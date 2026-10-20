@@ -9,6 +9,7 @@ from typing import Literal
 import httpx
 from fastapi.encoders import jsonable_encoder
 from langchain_core.tools import StructuredTool, tool
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from . import (
@@ -16,6 +17,7 @@ from . import (
     context,
     feature_tools,
     file_tools,
+    image_generation,
     learning,
     memory,
     provider,
@@ -57,6 +59,7 @@ TOOL_INFO = {
 }
 TOOL_INFO.update(feature_tools.INFO)
 TOOL_INFO.update(file_tools.INFO)
+TOOL_INFO.update(image_generation.INFO)
 
 
 def builtin_catalog() -> list[dict]:
@@ -66,6 +69,7 @@ def builtin_catalog() -> list[dict]:
         states = {x.id: x.enabled for x in db.scalars(select(BuiltinToolState))}
     search_ready = bool(secret_get("search"))
     has_skills = bool(skills.catalog())
+    image_ready = image_generation.ready()
     return [
         {
             "id": name,
@@ -75,12 +79,17 @@ def builtin_catalog() -> list[dict]:
             "name": label,
             "description": description,
             "available": (not requires_search or search_ready)
+            and (name != "generate_image" or image_ready)
             and (
                 has_skills
                 if name in {"load_skill", "read_skill_file", "run_skill_script"}
                 else True
             ),
-            "note": "需导入并启用技能"
+            "note": "需配置并启用图片生成模型"
+            if name == "generate_image" and not image_ready
+            else "图片模型已启用"
+            if name == "generate_image"
+            else "需导入并启用技能"
             if name in {"load_skill", "read_skill_file", "run_skill_script"}
             and not has_skills
             else "需配置 Tavily 密钥"
@@ -393,7 +402,7 @@ def builtin_tools(run_id: str, conversation_id: str):
         remember,
         learning_goals,
         create_learning_goal,
-    ] + feature_tools.build(run_id, conversation_id) + file_tools.build(run_id, conversation_id)
+    ] + feature_tools.build(run_id, conversation_id) + file_tools.build(run_id, conversation_id) + image_generation.build(run_id)
 
 
 def tool_catalog() -> list[dict]:
@@ -515,6 +524,16 @@ def _guard_tool(entry, originals, run_id):
                 {"error": "已取消，已发出的外部操作可能已执行"},
             )
             raise
+        except ValidationError as error:
+            detail = "；".join(
+                str(item.get("msg", "")).replace("Value error, ", "")
+                for item in error.errors()[:3]
+            )
+            status, value = (
+                "error",
+                {"error": f"工具参数格式不正确：{detail or '请检查参数'}"},
+            )
+            return json.dumps(value, ensure_ascii=False)
         except Exception:  # noqa: BLE001 - external tools must return a safe error to the agent
             status, value = (
                 "error",
@@ -530,6 +549,9 @@ def _guard_tool(entry, originals, run_id):
                     "name": entry["name"],
                     "source": entry["source"],
                     "source_label": entry["source_label"],
+                    "image_generation": image_generation.is_generation_tool(
+                        entry["id"], entry["name"], entry["description"]
+                    ),
                     "arguments": mcp_service.redact(arguments, secrets),
                     "result": value,
                     "status": status,

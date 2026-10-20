@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { ImagePlus, Loader2, RotateCw, X, FileText } from "lucide-react";
-import { Dialog } from "radix-ui";
+import { Dialog, Tooltip } from "radix-ui";
 import { createPortal } from "react-dom";
 import {
   api,
@@ -9,6 +15,38 @@ import {
   uploadFile,
   type Attachment,
 } from "@/lib/api";
+
+const imageExtension = /\.(jpe?g|png|webp)$/i;
+const documentExtension = /\.(docx|pdf|xlsx|txt|md|csv|json)$/i;
+const imageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const documentTypes = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/json",
+  "text/csv",
+  "text/markdown",
+  "text/plain",
+]);
+const maxImageBytes = 10 * 1024 * 1024;
+const maxDocumentBytes = 20 * 1024 * 1024;
+
+function isImageFile(file: Pick<File, "name" | "type">) {
+  return imageTypes.has(file.type) || imageExtension.test(file.name);
+}
+
+function isDocumentFile(file: Pick<File, "name" | "type">) {
+  return documentTypes.has(file.type) || documentExtension.test(file.name);
+}
+
+function clipboardImages(data: DataTransfer | null) {
+  const files = Array.from(data?.items ?? [])
+    .filter((item) => item.kind === "file" && imageTypes.has(item.type))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+  if (files.length) return files;
+  return Array.from(data?.files ?? []).filter(isImageFile);
+}
 
 export function Picture({
   id,
@@ -119,7 +157,9 @@ export function ImagesInput({
   scopeKey?: string;
 }) {
   const [pending, setPending] = useState<Pending[]>([]);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const pendingRef = useRef<Pending[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
   const imagesRef = useRef(images);
   imagesRef.current = images;
   const generation = useRef(0);
@@ -147,6 +187,11 @@ export function ImagesInput({
     callbacks.current.onUploading?.(false);
     return reset;
   }, [scopeKey]);
+  useLayoutEffect(() => {
+    // The preview slot is a ref on the composer; capture it after mount so
+    // restored drafts render in the right place on the very first paint.
+    setPortalTarget(previewTarget?.current ?? null);
+  }, [previewTarget]);
   async function upload(item: Pending) {
     const epoch = generation.current;
     update(
@@ -155,10 +200,7 @@ export function ImagesInput({
       ),
     );
     try {
-      const documentFile =
-        allowFiles &&
-        !/^image\//.test(item.file.type) &&
-        !/\.(jpe?g|png|webp)$/i.test(item.file.name);
+      const documentFile = allowFiles && isDocumentFile(item.file);
       let value: Attachment;
       if (documentFile) {
         value = item.serverId
@@ -211,11 +253,9 @@ export function ImagesInput({
     for (const file of files) {
       const key = `${file.name}:${file.size}:${file.lastModified}`;
       if (fingerprints.current.has(key)) continue;
-      if (
-        !/\.(jpe?g|png|webp)$/i.test(file.name) &&
-        !["image/jpeg", "image/png", "image/webp"].includes(file.type) &&
-        !(allowFiles && /\.(docx|pdf|xlsx|txt|md|csv|json)$/i.test(file.name))
-      ) {
+      const imageFile = isImageFile(file);
+      const documentFile = allowFiles && isDocumentFile(file);
+      if (!imageFile && !documentFile) {
         callbacks.current.onError(
           allowFiles
             ? "支持图片、DOCX、PDF、XLSX、TXT、MD、CSV、JSON"
@@ -223,10 +263,7 @@ export function ImagesInput({
         );
         continue;
       }
-      if (
-        file.size >
-        (allowFiles && !/^image\//.test(file.type) ? 20 : 10) * 1024 * 1024
-      ) {
+      if (file.size > (documentFile ? maxDocumentBytes : maxImageBytes)) {
         callbacks.current.onError(
           allowFiles
             ? "办公文件最多 20 MB，图片最多 10 MB"
@@ -288,16 +325,24 @@ export function ImagesInput({
         addRef.current(Array.from(event.dataTransfer?.files || []));
       }
     };
+    const paste = (event: ClipboardEvent) => {
+      const files = clipboardImages(event.clipboardData);
+      if (!files.length) return;
+      event.preventDefault();
+      addRef.current(files);
+    };
     target.addEventListener("dragenter", enter);
     target.addEventListener("dragleave", leave);
     target.addEventListener("dragover", over);
     target.addEventListener("drop", drop);
+    target.addEventListener("paste", paste);
     return () => {
       target.classList.remove("image-drag-over");
       target.removeEventListener("dragenter", enter);
       target.removeEventListener("dragleave", leave);
       target.removeEventListener("dragover", over);
       target.removeEventListener("drop", drop);
+      target.removeEventListener("paste", paste);
     };
   }, [dropTarget]);
   const previews =
@@ -320,12 +365,9 @@ export function ImagesInput({
                 <Picture id={image.id} name={image.name} />
               )
             )}
-            <small title={image.name}>{image.name}</small>
+            <small>{image.name}</small>
             {!!image.warnings?.length && (
-              <span
-                className="file-attachment-warning"
-                title={image.warnings.join("\n")}
-              >
+              <span className="file-attachment-warning">
                 有解析提示
               </span>
             )}
@@ -350,14 +392,14 @@ export function ImagesInput({
         ))}
         {pending.map((item) => (
           <div className="attachment-draft" key={item.key}>
-            {allowFiles && !/^image\//.test(item.file.type) ? (
+            {allowFiles && isDocumentFile(item.file) ? (
               <FileText size={24} />
             ) : (
               previewMode === "thumbnails" && (
                 <img src={item.url} alt={item.file.name} />
               )
             )}
-            <small title={item.file.name}>{item.file.name}</small>
+            <small>{item.file.name}</small>
             {item.uploading ? (
               <span className="attachment-uploading">
                 <Loader2 size={18} className="spin" />
@@ -367,7 +409,6 @@ export function ImagesInput({
               <button
                 type="button"
                 className="attachment-retry"
-                title={item.error}
                 aria-label={`重试上传 ${item.file.name}`}
                 disabled={disabled}
                 onClick={() => void upload(item)}
@@ -396,9 +437,7 @@ export function ImagesInput({
         ))}
         {allowFiles &&
           (images.some((image) => Boolean(image.file_status)) ||
-            pending.some((item) =>
-              /\.(docx|pdf|xlsx|txt|md|csv|json)$/i.test(item.file.name),
-            )) && (
+            pending.some((item) => isDocumentFile(item.file))) && (
             <p className="file-selection-notice">
               文件保存在本机；小汐读取的内容会发送给当前所选模型。
             </p>
@@ -407,30 +446,46 @@ export function ImagesInput({
     ) : null;
   return (
     <div className="image-input">
-      <label
-        className={`attach-button ${disabled ? "disabled" : ""}`}
-        title={allowFiles ? "添加文件或图片" : "添加图片"}
-      >
-        <input
-          aria-label={allowFiles ? "添加文件或图片" : "添加图片"}
-          type="file"
-          accept={
-            allowFiles
-              ? "image/jpeg,image/png,image/webp,.docx,.pdf,.xlsx,.txt,.md,.csv,.json"
-              : "image/jpeg,image/png,image/webp"
-          }
-          multiple
-          disabled={disabled}
-          onChange={(e) => {
-            addFiles(Array.from(e.target.files || []));
-            e.target.value = "";
-          }}
-        />
-        <ImagePlus size={18} />
-      </label>
-      {previewTarget?.current
-        ? createPortal(previews, previewTarget.current)
-        : previews}
+      <Tooltip.Provider delayDuration={260} skipDelayDuration={100}>
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <button
+              type="button"
+              className={`attach-button ${disabled ? "disabled" : ""}`}
+              aria-label={allowFiles ? "添加文件或图片" : "添加图片"}
+              disabled={disabled}
+              onClick={() => fileInput.current?.click()}
+            >
+              <ImagePlus size={18} />
+            </button>
+          </Tooltip.Trigger>
+          <Tooltip.Portal>
+            <Tooltip.Content className="ui-hint" side="top" sideOffset={7}>
+              {allowFiles ? "添加文件或图片" : "添加图片"}
+              <Tooltip.Arrow className="ui-hint-arrow" />
+            </Tooltip.Content>
+          </Tooltip.Portal>
+        </Tooltip.Root>
+      </Tooltip.Provider>
+      <input
+        ref={fileInput}
+        type="file"
+        hidden
+        tabIndex={-1}
+        aria-hidden="true"
+        accept={
+          allowFiles
+            ? "image/jpeg,image/png,image/webp,.docx,.pdf,.xlsx,.txt,.md,.csv,.json"
+            : "image/jpeg,image/png,image/webp"
+        }
+        multiple
+        disabled={disabled}
+        onChange={(e) => {
+          addFiles(Array.from(e.target.files || []));
+          e.target.value = "";
+        }}
+      />
+      {portalTarget ? createPortal(previews, portalTarget) : previews}
     </div>
   );
 }

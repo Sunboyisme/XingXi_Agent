@@ -22,6 +22,7 @@ import {
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
+import { Tooltip } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,16 +55,57 @@ import { WindowFrame } from "./components/WindowFrame";
 import { SidebarResize } from "./components/SidebarResize";
 
 type Page = "chat" | "learning" | "plans" | "settings";
-const pages: { id: Page; label: string; icon: LucideIcon }[] = [
-  { id: "chat", label: "对话", icon: MessageCircle },
-  { id: "learning", label: "学习", icon: BookOpen },
-  { id: "plans", label: "计划", icon: Calendar },
+const pages: {
+  id: Page;
+  label: string;
+  icon: LucideIcon;
+}[] = [
+  {
+    id: "chat",
+    label: "对话",
+    icon: MessageCircle,
+  },
+  {
+    id: "learning",
+    label: "学习",
+    icon: BookOpen,
+  },
+  {
+    id: "plans",
+    label: "计划",
+    icon: Calendar,
+  },
 ];
 
 type PendingAgenda = {
   day: string;
   tab: "todo" | "repeat";
 };
+
+function NavigationTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactElement;
+}) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="navigation-tooltip"
+          side="right"
+          align="center"
+          sideOffset={10}
+          collisionPadding={10}
+        >
+          {label}
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
 
 export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -404,46 +446,56 @@ export function App() {
           aria-label="应用导航与历史对话"
         >
           <div className="navigation-rail">
-            <BaiAvatar
-              interactive
-              className="rail-avatar"
-              label="点击头像新建对话"
-              onClick={startNewChat}
-            />
-            <nav className="main-navigation" aria-label="主导航">
-              {pages.map((value) => (
-                <button
-                  className={page === value.id ? "active" : ""}
-                  aria-current={page === value.id ? "page" : undefined}
-                  aria-label={value.label}
-                  title={value.label}
-                  key={value.id}
-                  onClick={() => navigate(value.id)}
-                >
-                  <value.icon size={20} />
-                </button>
-              ))}
-            </nav>
-            <div className="sidebar-footer">
-              <button
-                className={page === "settings" ? "active" : ""}
-                aria-label="连接与设置"
-                title="连接与设置"
-                aria-current={page === "settings" ? "page" : undefined}
-                onClick={() => navigate("settings")}
-              >
-                <Settings2 size={20} />
-                {(memories.some((x) => x.state === "candidate") ||
-                  !settings.model_configured) && <span className="setup-dot" />}
-              </button>
-              <button
-                onClick={() => setInfo(true)}
-                aria-label="关于这个空间"
-                title="关于这个空间"
-              >
-                <CircleHelp size={19} />
-              </button>
-            </div>
+            <Tooltip.Provider
+              delayDuration={220}
+              skipDelayDuration={100}
+              disableHoverableContent
+            >
+              <BaiAvatar
+                interactive
+                className="rail-avatar"
+                label="点击头像新建对话"
+                onClick={startNewChat}
+              />
+              <nav className="main-navigation" aria-label="主导航">
+                {pages.map((value) => (
+                  <NavigationTooltip key={value.id} label={value.label}>
+                    <button
+                      className={page === value.id ? "active" : ""}
+                      aria-current={page === value.id ? "page" : undefined}
+                      aria-label={value.label}
+                      onClick={() => navigate(value.id)}
+                    >
+                      <value.icon size={20} />
+                    </button>
+                  </NavigationTooltip>
+                ))}
+              </nav>
+              <div className="sidebar-footer">
+                <NavigationTooltip label="连接与设置">
+                  <button
+                    className={page === "settings" ? "active" : ""}
+                    aria-label="连接与设置"
+                    aria-current={page === "settings" ? "page" : undefined}
+                    onClick={() => navigate("settings")}
+                  >
+                    <Settings2 size={20} />
+                    {(memories.some((x) => x.state === "candidate") ||
+                      !settings.model_configured) && (
+                      <span className="setup-dot" />
+                    )}
+                  </button>
+                </NavigationTooltip>
+                <NavigationTooltip label="关于">
+                  <button
+                    onClick={() => setInfo(true)}
+                    aria-label="关于这个空间"
+                  >
+                    <CircleHelp size={19} />
+                  </button>
+                </NavigationTooltip>
+              </div>
+            </Tooltip.Provider>
           </div>
           <div
             className="chat-sidebar"
@@ -478,7 +530,7 @@ export function App() {
                     key={value.id}
                   >
                     <button
-                      title={value.title}
+                      aria-label={`打开对话 ${value.title}`}
                       aria-current={
                         page === "chat" && conversationId === value.id
                           ? "page"
@@ -593,7 +645,7 @@ export function App() {
             <DialogHeader>
               <DialogTitle>你的个人空间</DialogTitle>
               <DialogDescription>
-                XiaoXi · 0.1.4{import.meta.env.DEV ? " 开发版" : ""}
+                XiaoXi · 0.1.5{import.meta.env.DEV ? " 开发版" : ""}
               </DialogDescription>
             </DialogHeader>
             <div className="about-copy">

@@ -49,41 +49,225 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+async fn save_data_export(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Backend>,
+) -> Result<Option<String>, String> {
+    let mut dialog = rfd::AsyncFileDialog::new()
+        .set_title("导出 XiaoXi 数据")
+        .set_file_name("XiaoXi-data.zip")
+        .add_filter("ZIP 数据文件", &["zip"]);
+    if let Ok(downloads) = app.path().download_dir() {
+        dialog = dialog.set_directory(downloads);
+    }
+    let Some(file) = dialog.save_file().await else {
+        return Ok(None);
+    };
+    let target = file.path().to_path_buf();
+    let root = state.data_dir.get().ok_or("服务尚未就绪")?.clone();
+    let url = state.url.get().ok_or("服务尚未就绪")?.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<u8>, String> {
+        let token = std::fs::read_to_string(root.join("auth-token"))
+            .map_err(|_| "无法验证数据访问权限")?;
+        let response = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(180))
+            .build()
+            .map_err(|_| "无法连接数据服务")?
+            .post(format!("{url}/settings/data/export"))
+            .bearer_auth(token.trim())
+            .send()
+            .map_err(|_| "导出数据失败")?;
+        if !response.status().is_success() {
+            return Err("数据导出失败，请稍后重试".into());
+        }
+        let value: serde_json::Value = response.json().map_err(|_| "导出结果无效")?;
+        let name = value["name"].as_str().ok_or("导出文件名无效")?;
+        if !name.ends_with(".zip") || name.contains(['/', '\\', ':']) || name.contains("..") {
+            return Err("导出文件名无效".into());
+        }
+        std::fs::read(root.join("exports").join(name)).map_err(|_| "读取导出文件失败".into())
+    })
+    .await
+    .map_err(|_| "数据导出任务失败")??;
+    write_atomically(target.clone(), bytes).await?;
+    Ok(Some(target.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
 async fn save_office_file(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Backend>,
     file_id: String,
     name: String,
     upload: bool,
 ) -> Result<bool, String> {
+    let bytes = read_office_bytes(&state, &file_id, upload).await?;
+    let safe_name: String = name
+        .chars()
+        .filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c))
+        .take(180)
+        .collect();
+    let mut dialog = rfd::AsyncFileDialog::new().set_file_name(if safe_name.is_empty() {
+        "文件"
+    } else {
+        &safe_name
+    });
+    if let Ok(downloads) = app.path().download_dir() {
+        dialog = dialog.set_directory(downloads);
+    }
+    let selected = dialog.save_file().await;
+    let Some(file) = selected else {
+        return Ok(false);
+    };
+    let path = file.path().to_path_buf();
+    write_atomically(path, bytes).await?;
+    Ok(true)
+}
+
+async fn read_office_bytes(
+    state: &tauri::State<'_, Backend>,
+    file_id: &str,
+    upload: bool,
+) -> Result<Vec<u8>, String> {
     if file_id.len() != 36 || !file_id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
         return Err("文件编号无效".into());
     }
     let root = state.data_dir.get().ok_or("服务尚未就绪")?.clone();
     let url = state.url.get().ok_or("服务尚未就绪")?.clone();
-    let bytes = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<u8>, String> {
-        let token = std::fs::read_to_string(root.join("auth-token")).map_err(|_| "无法验证文件访问权限")?;
-        let client = reqwest::blocking::Client::builder().no_proxy().timeout(Duration::from_secs(30)).build().map_err(|_| "无法连接文件服务")?;
-        let response = client.get(format!("{}/{}/{}/content", url, if upload { "files" } else { "artifacts" }, file_id)).bearer_auth(token.trim()).send().map_err(|_| "读取文件失败")?;
-        if !response.status().is_success() { return Err("文件不存在或当前无法读取".into()); }
+    let file_id = file_id.to_string();
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<u8>, String> {
+        let token =
+            std::fs::read_to_string(root.join("auth-token")).map_err(|_| "无法验证文件访问权限")?;
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|_| "无法连接文件服务")?;
+        let response = client
+            .get(format!(
+                "{}/{}/{}/content",
+                url,
+                if upload { "files" } else { "artifacts" },
+                file_id
+            ))
+            .bearer_auth(token.trim())
+            .send()
+            .map_err(|_| "读取文件失败")?;
+        if !response.status().is_success() {
+            return Err("文件不存在或当前无法读取".into());
+        }
         use std::io::Read;
         let mut bytes = Vec::new();
-        response.take(20 * 1024 * 1024 + 1).read_to_end(&mut bytes).map_err(|_| "读取文件失败")?;
-        if bytes.len() > 20 * 1024 * 1024 { return Err("文件超过另存为大小限制".into()); }
+        response
+            .take(20 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "读取文件失败")?;
+        if bytes.len() > 20 * 1024 * 1024 {
+            return Err("文件超过另存为大小限制".into());
+        }
         Ok(bytes)
-    }).await.map_err(|_| "文件读取任务失败")??;
-    let safe_name: String = name.chars().filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c)).take(180).collect();
-    let selected = rfd::AsyncFileDialog::new().set_file_name(if safe_name.is_empty() { "文件" } else { &safe_name }).save_file().await;
-    let Some(file) = selected else { return Ok(false); };
-    let path = file.path().to_path_buf();
+    })
+    .await
+    .map_err(|_| "文件读取任务失败")?
+}
+
+async fn write_atomically(path: PathBuf, bytes: Vec<u8>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         use std::io::Write;
         let parent = path.parent().ok_or("保存位置无效")?;
-        let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|_| "无法在所选位置创建文件")?;
-        temporary.write_all(&bytes).and_then(|_| temporary.as_file().sync_all()).map_err(|_| "写入失败，原目标文件未替换")?;
-        temporary.persist(&path).map_err(|_| "文件被占用或保存失败，原目标文件未替换")?;
+        std::fs::create_dir_all(parent).map_err(|_| "无法创建保存目录")?;
+        let mut temporary =
+            tempfile::NamedTempFile::new_in(parent).map_err(|_| "无法在所选位置创建文件")?;
+        temporary
+            .write_all(&bytes)
+            .and_then(|_| temporary.as_file().sync_all())
+            .map_err(|_| "写入失败，原目标文件未替换")?;
+        temporary
+            .persist(&path)
+            .map_err(|_| "文件被占用或保存失败，原目标文件未替换")?;
         Ok(())
-    }).await.map_err(|_| "保存任务失败")??;
-    Ok(true)
+    })
+    .await
+    .map_err(|_| "保存任务失败")?
+}
+
+fn download_target(folder: &std::path::Path, name: &str) -> PathBuf {
+    let name = if name.trim().is_empty() {
+        "文件"
+    } else {
+        name
+    };
+    let path = std::path::Path::new(name);
+    let stem = path.file_stem().and_then(|v| v.to_str()).unwrap_or("文件");
+    let suffix = path
+        .extension()
+        .and_then(|v| v.to_str())
+        .map(|v| format!(".{v}"))
+        .unwrap_or_default();
+    let first = folder.join(name);
+    if !first.exists() {
+        return first;
+    }
+    for index in 2..1000 {
+        let candidate = folder.join(format!("{stem} ({index}){suffix}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    folder.join(name)
+}
+
+#[tauri::command]
+async fn download_office_file(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Backend>,
+    file_id: String,
+    name: String,
+    upload: bool,
+) -> Result<String, String> {
+    let bytes = read_office_bytes(&state, &file_id, upload).await?;
+    let safe_name: String = name
+        .chars()
+        .filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c))
+        .take(180)
+        .collect();
+    let folder = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))
+        .map_err(|_| "找不到 Windows 下载文件夹")?;
+    std::fs::create_dir_all(&folder).map_err(|_| "无法创建下载文件夹")?;
+    let target = download_target(&folder, &safe_name);
+    write_atomically(target.clone(), bytes).await?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn open_download_location(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let file = PathBuf::from(&path);
+    if !file.is_file() {
+        return Err("文件不存在或已被移动".into());
+    }
+    let folder = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))
+        .map_err(|_| "找不到 Windows 下载文件夹")?;
+    if !file.starts_with(&folder) {
+        return Err("只能打开下载文件夹中的文件".into());
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer.exe")
+            .arg(format!("/select,{}", file.display()))
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(|_| "无法打开下载文件夹".to_string())?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    Err("请在系统文件管理器中打开下载文件夹".into())
 }
 
 #[tauri::command]
@@ -169,6 +353,59 @@ fn open_main(app: &tauri::AppHandle) {
     }
 }
 
+#[allow(dead_code)]
+fn migrate_legacy_data(legacy: &std::path::Path, current: &std::path::Path) -> bool {
+    if current.join("bai.sqlite").exists() || !legacy.join("bai.sqlite").exists() {
+        return true;
+    }
+    if std::fs::create_dir_all(current).is_err() {
+        return false;
+    }
+    let mut moved: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+    // The running WebView keeps EBWebView open; move the application's own
+    // files and leave that cache behind rather than failing the whole move.
+    for name in [
+        "bai.sqlite",
+        "bai.sqlite-wal",
+        "bai.sqlite-shm",
+        "checkpoints.sqlite",
+        "checkpoints.sqlite-wal",
+        "checkpoints.sqlite-shm",
+        "auth-token",
+    ] {
+        let source = legacy.join(name);
+        if !source.exists() {
+            continue;
+        }
+        let target = current.join(name);
+        if std::fs::rename(&source, &target).is_err() {
+            for (from, to) in moved.iter().rev() {
+                let _ = std::fs::rename(to, from);
+            }
+            return false;
+        }
+        moved.push((source, target));
+    }
+    if let Ok(entries) = std::fs::read_dir(legacy) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if name == "EBWebView" || current.join(&name).exists() {
+                continue;
+            }
+            let source = entry.path();
+            let target = current.join(&name);
+            if std::fs::rename(&source, &target).is_err() {
+                for (from, to) in moved.iter().rev() {
+                    let _ = std::fs::rename(to, from);
+                }
+                return false;
+            }
+            moved.push((source, target));
+        }
+    }
+    true
+}
+
 fn main() {
     let preferred_port: u16 = std::env::var("BAI_BACKEND_PORT")
         .unwrap_or_else(|_| "8766".into())
@@ -189,7 +426,10 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             backend_config,
             quit_app,
+            save_data_export,
             save_office_file,
+            download_office_file,
+            open_download_location,
             open_data_directory,
             open_external_url,
             ensure_window_visible,
@@ -210,7 +450,15 @@ fn main() {
                     .join(".local-data")
                     .join("dev");
                 #[cfg(not(debug_assertions))]
-                let folder = app.path().app_local_data_dir()?;
+                let folder = {
+                    let current = app.path().local_data_dir()?.join("XiaoXi_Agent");
+                    let legacy = app.path().app_local_data_dir()?;
+                    if legacy != current && migrate_legacy_data(&legacy, &current) {
+                        current
+                    } else {
+                        legacy
+                    }
+                };
                 folder
             };
             std::fs::create_dir_all(&data_dir)?;
@@ -284,22 +532,34 @@ fn main() {
                 let child = command.spawn()?;
                 *app.state::<Backend>().child.lock().unwrap() = Some(child);
             }
-            let show = MenuItem::with_id(app, "show", "打开XiaoXi", true, None::<&str>)?;
-            let new_chat =
-                MenuItem::with_id(app, "new_chat", "新建对话", true, None::<&str>)?;
-            let plans =
-                MenuItem::with_id(app, "plans", "打开今日安排", true, None::<&str>)?;
-            let settings =
-                MenuItem::with_id(app, "settings", "连接与设置", true, None::<&str>)?;
-            let exit = MenuItem::with_id(app, "quit", "退出XiaoXi", true, None::<&str>)?;
-            let menu = Menu::with_items(
+            let is_preview = app.config().identifier.ends_with(".preview");
+            let tray_name = if is_preview {
+                "XiaoXi（测试版）"
+            } else {
+                "XiaoXi"
+            };
+            let show = MenuItem::with_id(
                 app,
-                &[&show, &new_chat, &plans, &settings, &exit],
+                "show",
+                format!("打开{tray_name}"),
+                true,
+                None::<&str>,
             )?;
+            let new_chat = MenuItem::with_id(app, "new_chat", "新建对话", true, None::<&str>)?;
+            let plans = MenuItem::with_id(app, "plans", "打开今日安排", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "连接与设置", true, None::<&str>)?;
+            let exit = MenuItem::with_id(
+                app,
+                "quit",
+                format!("退出{tray_name}"),
+                true,
+                None::<&str>,
+            )?;
+            let menu = Menu::with_items(app, &[&show, &new_chat, &plans, &settings, &exit])?;
             let icon = app.default_window_icon().cloned().ok_or("应用图标缺失")?;
             TrayIconBuilder::new()
                 .icon(icon)
-                .tooltip("XiaoXi · 个人助手")
+                .tooltip(tray_name)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -349,7 +609,7 @@ fn main() {
                             .body(note["body"].as_str().unwrap_or(""))
                             .show();
                     }
-                        let window_ready = if let Some(window) = handle.get_webview_window("reminder") {
+                    let window_ready = if let Some(window) = handle.get_webview_window("reminder") {
                         let shown = window.show().is_ok();
                         place_reminder_window(&window);
                         let _ = window.set_focus();
@@ -411,4 +671,32 @@ fn main() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate_legacy_data;
+
+    #[test]
+    fn migrates_app_data_and_keeps_the_webview_cache_behind() {
+        let root = tempfile::tempdir().unwrap();
+        let legacy = root.path().join("com.qinbai.baiagent");
+        let current = root.path().join("XiaoXi_Agent");
+        std::fs::create_dir_all(legacy.join("attachments")).unwrap();
+        std::fs::create_dir_all(legacy.join("EBWebView")).unwrap();
+        std::fs::write(legacy.join("bai.sqlite"), b"db").unwrap();
+        std::fs::write(legacy.join("auth-token"), b"token").unwrap();
+        std::fs::write(legacy.join("attachments/one.bin"), b"file").unwrap();
+        std::fs::write(legacy.join("EBWebView/cache.bin"), b"cache").unwrap();
+        assert!(migrate_legacy_data(&legacy, &current));
+        assert_eq!(std::fs::read(current.join("bai.sqlite")).unwrap(), b"db");
+        assert_eq!(
+            std::fs::read(current.join("attachments/one.bin")).unwrap(),
+            b"file"
+        );
+        assert!(!current.join("EBWebView").exists());
+        assert!(legacy.join("EBWebView/cache.bin").exists());
+        // A second launch sees the migrated database and does not move it again.
+        assert!(migrate_legacy_data(&legacy, &current));
+    }
 }

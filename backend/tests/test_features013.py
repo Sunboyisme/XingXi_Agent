@@ -112,12 +112,11 @@ def test_calendar_range_all_day_and_atomic_batch(client):
         ).status_code
         == 422
     )
-    assert (
-        client.post(
-            API + "/calendar/events", json=event(start="2026-10-20T09:00:00")
-        ).status_code
-        == 422
+    naive = client.post(
+        API + "/calendar/events", json=event(start="2026-10-20T09:00:00")
     )
+    assert naive.status_code == 200
+    assert naive.json()["start"] == "2026-10-20T01:00:00.000000+00:00"
     assert (
         client.get(API + "/calendar/events", headers={"Authorization": ""}).status_code
         == 401
@@ -235,6 +234,99 @@ def test_calendar_tool_requires_confirmation_and_retry_is_idempotent(client):
     )
     assert created[0]["title"] == "明确计划"
     assert len(calendar.list_events()) == 2
+
+
+def test_plan_confirmation_uses_what_the_user_saw_and_accepts_naive_times(client):
+    conversation = client.post(API + "/conversations", json={"title": "确认"}).json()
+    with db.Session() as session:
+        session.add(
+            db.Message(
+                conversation_id=conversation["id"], role="user", content="提醒我晒衣服"
+            )
+        )
+        session.commit()
+    tool = next(
+        x
+        for x in tools.build_tools(make_run(), conversation["id"])
+        if x.name == "create_plans"
+    )
+    planned = event(
+        title="晒衣服",
+        reminder_enabled=True,
+        reminder_offsets=[-10],
+    )
+    proposal = json.loads(tool.invoke({"plans": [planned]}))
+    assert proposal["status"] == "needs_confirmation"
+    with db.Session() as session:
+        session.add(
+            db.Message(
+                conversation_id=conversation["id"], role="user", content="确定"
+            )
+        )
+        session.commit()
+    tool = next(
+        x
+        for x in tools.build_tools(make_run(), conversation["id"])
+        if x.name == "create_plans"
+    )
+    # A smaller model re-sends the plan with a different reminder offset.
+    confirmed = json.loads(
+        tool.invoke(
+            {
+                "plans": [
+                    event(
+                        title="晒衣服",
+                        reminder_enabled=True,
+                        reminder_offsets=[-15],
+                    )
+                ],
+                "confirm": True,
+            }
+        )
+    )
+    assert confirmed[0]["title"] == "晒衣服"
+    assert confirmed[0]["reminder_offsets"] == [-10]
+    assert len(calendar.list_events()) == 1
+
+    # Naive datetimes are interpreted in the plan's timezone instead of failing.
+    with db.Session() as session:
+        session.add(
+            db.Message(
+                conversation_id=conversation["id"], role="user", content="再建一个"
+            )
+        )
+        session.commit()
+    tool = next(
+        x
+        for x in tools.build_tools(make_run(), conversation["id"])
+        if x.name == "create_plans"
+    )
+    created = json.loads(
+        tool.invoke(
+            {
+                "plans": [
+                    {
+                        "title": "无偏移时间",
+                        "start": "2026-10-21T09:00:00",
+                        "end": "2026-10-21T10:00:00",
+                    }
+                ],
+                "explicit_request": True,
+            }
+        )
+    )
+    assert created[0]["title"] == "无偏移时间"
+    assert created[0]["start"].startswith("2026-10-21T01:00:00")
+
+
+def test_artifact_export_keeps_the_user_facing_filename(client):
+    run_id = make_run()
+    file = artifacts.save_file(run_id, "AI技术分析报告_2026.docx", b"report")
+    first = client.post(f"{API}/artifacts/{file['id']}/export").json()
+    assert first["name"] == "AI技术分析报告_2026.docx"
+    assert not first["name"].startswith(file["id"])
+    second = client.post(f"{API}/artifacts/{file['id']}/export").json()
+    assert second["name"] == "AI技术分析报告_2026 (2).docx"
 
 
 def test_learning_goal_tool_requires_a_later_user_confirmation(client):

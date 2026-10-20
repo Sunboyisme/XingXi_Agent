@@ -13,6 +13,8 @@ import {
   Cable,
   Check,
   ChevronDown,
+  Image as ImageIcon,
+  LoaderCircle,
   Settings2,
   Square,
   Sparkles,
@@ -33,13 +35,14 @@ import {
   type Goal,
   type Memory,
 } from "@/lib/api";
-import { ErrorNotice, ImagesInput, Markdown } from "./common";
+import { ErrorNotice, Hint, ImagesInput, Markdown } from "./common";
 import { MessageAttachment } from "./OfficeFiles";
 import { ToolboxMenu } from "./ToolboxMenu";
 import { SkillsMenu } from "./SkillsMenu";
 import { Reasoning } from "./Reasoning";
 import { AnswerPresentation } from "./AnswerPresentation";
 import { AnswerActions } from "./AnswerActions";
+import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
 import { ChatHome } from "./ChatHome";
 import {
@@ -71,6 +74,94 @@ type StoredChatDraft = {
   text: string;
   images: Attachment[];
 };
+
+type ImageGenerationProgress = {
+  status: "started" | "progress" | "finished";
+  stage: string;
+  startedAt: number;
+  elapsedSeconds?: number;
+  error?: string;
+};
+
+const imageStageLabels: Record<string, string> = {
+  submit: "正在提交画面描述",
+  generate: "正在生成图片",
+  download: "正在下载生成结果",
+  validate: "正在检查图片",
+  save: "正在保存到本机",
+};
+
+function ImageGenerationPreview({
+  progress,
+}: {
+  progress: ImageGenerationProgress;
+}) {
+  const [now, setNow] = useState(Date.now());
+  const finished = progress.status === "finished";
+  const failed = finished && Boolean(progress.error);
+  useEffect(() => {
+    if (finished) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [finished]);
+  const elapsed =
+    progress.elapsedSeconds ??
+    Math.max(0, Math.floor((now - progress.startedAt) / 1000));
+  const label = failed
+    ? "图片生成未完成"
+    : finished
+      ? "图片已生成"
+      : imageStageLabels[progress.stage] || "正在生成图片";
+  const detail = failed
+    ? "尚未取得可展示的图片，稍后会显示具体结果。"
+    : finished
+      ? "正在整理图片说明，请稍候…"
+      : progress.stage === "download"
+        ? "模型已返回画面，正在取回完整图片。"
+        : "完成后，图片会显示在这里。";
+  const canvasLabel = failed
+    ? "尚未取得图片"
+    : finished
+      ? "图片已生成"
+      : progress.stage === "download"
+        ? "正在取回完整图片"
+        : progress.stage === "validate"
+          ? "正在检查图片"
+          : progress.stage === "save"
+            ? "正在保存图片"
+            : "等待生成图片中";
+  return (
+    <figure
+      className="image-generation-preview"
+      data-state={failed ? "error" : finished ? "finished" : "running"}
+      aria-label={`${label}，${finished ? "用时" : "已等待"} ${elapsed} 秒`}
+    >
+      <span className="sr-only" role="status" aria-live="polite">
+        {label}。{detail}
+      </span>
+      <div className="image-generation-canvas" aria-hidden="true">
+        <ImageIcon size={27} strokeWidth={1.2} />
+        <span>{canvasLabel}</span>
+      </div>
+      <figcaption>
+        <span className="image-generation-status-icon" aria-hidden="true">
+          {failed ? (
+            <AlertCircle size={17} />
+          ) : finished ? (
+            <Check size={17} />
+          ) : (
+            <LoaderCircle size={17} />
+          )}
+        </span>
+        <strong>{label}</strong>
+        <span className="image-generation-elapsed">
+          {finished ? `用时 ${elapsed} 秒` : `${elapsed} 秒`}
+        </span>
+      </figcaption>
+    </figure>
+  );
+}
 
 function chatDraftKey(conversationId: string | null) {
   return `bai-chat-draft:${conversationId || "new"}`;
@@ -189,14 +280,33 @@ export function ChatPage({
   const [reasoning, setReasoning] = useState("");
   const [contextStatus, setContextStatus] = useState("");
   const [tools, setTools] = useState<RunEvent[]>([]);
+  const [imageGeneration, setImageGeneration] =
+    useState<ImageGenerationProgress | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState("");
+  const [editedText, setEditedText] = useState("");
   const [atLatest, setAtLatest] = useState(true);
   const [activeTurn, setActiveTurn] = useState("");
   const turnElements = useRef(new Map<string, HTMLElement>());
   const [uploading, setUploading] = useState(false);
   const [buddyNote, setBuddyNote] = useState("");
+  const [composerMenu, setComposerMenu] = useState<"mcp" | "skills" | null>(
+    null,
+  );
+  const composerMenuOpenedAt = useRef(0);
+  function changeComposerMenu(next: "mcp" | "skills", open: boolean) {
+    if (open) {
+      composerMenuOpenedAt.current = Date.now();
+      setComposerMenu(next);
+      return;
+    }
+    // Radix emits open→close in the same pointer sequence when another
+    // composer panel was open. Keep the panel that just opened.
+    if (Date.now() - composerMenuOpenedAt.current < 300) return;
+    setComposerMenu((current) => (current === next ? null : current));
+  }
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
   const closeMemoryNotice = useCallback(() => setMemoryNotice(null), []);
   const receiveMemory = useCallback((event: RunEvent) => {
@@ -225,6 +335,17 @@ export function ChatPage({
   const persistDraft = useCallback(
     (text = draftRef.current, attachments = imagesRef.current) => {
       storeChatDraft(conversationId, { text, images: attachments });
+    },
+    [conversationId],
+  );
+  useEffect(
+    () => () => {
+      // Navigating to another page must not discard a half-written message.
+      if (draftRef.current || imagesRef.current.length)
+        storeChatDraft(conversationId, {
+          text: draftRef.current,
+          images: imagesRef.current,
+        });
     },
     [conversationId],
   );
@@ -295,6 +416,7 @@ export function ChatPage({
       setContextStatus("");
       let reasoningStep = "";
       setTools([]);
+      setImageGeneration(null);
       try {
         const result = await readEvents(
           value.id,
@@ -302,6 +424,8 @@ export function ChatPage({
             if (watch.signal.aborted) return;
             if (event.kind === "delta")
               setStream((text) => text + String(event.data.text || ""));
+            if (event.kind === "answer")
+              setStream(String(event.data.text || ""));
             if (event.kind === "reasoning") {
               const step = String(event.data.step || "");
               const separator =
@@ -320,6 +444,58 @@ export function ChatPage({
                     : "",
               );
             if (event.kind === "tool") setTools((values) => [...values, event]);
+            if (event.kind === "image_generation") {
+              const status = String(event.data.status || "");
+              const stage = String(event.data.stage || "generate");
+              const startedAt = Number(event.data.started_at) * 1000;
+              if (status === "started" || status === "progress") {
+                setImageGeneration((current) => ({
+                  status,
+                  stage,
+                  startedAt:
+                    Number.isFinite(startedAt) && startedAt > 0
+                      ? startedAt
+                      : current?.startedAt || Date.now(),
+                }));
+              }
+              if (status === "finished") {
+                const result = event.data.result;
+                const output =
+                  result && typeof result === "object"
+                    ? (result as Record<string, unknown>)
+                    : {};
+                const hasImage =
+                  Array.isArray(output.artifacts) &&
+                  output.artifacts.some(
+                    (artifact: unknown) =>
+                      artifact !== null &&
+                      typeof artifact === "object" &&
+                      "id" in artifact &&
+                      typeof artifact.id === "string" &&
+                      "media_type" in artifact &&
+                      typeof artifact.media_type === "string" &&
+                      artifact.media_type.startsWith("image/"),
+                  );
+                const elapsedMs = Number(event.data.elapsed_ms);
+                setImageGeneration((current) => ({
+                  status: "finished",
+                  stage,
+                  startedAt:
+                    Number.isFinite(startedAt) && startedAt > 0
+                      ? startedAt
+                      : current?.startedAt || Date.now(),
+                  elapsedSeconds:
+                    Number.isFinite(elapsedMs) && elapsedMs >= 0
+                      ? Math.floor(elapsedMs / 1000)
+                      : undefined,
+                  error: !hasImage
+                    ? typeof output.error === "string"
+                      ? output.error
+                      : "尚未取得可展示的图片产物"
+                    : undefined,
+                }));
+              }
+            }
             if (event.kind === "memory") {
               receiveMemory(event);
               void refresh().catch(() => {});
@@ -359,10 +535,13 @@ export function ChatPage({
     setContextStatus("");
     setUploading(false);
     setTools([]);
+    setImageGeneration(null);
     setMemoryNotice(null);
     setError("");
     setRun(null);
     setBusy(false);
+    setEditingMessageId("");
+    setEditedText("");
     setActiveTurn("");
     followLatest.current = true;
     setAtLatest(true);
@@ -436,13 +615,14 @@ export function ChatPage({
         value.state === "candidate" &&
         value.source_conversation_id === conversationId,
     ) || [];
+  const empty = !messages.length && !busy;
   useLayoutEffect(() => {
     const container = scroller.current;
     if (container && followLatest.current) {
       container.scrollTop = container.scrollHeight;
       setAtLatest(true);
     }
-  });
+  }, [messages, stream, reasoning, busy, conversationId]);
   useEffect(() => {
     const target = thread.current;
     if (!target || typeof ResizeObserver === "undefined") return;
@@ -453,9 +633,14 @@ export function ChatPage({
     });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [conversationId]);
-  async function send() {
-    if (busy || uploading || (!draft.trim() && !images.length)) return;
+  }, [conversationId, empty]);
+  async function send(edited?: Pick<Message, "content" | "attachment_ids">) {
+    const text = edited ? edited.content : draft;
+    const attachmentIds = edited
+      ? edited.attachment_ids
+      : images.map((x) => x.id);
+    if (busy || uploading || (!text.trim() && !attachmentIds.length))
+      return false;
     setError("");
     setBusy(true);
     followLatest.current = true;
@@ -470,8 +655,8 @@ export function ChatPage({
         id = value.id;
       }
       const value = await api<Run>(`/conversations/${id}/messages`, "POST", {
-        content: draft.trim() || "请根据上传的附件帮助我分析。",
-        attachment_ids: images.map((x) => x.id),
+        content: text.trim() || "请根据上传的附件帮助我分析。",
+        attachment_ids: attachmentIds,
         model_selection: selected
           ? {
               provider_id: selected.profile.id,
@@ -480,13 +665,18 @@ export function ChatPage({
             }
           : undefined,
       });
-      setDraft("");
-      setImages([]);
-      imagesRef.current = [];
-      draftRef.current = "";
-      clearChatDraft(conversationId);
-      if (created) clearChatDraft(null);
-      setAttachmentBatch((value) => value + 1);
+      if (!edited) {
+        setDraft("");
+        setImages([]);
+        imagesRef.current = [];
+        draftRef.current = "";
+        clearChatDraft(conversationId);
+        if (created) clearChatDraft(null);
+        setAttachmentBatch((value) => value + 1);
+      } else {
+        setEditingMessageId("");
+        setEditedText("");
+      }
       await refresh();
       if (created) {
         // The conversation effect owns resuming a new conversation's run.
@@ -495,9 +685,11 @@ export function ChatPage({
         await loadMessages(id);
         void track(value, id);
       }
+      return true;
     } catch (error) {
       setError((error as Error).message);
       setBusy(false);
+      return false;
     }
   }
   async function retry() {
@@ -524,7 +716,6 @@ export function ChatPage({
     );
   const showIncompleteReply =
     Boolean(incompleteRun && !lastAssistant) || orphanReasoning;
-  const empty = !messages.length && !busy;
   const turns: (Message & { answer: string })[] = [];
   for (const message of messages) {
     if (message.role === "user") turns.push({ ...message, answer: "" });
@@ -616,15 +807,64 @@ export function ChatPage({
                     {value.role === "assistant" && (
                       <Reasoning text={value.reasoning || ""} />
                     )}
-                    <Markdown
-                      runId={
-                        value.role === "assistant"
-                          ? value.run_id || undefined
-                          : undefined
-                      }
-                    >
-                      {value.content}
-                    </Markdown>
+                    {value.role === "user" && editingMessageId === value.id ? (
+                      <div className="user-message-editor">
+                        <Textarea
+                          aria-label="修改消息内容"
+                          value={editedText}
+                          disabled={busy}
+                          autoFocus
+                          onChange={(event) =>
+                            setEditedText(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape" && !busy)
+                              setEditingMessageId("");
+                          }}
+                        />
+                        <p className="user-message-editor-hint">
+                          保留原消息和附件，修改后作为新消息发送。
+                        </p>
+                        <div className="user-message-editor-actions">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => setEditingMessageId("")}
+                          >
+                            取消
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={
+                              busy ||
+                              uploading ||
+                              !modelReady ||
+                              (!editedText.trim() &&
+                                !value.attachment_ids.length)
+                            }
+                            onClick={() =>
+                              void send({
+                                content: editedText,
+                                attachment_ids: value.attachment_ids,
+                              })
+                            }
+                          >
+                            发送修改
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Markdown
+                        runId={
+                          value.role === "assistant"
+                            ? value.run_id || undefined
+                            : undefined
+                        }
+                      >
+                        {value.content}
+                      </Markdown>
+                    )}
                     {value.role === "assistant" && (
                       <AnswerPresentation
                         runId={value.run_id || undefined}
@@ -669,6 +909,16 @@ export function ChatPage({
                         ))}
                       </div>
                     )}
+                    {value.role === "user" && editingMessageId !== value.id && (
+                      <UserMessageActions
+                        content={value.content}
+                        disabled={busy || uploading}
+                        onEdit={() => {
+                          setEditingMessageId(value.id);
+                          setEditedText(value.content);
+                        }}
+                      />
+                    )}
                   </div>
                 </article>
               ))}
@@ -685,9 +935,11 @@ export function ChatPage({
                   <div className="message-body">
                     <span className="message-name">XiaoXi</span>
                     <Reasoning text={reasoning} active />
-                    {stream ? (
-                      <Markdown runId={run?.id}>{stream}</Markdown>
-                    ) : (
+                    {imageGeneration && (
+                      <ImageGenerationPreview progress={imageGeneration} />
+                    )}
+                    {stream && <Markdown runId={run?.id}>{stream}</Markdown>}
+                    {!imageGeneration && (
                       <div
                         className="thinking"
                         role="status"
@@ -696,11 +948,13 @@ export function ChatPage({
                         <span className="thinking-label">
                           {contextStatus === "正在整理上下文…"
                             ? contextStatus
-                            : tools.length
-                              ? "正在整理查到的内容"
-                              : reasoning
-                                ? "正在把想法写成回答"
-                                : "正在理清思路"}
+                            : stream
+                              ? "正在努力工作"
+                              : tools.length
+                                ? "正在整理工具结果"
+                                : reasoning
+                                  ? "正在把想法写成回答"
+                                  : "正在理清思路"}
                         </span>
                         <span className="thinking-dots" aria-hidden="true">
                           <i />
@@ -845,8 +1099,20 @@ export function ChatPage({
           )}
           {error && (
             <ErrorNotice
-              message={error}
+              message={
+                run?.kind === "chat" &&
+                error === "接口认证失败，请检查密钥与接口地址。"
+                  ? "聊天模型认证或权限检查失败，请在「模型连接」检查密钥与接口地址。"
+                  : error
+              }
               retry={run?.status === "failed" ? () => void retry() : undefined}
+              action={
+                /密钥|接口|认证|模型|连接|配置|401|403|unauthorized/i.test(
+                  error,
+                )
+                  ? { label: "配置接口", onClick: () => onAction("settings") }
+                  : undefined
+              }
             />
           )}
           {contextStatus && contextStatus !== "正在整理上下文…" && (
@@ -899,18 +1165,24 @@ export function ChatPage({
                   onError={setError}
                   onUploading={setUploading}
                 />
-                <ToolboxMenu onSettings={() => onAction("tools")} />
-                <SkillsMenu onSettings={() => onAction("skills")} />
-                <button
-                  className="composer-thinking"
-                  aria-label="思考模式"
-                  aria-pressed={thinkingEnabled}
-                  disabled={
-                    busy ||
-                    thinkingControl === "none" ||
-                    thinkingControl === "always"
-                  }
-                  title={
+                <ToolboxMenu
+                  open={composerMenu === "mcp"}
+                  onOpenChange={(open) => changeComposerMenu("mcp", open)}
+                  onSettings={() => {
+                    setComposerMenu(null);
+                    onAction("tools");
+                  }}
+                />
+                <SkillsMenu
+                  open={composerMenu === "skills"}
+                  onOpenChange={(open) => changeComposerMenu("skills", open)}
+                  onSettings={() => {
+                    setComposerMenu(null);
+                    onAction("skills");
+                  }}
+                />
+                <Hint
+                  label={
                     thinkingControl === "none"
                       ? "此模型未配置思考开关"
                       : thinkingControl === "always"
@@ -919,20 +1191,30 @@ export function ChatPage({
                           ? "关闭思考模式"
                           : "开启思考模式"
                   }
-                  onClick={() => setThinking(!thinking)}
                 >
-                  <Sparkles size={15} aria-hidden="true" />
-                  <span>
-                    {thinkingControl === "always" ? "始终思考" : "思考"}
-                  </span>
-                </button>
+                  <button
+                    className="composer-thinking"
+                    aria-label="思考模式"
+                    aria-pressed={thinkingEnabled}
+                    disabled={
+                      busy ||
+                      thinkingControl === "none" ||
+                      thinkingControl === "always"
+                    }
+                    onClick={() => setThinking(!thinking)}
+                  >
+                    <Sparkles size={15} aria-hidden="true" />
+                    <span>
+                      {thinkingControl === "always" ? "始终思考" : "思考"}
+                    </span>
+                  </button>
+                </Hint>
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>
                     <button
                       className="composer-model"
                       aria-label="选择模型"
                       disabled={busy}
-                      title={selected?.model.name || "配置模型"}
                     >
                       <span>{selected?.model.name || "选择模型"}</span>
                       <ChevronDown size={13} />

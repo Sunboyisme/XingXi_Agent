@@ -20,9 +20,15 @@ def main():
     if not 1024 <= args.port <= 65535:
         parser.error("port must be between 1024 and 65535")
     if "BAI_DATA_DIR" not in os.environ and getattr(sys, "frozen", False):
-        os.environ["BAI_DATA_DIR"] = str(
-            Path(os.environ["LOCALAPPDATA"]) / "com.qinbai.baiagent"
-        )
+        local = Path(os.environ["LOCALAPPDATA"])
+        current = local / "XiaoXi_Agent"
+        legacy = local / "com.qinbai.baiagent"
+        if not current.exists() and legacy.exists():
+            try:
+                legacy.rename(current)
+            except OSError:
+                current = legacy
+        os.environ["BAI_DATA_DIR"] = str(current)
     import uvicorn
     from app.main import app
 

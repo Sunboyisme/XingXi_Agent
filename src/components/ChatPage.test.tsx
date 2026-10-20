@@ -1,4 +1,5 @@
 import {
+  act,
   render,
   screen,
   cleanup,
@@ -48,10 +49,14 @@ const settings: Settings = {
 };
 
 const apiMock = vi.hoisted(() => vi.fn());
+const fetchMock = vi.hoisted(() =>
+  vi.fn(() => Promise.reject(new Error("offline in tests"))),
+);
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   api: apiMock,
   readEvents: vi.fn(),
+  fetchApi: fetchMock,
 }));
 afterEach(() => {
   cleanup();
@@ -283,4 +288,79 @@ test("new chats focus the composer and restore an unsent draft after remount", a
   ) as HTMLTextAreaElement;
   expect(restored.value).toBe("离开前还没写完的草稿");
   await waitFor(() => expect(document.activeElement).toBe(restored));
+});
+
+test("restores draft text and attached images after leaving the chat page", async () => {
+  apiMock.mockResolvedValue([]);
+  localStorage.setItem(
+    "bai-chat-draft:new",
+    JSON.stringify({
+      text: "带着图片的未发送草稿",
+      images: [
+        {
+          id: "image-1",
+          name: "cat.png",
+          media_type: "image/png",
+          width: 120,
+          height: 120,
+        },
+      ],
+    }),
+  );
+  render(
+    <ChatPage
+      conversationId={null}
+      onConversation={vi.fn()}
+      goals={[]}
+      settings={settings}
+      refresh={vi.fn()}
+      onAction={vi.fn()}
+      onPlan={vi.fn()}
+    />,
+  );
+  const input = screen.getByLabelText(
+    "发送给XiaoXi的消息",
+  ) as HTMLTextAreaElement;
+  expect(input.value).toBe("带着图片的未发送草稿");
+  expect(await screen.findByText("cat.png")).toBeTruthy();
+  await waitFor(() =>
+    expect(
+      document.querySelector(".composer-attachments .attachment-draft"),
+    ).not.toBeNull(),
+  );
+});
+
+test("keeps an animated status line while a reply is still streaming", async () => {
+  let emit: ((event: any) => void) | undefined;
+  apiMock.mockImplementation(async (path: string, method = "GET") => {
+    if (path === "/conversations/slow/messages" && method === "POST")
+      return { id: "run-slow", status: "queued" };
+    if (path === "/conversations/slow/messages") return [];
+    if (path === "/runs?conversation_id=slow") return [];
+    return [];
+  });
+  vi.mocked(readEvents).mockImplementation((_id, onEvent) => {
+    emit = onEvent;
+    return new Promise<never>(() => {});
+  });
+  render(
+    <ChatPage
+      conversationId="slow"
+      onConversation={vi.fn()}
+      goals={[]}
+      settings={settings}
+      refresh={vi.fn().mockResolvedValue(undefined)}
+      onAction={vi.fn()}
+      onPlan={vi.fn()}
+    />,
+  );
+  const input = screen.getByLabelText("发送给XiaoXi的消息");
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  fireEvent.change(input, { target: { value: "生成一张海报" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+  await waitFor(() => expect(emit).toBeTruthy());
+  act(() => emit?.({ kind: "delta", data: { text: "我先整理一下" } }));
+  expect(await screen.findByText("我先整理一下")).toBeTruthy();
+  expect(screen.getByText("正在努力工作")).toBeTruthy();
+  expect(document.querySelectorAll(".thinking-dots > i")).toHaveLength(3);
 });

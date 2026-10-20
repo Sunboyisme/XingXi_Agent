@@ -64,6 +64,7 @@ def test_auto_preference_provenance_undo_and_retry(client):
     "text, kwargs, state",
     [
         ("我喜欢简短的回答", {}, "confirmed"),
+        ("我有每天学英语和读书的习惯", {}, "confirmed"),
         ("我有糖尿病", {"category": "fact"}, "candidate"),
         ("我的工资每月一万元", {}, "candidate"),
         ("我喜欢安静的地方", {"risk": "inferred"}, "candidate"),
@@ -224,3 +225,23 @@ def test_agent_calls_non_explicit_memory_tool_and_restores_events(configured):
     assert configured.get(API + "/memories").json()[0]["state"] == "confirmed"
     events = configured.get(f"{API}/runs/{run['id']}/tools").json()
     assert any(x["kind"] == "memory" for x in events)
+
+
+def test_agent_saves_a_clear_habit_when_the_model_only_claims_to_remember(configured):
+    conversation = configured.post(API + "/conversations", json={}).json()
+    run = wait_run(
+        configured,
+        configured.post(
+            f"{API}/conversations/{conversation['id']}/messages",
+            json={"content": "我有每天学英语和读书的习惯"},
+        ),
+    )
+    assert run["status"] == "completed", run.get("error")
+    records = configured.get(API + "/memories").json()
+    assert any(
+        item["content"] == "我有每天学英语和读书的习惯"
+        and item["state"] == "confirmed"
+        for item in records
+    )
+    events = configured.get(f"{API}/runs/{run['id']}/tools").json()
+    assert any(item["kind"] == "memory" for item in events)

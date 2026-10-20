@@ -1,9 +1,11 @@
 import json
+import re
 import threading
 import time
 
 from fastapi import HTTPException
 from langchain_core.tools import tool
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from . import plans as calendar
@@ -13,6 +15,61 @@ from .db import MESSAGE_ORDER, Message, Session
 _PENDING_PLAN_PROPOSALS: dict[str, dict] = {}
 _PENDING_PLAN_PROPOSALS_LOCK = threading.Lock()
 _PLAN_PROPOSAL_TTL = 24 * 60 * 60
+_CONFIRMATION = re.compile(
+    r"^(?:确认|确定|可以|好的|好|行|对|是的|没问题|就这样|写入|创建|保存|安排|按这个方案|就按这个方案|创建吧|写入吧|保存吧|ok|okay|yes)"
+    r"(?:创建|安排|保存|写入)?$",
+    re.IGNORECASE,
+)
+
+
+def _plan_signature(value: dict) -> tuple:
+    return (
+        " ".join(str(value.get("title", "")).split()),
+        value.get("start"),
+        value.get("end"),
+        bool(value.get("all_day")),
+        value.get("recurrence", "none"),
+        int(value.get("repeat_interval") or 1),
+        value.get("repeat_until"),
+        value.get("repeat_count"),
+        bool(value.get("reminder_enabled")),
+        tuple(value.get("reminder_offsets") or []),
+    )
+
+
+def _short_confirmation(text: str) -> bool:
+    compact = "".join(
+        character
+        for character in (text or "").strip()
+        if character not in " \t\r\n，,。.!！~～"
+    )
+    return bool(compact) and bool(_CONFIRMATION.fullmatch(compact))
+
+
+def _confirmed_plans(proposal, pending, latest_text):
+    """Use the plan the user actually saw when they reply “确定”.
+
+    Models often re-send a proposal with different defaults (for example an
+    omitted ``reminder_offsets``). Byte-identical JSON made a plain
+    confirmation fail with a generic tool error.
+    """
+    if proposal == pending:
+        return proposal
+    if (
+        len(proposal) == len(pending)
+        and _short_confirmation(latest_text)
+        and all(
+            " ".join(str(a.get("title", "")).split())
+            == " ".join(str(b.get("title", "")).split())
+            for a, b in zip(proposal, pending)
+        )
+    ):
+        return pending
+    if len(proposal) == len(pending) and all(
+        _plan_signature(a) == _plan_signature(b) for a, b in zip(proposal, pending)
+    ):
+        return proposal
+    return None
 
 
 def build(run_id, conversation_id):
@@ -21,6 +78,15 @@ def build(run_id, conversation_id):
             return json.dumps(operation(), ensure_ascii=False)
         except HTTPException as error:
             return json.dumps({"error": error.detail}, ensure_ascii=False)
+        except ValidationError as error:
+            detail = "；".join(
+                str(item.get("msg", "")).replace("Value error, ", "")
+                for item in error.errors()[:3]
+            )
+            return json.dumps(
+                {"error": f"计划参数格式不正确：{detail or '请检查日期与时间'}"},
+                ensure_ascii=False,
+            )
         except (ValueError, KeyError, TypeError):
             return json.dumps(
                 {"error": "参数无效，请核对日期、时间、技能或文件路径"},
@@ -38,7 +104,7 @@ def build(run_id, conversation_id):
         explicit_request: bool = False,
         confirm: bool = False,
     ) -> str:
-        """用户明确要求创建日历计划且日期、时间、范围清楚时，设 explicit_request=true 直接创建。其他情况先询问：首次调用不要传 confirm（或传 false），只登记待确认方案，返回 needs_confirmation，不写入日历；请把计划名称、日期或时间、重复和提醒摘要告诉用户并明确询问是否创建。用户没有说清日期、时间或范围时先追问，不能自行补全。只有用户在下一条消息明确同意后，才能再次提交同一方案并传 confirm=true；同一轮提出并创建会被拒绝。用户修改内容时重新提出方案。无时间的单项事项用全天，start/end 是日期（结束日期不包含当天）；定时事项用带时区 ISO 时间。recurrence 为 none/daily/weekly/monthly，repeat_interval 为间隔。repeat_until 是包含当天的截止日期，或 repeat_count 为包含首次的次数，二选一；未指定则永不结束。calendar_display 默认 summary 汇总日常，用户要求突出显示时用 always。reminder_enabled 控制提醒；reminder_offsets 是每次开始前后本地分钟偏移的数组（提前为负），多个提醒属于同一计划。提醒请求同样创建计划，不另建提醒事项。"""
+        """用户明确要求创建日历计划且日期、时间、范围清楚时，设 explicit_request=true 直接创建。其他情况先询问：首次调用不要传 confirm（或传 false），只登记待确认方案，返回 needs_confirmation，不写入日历；请把计划名称、日期或时间、重复和提醒摘要告诉用户并明确询问是否创建。用户没有说清日期、时间或范围时先追问，不能自行补全。只有用户在下一条消息明确同意后，才能再次提交同一方案并传 confirm=true；同一轮提出并创建会被拒绝。用户确认时直接提交用户刚看到的同一方案即可，参数缺失的默认值会被容错。用户修改内容时重新提出方案。无时间的单项事项用全天，start/end 是日期（结束日期不包含当天）；定时事项用 ISO 时间，未带偏移时按 timezone（默认 Asia/Shanghai）解释。recurrence 为 none/daily/weekly/monthly，repeat_interval 为间隔。repeat_until 是包含当天的截止日期，或 repeat_count 为包含首次的次数，二选一；未指定则永不结束。calendar_display 默认 summary 汇总日常，用户要求突出显示时用 always。reminder_enabled 控制提醒；reminder_offsets 是每次开始前后本地分钟偏移的数组（提前为负），多个提醒属于同一计划。提醒请求同样创建计划，不另建提醒事项。"""
 
         def create():
             if not 1 <= len(plans) <= 100:
@@ -54,11 +120,17 @@ def build(run_id, conversation_id):
                     .limit(1)
                 )
                 latest_message_id = message.id if message else ""
+                latest_text = (
+                    " ".join((message.content or "").split()) if message else ""
+                )
             proposal = [value.model_dump() for value in plans]
+            # A model may set both flags on an already authorized request.
+            # Explicit authorization must not depend on a pending proposal.
             if explicit_request:
+                result = calendar.create_events(plans, latest_message_id or None)
                 with _PENDING_PLAN_PROPOSALS_LOCK:
                     _PENDING_PLAN_PROPOSALS.pop(conversation_id, None)
-                return calendar.create_events(plans, latest_message_id or None)
+                return result
             if not confirm:
                 with _PENDING_PLAN_PROPOSALS_LOCK:
                     _PENDING_PLAN_PROPOSALS[conversation_id] = {
@@ -93,7 +165,9 @@ def build(run_id, conversation_id):
                     )
                 }
             if pending["status"] == "created":
-                if latest_message_id == pending.get("confirmed_message_id"):
+                if latest_message_id == pending.get("confirmed_message_id") or _confirmed_plans(
+                    proposal, pending["plans"], latest_text
+                ) is not None:
                     return pending["result"]
                 return {
                     "error": (
@@ -118,14 +192,20 @@ def build(run_id, conversation_id):
                         "同意后才能创建。"
                     )
                 }
-            if proposal != pending["plans"]:
+            chosen = _confirmed_plans(proposal, pending["plans"], latest_text)
+            if chosen is None:
                 return {
-                    "error": (
-                        "提交的内容与待确认方案不一致。请重新提出完整方案并再次"
-                        "询问用户，确认后再创建。"
-                    )
+                    "status": "needs_confirmation",
+                    "plans": pending["plans"],
+                    "message": (
+                        "提交的内容与用户刚看到的方案不一致，本轮没有写入。请把"
+                        "待确认方案重新完整告诉用户，并再次询问是否按这个方案创建。"
+                    ),
                 }
-            result = calendar.create_events(plans, latest_message_id or None)
+            result = calendar.create_events(
+                [calendar.PlanWrite(**value) for value in chosen],
+                latest_message_id or None,
+            )
             with _PENDING_PLAN_PROPOSALS_LOCK:
                 pending["status"] = "created"
                 pending["result"] = result

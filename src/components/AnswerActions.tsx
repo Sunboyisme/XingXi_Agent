@@ -10,7 +10,7 @@ import {
   DialogDescription,
 } from "./ui/dialog";
 import { RetrievalDebugger } from "./RetrievalDebugger";
-import { ErrorNotice } from "./common";
+import { ErrorNotice, Hint } from "./common";
 
 function toolSummary(event: RunEvent): string {
   const result = event.data.result as Record<string, unknown> | undefined;
@@ -117,34 +117,38 @@ export function AnswerActions({
   return (
     <>
       <div className="answer-actions" role="group" aria-label="回答操作">
-        <Button
-          className="answer-action"
-          size="icon"
-          variant="ghost"
-          aria-label={copied ? "已复制回答" : "复制回答"}
-          title={copied ? "已复制" : "复制回答"}
-          disabled={!content}
-          onClick={() => void copy()}
-        >
-          {copied ? <Check size={15} /> : <Copy size={15} />}
-        </Button>
+        <Hint label={copied ? "已复制" : "复制回答"}>
+          <Button
+            className="answer-action"
+            size="icon"
+            variant="ghost"
+            aria-label={copied ? "已复制回答" : "复制回答"}
+            disabled={!content}
+            onClick={() => void copy()}
+          >
+            {copied ? <Check size={15} /> : <Copy size={15} />}
+          </Button>
+        </Hint>
         {runId && (
           <>
             {(tools === undefined || tools.length > 0) && (
-              <Button
-                className="answer-action"
-                size="icon"
-                variant="ghost"
-                aria-label="工具调用结果"
-                title={
+              <Hint
+                label={
                   tools?.length
                     ? `工具调用结果 · ${tools.length} 项`
                     : "工具调用结果"
                 }
-                onClick={() => setOpen(true)}
               >
-                <Layers2 size={15} />
-              </Button>
+                <Button
+                  className="answer-action"
+                  size="icon"
+                  variant="ghost"
+                  aria-label="工具调用结果"
+                  onClick={() => setOpen(true)}
+                >
+                  <Layers2 size={15} />
+                </Button>
+              </Hint>
             )}
             <RetrievalDebugger runId={runId} status={runStatus} compact />
           </>

@@ -120,7 +120,7 @@ export function MemorySavedNotice({
       }}
     >
       <div className="memory-saved-row">
-        <span role="status" title={notice.content}>
+        <span role="status">
           <Bookmark size={16} aria-hidden="true" />
           {notice.action === "updated" ? "记忆已更新" : "已记住"}
         </span>

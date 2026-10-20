@@ -325,6 +325,46 @@ class MessageRead(RecordRead):
     run_id: str | None = None
 
 
+class ImageGenerationWrite(BaseModel):
+    enabled: bool = False
+    url: HttpUrl = "https://api.openai.com/v1"
+    model: str = Field(default="", max_length=200)
+    api_key: str | None = Field(default=None, max_length=4096)
+    size: str = Field(default="", max_length=32, pattern=r"^(?:|auto|[1-9]\d{1,4}x[1-9]\d{1,4})$")
+    response_format: Literal["auto", "b64_json", "url"] = "auto"
+
+    @model_validator(mode="after")
+    def valid_connection(self):
+        if isinstance(self.url, str):
+            self.url = HttpUrl(self.url)
+        if self.url.username or self.url.password or self.url.query or self.url.fragment:
+            raise ValueError("接口地址不能包含凭据、查询参数或片段")
+        self.model = self.model.strip()
+        if self.enabled and not self.model:
+            raise ValueError("请填写图片生成模型名称")
+        return self
+
+
+class ImageGenerationRead(BaseModel):
+    enabled: bool = False
+    url: str = "https://api.openai.com/v1"
+    model: str = ""
+    size: str = ""
+    response_format: Literal["auto", "b64_json", "url"] = "auto"
+    key_configured: bool = False
+
+
+class ImageGenerationTestRead(BaseModel):
+    ok: bool
+    message: str
+    protocol: str
+    endpoint: str
+    model: str
+    width: int | None = None
+    height: int | None = None
+    http_status: int | None = None
+
+
 class EmbeddingWrite(BaseModel):
     enabled: bool = False
     url: HttpUrl = "https://api.openai.com/v1"

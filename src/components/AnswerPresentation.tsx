@@ -7,7 +7,11 @@ import {
   Globe2,
 } from "lucide-react";
 import { ExternalLink } from "./ExternalLink";
-import { FileCard } from "./OfficeFiles";
+import {
+  DownloadResultDialog,
+  FileCard,
+  type DownloadedFile,
+} from "./OfficeFiles";
 import { api, fetchApi, type Artifact, type Presentation } from "@/lib/api";
 import {
   Dialog,
@@ -17,6 +21,11 @@ import {
   DialogDescription,
 } from "./ui/dialog";
 
+// Keep decoded pictures and resolved image artifacts for the session. Remounting
+// a message (stream → persisted answer, page switch) must not flash blank again.
+const pictureUrls = new Map<string, string>();
+const imageArtifacts = new Map<string, Artifact>();
+
 export function ArtifactPicture({
   artifact,
   label,
@@ -24,11 +33,17 @@ export function ArtifactPicture({
   artifact: Artifact;
   label?: string;
 }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(() => pictureUrls.get(artifact.id) || "");
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState(false);
   useEffect(() => {
+    const cached = pictureUrls.get(artifact.id);
+    if (cached) {
+      setUrl(cached);
+      setError("");
+      return;
+    }
     let live = true,
       objectUrl = "";
     const controller = new AbortController();
@@ -41,8 +56,12 @@ export function ArtifactPicture({
       .then((r) => r.blob())
       .then((blob) => {
         objectUrl = URL.createObjectURL(blob);
-        if (live) setUrl(objectUrl);
-        else URL.revokeObjectURL(objectUrl);
+        if (live) {
+          if (pictureUrls.size > 60)
+            pictureUrls.delete(pictureUrls.keys().next().value!);
+          pictureUrls.set(artifact.id, objectUrl);
+          setUrl(objectUrl);
+        } else URL.revokeObjectURL(objectUrl);
       })
       .catch(() => {
         if (live) setError("图片加载失败");
@@ -52,7 +71,9 @@ export function ArtifactPicture({
       live = false;
       controller.abort();
       clearTimeout(timeout);
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      // Cached URLs are reused when the same message mounts again.
+      if (!live && objectUrl && !pictureUrls.has(artifact.id))
+        URL.revokeObjectURL(objectUrl);
     };
   }, [artifact.id, attempt]);
   if (error)
@@ -103,15 +124,27 @@ export function RemotePicture({
   src: string;
   alt: string;
 }) {
-  const [artifact, setArtifact] = useState<Artifact | null>(null);
+  const [artifact, setArtifact] = useState<Artifact | null>(
+    () => imageArtifacts.get(`${runId}:${src}`) || null,
+  );
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    const key = `${runId}:${src}`;
+    const cached = imageArtifacts.get(key);
+    if (cached) {
+      setArtifact(cached);
+      setError("");
+      return;
+    }
     let live = true;
     setArtifact(null);
     setError("");
     void api<Artifact>(`/runs/${runId}/images`, "POST", { url: src })
       .then((value) => {
+        if (imageArtifacts.size > 100)
+          imageArtifacts.delete(imageArtifacts.keys().next().value!);
+        imageArtifacts.set(key, value);
         if (live) setArtifact(value);
       })
       .catch((e: Error) => {
@@ -125,7 +158,7 @@ export function RemotePicture({
   return error ? (
     <button
       className="image-load-error"
-      title={error}
+        aria-label={`${error}，点击重试`}
       onClick={() => setAttempt(attempt + 1)}
     >
       图片加载失败，重试
@@ -137,6 +170,8 @@ export function RemotePicture({
 
 function ArtifactDownload({ artifact }: { artifact: Artifact }) {
   const [error, setError] = useState("");
+  const [downloaded, setDownloaded] = useState<DownloadedFile | null>(null);
+  const [webSaved, setWebSaved] = useState(false);
   return (
     <span className="artifact-download">
       <button
@@ -144,8 +179,12 @@ function ArtifactDownload({ artifact }: { artifact: Artifact }) {
           try {
             setError("");
             if (isTauri()) {
-              await api(`/artifacts/${artifact.id}/export`, "POST");
-              await invoke("open_data_directory", { exports: true });
+              const path = await invoke<string>("download_office_file", {
+                fileId: artifact.id,
+                name: artifact.name,
+                upload: false,
+              });
+              setDownloaded({ name: artifact.name, path });
               return;
             }
             const response = await fetchApi(
@@ -159,6 +198,7 @@ function ArtifactDownload({ artifact }: { artifact: Artifact }) {
             anchor.click();
             anchor.remove();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setWebSaved(true);
           } catch (e) {
             setError((e as Error).message);
           }
@@ -167,7 +207,12 @@ function ArtifactDownload({ artifact }: { artifact: Artifact }) {
         <Download size={14} />
         {artifact.name}
       </button>
+      {webSaved && <span role="status">已下载</span>}
       {error && <span role="alert">{error}</span>}
+      <DownloadResultDialog
+        value={downloaded}
+        onClose={() => setDownloaded(null)}
+      />
     </span>
   );
 }
@@ -187,7 +232,6 @@ export function AnswerPresentation({
   useEffect(() => {
     if (!runId) return;
     let live = true;
-    setValue(null);
     setError("");
     void api<Presentation>(`/runs/${runId}/presentation`)
       .then((result) => {
@@ -206,7 +250,7 @@ export function AnswerPresentation({
       {error && (
         <button
           className="presentation-retry"
-          title={error}
+          aria-label={`来源与产物暂不可用：${error}。点击重试`}
           onClick={() => setAttempt(attempt + 1)}
         >
           来源与产物暂不可用，重试

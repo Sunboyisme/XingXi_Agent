@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { Download, Eye, FileText, Loader2, Save } from "lucide-react";
+import {
+  Download,
+  Eye,
+  FileText,
+  FolderOpen,
+  Loader2,
+  Save,
+} from "lucide-react";
 import { api, fetchApi, type Artifact, type Attachment } from "@/lib/api";
+import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "./ui/dialog";
 import { Picture } from "./ImageAttachments";
 
@@ -22,6 +31,59 @@ type Preview = {
   page?: number;
   pages?: number;
 };
+
+export type DownloadedFile = { name: string; path: string };
+
+export function DownloadResultDialog({
+  value,
+  onClose,
+}: {
+  value: DownloadedFile | null;
+  onClose: () => void;
+}) {
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!value) setError("");
+  }, [value]);
+  return (
+    <Dialog
+      open={Boolean(value)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="download-result-dialog">
+        <DialogHeader>
+          <DialogTitle>文件已下载</DialogTitle>
+          <DialogDescription>{value?.name}</DialogDescription>
+        </DialogHeader>
+        <div className="download-result-path">
+          <FolderOpen size={18} aria-hidden="true" />
+          <code>{value?.path}</code>
+        </div>
+        {error && <p role="alert">{error}</p>}
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              if (!value) return;
+              setError("");
+              try {
+                await invoke("open_download_location", { path: value.path });
+              } catch (cause) {
+                setError((cause as Error).message);
+              }
+            }}
+          >
+            <FolderOpen size={14} />
+            打开所在文件夹
+          </Button>
+          <Button onClick={onClose}>知道了</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function FileCard({
   file,
@@ -38,6 +100,7 @@ export function FileCard({
   const [page, setPage] = useState(1);
   const [retry, setRetry] = useState(0);
   const [notice, setNotice] = useState("");
+  const [downloaded, setDownloaded] = useState<DownloadedFile | null>(null);
   const prefix = upload ? "files" : "artifacts";
   useEffect(() => {
     if (!open) return;
@@ -71,17 +134,15 @@ export function FileCard({
             upload,
           });
           if (saved) setNotice("文件已另存为");
-        } else if (!upload) {
-          await api(`/artifacts/${file.id}/export`, "POST");
-          await invoke("open_data_directory", { exports: true });
-          setNotice("文件已保存到导出目录");
         } else {
-          const saved = await invoke<boolean>("save_office_file", {
+          // “下载” is a normal download: go to the Windows Downloads folder,
+          // never into the application's private data directory.
+          const path = await invoke<string>("download_office_file", {
             fileId: file.id,
             name: file.name,
-            upload: true,
+            upload,
           });
-          if (saved) setNotice("原文件已另存为");
+          setDownloaded({ name: file.name, path });
         }
       } else {
         const response = await fetchApi(
@@ -107,7 +168,7 @@ export function FileCard({
       <div className="office-file-card">
         <FileText size={23} />
         <div className="office-file-copy">
-          <strong title={file.name}>{file.name}</strong>
+          <strong>{file.name}</strong>
           <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>
         </div>
         <div className="office-file-actions">
@@ -253,6 +314,10 @@ export function FileCard({
           </div>
         </DialogContent>
       </Dialog>
+      <DownloadResultDialog
+        value={downloaded}
+        onClose={() => setDownloaded(null)}
+      />
     </>
   );
 }

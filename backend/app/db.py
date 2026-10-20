@@ -48,6 +48,7 @@ class Settings(Base):
     model_providers: Mapped[list] = mapped_column(JSON, default=list)
     default_provider: Mapped[str] = mapped_column(String(30), default="custom")
     embedding_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    image_generation_config: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Conversation(Record, Base):

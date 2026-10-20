@@ -4,6 +4,7 @@ from .db import Session, Run, RunEvent
 from .provider import safe_error
 
 tasks: dict[str, asyncio.Task] = {}
+RUN_TIMEOUT_SECONDS = 720
 
 
 def emit(run_id: str, kind: str, data: dict):
@@ -19,7 +20,10 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
                 db.get(Run, run_id).status = "running"
                 db.commit()
             emit(run_id, "status", {"status": "running"})
-            async with asyncio.timeout(240):
+            # A tool round can include a long image request before the model
+            # writes its final answer. The run deadline is only a last-resort
+            # guard; individual providers still enforce their own timeouts.
+            async with asyncio.timeout(RUN_TIMEOUT_SECONDS):
                 result = await operation()
             with Session() as db:
                 run = db.get(Run, run_id)
@@ -34,10 +38,25 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
                 db.commit()
             emit(run_id, "cancelled", {})
         except Exception as error:
+            if isinstance(error, TimeoutError):
+                from .agent import recover_durable_reply
+                recovered = recover_durable_reply(run_id)
+                if recovered:
+                    with Session() as db:
+                        run = db.get(Run, run_id)
+                        run.status = "completed"
+                        run.result = recovered
+                        run.error = None
+                        db.commit()
+                    emit(run_id, "done", {"result": recovered})
+                    return
+            with Session() as db:
+                failed_run = db.get(Run, run_id)
+                model_config = failed_run.model_config if failed_run.kind == "chat" else None
             message = (
                 "执行超时，请缩小问题范围后重试。"
                 if isinstance(error, TimeoutError)
-                else safe_error(error)
+                else safe_error(error, model_config=model_config)
             )
             with Session() as db:
                 run = db.get(Run, run_id)

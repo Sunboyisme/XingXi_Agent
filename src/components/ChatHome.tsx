@@ -17,6 +17,7 @@ import {
   type Conversation,
   type Goal,
 } from "@/lib/api";
+import { Hint } from "./common";
 
 export function ChatHome({
   conversations,
@@ -118,15 +119,15 @@ export function ChatHome({
     <section className="chat-home" aria-label="首页内容">
       <div className="home-shortcuts" aria-label="快捷提示">
         {promptIdeas.map(({ label, accessibleLabel, icon: Icon, prompt }) => (
-          <button
-            key={label}
-            aria-label={accessibleLabel || label}
-            title={prompt}
-            onClick={() => onPrompt(prompt)}
-          >
-            <Icon size={15} />
-            {label}
-          </button>
+          <Hint key={label} label={prompt}>
+            <button
+              aria-label={accessibleLabel || label}
+              onClick={() => onPrompt(prompt)}
+            >
+              <Icon size={15} />
+              {label}
+            </button>
+          </Hint>
         ))}
         <button onClick={continueLearning}>
           <BookOpen size={15} />

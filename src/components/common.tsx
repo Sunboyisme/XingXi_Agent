@@ -1,8 +1,10 @@
 import { RemotePicture } from "./AnswerPresentation";
-import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AlertCircle, TriangleAlert } from "lucide-react";
+import { AlertCircle, Check, TriangleAlert, X } from "lucide-react";
+import { Tooltip } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -17,6 +19,35 @@ export { ImagesInput, Picture } from "./ImageAttachments";
 import { api } from "@/lib/api";
 import { ExternalLink } from "./ExternalLink";
 
+export function Hint({
+  label,
+  side = "top",
+  children,
+}: {
+  label: string;
+  side?: "top" | "right" | "bottom" | "left";
+  children: React.ReactElement;
+}) {
+  return (
+    <Tooltip.Provider delayDuration={260} skipDelayDuration={100}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            className="ui-hint"
+            side={side}
+            sideOffset={7}
+            collisionPadding={8}
+          >
+            {label}
+            <Tooltip.Arrow className="ui-hint-arrow" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  );
+}
+
 export function Markdown({
   children,
   runId,
@@ -24,20 +55,23 @@ export function Markdown({
   children: string;
   runId?: string;
 }) {
+  // React treats these renderers as component types. Recreating them on each
+  // token or scroll update remounts pictures and collapses their loaded height.
+  const components = useMemo<Components>(
+    () => ({
+      img: ({ src, alt }) =>
+        typeof src === "string" && runId ? (
+          <RemotePicture runId={runId} src={src} alt={alt || "图片"} />
+        ) : (
+          <img src={src} alt={alt || "图片"} loading="lazy" />
+        ),
+      a: ({ node: _node, ...props }) => <ExternalLink {...props} />,
+    }),
+    [runId],
+  );
   return (
     <div className="markdown">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img: ({ src, alt }) =>
-            typeof src === "string" && runId ? (
-              <RemotePicture runId={runId} src={src} alt={alt || "图片"} />
-            ) : (
-              <img src={src} alt={alt || "图片"} loading="lazy" />
-            ),
-          a: ({ node: _node, ...props }) => <ExternalLink {...props} />,
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {children}
       </ReactMarkdown>
     </div>
@@ -47,20 +81,68 @@ export function Markdown({
 export function ErrorNotice({
   message,
   retry,
+  action,
 }: {
   message: string;
   retry?: () => void;
+  action?: { label: string; onClick: () => void };
 }) {
   return (
     <div className="error-notice" role="alert">
       <AlertCircle size={17} />
-      <span>{message}</span>
-      {retry && (
-        <Button size="sm" variant="ghost" onClick={retry}>
-          重试
-        </Button>
+      <span className="error-notice-text">{message}</span>
+      {(action || retry) && (
+        <span className="error-notice-actions">
+          {action && (
+            <Button size="sm" variant="ghost" onClick={action.onClick}>
+              {action.label}
+            </Button>
+          )}
+          {retry && (
+            <Button size="sm" variant="ghost" onClick={retry}>
+              重试
+            </Button>
+          )}
+        </span>
       )}
     </div>
+  );
+}
+
+export function Toast({
+  message,
+  tone = "success",
+  onClose,
+}: {
+  message: string;
+  tone?: "success" | "error";
+  onClose: () => void;
+}) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => close.current(),
+      tone === "error" ? 7000 : 4200,
+    );
+    return () => window.clearTimeout(timer);
+  }, [message, tone]);
+  return createPortal(
+    <div className={`app-toast is-${tone}`} role="status" aria-live="polite">
+      <span className="app-toast-icon" aria-hidden="true">
+        {tone === "success" ? <Check size={15} /> : <AlertCircle size={15} />}
+      </span>
+      <span className="app-toast-text">{message}</span>
+      <button
+        type="button"
+        className="app-toast-close"
+        aria-label="关闭提示"
+        onClick={onClose}
+      >
+        <X size={14} />
+      </button>
+    </div>,
+    document.body,
   );
 }
 

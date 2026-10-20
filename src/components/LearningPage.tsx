@@ -48,6 +48,7 @@ import {
   Markdown,
   nodeStatus,
   ConfirmDelete,
+  Toast,
 } from "./common";
 import { BaiAvatar } from "./BaiAvatar";
 
@@ -314,6 +315,10 @@ export function LearningPage({
     goal?.nodes.filter((value) => value.status === "passed").length ?? 0;
   return (
     <div className={`learning-page ${goal ? "has-course" : "page-content"}`}>
+      {notice && <Toast message={notice} onClose={() => setNotice("")} />}
+      {error && (
+        <Toast tone="error" message={error} onClose={() => setError("")} />
+      )}
       {!goal ? (
         <>
           <div className="page-heading">
@@ -325,7 +330,6 @@ export function LearningPage({
               新的学习目标
             </Button>
           </div>
-          {error && <ErrorNotice message={error} />}
           {goals.length ? (
             <div className="goal-grid">
               {goals.map((value) => {
@@ -537,12 +541,6 @@ export function LearningPage({
             <div className="lesson-content" ref={answerDropTarget}>
               <div className="lesson-scroll">
                 <div className="lesson-inner">
-                  {notice && (
-                    <p className="success-notice" role="status">
-                      {notice}
-                    </p>
-                  )}
-                  {error && <ErrorNotice message={error} />}
                   <div className="lesson-topline">
                     <div className="lesson-location">
                       <span>{node?.module || "课程规划"}</span>

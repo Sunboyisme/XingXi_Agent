@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { ModelConnections } from "./ModelConnections";
 import { type Settings, type Memory } from "@/lib/api";
-import { ErrorNotice } from "./common";
+import { Toast } from "./common";
 import { WechatSection } from "./WechatSection";
 import { ToolsSettings } from "./ToolsSettings";
 import { MemoryPage } from "./MemoryPage";
 import { EmbeddingSettings } from "./EmbeddingSettings";
 import { SearchConnection } from "./SearchConnection";
+import { ImageGenerationConnection } from "./ImageGenerationConnection";
 import { SkillsSettings } from "./SkillsSettings";
 import { DataSettings } from "./DataSettings";
 import { ScriptRuntimeSettings } from "./ScriptRuntimeSettings";
@@ -24,6 +25,7 @@ function ConnectionSettings({
       <ModelConnections settings={settings} onSaved={onSaved} />
       <div className="connections-services">
         <EmbeddingSettings />
+        <ImageGenerationConnection />
         <SearchConnection settings={settings} onSaved={onSaved} />
         <WechatSection compact />
       </div>
@@ -66,7 +68,9 @@ export function SettingsPage({
       <div className="page-heading">
         <h1>设置</h1>
       </div>
-      {error && <ErrorNotice message={error} />}
+      {error && (
+        <Toast tone="error" message={error} onClose={() => setError("")} />
+      )}
       <div className="settings-tabs" role="tablist" aria-label="设置分类">
         {(
           [

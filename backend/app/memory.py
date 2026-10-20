@@ -41,7 +41,10 @@ TEMPORARY = re.compile(
     re.IGNORECASE,
 )
 PREFERENCE = re.compile(
-    r"我.{0,8}(?:喜欢|偏好|习惯|希望|倾向|更想)|(?:回答|回复|解释|界面|设计).{0,8}(?:简短|简洁|详细|圆角|扁平)|\bI (?:prefer|like|always)\b",
+    r"我.{0,20}(?:喜欢|偏好|习惯|坚持|希望|倾向|更想)"
+    r"|我(?:每天|每周|平时|通常|一般).{0,20}(?:学习|读书|阅读|运动|跑步|健身|早起|写日记)"
+    r"|(?:回答|回复|解释|界面|设计).{0,8}(?:简短|简洁|详细|圆角|扁平)"
+    r"|\bI (?:prefer|like|always)\b",
     re.IGNORECASE,
 )
 SENSITIVE = re.compile(
@@ -56,6 +59,35 @@ SECRET = re.compile(
 
 class MemoryConflict(ValueError):
     pass
+
+
+def preference_clause(message: str) -> str:
+    """A conservative fallback for clear, stable preferences stated by the user.
+
+    The model usually calls ``remember`` itself. When it only *claims* to have
+    remembered something, this extracts the user's own clause so an obvious
+    habit such as “我有每天学英语和读书的习惯” is not silently lost.
+    """
+    text = " ".join((message or "").split())
+    if not text or len(text) > 240:
+        return ""
+    if DECLINED.search(text) or SECRET.search(text) or TEMPORARY.search(text):
+        return ""
+    explicit = EXPLICIT.search(text)
+    clauses = [part.strip(" ，,。.；;：:") for part in re.split(r"[，,。；;\n]", text)]
+    for clause in clauses:
+        if not clause or len(clause) > 160:
+            continue
+        if PREFERENCE.search(clause):
+            return clause
+    if explicit and len(text) <= 160:
+        value = re.sub(
+            r"^(?:请|麻烦)?(?:你)?(?:记住|记下|记着)[：:，,\s]*",
+            "",
+            text,
+        ).strip(" ，,。.；;")
+        return value if value and value != text else ""
+    return ""
 
 
 def snapshot(value: Memory) -> dict:

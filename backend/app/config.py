@@ -19,6 +19,23 @@ VAULT_SERVICE = "BaiAgent-" + hashlib.sha256(str(DATA_DIR).encode()).hexdigest()
 PROFILE_ID = "local"
 
 
+def legacy_vault_services() -> list[str]:
+    """Credential services used before the data directory was renamed.
+
+    Windows credentials are keyed by a hash of the data directory, so moving
+    from ``com.qinbai.baiagent`` to ``XiaoXi_Agent`` would otherwise look like
+    a fresh install with no API keys. Reads fall back to the old service and
+    copy the value forward on first use.
+    """
+    local = os.getenv("LOCALAPPDATA")
+    if not local:
+        return []
+    legacy = (Path(local) / "com.qinbai.baiagent").resolve()
+    if legacy == DATA_DIR:
+        return []
+    return ["BaiAgent-" + hashlib.sha256(str(legacy).encode()).hexdigest()[:16]]
+
+
 def frontend_origins() -> list[str]:
     """An explicit alternate loopback origin for isolated desktop QA."""
     from urllib.parse import urlsplit
@@ -48,7 +65,18 @@ def secret_get(name: str) -> str:
         return override
     import keyring
 
-    return keyring.get_password(VAULT_SERVICE, name) or ""
+    value = keyring.get_password(VAULT_SERVICE, name)
+    if value:
+        return value
+    for service in legacy_vault_services():
+        value = keyring.get_password(service, name)
+        if value:
+            try:
+                keyring.set_password(VAULT_SERVICE, name, value)
+            except Exception:  # noqa: BLE001 - reading must still succeed
+                pass
+            return value
+    return ""
 
 
 def secret_set(name: str, value: str | None) -> None:

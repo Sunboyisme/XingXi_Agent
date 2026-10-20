@@ -101,7 +101,7 @@ uv run --project backend python backend/tests/mock_provider.py                  
 
 ## 数据与配置
 
-- 数据目录由 `BAI_DATA_DIR` 决定：开发版 `.local-data/dev`，测试版 `.local-data/preview-runtime`，安装版 `%LOCALAPPDATA%\com.qinbai.baiagent`。浏览器/隔离验证各用独立子目录。
+- 数据目录由 `BAI_DATA_DIR` 决定：开发版 `.local-data/dev`，测试版 `.local-data/preview-runtime`，安装版 `%LOCALAPPDATA%\XiaoXi_Agent`（旧版 `com.qinbai.baiagent` 首次启动自动迁移）。浏览器/隔离验证各用独立子目录。
 - 每个数据目录下：`bai.sqlite`（业务数据 + 向量）、`checkpoints.sqlite`（学习图）、`attachments/`、`auth-token`（本机 bearer token）；安装版另有 `backend.log`。
 - API 密钥和微信凭据存 Windows 凭据库，按数据目录隔离，不写入数据库或前端；测试通过 monkeypatch 的假 vault 隔离。
 - 后端只监听 `127.0.0.1`，不要暴露到公网。

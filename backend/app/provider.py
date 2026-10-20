@@ -144,7 +144,7 @@ async def ask_json(
             )
 
 
-def safe_error(error: Exception) -> str:
+def safe_error(error: Exception, *, model_config=None) -> str:
     if isinstance(error, ConfigurationError):
         return str(error)[:600]
     if isinstance(error, ValueError):
@@ -159,6 +159,13 @@ def safe_error(error: Exception) -> str:
             return str(error)[:600]
         return "输入参数或模型返回格式不符合要求，请检查后重试。"
     status = getattr(error, "status_code", None)
+    if status in (401, 403) and model_config:
+        name = str(model_config.get("model_name") or "未命名")[:200]
+        reason = "认证失败" if status == 401 else "无访问权限"
+        return (
+            f"聊天模型「{name}」{reason}（HTTP {status}），"
+            "请在「连接与设置 → 模型连接」检查该连接的密钥、接口地址与模型授权。"
+        )
     if status in (401, 403):
         return "接口认证失败，请检查密钥与接口地址。"
     if status == 429:

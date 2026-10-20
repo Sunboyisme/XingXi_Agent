@@ -27,7 +27,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
-import { ConfirmDelete, ErrorNotice } from "./common";
+import { ConfirmDelete, ErrorNotice, Toast } from "./common";
 
 type Connection = Settings["providers"][number];
 type Draft = Connection & { api_key?: string | null };
@@ -258,12 +258,11 @@ export function ModelConnections({
           添加模型连接
         </Button>
       </div>
-      {!draft && error && <ErrorNotice message={error} />}
       {!draft && notice && (
-        <p className="connection-notice" role="status">
-          <Check size={14} />
-          {notice}
-        </p>
+        <Toast message={notice} onClose={() => setNotice("")} />
+      )}
+      {!draft && error && (
+        <Toast tone="error" message={error} onClose={() => setError("")} />
       )}
       {options.length > 0 && (
         <div className="model-default-panel">
@@ -444,12 +443,6 @@ export function ModelConnections({
           {draft && (
             <>
               <div className="model-dialog-body">
-                {error && <ErrorNotice message={error} />}{" "}
-                {notice && (
-                  <p className="connection-notice" role="status">
-                    {notice}
-                  </p>
-                )}
                 <section className="model-dialog-section">
                   <div className="model-dialog-section-title">
                     <span>1</span>
@@ -640,7 +633,9 @@ export function ModelConnections({
                             />
                             <span>
                               <strong>图片输入</strong>
-                              <small>模型能理解截图和照片时开启</small>
+                              <small>
+                                用于理解截图和照片；生图请配置独立图片模型
+                              </small>
                             </span>
                           </label>
                           <div className="model-thinking-control">
@@ -679,6 +674,15 @@ export function ModelConnections({
                     ))}
                   </div>
                 </section>
+              </div>
+              <div className="model-dialog-status">
+                {error && <ErrorNotice message={error} />}
+                {notice && (
+                  <p className="connection-notice" role="status">
+                    <Check size={14} />
+                    {notice}
+                  </p>
+                )}
               </div>
               <DialogFooter className="model-dialog-footer">
                 <Button

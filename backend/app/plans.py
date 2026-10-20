@@ -69,13 +69,17 @@ class PlanWrite(BaseModel):
                 datetime.fromisoformat(self.start),
                 datetime.fromisoformat(self.end),
             )
-            if start.tzinfo is None or end.tzinfo is None:
-                raise ValueError("时间必须包含时区")
+            # Naive times are interpreted in the plan's own timezone. Models
+            # frequently omit the offset; rejecting that lost the whole plan.
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=zone)
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=zone)
             self.start, self.end = utc(start), utc(end)
             if self.reminder_at is not None:
                 reminder = datetime.fromisoformat(self.reminder_at)
                 if reminder.tzinfo is None:
-                    raise ValueError("提醒时间必须包含时区")
+                    reminder = reminder.replace(tzinfo=zone)
                 self.reminder_at = utc(reminder)
         if end <= start:
             raise ValueError("结束须晚于开始；全天结束日期不包含当天")

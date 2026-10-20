@@ -6,7 +6,12 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { CalendarPage, eventsOnDay, zonedISO } from "./CalendarPage";
+import {
+  CalendarPage,
+  eventsOnDay,
+  nextPlanEnd,
+  zonedISO,
+} from "./CalendarPage";
 import type { CalendarEvent } from "@/lib/api";
 const mock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api", () => ({ api: mock }));
@@ -28,6 +33,19 @@ test("calendar uses the selected timezone and exclusive all-day ending", () => {
   ] as CalendarEvent[];
   expect(eventsOnDay(events, "2026-10-21", "Asia/Shanghai")).toHaveLength(1);
   expect(eventsOnDay(events, "2026-10-22", "Asia/Shanghai")).toHaveLength(0);
+});
+
+test("a later start moves the end to one hour after it", () => {
+  expect(nextPlanEnd("2026-10-23T15:30", "2026-10-22T16:00", false)).toBe(
+    "2026-10-23T16:30",
+  );
+  expect(nextPlanEnd("2026-10-23T23:30", "2026-10-23T23:45", false)).toBe(
+    "2026-10-24T00:30",
+  );
+  expect(nextPlanEnd("2026-10-23", "2026-10-22", true)).toBe("2026-10-23");
+  expect(nextPlanEnd("2026-10-23T09:00", "2026-10-23T10:30", false)).toBe(
+    "2026-10-23T10:30",
+  );
 });
 
 test("creates an all-day plan with reminders off and retains calendar/week views", async () => {

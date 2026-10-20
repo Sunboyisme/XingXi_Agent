@@ -20,6 +20,26 @@ from . import config
 from .db import Artifact, RunEvent, Session, uid
 
 LIMIT = 10 * 1024 * 1024
+IMAGE_SUFFIXES = (
+    ".avif",
+    ".bmp",
+    ".gif",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
+)
+
+
+def looks_like_image_url(value):
+    if value.startswith("data:image/"):
+        return True
+    return (
+        value.startswith(("http://", "https://"))
+        and urlsplit(value).path.lower().endswith(IMAGE_SUFFIXES)
+    )
 
 
 def root():
@@ -38,21 +58,23 @@ def describe(row):
     }
 
 
+def image_info(data):
+    if len(data) > LIMIT:
+        raise ValueError("图片超过 10 MB")
+    with Image.open(io.BytesIO(data)) as picture:
+        if picture.width * picture.height > 40_000_000 or picture.format not in {
+            "JPEG", "PNG", "WEBP", "GIF",
+        }:
+            raise ValueError("图片格式或尺寸不支持")
+        value = {"media_type": Image.MIME[picture.format], "width": picture.width, "height": picture.height}
+        picture.verify()
+    return value
+
+
 def save_file(run_id, name, data, source_url="", image=False):
     media = mimetypes.guess_type(name)[0] or "application/octet-stream"
     if image or media.startswith("image/"):
-        if len(data) > LIMIT:
-            raise ValueError("图片超过 10 MB")
-        with Image.open(io.BytesIO(data)) as picture:
-            if picture.width * picture.height > 40_000_000 or picture.format not in {
-                "JPEG",
-                "PNG",
-                "WEBP",
-                "GIF",
-            }:
-                raise ValueError("图片格式或尺寸不支持")
-            media = Image.MIME[picture.format]
-            picture.verify()
+        media = image_info(data)["media_type"]
         if Path(name).suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
             name += {
                 "image/jpeg": ".jpg",
@@ -264,11 +286,15 @@ async def normalize(run_id, value, read=False):
         elif isinstance(item, list):
             for child in item[:30]:
                 image_links(child, depth + 1, image_context)
-        elif isinstance(item, str) and item.lstrip().startswith(("{", "[")):
-            try:
-                image_links(json.loads(item), depth + 1)
-            except (ValueError, RecursionError):
-                pass
+        elif isinstance(item, str):
+            stripped = item.lstrip()
+            if stripped.startswith(("{", "[")):
+                try:
+                    image_links(json.loads(stripped), depth + 1)
+                except (ValueError, RecursionError):
+                    pass
+            elif image_context or looks_like_image_url(item):
+                urls.append(item)
 
     image_links(value)
     value["image_urls"] = list(

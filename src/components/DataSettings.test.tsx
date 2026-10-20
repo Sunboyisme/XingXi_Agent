@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import {
   cleanup,
   fireEvent,
@@ -37,11 +38,13 @@ test("shows the current storage and exports without touching provider settings",
       ? { path: "C:/isolated/exports/data.zip", name: "data.zip" }
       : data,
   );
+  mocks.invoke.mockResolvedValue("D:/chosen/data.zip");
   render(<DataSettings />);
   await screen.findByText("C:/isolated/bai.sqlite");
   fireEvent.click(screen.getByRole("button", { name: "导出数据" }));
-  await screen.findByText("C:/isolated/exports/data.zip");
-  expect(mocks.api).toHaveBeenCalledWith("/settings/data/export", "POST");
+  await screen.findByText("D:/chosen/data.zip");
+  expect(mocks.invoke).toHaveBeenCalledWith("save_data_export");
+  expect(mocks.api).not.toHaveBeenCalledWith("/settings/data/export", "POST");
   expect(mocks.api.mock.calls.some((call) => call[0] === "/settings")).toBe(
     false,
   );
@@ -49,6 +52,23 @@ test("shows the current storage and exports without touching provider settings",
   await waitFor(() =>
     expect(mocks.invoke).toHaveBeenCalledWith("open_data_directory"),
   );
+});
+
+test("cancelling export never reports a saved file, and save errors can be retried", async () => {
+  mocks.api.mockResolvedValue(data);
+  mocks.invoke
+    .mockResolvedValueOnce(null)
+    .mockRejectedValueOnce(new Error("文件被占用"));
+  render(<DataSettings />);
+  await screen.findByText("C:/isolated/bai.sqlite");
+  const button = screen.getByRole("button", { name: "导出数据" });
+  fireEvent.click(button);
+  await waitFor(() => expect(button).not.toBeDisabled());
+  expect(screen.queryByText(/已导出到/)).toBeNull();
+  fireEvent.click(button);
+  await screen.findByText("文件被占用");
+  expect(screen.queryByText(/已导出到/)).toBeNull();
+  expect(button).not.toBeDisabled();
 });
 
 test("import inspection makes no changes until confirmation and can be cancelled after staging", async () => {

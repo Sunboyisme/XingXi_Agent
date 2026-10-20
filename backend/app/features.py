@@ -252,17 +252,26 @@ async def artifact_preview(artifact_id: str, page: int = 1):
 def artifact_export(artifact_id: str):
     import re
     import shutil
+    from pathlib import Path
 
     from . import config
 
     path, record = artifacts.file_record(artifact_id)
     safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", record.name).strip(" .") or "文件"
     if len(safe_name) > 100:
-        from pathlib import Path
-
         safe_name = safe_name[:85] + Path(safe_name).suffix[:12]
     folder = config.DATA_DIR / "exports"
     folder.mkdir(exist_ok=True)
-    target = folder / f"{record.id}-{safe_name}"
+    # Keep the user-facing name clean: never prefix exported files with the artifact id.
+    target = folder / safe_name
+    if target.exists():
+        stem, suffix = Path(safe_name).stem, Path(safe_name).suffix
+        for index in range(2, 1000):
+            candidate = folder / f"{stem} ({index}){suffix}"
+            if not candidate.exists():
+                target = candidate
+                break
+        else:
+            raise HTTPException(409, "导出目录中的同名文件过多，请先整理后再试。")
     shutil.copyfile(path, target)
     return {"name": target.name, "path": str(target)}

@@ -143,6 +143,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/image-generation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Image Generation Settings */
+        get: operations["image_generation_settings_api_v1_settings_image_generation_get"];
+        /** Save Image Generation */
+        put: operations["save_image_generation_api_v1_settings_image_generation_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/image-generation/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Image Generation */
+        post: operations["test_image_generation_api_v1_settings_image_generation_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/embedding/test": {
         parameters: {
             query?: never;
@@ -1571,6 +1606,91 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** ImageGenerationRead */
+        ImageGenerationRead: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Url
+             * @default https://api.openai.com/v1
+             */
+            url: string;
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /**
+             * Size
+             * @default
+             */
+            size: string;
+            /**
+             * Response Format
+             * @default auto
+             * @enum {string}
+             */
+            response_format: "auto" | "b64_json" | "url";
+            /**
+             * Key Configured
+             * @default false
+             */
+            key_configured: boolean;
+        };
+        /** ImageGenerationTestRead */
+        ImageGenerationTestRead: {
+            /** Ok */
+            ok: boolean;
+            /** Message */
+            message: string;
+            /** Protocol */
+            protocol: string;
+            /** Endpoint */
+            endpoint: string;
+            /** Model */
+            model: string;
+            /** Width */
+            width?: number | null;
+            /** Height */
+            height?: number | null;
+            /** Http Status */
+            http_status?: number | null;
+        };
+        /** ImageGenerationWrite */
+        ImageGenerationWrite: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Url
+             * Format: uri
+             * @default https://api.openai.com/v1
+             */
+            url: string;
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /** Api Key */
+            api_key?: string | null;
+            /**
+             * Size
+             * @default
+             */
+            size: string;
+            /**
+             * Response Format
+             * @default auto
+             * @enum {string}
+             */
+            response_format: "auto" | "b64_json" | "url";
+        };
         /** ImageResolve */
         ImageResolve: {
             /** Url */
@@ -2906,6 +3026,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmbeddingRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    image_generation_settings_api_v1_settings_image_generation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerationRead"];
+                };
+            };
+        };
+    };
+    save_image_generation_api_v1_settings_image_generation_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageGenerationWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerationRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_image_generation_api_v1_settings_image_generation_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageGenerationWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerationTestRead"];
                 };
             };
             /** @description Validation Error */

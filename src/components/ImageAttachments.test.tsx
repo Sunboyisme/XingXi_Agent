@@ -78,6 +78,26 @@ test("drop uploads once, renders a thumbnail and supports zoom and removal", asy
   expect(URL.revokeObjectURL).toHaveBeenCalled();
 });
 
+test("pasted clipboard images enter the same attachment upload flow", async () => {
+  render(<Host />);
+  const file = new File(["image"], "粘贴截图.png", { type: "image/png" });
+  fireEvent.paste(screen.getByTestId("drop"), {
+    clipboardData: {
+      items: [
+        {
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => file,
+        },
+      ],
+      files: [file],
+    },
+  });
+  await screen.findByRole("button", { name: "放大 粘贴截图.png" });
+  expect(mocks.uploadImage).toHaveBeenCalledTimes(1);
+  expect(mocks.uploadImage).toHaveBeenCalledWith(file);
+});
+
 test("failed upload can retry without losing other successful files", async () => {
   mocks.uploadImage
     .mockRejectedValueOnce(new Error("模拟上传失败"))

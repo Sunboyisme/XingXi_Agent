@@ -255,6 +255,9 @@ class WechatChannel:
                         secret_set("wechat_context", "")
                         update_state(
                             enabled=True,
+                            # Connecting WeChat is the user's opt-in for reminder
+                            # delivery; the switch in settings can still turn it off.
+                            reminders_enabled=True,
                             account_id=account,
                             owner_id=owner,
                             base_url=base,

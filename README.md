@@ -1,6 +1,6 @@
-# XiaoXi · 0.1.4
+# XiaoXi · 0.1.5
 
-0.1.4 支持上传办公资料、显示解析状态、按需读取与生成 Word、PDF、Excel、TXT、MD、CSV、JSON 结果文件，并提供预览、下载和另存为；同时改进提醒卡、重复计划、对话定位与学习回答区。Windows x64 安装包于 2026-10-20 经用户授权构建。详见 [0.1.4 发布说明](docs/releases/0.1.4.md)与[文件功能](docs/files.md)。
+0.1.5 修正计划开始与结束时间联动，并修复聊天输入框无法直接粘贴图片的问题。0.1.4 支持上传办公资料、显示解析状态、按需读取与生成 Word、PDF、Excel、TXT、MD、CSV、JSON 结果文件，并提供预览、下载和另存为；同时改进提醒卡、重复计划、对话定位与学习回答区。详见 [0.1.5 更新记录](docs/updata/0.1.5/changes.md)、[0.1.4 发布说明](docs/releases/0.1.4.md)与[文件功能](docs/files.md)。
 
 0.1.3 新增「日序」月历/周历和 Skill 技能包，支持聊天安排计划、联动提醒、按技能授权运行脚本，以及 MCP 图片与网页来源持久化展示。详见 [0.1.3 发布说明](docs/releases/0.1.3.md)、[技能使用](docs/skills.md)和[日序](docs/calendar.md)。Windows x64 安装包已于 2026-10-19 在用户验收并授权后构建。
 
@@ -14,7 +14,7 @@
 
 安装包位于 `releases/0.1.4/XiaoXi_0.1.4_x64-setup.exe`，同目录 `SHA256SUMS.txt` 可校验文件。安装版包含前端、Python 后端及 MCP 依赖，无需安装 Python、Node.js 或 Rust。第三方 stdio MCP 服务及技能脚本自身需要的运行环境需另行准备。缺少 WebView2 时安装器会联网下载运行环境。图标采用用户选定的 A 版「奶油方糖」。
 
-安装数据默认保存在 `%LOCALAPPDATA%\com.qinbai.baiagent`，不写入安装目录；开发版个人数据、API 密钥和测试记录不放入安装包。开发版与安装版默认使用不同的数据目录；使用前先退出另一个XiaoXi，避免占用同一个本机服务端口。安装版首次使用需要配置自己的模型连接。
+安装数据默认保存在 `%LOCALAPPDATA%\XiaoXi_Agent`，不写入安装目录；旧版 `com.qinbai.baiagent` 目录会在升级首次启动时自动迁移。开发版个人数据、API 密钥和测试记录不放入安装包。开发版与安装版默认使用不同的数据目录；使用前先退出另一个XiaoXi，避免占用同一个本机服务端口。安装版首次使用需要配置自己的模型连接。
 
 版本交付、验证范围与构建说明见 [0.1.2 发布记录](docs/releases/0.1.2.md)。
 
@@ -65,7 +65,7 @@ pnpm desktop:dev
 ## 数据与密钥
 
 - 正常开发空间：`.local-data\dev`。SQLite 保存对话、课程、练习、记忆、提醒和执行记录；`checkpoints.sqlite` 保存 LangGraph 状态，图片保存在 `attachments`。
-- 安装版空间：`%LOCALAPPDATA%\com.qinbai.baiagent`。后端日志为该目录下的 `backend.log`；更新程序时数据保留在用户目录。
+- 安装版空间：`%LOCALAPPDATA%\XiaoXi_Agent`。后端日志为该目录下的 `backend.log`；更新程序时数据保留在用户目录。旧版 `com.qinbai.baiagent` 的数据库、附件和技能会自动迁移，已保存的 API 密钥从原凭据项读取并复制到新位置；WebView 缓存留在旧目录。
 - API 密钥通过 `keyring` 写入 Windows 凭据存储，不写进数据库、前端代码或 Git。接口地址不能内嵌用户名和密码。留空密钥表示保留已有配置，勾选清除才删除。
 - 本机 API 仅监听 `127.0.0.1:8766`，前端开发服务使用 `127.0.0.1:5186`。不要把当前版本的服务直接暴露到公网。
 - `.local-data\review` 是开发验证数据，连接本地模拟接口时会显示「隔离测试 · 模拟接口」。正常空间没有内置模拟回复，也不会自动调用任何外部模型。

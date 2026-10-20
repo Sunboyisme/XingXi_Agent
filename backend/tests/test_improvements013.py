@@ -96,13 +96,16 @@ def test_timed_plan_reminder_can_precede_start_and_survives_updates(client):
         )["reminder_at"]
         == changed["reminder_at"]
     )
-    assert (
-        client.post(
-            API + "/calendar/events",
-            json={**value, "reminder_at": "2026-10-21T08:00:00"},
-        ).status_code
-        == 422
+    naive = client.post(
+        API + "/calendar/events",
+        json={
+            **value,
+            "title": "无偏移提醒",
+            "reminder_at": "2026-10-21T08:00:00",
+        },
     )
+    assert naive.status_code == 200
+    assert naive.json()["reminder_at"] == "2026-10-21T00:00:00.000000+00:00"
     value["reminder_at"] = None
     client.put(f"{API}/calendar/events/{event['id']}", json=value)
     assert "01:00:00" in reminder()["due_at"]

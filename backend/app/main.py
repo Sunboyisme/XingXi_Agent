@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
         await mcp_service.manager.close()
 
 
-app = FastAPI(title="XiaoXi API", version="0.1.4", lifespan=lifespan)
+app = FastAPI(title="XiaoXi API", version="0.1.5", lifespan=lifespan)
 
 
 # Pydantic's default response includes the rejected input, including credentials.
@@ -201,7 +201,7 @@ def create_run(db, kind, conversation_id=None, goal_id=None):
 
 @app.get("/api/v1/health")
 def health():
-    return {"service": "bai-agent", "version": "0.1.4"}
+    return {"service": "bai-agent", "version": "0.1.5"}
 
 
 from fastapi import APIRouter
@@ -273,6 +273,37 @@ def get_settings(db=Depends(database)):
 @router.get("/settings/embedding", response_model=s.EmbeddingRead)
 def embedding_settings():
     return retrieval.status()
+
+
+@router.get("/settings/image-generation", response_model=s.ImageGenerationRead)
+def image_generation_settings():
+    from . import image_generation
+    return image_generation.settings()
+
+
+@router.put("/settings/image-generation", response_model=s.ImageGenerationRead)
+def save_image_generation(value: s.ImageGenerationWrite, db=Depends(database)):
+    from . import image_generation
+    key = secret_get("image_generation") if value.api_key is None else value.api_key.strip()
+    if value.enabled and not key:
+        raise HTTPException(400, "请填写图片生成 API 密钥。")
+    secret_set("image_generation", value.api_key)
+    db.get(store.Settings, PROFILE_ID).image_generation_config = value.model_dump(
+        mode="json", exclude={"api_key"}
+    )
+    db.commit()
+    return image_generation.settings()
+
+
+@router.post("/settings/image-generation/test", response_model=s.ImageGenerationTestRead)
+async def test_image_generation(value: s.ImageGenerationWrite):
+    from . import image_generation
+    key = secret_get("image_generation") if value.api_key is None else value.api_key.strip()
+    if not value.model:
+        raise HTTPException(400, "请填写图片模型名称。")
+    if not key:
+        raise HTTPException(400, "请填写图片 API 密钥。")
+    return await image_generation.probe(value.model_dump(mode="json", exclude={"api_key"}), key)
 
 
 @router.put("/settings/embedding", response_model=s.EmbeddingRead)

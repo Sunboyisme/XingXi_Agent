@@ -94,7 +94,6 @@ export function BaiAvatar({
       type="button"
       className={["avatar-interaction", className].filter(Boolean).join(" ")}
       aria-label={label}
-      title={label}
       data-reaction={reaction ? (reaction % 2 ? "happy" : "wave") : undefined}
       onClick={() => {
         setReaction((value) => value + 1);

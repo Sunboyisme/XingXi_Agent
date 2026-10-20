@@ -21,7 +21,7 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { ErrorNotice } from "./common";
+import { ErrorNotice, Hint } from "./common";
 
 type Trace = components["schemas"]["RetrievalRead"];
 export function RetrievalDebugger({
@@ -87,17 +87,18 @@ export function RetrievalDebugger({
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   return (
     <>
-      <Button
-        size={compact ? "icon" : "sm"}
-        variant="ghost"
-        className={compact ? "answer-action" : "retrieval-entry"}
-        aria-label={runId ? "参考的记忆" : "试着查找记忆"}
-        title={runId ? "参考的记忆" : "试着查找记忆"}
-        onClick={() => setOpen(true)}
-      >
-        <ListFilter size={15} />
-        {!compact && (runId ? "参考的记忆" : "试着查找记忆")}
-      </Button>
+      <Hint label={runId ? "参考的记忆" : "试着查找记忆"}>
+        <Button
+          size={compact ? "icon" : "sm"}
+          variant="ghost"
+          className={compact ? "answer-action" : "retrieval-entry"}
+          aria-label={runId ? "参考的记忆" : "试着查找记忆"}
+          onClick={() => setOpen(true)}
+        >
+          <ListFilter size={15} />
+          {!compact && (runId ? "参考的记忆" : "试着查找记忆")}
+        </Button>
+      </Hint>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="retrieval-dialog">
           <DialogHeader>

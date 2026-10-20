@@ -63,8 +63,14 @@ export function DataSettings() {
     }
   }
   async function exportData() {
+    setExported("");
+    if (isTauri()) {
+      const path = await invoke<string | null>("save_data_export");
+      if (path) setExported(path);
+      return;
+    }
     const value = await api<Exported>("/settings/data/export", "POST");
-    setExported(value.path);
+    setExported(value.name);
     if (!isTauri()) {
       const response = await fetchApi(
         `/settings/data/exports/${encodeURIComponent(value.name)}`,

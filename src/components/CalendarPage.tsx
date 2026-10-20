@@ -61,6 +61,16 @@ export function zonedISO(input: string, zone: string) {
     throw new Error("此时区不存在这个时间，请调整时间");
   return result;
 }
+export function nextPlanEnd(start: string, end: string, allDay: boolean) {
+  const startDay = start.slice(0, 10);
+  if (allDay) return end.slice(0, 10) < startDay ? startDay : end.slice(0, 10);
+  const normalizedStart = start.length === 10 ? `${start}T09:00` : start;
+  const normalizedEnd = end.length === 10 ? `${end}T10:00` : end;
+  if (normalizedEnd > normalizedStart) return normalizedEnd;
+  return new Date(Date.parse(`${normalizedStart}:00Z`) + 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 16);
+}
 export function eventsOnDay(
   events: CalendarEvent[],
   day: string,
@@ -434,17 +444,23 @@ export function CalendarPage({
     return () => window.clearTimeout(timer);
   }, [agendaNotice]);
   function toggleAllDay(checked: boolean) {
-    setForm({
-      ...form,
-      all_day: checked,
-      reminder_at: "",
-      reminder_values: form.reminder_values.length
-        ? form.reminder_values
-        : [`${form.start.slice(0, 10)}T09:00`],
-      start: checked
-        ? form.start.slice(0, 10)
-        : `${form.start.slice(0, 10)}T09:00`,
-      end: checked ? form.end.slice(0, 10) : `${form.end.slice(0, 10)}T10:00`,
+    setForm((value) => {
+      const start = checked
+        ? value.start.slice(0, 10)
+        : `${value.start.slice(0, 10)}T09:00`;
+      const end = checked
+        ? value.end.slice(0, 10)
+        : `${value.end.slice(0, 10)}T10:00`;
+      return {
+        ...value,
+        all_day: checked,
+        reminder_at: "",
+        reminder_values: value.reminder_values.length
+          ? value.reminder_values
+          : [`${value.start.slice(0, 10)}T09:00`],
+        start,
+        end: nextPlanEnd(start, end, checked),
+      };
     });
   }
   const timeLabel = (e: CalendarEvent) =>
@@ -1135,6 +1151,7 @@ export function CalendarPage({
                     setForm((value) => ({
                       ...value,
                       start,
+                      end: nextPlanEnd(start, value.end, value.all_day),
                       reminder_values: value.reminder_values.map((reminder) =>
                         reminder === value.start
                           ? start
