@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Brain, Check, Undo2, X } from "lucide-react";
+import { Bookmark, Check, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, type Memory } from "@/lib/api";
 import { dateTime } from "@/lib/utils";
@@ -52,7 +52,7 @@ export function MemoryReview({
   return (
     <article className="memory-review" aria-label="待确认记忆">
       <div className="memory-review-heading">
-        <Brain size={17} aria-hidden="true" />
+        <Bookmark size={17} aria-hidden="true" />
         <span>
           {memory.replaces_id ? "要更新这条记忆吗？" : "要记住这条信息吗？"}
         </span>
@@ -121,7 +121,7 @@ export function MemorySavedNotice({
     >
       <div className="memory-saved-row">
         <span role="status" title={notice.content}>
-          <Brain size={16} aria-hidden="true" />
+          <Bookmark size={16} aria-hidden="true" />
           {notice.action === "updated" ? "记忆已更新" : "已记住"}
         </span>
         <Button

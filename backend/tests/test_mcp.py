@@ -1,8 +1,6 @@
 import asyncio
 import json
 import os
-import socket
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -178,42 +176,13 @@ def test_missing_runtime_is_localized_and_does_not_block_builtins(client):
     assert "calculate" in {x.name for x in tools.build_tools("", "")}
 
 
-@pytest.fixture
-def http_mcp():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    process = subprocess.Popen(
-        [sys.executable, FIXTURE, "--port", str(port)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-    )
-    try:
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            try:
-                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
-                    break
-            except OSError:
-                if process.poll() is not None:
-                    pytest.fail("HTTP MCP fixture exited")
-                time.sleep(0.1)
-        else:
-            pytest.fail("HTTP MCP fixture did not start")
-        yield f"http://127.0.0.1:{port}/mcp"
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
-
-
-def test_http_authentication_discovery_and_server_error(client, http_mcp):
+def test_http_authentication_discovery_and_server_error(client, http_mcp_url):
     response = client.post(
         API + "/mcp/servers",
         json={
             "name": "HTTP fixture",
             "transport": "streamable_http",
-            "url": http_mcp,
+            "url": http_mcp_url,
             "headers": {"X-Test-Key": "synthetic-mcp-secret"},
             "enabled": True,
         },
@@ -231,7 +200,7 @@ def test_http_authentication_discovery_and_server_error(client, http_mcp):
     bad = {
         "name": server["name"],
         "transport": server["transport"],
-        "url": http_mcp,
+        "url": http_mcp_url,
         "headers": {"X-Test-Key": "bad-token"},
         "enabled": True,
     }

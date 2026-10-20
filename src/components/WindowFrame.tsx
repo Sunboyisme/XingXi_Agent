@@ -107,6 +107,9 @@ export function WindowFrame({
                 ? () => void control(() => getCurrentWindow().close())
                 : undefined
             }
+            onQuit={
+              native ? () => void control(() => invoke("quit_app")) : undefined
+            }
             onError={setError}
           />
         )}
@@ -115,7 +118,7 @@ export function WindowFrame({
         {onReminders && (
           <button
             className="bell-button"
-            aria-label="查看提醒"
+            aria-label="查看通知"
             onClick={onReminders}
           >
             <Bell size={17} />

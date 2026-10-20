@@ -1,0 +1,258 @@
+/* The original cream palette stays in cream.css. Dark-only overrides also
+   replace fixed legacy colors through fallbacks, keeping the light colors intact. */
+:root[data-theme="warm-dark"] {
+  color-scheme: dark;
+  --ui-color-bg: #24211e;
+  --ui-color-surface: #2d2925;
+  --ui-color-surface-deep: #3b342d;
+  --ui-color-text: #e5d9c9;
+  --ui-color-text-muted: #bca98f;
+  --ui-color-heading: #f4ebe0;
+  --ui-color-brand: #db9c74;
+  --ui-color-action: #db9c74;
+  --ui-color-action-hover: #e9af8b;
+  --ui-color-on-action: #2b2018;
+  --ui-color-border: #5c4e40;
+  --ui-color-line: #494035;
+  --ui-color-focus: #e9af8b;
+  --ui-color-danger: #eeaa98;
+  --ui-color-danger-surface: #49322d;
+  --status-success: #bed0a9;
+  --status-success-surface: #343d2d;
+  --line-subtle: #494035;
+  --surface-hover: #3c342c;
+  --bai-lift: #35302a;
+  --bai-sidebar: #24211e;
+  --bai-selected: #3b342d;
+  --muted: var(--ui-color-surface-deep);
+  --card: var(--ui-color-surface);
+  --appearance-sidebar: #2a2622;
+  --appearance-soft-surface: #35302a;
+  --appearance-pressed-surface: #44382e;
+  --appearance-text: var(--ui-color-text);
+  --appearance-muted: var(--ui-color-text-muted);
+  --appearance-accent: var(--ui-color-action);
+  --appearance-on-action: var(--ui-color-on-action);
+  --appearance-action-fill: var(--ui-color-action);
+  --appearance-border: var(--ui-color-line);
+  --appearance-focus: var(--ui-color-focus);
+  --appearance-success: var(--status-success);
+  --appearance-success-fill: #a7bd8c;
+  --appearance-muted-fill: #786750;
+  --appearance-danger: var(--ui-color-danger);
+  --appearance-drag-surface: rgb(45 41 37 / 96%);
+}
+:root[data-theme="warm-dark"] [data-slot="dialog-overlay"],
+:root[data-theme="warm-dark"] [data-slot="alert-dialog-overlay"] {
+  background: rgb(10 8 6 / 48%);
+}
+:root[data-theme="warm-dark"] .app-menu-content,
+:root[data-theme="warm-dark"] [data-slot="dialog-content"],
+:root[data-theme="warm-dark"] [data-slot="alert-dialog-content"],
+:root[data-theme="warm-dark"] .datetime-popover {
+  box-shadow: 0 16px 56px rgb(0 0 0 / 25%);
+}
+
+/* Chat content has no character avatar; navigation and other placements keep it. */
+.chat-main .message.assistant {
+  display: block;
+}
+.chat-main .welcome {
+  align-items: flex-start;
+}
+.welcome,
+.chat-main.is-empty .composer-area {
+  max-width: 988px;
+}
+.welcome-description {
+  color: var(--ui-color-text-muted);
+}
+
+.appearance-settings {
+  padding-top: 8px;
+}
+.settings-tabs[role="tablist"] {
+  overflow-x: auto;
+}
+.settings-tabs [role="tab"] {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.appearance-settings .section-title {
+  display: block;
+  margin-bottom: 24px;
+}
+.appearance-settings h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.appearance-settings .section-title p {
+  font-size: 13px;
+  margin: 8px 0 0;
+  color: var(--ui-color-text-muted);
+}
+.theme-options {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  max-width: 860px;
+}
+.theme-option {
+  position: relative;
+  min-width: 0;
+  display: block;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 20px;
+  padding: 12px;
+  cursor: pointer;
+}
+.theme-option:hover {
+  border-color: var(--ui-color-border);
+}
+.theme-option[data-selected="true"] {
+  border-color: var(--ui-color-action);
+  box-shadow: 0 0 0 1px var(--ui-color-action);
+}
+.theme-option:has(> input:focus-visible) {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 4px;
+}
+.theme-option > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.theme-preview {
+  --preview-bg: #f6efe8;
+  --preview-panel: #fffcf8;
+  --preview-composer: #fffefd;
+  --preview-line: #ede5dc;
+  --preview-text: #433b35;
+  --preview-accent: #a95940;
+  display: flex;
+  height: 170px;
+  background: var(--preview-bg);
+  padding: 12px 12px 12px 0;
+  border-radius: 12px;
+  color: var(--preview-text);
+}
+.theme-preview[data-preview="warm-dark"] {
+  --preview-bg: #24211e;
+  --preview-panel: #2d2925;
+  --preview-composer: #35302a;
+  --preview-line: #494035;
+  --preview-text: #f4ebe0;
+  --preview-accent: #db9c74;
+}
+.theme-preview-rail {
+  width: 42px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 17px;
+  padding-top: 12px;
+}
+.theme-preview-rail i {
+  height: 9px;
+  width: 9px;
+  border: 1px solid var(--preview-accent);
+  border-radius: 3px;
+}
+.theme-preview-rail i:first-child {
+  height: 15px;
+  width: 15px;
+  border-radius: 50%;
+  background: var(--preview-accent);
+}
+.theme-preview-content {
+  flex: 1;
+  min-width: 0;
+  padding: 22px 18px;
+  border-radius: 14px;
+  background: var(--preview-panel);
+}
+.theme-preview-content b {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.theme-preview-content > i {
+  display: block;
+  height: 3px;
+  margin: 8px 0 15px;
+  width: 50%;
+  background: var(--preview-line);
+}
+.theme-preview-composer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 51px;
+  padding: 10px;
+  border: 1px solid var(--preview-line);
+  border-radius: 10px;
+  background: var(--preview-composer);
+}
+.theme-preview-composer i:first-child {
+  height: 4px;
+  width: 45%;
+  background: var(--preview-line);
+}
+.theme-preview-composer i:last-child {
+  height: 11px;
+  width: 11px;
+  border-radius: 50%;
+  background: var(--preview-accent);
+}
+.theme-option-copy {
+  display: grid;
+  gap: 7px;
+  padding: 18px 38px 8px 8px;
+  position: relative;
+}
+.theme-option-copy strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.theme-option-copy small {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.theme-selection {
+  position: absolute;
+  top: 17px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 50%;
+}
+.theme-option[data-selected="true"] .theme-selection {
+  border-color: var(--ui-color-action);
+  background: var(--ui-color-action);
+  color: var(--ui-color-on-action);
+}
+@media (max-width: 760px) {
+  .theme-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .settings-tabs [role="tab"] {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}

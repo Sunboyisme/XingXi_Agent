@@ -16,6 +16,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from . import config as vault
+from . import mcp_env
 from .config import PROFILE_ID
 from .db import MCPServer, MCPTool, Session, now, uid
 from .schemas import MCPImport, MCPServerWrite
@@ -42,14 +43,35 @@ def require_server(db, server_id):
 
 
 def secret_values(server):
-    return [
+    values = [
         vault.secret_get(ref)
         for kind in ("headers", "env")
         for ref in server.config.get(kind, {}).values()
     ]
+    secrets = list(values)
+    for value in values:
+        try:
+            resolved, variables = mcp_env.resolve(value)
+            secrets.extend([resolved, *variables])
+        except mcp_env.EnvironmentReferenceError:
+            pass
+    worker = manager.workers.get(server.id)
+    if worker:
+        secrets.extend(worker.resolved_secrets)
+    return secrets
 
 
-def redact(value, secrets=()):
+def connection_values(server, kind, secrets):
+    values = {}
+    for key, ref in server.config.get(kind, {}).items():
+        raw = vault.secret_get(ref)
+        resolved, variables = mcp_env.resolve(raw, header=kind == "headers")
+        values[key] = resolved
+        secrets.extend([raw, resolved, *variables])
+    return values
+
+
+def redact(value, secrets=(), *, limit=True):
     """Bound model/audit output and remove configured credentials recursively."""
     tokens = sorted(
         {
@@ -85,10 +107,17 @@ def redact(value, secrets=()):
 
     clean = scrub(value)
     text = json.dumps(clean, ensure_ascii=False, default=str)
-    if len(text) > MAX_RESULT:
+    if limit and len(text) > MAX_RESULT:
         result = {"summary": text[:MAX_RESULT], "truncated": True}
         if isinstance(clean, dict) and clean.get("error"):
             result["error"] = str(clean["error"])[:2000]
+        if isinstance(clean, dict):
+            for key in ("artifacts", "sources", "media_errors", "image_urls", "exit_code"):
+                if key in clean:
+                    result[key] = clean[key]
+            for key in ("stdout", "stderr"):
+                if key in clean:
+                    result[key] = str(clean[key])[:4000]
         return result
     return clean
 
@@ -115,6 +144,14 @@ def read_server(server):
             kind: {
                 key: bool(vault.secret_get(ref))
                 for key, ref in server.config.get(kind, {}).items()
+            }
+            for kind in ("headers", "env")
+        },
+        **{
+            kind + "_templates": {
+                key: value
+                for key, ref in server.config.get(kind, {}).items()
+                if (value := mcp_env.template(vault.secret_get(ref)))
             }
             for kind in ("headers", "env")
         },
@@ -282,6 +319,7 @@ class Request:
 class Worker:
     def __init__(self, server):
         self.server = server
+        self.resolved_secrets = []
         self.status, self.error = "connecting", ""
         self.queue = asyncio.Queue()
         self.ready = asyncio.get_running_loop().create_future()
@@ -321,12 +359,7 @@ class Worker:
                     "LANG",
                 }
                 env = {k: v for k, v in os.environ.items() if k.upper() in essentials}
-                env.update(
-                    {
-                        key: vault.secret_get(ref)
-                        for key, ref in data.get("env", {}).items()
-                    }
-                )
+                env.update(connection_values(self.server, "env", self.resolved_secrets))
                 transport = StdioTransport(
                     command,
                     data.get("args", []),
@@ -338,10 +371,7 @@ class Worker:
             else:
                 transport = StreamableHttpTransport(
                     data["url"],
-                    headers={
-                        key: vault.secret_get(ref)
-                        for key, ref in data.get("headers", {}).items()
-                    },
+                    headers=connection_values(self.server, "headers", self.resolved_secrets),
                 )
 
             elicited = False
@@ -407,16 +437,14 @@ class Worker:
                         if not isinstance(message, ToolMessage):
                             return {"error": "MCP 返回格式无法处理"}
                         content = message.content
+                        media = []
                         if isinstance(content, list):
-                            if any(
-                                not isinstance(x, dict) or x.get("type") != "text"
-                                for x in content
-                            ):
-                                return {
-                                    "error": "工具已返回非文本内容，当前版本无法处理；未自动重试"
-                                }
-                            content = "\n".join(x.get("text", "") for x in content)
-                        result = {"text": content}
+                            media = [x for x in content if isinstance(x, dict) and x.get("type") in {"image", "image_url", "file"}]
+                            unsupported = [x for x in content if not isinstance(x, dict) or x.get("type") not in {"text", "image", "image_url", "file"}]
+                            if unsupported:
+                                return {"error": "工具返回了暂不支持的内容类型；未自动重试"}
+                            content = "\n".join(x.get("text", "") for x in content if isinstance(x, dict) and x.get("type") == "text")
+                        result = {"text": content, "media_blocks": media}
                         if message.artifact:
                             result["structured_content"] = message.artifact.get(
                                 "structured_content"
@@ -434,7 +462,7 @@ class Worker:
                                 result["error"] = (
                                     "此工具需要交互式输入，当前版本不支持；未自动重试"
                                 )
-                        return redact(result, secret_values(self.server))
+                        return redact(result, secret_values(self.server), limit=False)
 
                     operation = asyncio.create_task(invoke(active))
                     cancelled = asyncio.create_task(active.cancelled.wait())
@@ -471,7 +499,9 @@ class Worker:
         except Exception as error:  # noqa: BLE001 - third-party startup boundary
             self.status = "error"
             self.error = (
-                "未找到启动命令，请安装或指定 MCP 所需的运行环境。"
+                str(error)
+                if isinstance(error, mcp_env.EnvironmentReferenceError)
+                else "未找到启动命令，请安装或指定 MCP 所需的运行环境。"
                 if isinstance(error, FileNotFoundError)
                 else "工作目录不存在。"
                 if isinstance(error, NotADirectoryError)

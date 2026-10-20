@@ -22,8 +22,36 @@ class RecordRead(ReadModel):
     updated_at: str
 
 
+class DataRead(BaseModel):
+    directory: str
+    database: str
+    attachments: str
+    storage: str
+    counts: dict[str, int]
+    pending: bool
+    last_import: dict | None = None
+
+
+class DataExportRead(BaseModel):
+    name: str
+    path: str
+    counts: dict[str, int]
+
+
+class DataImportRead(BaseModel):
+    id: str
+    created_at: str
+    counts: dict[str, int]
+
+
+class DataImportWrite(BaseModel):
+    id: str = Field(pattern=r"^[a-f0-9]{32}$")
+
+
 ProviderId = Literal["bailian", "deepseek", "kimi", "zhipu", "siliconflow", "custom"]
-ThinkingMode = Literal["auto", "none", "always", "enable_thinking", "thinking", "reasoning_effort"]
+ThinkingMode = Literal[
+    "auto", "none", "always", "enable_thinking", "thinking", "reasoning_effort"
+]
 
 
 class ModelOption(BaseModel):
@@ -55,10 +83,17 @@ class ProviderWrite(BaseModel):
     @model_validator(mode="after")
     def valid_models(self):
         self.default_model = self.default_model.strip()
-        if self.model_url.username or self.model_url.password or self.model_url.query or self.model_url.fragment:
+        if (
+            self.model_url.username
+            or self.model_url.password
+            or self.model_url.query
+            or self.model_url.fragment
+        ):
             raise ValueError("接口地址不能包含凭据、查询参数或片段")
         names = [x.name for x in self.models]
-        if len(set(names)) != len(names) or (self.default_model and self.default_model not in names):
+        if len(set(names)) != len(names) or (
+            self.default_model and self.default_model not in names
+        ):
             raise ValueError("模型名称不能重复，默认模型必须在模型列表中")
         if names and not self.default_model:
             self.default_model = names[0]
@@ -79,7 +114,7 @@ class ProviderPresetRead(BaseModel):
     id: ProviderId
     label: str
     model_url: str
-    models: list[ModelOption]
+    models: list[ModelOptionRead]
 
 
 class ModelSelection(BaseModel):
@@ -192,6 +227,8 @@ class MCPServerRead(BaseModel):
     cwd: str
     headers: dict[str, bool]
     env: dict[str, bool]
+    headers_templates: dict[str, str] = Field(default_factory=dict)
+    env_templates: dict[str, str] = Field(default_factory=dict)
     enabled: bool
     status: Literal["disabled", "disconnected", "connecting", "connected", "error"]
     error: str
@@ -239,7 +276,9 @@ class SettingsUpdate(BaseModel):
     timezone: str = "Asia/Shanghai"
     memory_mode: Literal["auto", "confirm"] | None = None
     providers: list[ProviderWrite] | None = Field(default=None, max_length=50)
-    default_provider: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    default_provider: str | None = Field(
+        default=None, pattern=r"^[a-z][a-z0-9_-]{0,63}$"
+    )
 
     @model_validator(mode="after")
     def provider_list(self):
@@ -282,6 +321,73 @@ class MessageRead(RecordRead):
     role: str
     content: str
     attachment_ids: list[str]
+    reasoning: str = ""
+    run_id: str | None = None
+
+
+class EmbeddingWrite(BaseModel):
+    enabled: bool = False
+    url: HttpUrl = "https://api.openai.com/v1"
+    model: str = Field(default="", max_length=200)
+    api_key: str | None = Field(default=None, max_length=4096)
+
+    @model_validator(mode="after")
+    def valid_embedding(self):
+        if isinstance(self.url, str):
+            self.url = HttpUrl(self.url)
+        if (
+            self.url.username
+            or self.url.password
+            or self.url.query
+            or self.url.fragment
+        ):
+            raise ValueError("接口地址不能包含凭据、查询参数或片段")
+        self.model = self.model.strip()
+        if self.enabled and not self.model:
+            raise ValueError("请填写 Embedding 模型名称")
+        return self
+
+
+class EmbeddingRead(BaseModel):
+    enabled: bool = False
+    url: str = "https://api.openai.com/v1"
+    model: str = ""
+    key_configured: bool = False
+    indexed: int = 0
+    total: int = 0
+    indexing: bool = False
+    error: str = ""
+
+
+class RetrievalInput(BaseModel):
+    query: str = Field(min_length=1, max_length=4000)
+
+
+class RetrievalCandidateRead(BaseModel):
+    id: str
+    content: str
+    source: str
+    revision: int
+    keyword_score: float = 0
+    semantic_score: float | None = None
+    fusion_score: float = 0
+    selected: bool = False
+    reason: str
+
+
+class RetrievalRead(BaseModel):
+    query: str
+    purpose: str = "preview"
+    mode: Literal["hybrid", "keyword"]
+    fallback_reason: str = ""
+    indexed: int
+    total: int
+    threshold: float
+    token_budget: int
+    tokens_used: int
+    duration_ms: int
+    selected_ids: list[str]
+    candidates: list[RetrievalCandidateRead]
 
 
 class ChatInput(BaseModel):
@@ -395,6 +501,7 @@ class ReminderCreate(BaseModel):
 
 
 class ReminderRead(RecordRead):
+    calendar_event_id: str | None = None
     title: str
     body: str
     due_at: str
@@ -415,6 +522,14 @@ class NotificationRead(RecordRead):
     body: str
     status: str
     overdue: bool
+    plan_id: str | None = None
+    plan_occurrence_start: str | None = None
+    snoozed_until: str | None = None
+    generation: int = 0
+
+
+class NotificationSnooze(BaseModel):
+    minutes: int = Field(default=10, ge=1, le=10080)
 
 
 class AttachmentRead(RecordRead):
@@ -422,6 +537,11 @@ class AttachmentRead(RecordRead):
     media_type: str
     width: int
     height: int
+    size: int = 0
+    file_status: str | None = None
+    error: str = ""
+    warnings: list[str] = Field(default_factory=list)
+    parts: int = 0
 
 
 class CourseNode(BaseModel):

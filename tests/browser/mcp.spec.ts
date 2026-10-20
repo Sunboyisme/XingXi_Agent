@@ -63,16 +63,17 @@ test("MCP import, test, selection, mixed chat and persisted records", async ({
   await expect(
     page.getByText("组合工具已执行。", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /已调用 2 项工具/ }).click();
-  await expect(page.locator(".tool-results")).toContainText("测试 MCP");
-  await expect(page.locator(".tool-results")).toContainText("echo");
+  await page.getByRole("button", { name: "工具调用结果" }).click();
+  await expect(page.locator(".answer-tools-dialog")).toContainText("测试 MCP");
+  await expect(page.locator(".answer-tools-dialog")).toContainText("echo");
   await page.reload();
   await page
     .getByRole("button", { name: "组合MCP，先计算再回显", exact: false })
     .first()
     .click();
-  await page.getByRole("button", { name: /已调用 2 项工具/ }).click();
-  await expect(page.locator(".tool-results")).toContainText("echo");
+  await page.getByRole("button", { name: "工具调用结果" }).click();
+  await expect(page.locator(".answer-tools-dialog")).toContainText("echo");
+  await page.keyboard.press("Escape");
   await openTools(page);
   await expect(
     section.getByRole("checkbox", {

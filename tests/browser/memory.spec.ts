@@ -16,10 +16,14 @@ async function send(page: Page, text: string) {
 }
 
 test.beforeEach(async ({ page, request }) => {
+  const previous = await request.get("/api/v1/settings").then((r) => r.json());
+  for (const provider of previous.providers)
+    await request.delete(`/api/v1/settings/providers/${provider.id}`);
   const response = await request.put("/api/v1/settings", {
     data: {
       model_url: process.env.BAI_MOCK_URL || "http://127.0.0.1:8889/v1",
       model_name: "mock-test",
+      model_key: "synthetic-memory-013",
       memory_mode: "auto",
     },
   });
@@ -77,8 +81,10 @@ test("pending private information persists, is excluded from a new chat, then co
   await page.reload();
   await page.locator(".conversation-link > button:first-child").first().click();
   await expect(page.getByLabel("待确认记忆")).toBeVisible();
-  await page.getByRole("button", { name: "开启新对话", exact: true }).click();
-  await send(page, "检查记忆背景");
+  await page
+    .getByRole("button", { name: "点击头像新建对话", exact: true })
+    .click();
+  await send(page, "检查记忆背景：糖尿病");
   await expect(page.locator(".message.assistant").last()).toContainText(
     '"private_available": false',
   );
@@ -92,8 +98,10 @@ test("pending private information persists, is excluded from a new chat, then co
   expect((await (await request.get("/api/v1/memories")).json())[0].state).toBe(
     "confirmed",
   );
-  await page.getByRole("button", { name: "开启新对话", exact: true }).click();
-  await send(page, "检查记忆背景");
+  await page
+    .getByRole("button", { name: "点击头像新建对话", exact: true })
+    .click();
+  await send(page, "检查记忆背景：糖尿病");
   await expect(page.locator(".message.assistant").last()).toContainText(
     '"private_available": true',
   );
@@ -111,8 +119,10 @@ test("manual mode persists and Ignore discards a proposal; explicit requests sti
   await page.reload();
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
   await page.getByRole("tab", { name: "记忆", exact: true }).click();
-  await expect(page.getByLabel("记忆保存方式")).toHaveValue("confirm");
-  await page.getByRole("button", { name: "开启新对话", exact: true }).click();
+  await expect(page.getByLabel("记忆保存方式")).toContainText("每次确认");
+  await page
+    .getByRole("button", { name: "点击头像新建对话", exact: true })
+    .click();
   await send(page, "我喜欢简短的回答");
   await expect(page.getByLabel("待确认记忆")).toContainText("每次确认");
   await page.getByRole("button", { name: "忽略", exact: true }).click();
@@ -126,8 +136,8 @@ test("manual mode persists and Ignore discards a proposal; explicit requests sti
   );
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
   await page.getByRole("tab", { name: "记忆", exact: true }).click();
-  await expect(page.getByLabel("记忆保存方式", { exact: true })).toHaveValue(
-    "confirm",
+  await expect(page.getByLabel("记忆保存方式", { exact: true })).toContainText(
+    "每次确认",
   );
 });
 

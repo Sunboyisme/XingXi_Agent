@@ -17,7 +17,7 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
+    Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_notification::NotificationExt;
 
@@ -49,6 +49,94 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+async fn save_office_file(
+    state: tauri::State<'_, Backend>,
+    file_id: String,
+    name: String,
+    upload: bool,
+) -> Result<bool, String> {
+    if file_id.len() != 36 || !file_id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+        return Err("文件编号无效".into());
+    }
+    let root = state.data_dir.get().ok_or("服务尚未就绪")?.clone();
+    let url = state.url.get().ok_or("服务尚未就绪")?.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<u8>, String> {
+        let token = std::fs::read_to_string(root.join("auth-token")).map_err(|_| "无法验证文件访问权限")?;
+        let client = reqwest::blocking::Client::builder().no_proxy().timeout(Duration::from_secs(30)).build().map_err(|_| "无法连接文件服务")?;
+        let response = client.get(format!("{}/{}/{}/content", url, if upload { "files" } else { "artifacts" }, file_id)).bearer_auth(token.trim()).send().map_err(|_| "读取文件失败")?;
+        if !response.status().is_success() { return Err("文件不存在或当前无法读取".into()); }
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        response.take(20 * 1024 * 1024 + 1).read_to_end(&mut bytes).map_err(|_| "读取文件失败")?;
+        if bytes.len() > 20 * 1024 * 1024 { return Err("文件超过另存为大小限制".into()); }
+        Ok(bytes)
+    }).await.map_err(|_| "文件读取任务失败")??;
+    let safe_name: String = name.chars().filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c)).take(180).collect();
+    let selected = rfd::AsyncFileDialog::new().set_file_name(if safe_name.is_empty() { "文件" } else { &safe_name }).save_file().await;
+    let Some(file) = selected else { return Ok(false); };
+    let path = file.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        use std::io::Write;
+        let parent = path.parent().ok_or("保存位置无效")?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|_| "无法在所选位置创建文件")?;
+        temporary.write_all(&bytes).and_then(|_| temporary.as_file().sync_all()).map_err(|_| "写入失败，原目标文件未替换")?;
+        temporary.persist(&path).map_err(|_| "文件被占用或保存失败，原目标文件未替换")?;
+        Ok(())
+    }).await.map_err(|_| "保存任务失败")??;
+    Ok(true)
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "网页地址无效")?;
+    if !matches!(parsed.scheme(), "https" | "http")
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || url.chars().any(|c| c.is_control() || c == '"')
+    {
+        return Err("只支持 HTTP 或 HTTPS 网页地址".into());
+    }
+    #[cfg(windows)]
+    {
+        Command::new("rundll32.exe")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(parsed.as_str())
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(|_| "无法打开系统浏览器".to_string())?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    Err("请复制链接到浏览器打开".into())
+}
+
+#[tauri::command]
+fn open_data_directory(
+    state: tauri::State<'_, Backend>,
+    exports: Option<bool>,
+) -> Result<(), String> {
+    let root = state.data_dir.get().ok_or("数据目录尚未就绪")?;
+    let folder = if exports.unwrap_or(false) {
+        root.join("exports")
+    } else {
+        root.clone()
+    };
+    std::fs::create_dir_all(&folder).map_err(|_| "无法创建导出目录".to_string())?;
+    #[cfg(windows)]
+    {
+        Command::new("explorer.exe")
+            .arg(&folder)
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(|_| "无法打开数据目录".to_string())?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    Err("请使用显示的路径打开数据目录".into())
+}
+
+#[tauri::command]
 fn ensure_window_visible(window: tauri::WebviewWindow) -> Result<(), String> {
     window_layout::ensure_visible(&window).map_err(|error| error.to_string())
 }
@@ -56,6 +144,20 @@ fn ensure_window_visible(window: tauri::WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 fn restore_window_layout(window: tauri::WebviewWindow) -> Result<(), String> {
     window_layout::fit_main_window(&window).map_err(|error| error.to_string())
+}
+
+fn place_reminder_window(window: &tauri::WebviewWindow) {
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let area = monitor.work_area();
+    let scale = monitor.scale_factor();
+    let width = (420.0 * scale).round() as i32;
+    let height = (360.0 * scale).round() as i32;
+    let margin = (18.0 * scale).round() as i32;
+    let x = area.position.x + area.size.width as i32 - width - margin;
+    let y = area.position.y + area.size.height as i32 - height - margin;
+    let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
 fn open_main(app: &tauri::AppHandle) {
@@ -87,6 +189,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             backend_config,
             quit_app,
+            save_office_file,
+            open_data_directory,
+            open_external_url,
             ensure_window_visible,
             restore_window_layout
         ])
@@ -180,14 +285,17 @@ fn main() {
                 *app.state::<Backend>().child.lock().unwrap() = Some(child);
             }
             let show = MenuItem::with_id(app, "show", "打开XiaoXi", true, None::<&str>)?;
-            let exit = MenuItem::with_id(
+            let new_chat =
+                MenuItem::with_id(app, "new_chat", "新建对话", true, None::<&str>)?;
+            let plans =
+                MenuItem::with_id(app, "plans", "打开今日安排", true, None::<&str>)?;
+            let settings =
+                MenuItem::with_id(app, "settings", "连接与设置", true, None::<&str>)?;
+            let exit = MenuItem::with_id(app, "quit", "退出XiaoXi", true, None::<&str>)?;
+            let menu = Menu::with_items(
                 app,
-                "quit",
-                "退出XiaoXi（暂停本机提醒）",
-                true,
-                None::<&str>,
+                &[&show, &new_chat, &plans, &settings, &exit],
             )?;
-            let menu = Menu::with_items(app, &[&show, &exit])?;
             let icon = app.default_window_icon().cloned().ok_or("应用图标缺失")?;
             TrayIconBuilder::new()
                 .icon(icon)
@@ -196,6 +304,10 @@ fn main() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => open_main(app),
+                    "new_chat" | "plans" | "settings" => {
+                        open_main(app);
+                        let _ = app.emit("bai-tray-action", event.id.as_ref());
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -237,23 +349,34 @@ fn main() {
                             .body(note["body"].as_str().unwrap_or(""))
                             .show();
                     }
-                    let window_ready = if let Some(window) = handle.get_webview_window("reminder") {
+                        let window_ready = if let Some(window) = handle.get_webview_window("reminder") {
                         let shown = window.show().is_ok();
+                        place_reminder_window(&window);
                         let _ = window.set_focus();
                         shown
                     } else {
-                        WebviewWindowBuilder::new(
+                        match WebviewWindowBuilder::new(
                             &handle,
                             "reminder",
                             WebviewUrl::App("index.html?view=reminder".into()),
                         )
-                        .title("XiaoXi提醒你")
-                        .inner_size(420.0, 320.0)
+                        .title("XiaoXi提醒")
+                        .inner_size(420.0, 360.0)
                         .resizable(false)
+                        .decorations(false)
+                        .transparent(true)
+                        .shadow(false)
+                        .skip_taskbar(true)
                         .always_on_top(true)
-                        .center()
+                        .focused(true)
                         .build()
-                        .is_ok()
+                        {
+                            Ok(window) => {
+                                place_reminder_window(&window);
+                                window.show().is_ok()
+                            }
+                            Err(_) => false,
+                        }
                     };
                     if window_ready {
                         for note in &notes {

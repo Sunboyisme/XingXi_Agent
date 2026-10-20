@@ -1,11 +1,15 @@
 import { useState } from "react";
 import {
+  BrainCircuit,
   Cable,
   Check,
-  ChevronDown,
+  KeyRound,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Plus,
+  Server,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
@@ -35,11 +39,19 @@ const thinkingOptions = [
   { value: "thinking", label: "thinking.type 开关" },
   { value: "reasoning_effort", label: "reasoning_effort 开关" },
 ];
+const thinkingControlLabels: Record<string, string> = {
+  auto: "保存后识别",
+  none: "未检测到思考开关",
+  always: "始终思考",
+  enable_thinking: "enable_thinking 开关",
+  thinking: "thinking 开关",
+  reasoning_effort: "reasoning_effort 开关",
+};
 const blankModel = () => ({
   name: "",
   vision_enabled: false,
   thinking_mode: "auto" as const,
-  thinking_control: "none" as const,
+  thinking_control: "auto" as const,
 });
 
 export function ModelConnections({
@@ -122,7 +134,15 @@ export function ModelConnections({
   function updateModel(index: number, patch: Partial<Draft["models"][number]>) {
     if (!draft) return;
     const models = draft.models.map((x, i) =>
-      i === index ? { ...x, ...patch } : x,
+      i === index
+        ? {
+            ...x,
+            ...patch,
+            ...(patch.name !== undefined
+              ? { thinking_control: "auto" as const }
+              : {}),
+          }
+        : x,
     );
     setDraft({
       ...draft,
@@ -224,15 +244,18 @@ export function ModelConnections({
     }
   }
   return (
-    <section className="settings-section model-connections">
+    <section className="settings-section model-connections model-hub">
       <div className="connections-heading">
         <div>
+          <span className="model-hub-eyebrow">对话与推理</span>
           <h2>模型连接</h2>
-          <p>管理接口与模型</p>
+          <p>
+            每个连接独立保存接口、模型和密钥。先添加服务商，再从中选择默认对话模型。
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={add} disabled={busy}>
+        <Button className="model-add-button" onClick={add} disabled={busy}>
           <Plus size={15} />
-          添加连接
+          添加模型连接
         </Button>
       </div>
       {!draft && error && <ErrorNotice message={error} />}
@@ -242,75 +265,146 @@ export function ModelConnections({
           {notice}
         </p>
       )}
-      <div className="connection-list">
-        {connections.map((connection) => (
-          <div className="connection-card" key={connection.id}>
-            <button
-              className="connection-card-main"
-              onClick={() => edit(connection)}
-              aria-label={`编辑连接 ${connection.label}`}
-            >
-              <span className="connection-symbol">
-                <Cable size={20} />
-              </span>
-              <span className="connection-card-copy">
-                <span className="connection-card-title">
-                  <strong>{connection.label}</strong>
-                  {settings.default_provider === connection.id && (
-                    <small className="default-badge">默认</small>
-                  )}
-                </span>
-                <span className="connection-card-meta">
-                  {presets.find((x) => x.id === connection.provider_type)
-                    ?.label || "自定义"}{" "}
-                  · {connection.models.length} 个模型
-                </span>
-                <span className="connection-card-models">
-                  {connection.models.map((x) => x.name).join(" / ") ||
-                    "尚未添加模型"}
-                </span>
-              </span>
-            </button>
-            <span
-              className={`connection-state ${connection.key_configured && connection.models.length ? "ready" : ""}`}
-            >
-              <i />
-              {connection.key_configured && connection.models.length
-                ? "已配置"
-                : "待配置"}
-            </span>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button
-                  className="icon-button"
-                  aria-label={`${connection.label} 更多操作`}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  className="model-menu"
-                  align="end"
-                  sideOffset={5}
-                >
-                  <DropdownMenu.Item
-                    className="model-menu-item"
-                    onSelect={() => edit(connection)}
-                  >
-                    编辑连接
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    className="model-menu-item danger"
-                    onSelect={() => setDeleting(connection)}
-                  >
-                    删除连接
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+      {options.length > 0 && (
+        <div className="model-default-panel">
+          <span className="model-default-icon" aria-hidden="true">
+            <BrainCircuit size={22} />
+          </span>
+          <div className="model-default-copy">
+            <span>当前默认</span>
+            <strong>
+              {defaultConnection?.label || "尚未选择连接"}
+              <small>{defaultConnection?.default_model}</small>
+            </strong>
+            <p>新对话、学习和计划整理会优先使用这个模型。</p>
           </div>
-        ))}
+          <div className="model-default-control">
+            <Label htmlFor="default-model">默认模型</Label>
+            <SoftSelect
+              id="default-model"
+              label="默认模型"
+              value={defaultKey}
+              disabled={busy}
+              onValueChange={(v) => void chooseDefault(v)}
+              options={options}
+            />
+          </div>
+        </div>
+      )}
+      <div className="connection-list model-provider-list">
+        {connections.map((connection) => {
+          const ready = Boolean(
+            connection.key_configured && connection.models.length,
+          );
+          const preset = presets.find(
+            (item) => item.id === connection.provider_type,
+          );
+          return (
+            <article
+              className="connection-card model-provider-card"
+              data-default={settings.default_provider === connection.id}
+              key={connection.id}
+            >
+              <div className="model-provider-heading">
+                <span className="connection-symbol">
+                  <Cable size={19} />
+                </span>
+                <div className="connection-card-copy">
+                  <div className="connection-card-title">
+                    <strong>{connection.label}</strong>
+                    {settings.default_provider === connection.id && (
+                      <small className="default-badge">默认</small>
+                    )}
+                  </div>
+                  <span className="connection-card-meta">
+                    {preset?.label || "自定义接口"}
+                    <span aria-hidden="true"> · </span>
+                    {connection.models.length} 个模型
+                  </span>
+                </div>
+                <span className={`connection-state ${ready ? "ready" : ""}`}>
+                  <i />
+                  {ready ? "可使用" : "待完善"}
+                </span>
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      className="icon-button"
+                      aria-label={`${connection.label} 更多操作`}
+                    >
+                      <MoreHorizontal size={18} />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      className="model-menu"
+                      align="end"
+                      sideOffset={5}
+                    >
+                      <DropdownMenu.Item
+                        className="model-menu-item"
+                        onSelect={() => edit(connection)}
+                      >
+                        <Pencil size={14} />
+                        编辑连接
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        className="model-menu-item danger"
+                        onSelect={() => setDeleting(connection)}
+                      >
+                        <Trash2 size={14} />
+                        删除连接
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              </div>
+              <div className="model-provider-models" aria-label="模型列表">
+                {connection.models.length ? (
+                  connection.models.map((model) => (
+                    <span
+                      className="model-pill"
+                      data-default={
+                        connection.default_model === model.name &&
+                        settings.default_provider === connection.id
+                      }
+                      key={model.name}
+                    >
+                      {model.name}
+                      {connection.default_model === model.name &&
+                        settings.default_provider === connection.id && (
+                          <Check size={11} />
+                        )}
+                    </span>
+                  ))
+                ) : (
+                  <span className="model-pill is-empty">还没有模型</span>
+                )}
+              </div>
+              <div className="model-provider-footer">
+                <span>
+                  {connection.key_configured ? (
+                    <ShieldCheck size={13} />
+                  ) : (
+                    <KeyRound size={13} />
+                  )}
+                  {connection.key_configured
+                    ? "密钥已安全保存"
+                    : "还需要填写 API 密钥"}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`编辑连接 ${connection.label}`}
+                  onClick={() => edit(connection)}
+                >
+                  <Pencil size={13} />
+                  编辑连接
+                </Button>
+              </div>
+            </article>
+          );
+        })}
       </div>
       {connections.length === 0 && (
         <button className="connection-empty" onClick={add}>
@@ -320,19 +414,6 @@ export function ModelConnections({
           <strong>添加第一个模型连接</strong>
           <span>阿里云百炼、DeepSeek、Kimi、智谱、硅基流动或自定义接口</span>
         </button>
-      )}
-      {options.length > 0 && (
-        <div className="connection-default">
-          <Label htmlFor="default-model">默认模型</Label>
-          <SoftSelect
-            id="default-model"
-            label="默认模型"
-            value={defaultKey}
-            disabled={busy}
-            onValueChange={(v) => void chooseDefault(v)}
-            options={options}
-          />
-        </div>
       )}
       <Dialog
         open={Boolean(draft)}
@@ -344,12 +425,21 @@ export function ModelConnections({
           }
         }}
       >
-        <DialogContent className="model-dialog">
-          <DialogHeader>
-            <DialogTitle>{isNew ? "添加模型连接" : "编辑模型连接"}</DialogTitle>
-            <DialogDescription>
-              每套连接独立保存接口、密钥和模型。
-            </DialogDescription>
+        <DialogContent className="model-dialog model-dialog-redesign">
+          <DialogHeader className="model-dialog-heading">
+            <span className="model-dialog-icon" aria-hidden="true">
+              {isNew ? <Server size={21} /> : <BrainCircuit size={21} />}
+            </span>
+            <span>
+              <DialogTitle>
+                {isNew ? "添加模型连接" : "编辑模型连接"}
+              </DialogTitle>
+              <DialogDescription>
+                {isNew
+                  ? "按服务商整理接口与模型，之后可以随时切换默认模型。"
+                  : "修改接口、密钥或这个连接下的模型。"}
+              </DialogDescription>
+            </span>
           </DialogHeader>
           {draft && (
             <>
@@ -360,77 +450,132 @@ export function ModelConnections({
                     {notice}
                   </p>
                 )}
-                <div className="connection-form-grid">
+                <section className="model-dialog-section">
+                  <div className="model-dialog-section-title">
+                    <span>1</span>
+                    <div>
+                      <h3>选择服务商</h3>
+                      <p>预设会自动填好常用接口和模型名称。</p>
+                    </div>
+                  </div>
+                  <div
+                    className="provider-preset-grid"
+                    role="group"
+                    aria-label="服务商"
+                  >
+                    {presets.map((preset) => (
+                      <button
+                        type="button"
+                        key={preset.id}
+                        aria-pressed={draft.provider_type === preset.id}
+                        disabled={busy || !isNew}
+                        onClick={() => switchPreset(preset.id)}
+                      >
+                        <span>{preset.label}</span>
+                        <small>
+                          {(() => {
+                            try {
+                              return new URL(preset.model_url).hostname;
+                            } catch {
+                              return preset.model_url || "自定义地址";
+                            }
+                          })()}
+                        </small>
+                        {draft.provider_type === preset.id && (
+                          <Check size={14} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+                <section className="model-dialog-section">
+                  <div className="model-dialog-section-title">
+                    <span>2</span>
+                    <div>
+                      <h3>接口与凭据</h3>
+                      <p>这些配置只属于当前连接，不会影响其他模型。</p>
+                    </div>
+                  </div>
+                  <div className="connection-form-grid">
+                    <div className="form-field">
+                      <Label htmlFor="connection-name">连接名称</Label>
+                      <Input
+                        id="connection-name"
+                        value={draft.label}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setDraft({ ...draft, label: e.target.value })
+                        }
+                        placeholder="例如：工作用 DeepSeek"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <Label htmlFor="model-url">接口地址</Label>
+                      <Input
+                        id="model-url"
+                        value={draft.model_url}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setDraft({ ...draft, model_url: e.target.value })
+                        }
+                        placeholder="https://example.com/v1"
+                      />
+                    </div>
+                  </div>
                   <div className="form-field">
-                    <Label htmlFor="connection-name">连接名称</Label>
+                    <div className="embedding-label-row">
+                      <Label htmlFor="model-key">
+                        <KeyRound size={13} />
+                        API 密钥
+                      </Label>
+                      {draft.key_configured && (
+                        <button
+                          type="button"
+                          className={`embedding-secret-action ${draft.api_key === "" ? "is-clearing" : ""}`}
+                          disabled={busy}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              api_key: draft.api_key === "" ? undefined : "",
+                            })
+                          }
+                        >
+                          {draft.api_key === "" ? "撤销清除" : "清除密钥"}
+                        </button>
+                      )}
+                    </div>
                     <Input
-                      id="connection-name"
-                      value={draft.label}
+                      id="model-key"
+                      type="password"
+                      autoComplete="new-password"
+                      value={draft.api_key || ""}
                       disabled={busy}
                       onChange={(e) =>
-                        setDraft({ ...draft, label: e.target.value })
+                        setDraft({
+                          ...draft,
+                          api_key: e.target.value || null,
+                        })
                       }
-                      placeholder="例如：工作用 DeepSeek"
+                      placeholder={
+                        draft.api_key === ""
+                          ? "保存后将移除已存密钥"
+                          : draft.key_configured
+                            ? "密钥已保存，留空保持不变"
+                            : "输入 API 密钥"
+                      }
                     />
                   </div>
-                  <div className="form-field">
-                    <Label htmlFor="provider-select">服务商</Label>
-                    <SoftSelect
-                      id="provider-select"
-                      label="服务商"
-                      value={draft.provider_type}
-                      disabled={busy || !isNew}
-                      onValueChange={switchPreset}
-                      options={presets.map((x) => ({
-                        value: x.id,
-                        label: x.label,
-                      }))}
-                    />
+                </section>
+                <section className="model-dialog-section connection-model-section">
+                  <div className="model-dialog-section-title">
+                    <span>3</span>
+                    <div>
+                      <h3>模型</h3>
+                      <p>一个连接可以有多个模型，分别设置能力与思考方式。</p>
+                    </div>
                   </div>
-                </div>
-                <div className="form-field">
-                  <Label htmlFor="model-url">接口地址</Label>
-                  <Input
-                    id="model-url"
-                    value={draft.model_url}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setDraft({ ...draft, model_url: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="form-field">
-                  <Label htmlFor="model-key">API 密钥</Label>
-                  <Input
-                    id="model-key"
-                    type="password"
-                    autoComplete="new-password"
-                    value={draft.api_key || ""}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setDraft({ ...draft, api_key: e.target.value || null })
-                    }
-                    placeholder={
-                      draft.key_configured
-                        ? "已保存；留空保持原密钥"
-                        : "输入 API 密钥"
-                    }
-                  />
-                  {draft.key_configured && (
-                    <button
-                      className="text-button danger"
-                      disabled={busy}
-                      onClick={() => setDraft({ ...draft, api_key: "" })}
-                    >
-                      {draft.api_key === ""
-                        ? "保存后清除密钥"
-                        : "清除已保存的密钥"}
-                    </button>
-                  )}
-                </div>
-                <div className="connection-model-section">
                   <div className="models-heading">
-                    <h3>模型</h3>
+                    <span>模型列表</span>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -482,53 +627,70 @@ export function ModelConnections({
                             <Trash2 size={15} />
                           </button>
                         </div>
-                        <details className="model-advanced">
-                          <summary>
-                            能力设置
-                            <ChevronDown size={12} />
-                          </summary>
-                          <div className="model-capabilities">
-                            <label className="model-vision">
-                              <Checkbox
-                                checked={model.vision_enabled}
-                                disabled={busy}
-                                onCheckedChange={(v) =>
-                                  updateModel(index, {
-                                    vision_enabled: v === true,
-                                  })
-                                }
-                              />
-                              图片输入
-                            </label>
-                            <SoftSelect
-                              label={`模型 ${index + 1} 思考配置`}
-                              value={model.thinking_mode || "auto"}
+                        <div className="model-capabilities">
+                          <label className="model-vision">
+                            <Checkbox
+                              checked={model.vision_enabled}
                               disabled={busy}
-                              onValueChange={(v) =>
+                              onCheckedChange={(v) =>
                                 updateModel(index, {
-                                  thinking_mode:
-                                    v as typeof model.thinking_mode,
+                                  vision_enabled: v === true,
                                 })
                               }
-                              options={thinkingOptions}
                             />
+                            <span>
+                              <strong>图片输入</strong>
+                              <small>模型能理解截图和照片时开启</small>
+                            </span>
+                          </label>
+                          <div className="model-thinking-control">
+                            <span>
+                              <strong>思考支持</strong>
+                              <small>按服务商与完整模型名自动判断</small>
+                            </span>
+                            <span className="model-thinking-select">
+                              <SoftSelect
+                                label={`模型 ${index + 1} 思考配置`}
+                                value={model.thinking_mode || "auto"}
+                                disabled={busy}
+                                onValueChange={(v) =>
+                                  updateModel(index, {
+                                    thinking_mode:
+                                      v as typeof model.thinking_mode,
+                                  })
+                                }
+                                options={thinkingOptions}
+                              />
+                              {model.thinking_mode === "auto" && (
+                                <small
+                                  className="model-thinking-detected"
+                                  title="识别依据是当前服务商接口和完整模型名，不使用默认模型代替。"
+                                >
+                                  {model.thinking_control &&
+                                  model.thinking_control !== "auto"
+                                    ? `自动识别：${thinkingControlLabels[model.thinking_control]}`
+                                    : "保存后按当前模型精确识别"}
+                                </small>
+                              )}
+                            </span>
                           </div>
-                        </details>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               </div>
-              <DialogFooter>
+              <DialogFooter className="model-dialog-footer">
                 <Button
                   variant="outline"
                   disabled={busy}
                   onClick={() => void save(true)}
                 >
-                  保存并测试模型
+                  保存并测试
                 </Button>
                 <Button disabled={busy} onClick={() => void save()}>
-                  {busy && <Loader2 size={15} className="spin" />}保存连接
+                  {busy && <Loader2 size={15} className="spin" />}
+                  保存连接
                 </Button>
               </DialogFooter>
             </>

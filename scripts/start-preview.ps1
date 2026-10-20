@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $previewRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $previewRoot
-$env:BAI_DATA_DIR = Join-Path $previewRoot '.local-data\preview-runtime'
+$env:BAI_DATA_DIR = if ($env:BAI_PREVIEW_DATA_DIR) { $env:BAI_PREVIEW_DATA_DIR } else { Join-Path $previewRoot '.local-data\preview-runtime' }
 $env:BAI_BACKEND_PORT = '8790'
 $env:BAI_BACKEND_URL = 'http://127.0.0.1:8790'
 $env:BAI_FRONTEND_ORIGIN = 'http://127.0.0.1:5190'
@@ -16,10 +16,12 @@ if ($Worker) {
     exit $LASTEXITCODE
 }
 $previewRunning = Get-Process -Name 'bai-agent' -ErrorAction SilentlyContinue | Where-Object {
-    $_.Path -eq $previewExecutable -and $_.MainWindowTitle -like '*测试版*'
+    $_.Path -eq $previewExecutable
 }
 if ($previewRunning) {
-    Start-Process -FilePath $previewExecutable -WindowStyle Hidden
+    # This is the interactive app: let its single-instance handler restore it.
+    # Hidden applies a startup window state which can minimize the existing window.
+    Start-Process -FilePath $previewExecutable -WindowStyle Normal
     exit 0
 }
 foreach ($previewCommand in @('pnpm.cmd', 'cargo', 'node')) {
@@ -34,7 +36,7 @@ $previewWorker = Start-Process -FilePath $previewPowerShell -ArgumentList @('-No
 $previewDeadline = [DateTime]::UtcNow.AddMinutes(3)
 while ([DateTime]::UtcNow -lt $previewDeadline) {
     $previewWindow = Get-Process -Name 'bai-agent' -ErrorAction SilentlyContinue | Where-Object {
-        $_.Path -eq $previewExecutable -and $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like '*测试版*'
+        $_.Path -eq $previewExecutable -and $_.MainWindowHandle -ne 0
     }
     if ($previewWindow) { exit 0 }
     $previewWorker.Refresh()

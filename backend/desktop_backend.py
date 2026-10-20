@@ -8,6 +8,10 @@ import sys
 
 
 def main():
+    if "--office-worker" in sys.argv:
+        from app.office_worker import main as office_main
+        office_main()
+        return
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", choices=["127.0.0.1"], default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)

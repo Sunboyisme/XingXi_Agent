@@ -3,12 +3,17 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Cable,
   Check,
+  ChevronDown,
+  CircleAlert,
+  Eye,
+  EyeOff,
   Loader2,
   Pencil,
   Plus,
   RefreshCw,
   Search,
   Trash2,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +39,8 @@ const phases: Record<MCPServer["status"], string> = {
   connected: "已连接",
   error: "连接失败",
 };
+const enhancedSearchUrl =
+  "https://dashscope.aliyuncs.com/api/v1/mcps/EnhancedSearch/mcp";
 type SecretRow = {
   id: string;
   key: string;
@@ -41,14 +48,55 @@ type SecretRow = {
   saved: boolean;
   remove: boolean;
 };
-function secretRows(values: Record<string, boolean>): SecretRow[] {
+function secretRows(
+  values: Record<string, boolean>,
+  templates: Record<string, string> = {},
+): SecretRow[] {
   return Object.entries(values).map(([key, saved]) => ({
     id: crypto.randomUUID(),
     key,
-    value: "",
+    value: templates[key] || "",
     saved,
     remove: false,
   }));
+}
+
+function MCPValueInput({
+  label,
+  value,
+  placeholder,
+  onChange,
+  id,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+  id?: string;
+}) {
+  const [visible, setVisible] = useState(true);
+  return (
+    <div className="mcp-value-input">
+      <Input
+        id={id}
+        aria-label={label}
+        type={visible ? "text" : "password"}
+        autoComplete="off"
+        spellCheck={false}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <button
+        type="button"
+        aria-label={`${visible ? "隐藏" : "显示"}${label}`}
+        title={visible ? "隐藏" : "显示"}
+        onClick={() => setVisible(!visible)}
+      >
+        {visible ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
 }
 
 function SecretFields({
@@ -63,6 +111,9 @@ function SecretFields({
   return (
     <fieldset className="mcp-secrets">
       <legend>{label}</legend>
+      {label === "请求头" && (
+        <p className="mcp-header-hint">请按服务商要求填写</p>
+      )}
       {rows.map(
         (row, index) =>
           !row.remove && (
@@ -80,17 +131,13 @@ function SecretFields({
                   )
                 }
               />
-              <Input
-                aria-label={`${label}值 ${index + 1}`}
-                type="password"
-                autoComplete="new-password"
+              <MCPValueInput
+                label={`${label}值 ${index + 1}`}
                 value={row.value}
-                placeholder={row.saved ? "已保存；留空保留" : "值"}
-                onChange={(event) =>
+                placeholder={row.saved ? "已保存；留空保留" : "值或 ${变量名}"}
+                onChange={(value) =>
                   setRows(
-                    rows.map((x) =>
-                      x.id === row.id ? { ...x, value: event.target.value } : x,
-                    ),
+                    rows.map((x) => (x.id === row.id ? { ...x, value } : x)),
                   )
                 }
               />
@@ -154,11 +201,48 @@ function ServerEditor({
   const [args, setArgs] = useState(JSON.stringify(server?.args || [], null, 2));
   const [cwd, setCwd] = useState(server?.cwd || "");
   const [headers, setHeaders] = useState(() =>
-    secretRows(server?.headers || {}),
+    secretRows(server?.headers || {}, server?.headers_templates),
   );
-  const [env, setEnv] = useState(() => secretRows(server?.env || {}));
+  const [env, setEnv] = useState(() =>
+    secretRows(server?.env || {}, server?.env_templates),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const quickSearch =
+    transport === "streamable_http" &&
+    url === enhancedSearchUrl &&
+    headers.every(
+      (row) => row.remove || row.key.toLowerCase() === "authorization",
+    );
+  const authorization = headers.find(
+    (row) => !row.remove && row.key.toLowerCase() === "authorization",
+  );
+  function searchPreset() {
+    if (!name.trim()) setName("百炼联网搜索");
+    setTransport("streamable_http");
+    setUrl(enhancedSearchUrl);
+    setHeaders([
+      {
+        id: crypto.randomUUID(),
+        key: "Authorization",
+        value: "",
+        saved: false,
+        remove: false,
+      },
+    ]);
+    setError("");
+  }
+  function searchKey(value: string) {
+    setHeaders([
+      {
+        id: authorization?.id || crypto.randomUUID(),
+        key: authorization?.key || "Authorization",
+        value,
+        saved: authorization?.saved || false,
+        remove: false,
+      },
+    ]);
+  }
   async function save() {
     setBusy(true);
     setError("");
@@ -182,6 +266,19 @@ function ServerEditor({
           throw new Error("凭据名称不能为空或重复");
         return Object.fromEntries(active.map((x) => [x.key, x.value || null]));
       };
+      const requestHeaders =
+        transport === "streamable_http" ? values(headers) : {};
+      if (quickSearch) {
+        const token = authorization?.value.trim() || "";
+        if (!token && !authorization?.saved)
+          throw new Error("请填写百炼 API 密钥");
+        if (token) {
+          const key = token.replace(/^(?:Bearer\s+)+/i, "").trim();
+          if (!key) throw new Error("请填写百炼 API 密钥");
+          requestHeaders[authorization?.key || "Authorization"] =
+            `Bearer ${key}`;
+        }
+      }
       const value: MCPServerWrite = {
         name,
         transport,
@@ -190,7 +287,7 @@ function ServerEditor({
         command: transport === "stdio" ? command : "",
         args: parsed as string[],
         cwd: transport === "stdio" ? cwd : "",
-        headers: transport === "streamable_http" ? values(headers) : {},
+        headers: requestHeaders,
         env: transport === "stdio" ? values(env) : {},
         clear_headers: headers
           .filter((x) => x.remove && x.saved)
@@ -232,6 +329,20 @@ function ServerEditor({
           </DialogDescription>
         </DialogHeader>
         {error && <ErrorNotice message={error} />}
+        {!server && (
+          <div className="mcp-presets">
+            <span>快捷配置</span>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-pressed={quickSearch}
+              onClick={searchPreset}
+            >
+              <Search size={14} />
+              百炼联网搜索
+            </Button>
+          </div>
+        )}
         <div className="mcp-editor-fields">
           <div className="form-field">
             <Label htmlFor="mcp-name">名称</Label>
@@ -265,11 +376,36 @@ function ServerEditor({
                   onChange={(event) => setUrl(event.target.value)}
                 />
               </div>
-              <SecretFields
-                label="请求头"
-                rows={headers}
-                setRows={setHeaders}
-              />
+              {quickSearch ? (
+                <div className="form-field">
+                  <Label htmlFor="mcp-bailian-key">百炼 API 密钥</Label>
+                  <MCPValueInput
+                    id="mcp-bailian-key"
+                    label="百炼 API 密钥"
+                    value={authorization?.value || ""}
+                    placeholder={
+                      authorization?.saved
+                        ? "已保存；留空保留"
+                        : "sk-… 或 ${QWEN_API_KEY}"
+                    }
+                    onChange={searchKey}
+                  />
+                  <a
+                    className="mcp-provider-link"
+                    href="https://bailian.console.aliyun.com/cn-beijing/store/mcp/detail/EnhancedSearch"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    开通服务与查看密钥
+                  </a>
+                </div>
+              ) : (
+                <SecretFields
+                  label="请求头"
+                  rows={headers}
+                  setRows={setHeaders}
+                />
+              )}
             </>
           ) : (
             <>
@@ -440,10 +576,10 @@ function ToolRow({
     <div className="managed-tool-row">
       <div className="managed-tool-copy">
         <strong>{tool.name}</strong>
-        <p>{tool.description}</p>
-        <small className={tool.available ? "" : "tool-unavailable"}>
-          {tool.note}
-        </small>
+        <p title={tool.description}>{tool.description}</p>
+        {!tool.available && (
+          <small className="tool-unavailable">{tool.note}</small>
+        )}
       </div>
       <label className="tool-switch">
         <Checkbox
@@ -471,6 +607,8 @@ export function ToolsSettings({ active }: { active: boolean }) {
   );
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState<MCPServer | null>(null);
+  const [builtinOpen, setBuiltinOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const load = useCallback(async () => {
     const [nextTools, nextServers] = await Promise.all([
       api<Tool[]>("/tools"),
@@ -565,126 +703,187 @@ export function ToolsSettings({ active }: { active: boolean }) {
         </p>
       )}
       {builtin.length > 0 && (
-        <section className="settings-section">
-          <div className="section-title">
-            <h2>内置工具</h2>
-            <small>{builtin.length}</small>
-          </div>
-          {builtin.map((tool) => (
-            <ToolRow
-              key={tool.id}
-              tool={tool}
-              busy={busy}
-              onToggle={() => toggle(tool)}
-            />
-          ))}
+        <section className="settings-section compact-builtin">
+          <button
+            className="tools-group-heading"
+            type="button"
+            aria-expanded={builtinOpen || Boolean(query)}
+            aria-controls="builtin-tool-list"
+            onClick={() => setBuiltinOpen(!builtinOpen)}
+          >
+            <Wrench size={18} />
+            <strong>内置工具</strong>
+            <span>
+              已启用 {builtin.filter((tool) => tool.enabled).length} /{" "}
+              {builtin.length}
+            </span>
+            <ChevronDown size={16} />
+          </button>
+          {(builtinOpen || Boolean(query)) && (
+            <div className="builtin-tool-grid" id="builtin-tool-list">
+              {builtin.map((tool) => (
+                <ToolRow
+                  key={tool.id}
+                  tool={tool}
+                  busy={busy}
+                  onToggle={() => toggle(tool)}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
-      {servers.map((server) => {
-        const items = tools.filter(
-          (tool) => tool.server_id === server.id && match(tool),
-        );
-        if (
-          query &&
-          !server.name.toLowerCase().includes(query.toLowerCase()) &&
-          !items.length
-        )
-          return null;
-        return (
-          <section
-            className="settings-section mcp-service"
-            key={server.id}
-            aria-label={`MCP 服务 ${server.name}`}
-          >
-            <div className="mcp-service-heading">
-              <Cable size={19} />
-              <div>
-                <h2>{server.name}</h2>
-                <small>
-                  {server.transport === "stdio" ? "本地 stdio" : "远程 HTTP"}
-                </small>
+      <div className="mcp-service-grid">
+        {servers.map((server) => {
+          const items = tools.filter(
+            (tool) => tool.server_id === server.id && match(tool),
+          );
+          if (
+            query &&
+            !server.name.toLowerCase().includes(query.toLowerCase()) &&
+            !items.length
+          )
+            return null;
+          return (
+            <section
+              className="settings-section mcp-service"
+              key={server.id}
+              aria-label={`MCP 服务 ${server.name}`}
+            >
+              <div className="mcp-service-heading">
+                <Cable size={19} />
+                <div>
+                  <h2>{server.name}</h2>
+                  <small>
+                    {server.transport === "stdio" ? "本地 stdio" : "远程 HTTP"}
+                  </small>
+                </div>
+                <span
+                  className={`connection-label ${server.status === "connected" ? "ready" : ""}`}
+                >
+                  {phases[server.status]}
+                </span>
               </div>
-              <span
-                className={`connection-label ${server.status === "connected" ? "ready" : ""}`}
-              >
-                {phases[server.status]}
-              </span>
-            </div>
-            {server.error && <ErrorNotice message={server.error} />}
-            <div className="mcp-service-actions">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  void act(async () => {
-                    const result = await api<MCPServer>(
-                      `/mcp/servers/${server.id}/test`,
-                      "POST",
-                    );
-                    if (!result.error)
-                      setNotice(
-                        `${server.name}：测试通过，发现 ${result.tool_count} 个工具`,
+              {server.error && (
+                <div className="mcp-connection-error" role="status">
+                  <CircleAlert size={15} />
+                  <p>{server.error}</p>
+                </div>
+              )}
+              <div className="mcp-service-actions">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    void act(async () => {
+                      const result = await api<MCPServer>(
+                        `/mcp/servers/${server.id}/test`,
+                        "POST",
                       );
-                  })
-                }
-              >
-                <RefreshCw size={14} />
-                测试 / 刷新工具
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => setEditing(server)}
-              >
-                <Pencil size={14} />
-                编辑
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  void act(() =>
-                    api(
-                      `/mcp/servers/${server.id}`,
-                      "PUT",
-                      serverWrite(server),
-                    ),
-                  )
-                }
-              >
-                {server.enabled ? "停用服务" : "启用服务"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                aria-label={`删除服务 ${server.name}`}
-                onClick={() => setDeleting(server)}
-              >
-                <Trash2 size={14} />
-              </Button>
-            </div>
-            {!server.tool_count && (
-              <p className="mcp-empty">
-                {server.tested_at
-                  ? "服务未提供工具"
-                  : "测试连接后选择要启用的工具"}
-              </p>
-            )}
-            {items.map((tool) => (
-              <ToolRow
-                key={tool.id}
-                tool={tool}
-                busy={busy}
-                onToggle={() => toggle(tool)}
-              />
-            ))}
-          </section>
-        );
-      })}
+                      if (result.tool_count)
+                        setExpanded(
+                          (previous) => new Set([...previous, server.id]),
+                        );
+                      if (!result.error)
+                        setNotice(
+                          `${server.name}：测试通过，发现 ${result.tool_count} 个工具`,
+                        );
+                    })
+                  }
+                >
+                  <RefreshCw size={14} />
+                  <span aria-hidden="true">测试连接</span>
+                  <span className="sr-only">测试 / 刷新工具</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setEditing(server)}
+                >
+                  <Pencil size={14} />
+                  编辑
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    void act(() =>
+                      api(
+                        `/mcp/servers/${server.id}`,
+                        "PUT",
+                        serverWrite(server),
+                      ),
+                    )
+                  }
+                >
+                  {server.enabled ? "停用服务" : "启用服务"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  aria-label={`删除服务 ${server.name}`}
+                  onClick={() => setDeleting(server)}
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+              {!server.tool_count && (
+                <p className="mcp-empty">
+                  {server.tested_at ? "服务未提供工具" : "尚未发现工具"}
+                </p>
+              )}
+              {server.tool_count > 0 && (
+                <button
+                  type="button"
+                  className="mcp-catalog-toggle"
+                  aria-label={`管理 ${server.name} 的工具`}
+                  aria-expanded={expanded.has(server.id) || Boolean(query)}
+                  aria-controls={`mcp-catalog-${server.id}`}
+                  onClick={() =>
+                    setExpanded((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(server.id)) next.delete(server.id);
+                      else next.add(server.id);
+                      return next;
+                    })
+                  }
+                >
+                  <span>
+                    {server.tool_count} 个工具 · 已启用{" "}
+                    {
+                      tools.filter(
+                        (tool) =>
+                          tool.server_id === server.id &&
+                          tool.enabled &&
+                          tool.available,
+                      ).length
+                    }
+                  </span>
+                  <span>
+                    管理工具 <ChevronDown size={14} />
+                  </span>
+                </button>
+              )}
+              {(expanded.has(server.id) || Boolean(query)) && (
+                <div id={`mcp-catalog-${server.id}`} className="mcp-catalog">
+                  {items.map((tool) => (
+                    <ToolRow
+                      key={tool.id}
+                      tool={tool}
+                      busy={busy}
+                      onToggle={() => toggle(tool)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
       {loaded && !servers.length && !query && (
         <p className="mcp-empty">尚未添加 MCP 服务</p>
       )}

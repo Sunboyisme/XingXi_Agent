@@ -1,16 +1,18 @@
-# XiaoXi · 0.1.2
+# XiaoXi · 0.1.4
 
-支持在「设置 → 工具」管理内置工具和 MCP 服务，通过表单或 JSON 导入本地 stdio / 远程 HTTP 连接。记忆管理已移到「设置 → 记忆」。0.1.2 安装包包含本次功能，接入说明见 [MCP 与统一工具管理](docs/mcp.md)。
+0.1.4 支持上传办公资料、显示解析状态、按需读取与生成 Word、PDF、Excel、TXT、MD、CSV、JSON 结果文件，并提供预览、下载和另存为；同时改进提醒卡、重复计划、对话定位与学习回答区。Windows x64 安装包于 2026-10-20 经用户授权构建。详见 [0.1.4 发布说明](docs/releases/0.1.4.md)与[文件功能](docs/files.md)。
 
-应用已从 Bai Agent 更名为「XiaoXi」。使用 `启动XiaoXi.cmd` 启动当前开发版，原启动入口仍可使用。应用标识、数据目录和密钥存储保持兼容，已有 0.1.0 安装包保留。
+0.1.3 新增「日序」月历/周历和 Skill 技能包，支持聊天安排计划、联动提醒、按技能授权运行脚本，以及 MCP 图片与网页来源持久化展示。详见 [0.1.3 发布说明](docs/releases/0.1.3.md)、[技能使用](docs/skills.md)和[日序](docs/calendar.md)。Windows x64 安装包已于 2026-10-19 在用户验收并授权后构建。
+
+应用已从 Bai Agent 更名为「XiaoXi」。使用 `启动测试版.cmd` 打开独立测试版。应用标识、数据目录和密钥存储保持兼容，已有 0.1.0 安装包保留。
 
 个人助手，在同一个对话框中查询天气、联网搜索、阅读网页、计算、处理日期与单位换算、保存记忆和安排提醒。Agent 自行选择已封装的工具，必要时连续调用。提供 **Windows x64 安装版** 和桌面开发环境。同时支持按知识框架逐步学习，内容由你配置的模型生成。
 
-项目位置：`C:\QinBai\Personal_Works\Project\261005-Bai-Agent`。开发路线见 [PLAN.md](PLAN.md)，技术说明见 [docs/architecture.md](docs/architecture.md)，界面规范见 [docs/interface.md](docs/interface.md)。
+项目位置：`C:\QinBai\Personal_Works\Project\261005-XiaoXi_Agent`。开发路线见 [PLAN.md](PLAN.md)，技术说明见 [docs/architecture.md](docs/architecture.md)，界面规范见 [docs/interface.md](docs/interface.md)。
 
 ## 安装版
 
-安装包位于 `releases/0.1.2/XiaoXi_0.1.2_x64-setup.exe`，同目录 `SHA256SUMS.txt` 可校验文件。安装版包含前端、Python 后端及 MCP 依赖，无需安装 Python、Node.js 或 Rust。第三方 stdio MCP 服务自身需要的运行环境需另行准备。缺少 WebView2 时安装器会联网下载运行环境。图标采用用户选定的 A 版「奶油方糖」。
+安装包位于 `releases/0.1.4/XiaoXi_0.1.4_x64-setup.exe`，同目录 `SHA256SUMS.txt` 可校验文件。安装版包含前端、Python 后端及 MCP 依赖，无需安装 Python、Node.js 或 Rust。第三方 stdio MCP 服务及技能脚本自身需要的运行环境需另行准备。缺少 WebView2 时安装器会联网下载运行环境。图标采用用户选定的 A 版「奶油方糖」。
 
 安装数据默认保存在 `%LOCALAPPDATA%\com.qinbai.baiagent`，不写入安装目录；开发版个人数据、API 密钥和测试记录不放入安装包。开发版与安装版默认使用不同的数据目录；使用前先退出另一个XiaoXi，避免占用同一个本机服务端口。安装版首次使用需要配置自己的模型连接。
 
@@ -18,12 +20,12 @@
 
 ## 开发启动
 
-本机依赖已经安装。双击项目根目录的 **`启动XiaoXi.cmd`**。启动器在后台运行开发服务，第一次编译或依赖变化后需要等待；再次启动会打开已有窗口。
+本机依赖已经安装。双击项目根目录的 **`启动测试版.cmd`**。启动器在后台运行开发服务，第一次编译或依赖变化后需要等待；再次启动会打开已有窗口。
 
 也可以在 PowerShell 中运行：
 
 ```powershell
-Set-Location -LiteralPath 'C:\QinBai\Personal_Works\Project\261005-Bai-Agent'
+Set-Location -LiteralPath 'C:\QinBai\Personal_Works\Project\261005-XiaoXi_Agent'
 pnpm desktop:dev
 ```
 
@@ -50,7 +52,7 @@ pnpm desktop:dev
 
 记忆默认自动保存明确、稳定的普通偏好，并提供撤销；敏感信息和推测内容等待确认，临时信息留在当前对话。可在记忆页切换「自动记忆 / 每次确认」，查看来源、编辑或删除。明确说「请记住……」已有授权，直接保存；历史对话单独保留。规则见 [记忆保存与确认](docs/memory.md)。
 
-提醒支持一次、每天、每周，也可完成、取消或延后。界面使用**北京时间**。电脑开机且XiaoXi在托盘运行时，提醒可以通过独立窗口显示，同时尝试发送 Windows 通知。应用退出、电脑关机或休眠时不能按时弹出；恢复运行后补充一次逾期提示，重复事项跳到下一次时间，不逐条轰炸历史遗漏。
+计划支持全天、定时、每天／每周／每月重复及多个提醒。完成本次与结束整个系列分开操作；关闭提醒保留计划，通知「知道了」只标已读，「稍后提醒」只推迟本次通知。界面默认使用**北京时间**。电脑开机且XiaoXi在托盘运行时，提醒可以通过独立窗口显示，同时尝试发送 Windows 通知。应用退出、电脑关机或休眠时不能按时弹出；恢复运行后补充一次逾期提示，重复事项跳到下一次时间，不逐条补发历史遗漏。
 
 ## 对话中的工具
 
@@ -97,7 +99,7 @@ pnpm release:windows
 
 ```powershell
 # 终端一：隔离的后端
-$env:BAI_DATA_DIR = 'C:\QinBai\Personal_Works\Project\261005-Bai-Agent\.local-data\review'
+$env:BAI_DATA_DIR = 'C:\QinBai\Personal_Works\Project\261005-XiaoXi_Agent\.local-data\review'
 $env:BAI_MODEL_API_KEY = 'synthetic-key'
 uv run --project backend uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8766 --no-access-log
 # 终端二：前端（也设置上面的 BAI_DATA_DIR）
@@ -109,3 +111,11 @@ uv run --project backend python backend/tests/mock_provider.py
 然后运行 `pnpm exec playwright test`，使用本机 Chrome。测试会在隔离空间创建测试对话和课程，不产生真实模型费用。**不要对正常个人空间运行这些浏览器测试。** Windows 原生验证另用 `tests/native.verify.mjs`，需要桌面开发进程开启 CDP 9227，并已有浏览器测试保存的前端课程。
 
 已验证的结果与未验证事项见 [docs/verification.md](docs/verification.md)。
+
+### 记忆检索与独立测试版
+
+双击 `启动测试版.cmd` 打开独立的桌面测试版。测试版使用 `.local-data/preview-runtime` 保存自己的数据库和凭据，可在设置中添加真实聊天模型，并通过「语义记忆检索」卡片单独配置 Embedding 地址、模型和密钥。模拟验收数据保存在其他目录，不作为测试版的默认模型连接；不会自动导入安装版或原开发版的个人配置。
+
+连接页面用卡片展示状态，点击配置或管理后再编辑。聊天回答下方的「检索依据」查看当次运行保存的记忆候选、分数和选入结果；「设置 → 记忆 → 检索调试」可输入问题试查当前记忆。手动试查不调用聊天模型，启用语义检索时会调用 Embedding 服务。
+
+人工评测样例、操作步骤和结果模板见 [记忆与上下文评测](docs/evals/README.md)。评测用例的预期不等于真实模型已通过；请在隔离评测数据中执行。

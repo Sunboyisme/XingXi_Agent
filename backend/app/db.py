@@ -1,17 +1,20 @@
 from datetime import datetime, timezone
 from uuid import uuid4
+
 from sqlalchemy import (
-    create_engine,
-    event,
-    String,
-    Text,
     JSON,
-    Integer,
     Boolean,
     ForeignKey,
+    Integer,
+    String,
+    Text,
     UniqueConstraint,
+    create_engine,
+    event,
+    literal_column,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+
 from .config import DATABASE_URL, PROFILE_ID
 
 
@@ -44,6 +47,7 @@ class Settings(Base):
     memory_mode: Mapped[str] = mapped_column(String(20), default="auto")
     model_providers: Mapped[list] = mapped_column(JSON, default=list)
     default_provider: Mapped[str] = mapped_column(String(30), default="custom")
+    embedding_config: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Conversation(Record, Base):
@@ -89,6 +93,28 @@ class Message(Record, Base):
     content: Mapped[str] = mapped_column(Text)
     attachment_ids: Mapped[list] = mapped_column(JSON, default=list)
     provider_context: Mapped[dict] = mapped_column(JSON, default=dict)
+    reasoning: Mapped[str] = mapped_column(Text, default="")
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+
+
+# SQLite insertion order breaks ties when several messages share a clock tick.
+MESSAGE_ORDER = literal_column("messages.rowid")
+
+
+class ConversationSummary(Base):
+    __tablename__ = "conversation_summaries"
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True)
+    content: Mapped[str] = mapped_column(Text, default="")
+    through_message_id: Mapped[str] = mapped_column(String(36))
+
+
+class MemoryVector(Base):
+    __tablename__ = "memory_vectors"
+    memory_id: Mapped[str] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    signature: Mapped[str] = mapped_column(String(64))
+    vector: Mapped[list] = mapped_column(JSON)
 
 
 class Run(Record, Base):
@@ -199,6 +225,10 @@ class Reminder(Record, Base):
     timezone: Mapped[str] = mapped_column(String(100), default="Asia/Shanghai")
     recurrence: Mapped[str] = mapped_column(String(20), default="none")
     status: Mapped[str] = mapped_column(String(30), default="active")
+    plan_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    offset_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    plan_occurrence_start: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class Notification(Record, Base):
@@ -212,6 +242,10 @@ class Notification(Record, Base):
     body: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     overdue: Mapped[bool] = mapped_column(Boolean, default=False)
+    plan_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    plan_occurrence_start: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    snoozed_until: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    generation: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class WechatState(Base):
@@ -236,12 +270,94 @@ class WechatDelivery(Record, Base):
     error: Mapped[str] = mapped_column(Text, default="")
 
 
+class CalendarEvent(Record, Base):
+    __tablename__ = "calendar_events"
+    title: Mapped[str] = mapped_column(String(300))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    start: Mapped[str] = mapped_column(String(40), index=True)
+    end: Mapped[str] = mapped_column(String(40))
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    timezone: Mapped[str] = mapped_column(String(100), default="Asia/Shanghai")
+    status: Mapped[str] = mapped_column(String(20), default="planned")
+    reminder_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    reminder_time: Mapped[str] = mapped_column(String(5), default="09:00")
+    reminder_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    recurrence: Mapped[str] = mapped_column(String(20), default="none")
+    repeat_interval: Mapped[int] = mapped_column(Integer, default=1)
+    repeat_until: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    repeat_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    calendar_display: Mapped[str] = mapped_column(String(20), default="summary")
+    reminder_offsets: Mapped[list] = mapped_column(JSON, default=lambda: [0])
+    reminder_id: Mapped[str | None] = mapped_column(ForeignKey("reminders.id", ondelete="SET NULL"), nullable=True)
+    source_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class CalendarBatch(Base):
+    __tablename__ = "calendar_batches"
+    source_message_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_ids: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class PlanOccurrence(Base):
+    __tablename__ = "plan_occurrences"
+    plan_id: Mapped[str] = mapped_column(ForeignKey("calendar_events.id", ondelete="CASCADE"), primary_key=True)
+    start: Mapped[str] = mapped_column(String(40), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), default="completed")
+    completed_at: Mapped[str] = mapped_column(String(40), default=now)
+    override: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class PlanSegment(Base):
+    __tablename__ = "plan_segments"
+    plan_id: Mapped[str] = mapped_column(ForeignKey("calendar_events.id", ondelete="CASCADE"), primary_key=True)
+    from_day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON)
+
+
+class Skill(Record, Base):
+    __tablename__ = "skills"
+    __table_args__ = (UniqueConstraint("profile_id", "name"),)
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)
+    digest: Mapped[str] = mapped_column(String(64))
+    files: Mapped[list] = mapped_column(JSON, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    scripts_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class SkillRuntime(Base):
+    __tablename__ = "skill_runtimes"
+    name: Mapped[str] = mapped_column(String(20), primary_key=True)
+    path: Mapped[str] = mapped_column(Text, default="")
+
+
+class Artifact(Record, Base):
+    __tablename__ = "artifacts"
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(300))
+    media_type: Mapped[str] = mapped_column(String(100))
+    storage_name: Mapped[str] = mapped_column(String(100))
+    source_url: Mapped[str] = mapped_column(Text, default="")
+
+
 class Attachment(Record, Base):
     __tablename__ = "attachments"
     name: Mapped[str] = mapped_column(String(300))
     media_type: Mapped[str] = mapped_column(String(60))
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
+
+
+class OfficeFile(Base):
+    __tablename__ = "office_files"
+    id: Mapped[str] = mapped_column(ForeignKey("attachments.id", ondelete="CASCADE"), primary_key=True)
+    conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True)
+    size: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    error: Mapped[str] = mapped_column(Text, default="")
+    chunks: Mapped[list] = mapped_column(JSON, default=list)
+    warnings: Mapped[list] = mapped_column(JSON, default=list)
 
 
 engine = create_engine(
@@ -262,9 +378,10 @@ Session = sessionmaker(engine, expire_on_commit=False)
 
 
 def migrate() -> None:
-    from alembic.config import Config
-    from alembic import command
     from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
 
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     config.set_main_option(

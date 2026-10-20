@@ -6,7 +6,15 @@ from threading import RLock
 from sqlalchemy import select
 
 from .config import PROFILE_ID
-from .db import Conversation, Memory, MemoryChange, Message, Session, Settings
+from .db import (
+    MESSAGE_ORDER,
+    Conversation,
+    Memory,
+    MemoryChange,
+    Message,
+    Session,
+    Settings,
+)
 
 lock = RLock()
 FIELDS = (
@@ -121,7 +129,7 @@ def save_from_chat(
                 Message.role == "user",
                 Message.profile_id == PROFILE_ID,
             )
-            .order_by(Message.created_at.desc())
+            .order_by(Message.created_at.desc(), MESSAGE_ORDER.desc())
             .limit(1)
         )
         if not message:

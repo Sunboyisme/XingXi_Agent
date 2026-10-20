@@ -1,6 +1,10 @@
 import os
+import socket
+import subprocess
+import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 import pytest
 
@@ -54,6 +58,36 @@ def mock_server():
     yield f"http://127.0.0.1:{server.server_port}/v1"
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture
+def http_mcp_url():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    fixture = str(Path(__file__).with_name("mcp_fixture.py"))
+    process = subprocess.Popen(
+        [sys.executable, fixture, "--port", str(port)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
+    try:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                if process.poll() is not None:
+                    pytest.fail("HTTP MCP fixture exited")
+                time.sleep(0.1)
+        else:
+            pytest.fail("HTTP MCP fixture did not start")
+        yield f"http://127.0.0.1:{port}/mcp"
+    finally:
+        process.terminate()
+        process.wait(timeout=10)
 
 
 @pytest.fixture

@@ -91,7 +91,10 @@ test("WeChat separates connection, uncertain delivery, reminders and actions", a
   });
   await page.goto("/");
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
-  const section = page.getByRole("region", { name: "微信连接" });
+  await page.getByRole("button", { name: "管理微信连接" }).click();
+  const section = page
+    .getByRole("dialog")
+    .getByRole("region", { name: "微信连接" });
   await expect(section.getByRole("status")).toHaveText("已连接");
   await expect(section.getByRole("alert")).toContainText("未自动重发");
   await section.scrollIntoViewIfNeeded();
@@ -136,8 +139,8 @@ test("menus create the right content and chat history stays on the chat page", a
   await expect(page.getByRole("dialog")).toContainText("你想学什么");
   await page.keyboard.press("Escape");
   await menu.getByRole("menuitem", { name: "文件", exact: true }).click();
-  await page.getByRole("menuitem", { name: "新建提醒", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("新建提醒");
+  await page.getByRole("menuitem", { name: "新建计划", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("安排一件小事");
   await expect(page.locator(".chat-sidebar")).toBeHidden();
   await page.keyboard.press("Escape");
   await page.keyboard.press("Control+1");

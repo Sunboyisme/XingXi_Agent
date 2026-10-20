@@ -1,5 +1,6 @@
 @import "./styles/tools.css";
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="warm-dark"], [data-theme="warm-dark"] *));
 
 @theme inline {
   --color-background: var(--ui-color-surface);

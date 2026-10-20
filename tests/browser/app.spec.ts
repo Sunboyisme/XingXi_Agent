@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { selectCalendarDate } from "./helpers/calendarPicker";
 test.describe.configure({ mode: "serial" });
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
@@ -46,11 +47,8 @@ test("separate sidebar toggle preserves draft, navigation and saved preference",
   const draft = page.getByLabel("发送给XiaoXi的消息");
   await draft.fill("先留在这里，等我想清楚再发送");
   const collapse = page.getByRole("button", { name: "收起侧栏", exact: true });
-  const avatar = page
-    .getByRole("button", { name: "和XiaoXi打个招呼", exact: true })
-    .first();
-  await avatar.click();
-  await expect(avatar).toHaveAttribute("data-reaction", "happy");
+  await expect(page.locator(".chat-main .bai-avatar")).toHaveCount(0);
+  await expect(page.locator(".navigation-rail .bai-avatar")).toBeVisible();
   await expect(collapse).toBeVisible();
   await expect(page.locator(".chat-sidebar .new-chat-button")).toBeVisible();
   await expect(collapse).toHaveAttribute("aria-expanded", "true");
@@ -114,9 +112,7 @@ test("configure own compatible API and test connection", async ({ page }) => {
     .getByLabel("接口地址", { exact: true })
     .fill(process.env.BAI_MOCK_URL || "http://127.0.0.1:8877/v1");
   await page.getByLabel("模型名称", { exact: true }).fill("mock-test");
-  await page
-    .getByRole("button", { name: "保存并测试模型", exact: true })
-    .click();
+  await page.getByRole("button", { name: "保存并测试", exact: true }).click();
   await expect(
     page.getByText("模型接口连接成功", { exact: true }),
   ).toBeVisible();
@@ -152,8 +148,10 @@ test("agent calls multiple utility tools and restores results after reload", asy
     .getByLabel("发送给XiaoXi的消息")
     .fill("帮我计算并换算单位，再查一下日期。");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  await expect(page.getByText("已调用 3 项工具")).toBeVisible();
-  await page.getByRole("button", { name: /已调用 3 项工具/ }).click();
+  await expect(
+    page.getByRole("button", { name: "工具调用结果" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "工具调用结果" }).click();
   await expect(page.getByText("结果：244.80", { exact: true })).toBeVisible();
   await expect(
     page.getByText("结果：8.04672 km", { exact: true }),
@@ -164,9 +162,9 @@ test("agent calls multiple utility tools and restores results after reload", asy
     .filter({ hasText: "帮我计算并换算单位" })
     .click();
   await expect(
-    page.getByRole("button", { name: /已调用 3 项工具/ }),
+    page.getByRole("button", { name: "工具调用结果" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /已调用 3 项工具/ }).click();
+  await page.getByRole("button", { name: "工具调用结果" }).click();
   await expect(page.getByText("结果：244.80", { exact: true })).toBeVisible();
 });
 
@@ -231,31 +229,51 @@ test("manual memories can be created, edited and deleted", async ({ page }) => {
   ).toHaveCount(0);
 });
 
-test("manual reminder can be saved, edited and completed", async ({ page }) => {
-  await page.getByRole("button", { name: "提醒", exact: true }).click();
-  await page.getByRole("button", { name: "新建提醒", exact: true }).click();
-  await page.getByLabel("提醒我做什么").fill("浏览器测试：明天学习");
+test("manual plan with reminder can be saved, edited and completed", async ({
+  page,
+  request,
+}) => {
+  await page.getByRole("button", { name: "计划", exact: true }).click();
+  await page.getByRole("button", { name: "添加计划", exact: true }).click();
+  await page.getByRole("menuitem", { name: /普通计划/ }).click();
+  await page.getByLabel("计划名称").fill("浏览器测试：明天学习");
+  const tomorrow = new Date(Date.now() + 32 * 3600000)
+    .toISOString()
+    .slice(0, 10);
+  await page.getByLabel("指定时间", { exact: true }).check();
+  await selectCalendarDate(page, "开始", tomorrow, "09:00");
+  await selectCalendarDate(page, "结束", tomorrow, "10:00");
+  await page.getByLabel("设置提醒时间", { exact: true }).check();
+  await selectCalendarDate(page, "提醒时间", tomorrow, "08:45");
+  await page.getByRole("button", { name: "保存计划", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const day = page.locator(
+    `.plan-day:has([aria-label="${tomorrow} 添加计划"])`,
+  );
+  await day.getByRole("button", { name: /09:00 浏览器测试：明天学习/ }).click();
   await page
-    .getByLabel("时间（北京时间）", { exact: true })
-    .fill("2030-01-01T20:00");
-  await page.getByRole("button", { name: "保存提醒", exact: true }).click();
-  const row = page
-    .locator(".reminder-row")
-    .filter({ hasText: "浏览器测试：明天学习" });
-  await expect(row).toBeVisible();
-  await row
-    .getByRole("button", { name: "编辑 浏览器测试：明天学习", exact: true })
-    .click();
-  await page.getByLabel("提醒我做什么").fill("浏览器测试：已调整学习时间");
-  await page.getByRole("button", { name: "保存提醒", exact: true }).click();
-  const changed = page
-    .locator(".reminder-row")
-    .filter({ hasText: "浏览器测试：已调整学习时间" });
-  await changed
     .getByRole("button", {
-      name: "完成 浏览器测试：已调整学习时间",
+      name: "编辑 浏览器测试：明天学习",
       exact: true,
     })
     .click();
-  await expect(changed).toHaveCount(0);
+  await page.getByLabel("计划名称").fill("浏览器测试：已调整学习时间");
+  await page.getByRole("button", { name: "保存计划", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const changedEvent = day.getByRole("button", {
+    name: /09:00 浏览器测试：已调整学习时间/,
+  });
+  await expect(changedEvent).toBeVisible();
+  await changedEvent.click();
+  await page
+    .getByRole("button", {
+      name: `完成 浏览器测试：已调整学习时间 ${tomorrow}`,
+      exact: true,
+    })
+    .click();
+  expect(
+    (await request.get("/api/v1/plans").then((r) => r.json())).find(
+      (plan: any) => plan.title === "浏览器测试：已调整学习时间",
+    ).status,
+  ).toBe("completed");
 });

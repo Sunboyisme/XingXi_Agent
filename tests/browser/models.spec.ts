@@ -33,7 +33,7 @@ test("multiple named connections, model defaults and thinking persist", async ({
   await page.getByLabel("连接名称", { exact: true }).fill("工作模型");
   await page
     .getByLabel("接口地址", { exact: true })
-    .fill("http://127.0.0.1:8937/v1");
+    .fill(process.env.BAI_MOCK_URL || "http://127.0.0.1:8937/v1");
   await page.getByLabel("API 密钥", { exact: true }).fill("synthetic-ui-key");
   await page.getByLabel("模型名称", { exact: true }).fill("first");
   await page.getByLabel("模型名称 2", { exact: true }).fill("second");
@@ -61,7 +61,7 @@ test("multiple named connections, model defaults and thinking persist", async ({
   await page.getByLabel("连接名称", { exact: true }).fill("备用模型");
   await page
     .getByLabel("接口地址", { exact: true })
-    .fill("http://127.0.0.1:8937/v1");
+    .fill(process.env.BAI_MOCK_URL || "http://127.0.0.1:8937/v1");
   await page
     .getByLabel("API 密钥", { exact: true })
     .fill("synthetic-backup-key");

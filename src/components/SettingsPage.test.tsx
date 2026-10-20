@@ -1,4 +1,5 @@
 import React from "react";
+import "@testing-library/jest-dom/vitest";
 import {
   cleanup,
   fireEvent,
@@ -88,14 +89,17 @@ test("settings tabs preserve search drafts and save without overwriting models o
     );
   }
   render(<Host />);
+  fireEvent.click(screen.getByRole("button", { name: "配置联网查资料" }));
   fireEvent.change(screen.getByLabelText("Tavily API 密钥"), {
     target: { value: "synthetic-search-draft" },
   });
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
   fireEvent.click(screen.getByRole("tab", { name: "工具" }));
   await screen.findByRole("button", { name: "添加 MCP" });
   fireEvent.click(screen.getByRole("tab", { name: "记忆" }));
   expect(screen.getByLabelText("记忆保存方式")).toBeDefined();
   fireEvent.click(screen.getByRole("tab", { name: "连接" }));
+  fireEvent.click(screen.getByRole("button", { name: "配置联网查资料" }));
   expect(
     (screen.getByLabelText("Tavily API 密钥") as HTMLInputElement).value,
   ).toBe("synthetic-search-draft");
@@ -119,6 +123,7 @@ test("JSON preview makes no requests and lists no secret values", async () => {
     path === "/tools" ? [calculate] : [],
   );
   render(<ToolsSettings active />);
+  fireEvent.click(await screen.findByRole("button", { name: /内置工具/ }));
   await screen.findByText("计算器");
   fireEvent.click(screen.getByRole("button", { name: "导入 JSON" }));
   fireEvent.change(screen.getByLabelText("mcpServers JSON"), {
@@ -157,6 +162,7 @@ test("tool switch persists explicit disable", async () => {
     path === "/tools" ? [calculate] : [],
   );
   render(<ToolsSettings active />);
+  fireEvent.click(await screen.findByRole("button", { name: /内置工具/ }));
   const toggle = await screen.findByRole("checkbox", {
     name: "启用 内置工具 · 计算器",
   });
@@ -165,5 +171,86 @@ test("tool switch persists explicit disable", async () => {
     expect(apiMock).toHaveBeenCalledWith("/tools/calculate", "PATCH", {
       enabled: false,
     }),
+  );
+});
+
+test.each(["synthetic-bailian-key", "Bearer synthetic-bailian-key"])(
+  "Bailian search preset adds authentication and saves without connecting (%s)",
+  async (key) => {
+    apiMock.mockResolvedValue([]);
+    render(<ToolsSettings active />);
+    fireEvent.click(await screen.findByRole("button", { name: "添加 MCP" }));
+    fireEvent.click(screen.getByRole("button", { name: "百炼联网搜索" }));
+    expect(screen.getByLabelText("名称")).toHaveValue("百炼联网搜索");
+    expect(screen.getByLabelText("服务地址")).toHaveValue(
+      "https://dashscope.aliyuncs.com/api/v1/mcps/EnhancedSearch/mcp",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+    await screen.findByText("请填写百炼 API 密钥");
+    expect(apiMock.mock.calls.some((call) => call[1] === "POST")).toBe(false);
+    fireEvent.change(screen.getByLabelText("百炼 API 密钥"), {
+      target: { value: key },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(
+        "/mcp/servers",
+        "POST",
+        expect.objectContaining({
+          transport: "streamable_http",
+          enabled: false,
+          url: "https://dashscope.aliyuncs.com/api/v1/mcps/EnhancedSearch/mcp",
+          headers: { Authorization: "Bearer synthetic-bailian-key" },
+        }),
+      ),
+    );
+    expect(apiMock.mock.calls.some((call) => call[0].endsWith("/test"))).toBe(
+      false,
+    );
+  },
+);
+
+test("saved environment references remain readable and can be hidden without resolving them", async () => {
+  const server = {
+    id: "env-ui",
+    name: "引用测试",
+    transport: "streamable_http",
+    url: "https://example.invalid/mcp",
+    command: "",
+    args: [],
+    cwd: "",
+    headers: { Authorization: true },
+    headers_templates: { Authorization: "Bearer ${MCP_QA_UI_KEY}" },
+    env: {},
+    enabled: false,
+    status: "disabled",
+    error: "",
+    tool_count: 0,
+    tested_at: null,
+  };
+  apiMock.mockImplementation(async (path: string) =>
+    path === "/mcp/servers" ? [server] : [],
+  );
+  render(<ToolsSettings active />);
+  fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
+  const input = screen.getByLabelText("请求头值 1");
+  expect(input).toHaveValue("Bearer ${MCP_QA_UI_KEY}");
+  expect(input).toHaveAttribute("type", "text");
+  fireEvent.click(screen.getByRole("button", { name: "隐藏请求头值 1" }));
+  expect(input).toHaveAttribute("type", "password");
+  fireEvent.click(screen.getByRole("button", { name: "显示请求头值 1" }));
+  expect(input).toHaveAttribute("type", "text");
+  fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+  await waitFor(() =>
+    expect(apiMock).toHaveBeenCalledWith(
+      "/mcp/servers/env-ui",
+      "PUT",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer ${MCP_QA_UI_KEY}" },
+      }),
+    ),
+  );
+  expect(apiMock.mock.calls.some((call) => call[0].endsWith("/test"))).toBe(
+    false,
   );
 });

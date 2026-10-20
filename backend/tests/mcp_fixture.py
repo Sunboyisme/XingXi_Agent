@@ -63,6 +63,22 @@ async def interactive(ctx: Context) -> str:
     return json.dumps({"action": answer.action})
 
 
+if os.getenv("MCP_FIXTURE_MEDIA"):
+    @mcp.tool
+    def media_fixture():
+        """0.1.3 图片与来源验收。只返回本地模拟图片和示例来源。"""
+        import base64
+        import io
+        from PIL import Image
+        from mcp.types import CallToolResult, ImageContent, TextContent
+        stream = io.BytesIO()
+        Image.new("RGB", (320, 180), (198, 145, 116)).save(stream, format="PNG")
+        return CallToolResult(content=[
+            TextContent(type="text", text=json.dumps({"results": [{"title": "本地模拟网页来源", "url": "https://example.com/013", "summary": "这是 MCP 真实协议返回的模拟搜索摘要。"}]}, ensure_ascii=False)),
+            ImageContent(type="image", data=base64.b64encode(stream.getvalue()).decode(), mimeType="image/png"),
+        ])
+
+
 if options.port:
     import uvicorn
     from starlette.responses import JSONResponse

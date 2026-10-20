@@ -2,6 +2,12 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { components } from "./api.generated";
 
 type Schemas = components["schemas"];
+export type CalendarEvent = Schemas["PlanRead"];
+export type CalendarEventWrite = Schemas["PlanWrite"];
+export type Skill = Schemas["SkillRead"];
+export type SkillPreview = Schemas["SkillPreview"];
+export type Artifact = Schemas["ArtifactRead"];
+export type Presentation = Schemas["PresentationRead"];
 export type Settings = Schemas["SettingsRead"];
 export type Tool = Schemas["ToolRead"];
 export type MCPServer = Schemas["MCPServerRead"];
@@ -13,7 +19,6 @@ export type Goal = Schemas["GoalRead"];
 export type Node = Schemas["NodeRead"];
 export type Lesson = Schemas["LessonRead"];
 export type Memory = Schemas["MemoryRead"];
-export type Reminder = Schemas["ReminderRead"];
 export type Notification = Schemas["NotificationRead"];
 export type Attachment = Schemas["AttachmentRead"];
 export type RunEvent = { kind: string; data: Record<string, unknown> };
@@ -62,6 +67,12 @@ export async function uploadImage(file: File): Promise<Attachment> {
   const body = new FormData();
   body.append("file", file);
   return (await fetchApi("/attachments", { method: "POST", body })).json();
+}
+
+export async function uploadFile(file: File): Promise<Attachment> {
+  const body = new FormData();
+  body.append("file", file);
+  return (await fetchApi("/files", { method: "POST", body })).json();
 }
 
 export async function readEvents(

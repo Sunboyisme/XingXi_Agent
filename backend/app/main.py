@@ -15,14 +15,18 @@ from langgraph.types import Command
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
+from . import features, skills, office
 from . import (
     agent,
+    data_transfer,
     learning,
     mcp_service,
     memory,
     model_profiles,
     provider,
     reminders,
+    plans,
+    retrieval,
     runs,
     tools,
     wechat,
@@ -46,7 +50,16 @@ from .config import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    data_transfer.recover_interrupted()
     store.migrate()
+    with store.Session() as db:
+        for pending_file in db.scalars(select(store.OfficeFile).where(store.OfficeFile.status.in_(["queued","parsing"]))):
+            pending_file.status, pending_file.error = "failed", "上次解析被中断，请重新上传；原文件已保留"
+        db.commit()
+    data_transfer.apply_pending()
+    skills.ensure_builtin()
+    retrieval.last_error = ""
+    retrieval_task = asyncio.create_task(retrieval.worker())
     mcp_service.manager = mcp_service.MCPManager()
     with store.Session() as db:
         for server in db.scalars(
@@ -73,6 +86,10 @@ async def lifespan(app: FastAPI):
         app.state.wechat.start()
         yield
         await app.state.wechat.close()
+        await skills.close()
+        await office.close()
+        retrieval_task.cancel()
+        await asyncio.gather(retrieval_task, return_exceptions=True)
         scheduler.shutdown(wait=False)
         outstanding = list(runs.tasks.values())
         for task in outstanding:
@@ -82,7 +99,7 @@ async def lifespan(app: FastAPI):
         await mcp_service.manager.close()
 
 
-app = FastAPI(title="XiaoXi API", version="0.1.2", lifespan=lifespan)
+app = FastAPI(title="XiaoXi API", version="0.1.4", lifespan=lifespan)
 
 
 # Pydantic's default response includes the rejected input, including credentials.
@@ -184,7 +201,7 @@ def create_run(db, kind, conversation_id=None, goal_id=None):
 
 @app.get("/api/v1/health")
 def health():
-    return {"service": "bai-agent", "version": "0.1.2"}
+    return {"service": "bai-agent", "version": "0.1.4"}
 
 
 from fastapi import APIRouter
@@ -192,9 +209,112 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(auth)])
 
 
+def data_idle():
+    with store.Session() as db:
+        active = db.scalar(select(store.Run.id).where(store.Run.status.in_(["queued", "running"])))
+    if active or runs.tasks or retrieval.indexing:
+        raise HTTPException(409, "请等待当前任务和记忆索引完成后再操作数据。")
+    if wechat.read_state().get("enabled"):
+        raise HTTPException(409, "请先暂停微信连接，再操作数据。")
+
+
+@router.get("/settings/data", response_model=s.DataRead)
+def data_settings():
+    return data_transfer.info()
+
+
+@router.post("/settings/data/export", response_model=s.DataExportRead)
+async def export_data():
+    data_idle()
+    return data_transfer.create_archive()
+
+
+@router.get("/settings/data/exports/{name}")
+def download_data(name: str):
+    import re
+    if not re.fullmatch(r"XiaoXi-data-[A-Za-z0-9-]+\.zip", name):
+        raise HTTPException(404, "数据文件不存在")
+    path = DATA_DIR / "exports" / name
+    if not path.is_file():
+        raise HTTPException(404, "数据文件不存在")
+    return FileResponse(path, media_type="application/zip", filename=name)
+
+
+@router.post("/settings/data/inspect", response_model=s.DataImportRead)
+async def inspect_data(file: UploadFile = File(...)):
+    import tempfile
+    size = 0
+    with tempfile.TemporaryFile() as temporary:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > data_transfer.LIMIT:
+                raise HTTPException(413, "数据文件不能超过 512 MB")
+            temporary.write(chunk)
+        temporary.seek(0)
+        return data_transfer.inspect_archive(temporary)
+
+
+@router.post("/settings/data/import")
+async def import_data(value: s.DataImportWrite):
+    data_idle()
+    return data_transfer.stage_import(value.id)
+
+
+@router.delete("/settings/data/import")
+async def cancel_data_import():
+    return data_transfer.cancel_import()
+
+
 @router.get("/settings", response_model=s.SettingsRead)
 def get_settings(db=Depends(database)):
     return settings_read(db)
+
+
+@router.get("/settings/embedding", response_model=s.EmbeddingRead)
+def embedding_settings():
+    return retrieval.status()
+
+
+@router.put("/settings/embedding", response_model=s.EmbeddingRead)
+def save_embedding(value: s.EmbeddingWrite, db=Depends(database)):
+    key = secret_get("embedding") if value.api_key is None else value.api_key.strip()
+    if value.enabled and not key:
+        raise HTTPException(400, "请填写 Embedding API 密钥。")
+    secret_set("embedding", value.api_key)
+    db.get(store.Settings, PROFILE_ID).embedding_config = {
+        "enabled": value.enabled, "url": str(value.url).rstrip("/"), "model": value.model,
+    }
+    db.commit()
+    retrieval.last_error = ""
+    return retrieval.status()
+
+
+@router.post("/settings/embedding/test")
+async def test_embedding():
+    value = retrieval.settings()
+    if not value.get("model") or not secret_get("embedding"):
+        raise HTTPException(400, "请先保存 Embedding 模型与密钥。")
+    try:
+        vector = retrieval.checked(await retrieval.client(value).aembed_query("连接测试"))
+        return {"ok": True, "dimensions": len(vector)}
+    except Exception:
+        raise HTTPException(400, "Embedding 连接失败，请检查地址、模型和密钥。") from None
+
+
+@router.post("/memories/retrieval/preview", response_model=s.RetrievalRead)
+async def preview_retrieval(value: s.RetrievalInput):
+    if not value.query.strip():
+        raise HTTPException(400, "请输入检索问题。")
+    _, trace = await retrieval.retrieve_detailed(value.query)
+    return trace
+
+
+@router.get("/runs/{run_id}/retrieval", response_model=list[s.RetrievalRead])
+def run_retrieval(run_id: str, db=Depends(database)):
+    item(db, store.Run, run_id)
+    return [event.data for event in db.scalars(select(store.RunEvent).where(
+        store.RunEvent.run_id == run_id, store.RunEvent.kind == "retrieval"
+    ).order_by(store.RunEvent.id))]
 
 
 @router.get("/tools", response_model=list[s.ToolRead])
@@ -290,7 +410,7 @@ def get_run_tools(run_id: str, db=Depends(database)):
             select(store.RunEvent)
             .where(
                 store.RunEvent.run_id == run_id,
-                store.RunEvent.kind.in_(["tool", "memory"]),
+                store.RunEvent.kind.in_(["tool", "memory", "reasoning", "context"]),
             )
             .order_by(store.RunEvent.id)
         )
@@ -401,13 +521,16 @@ def messages(conversation_id: str, db=Depends(database)):
     return db.scalars(
         select(store.Message)
         .where(store.Message.conversation_id == conversation_id)
-        .order_by(store.Message.created_at)
+        .order_by(store.Message.created_at, store.MESSAGE_ORDER)
     ).all()
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=s.RunRead)
 async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(database)):
     conversation = item(db, store.Conversation, conversation_id)
+    if db.scalar(select(store.Run.id).where(store.Run.conversation_id == conversation_id,
+        store.Run.status.in_(["queued", "running"]))):
+        raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
     try:
         config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), value.model_selection)
         provider.model(config)
@@ -415,6 +538,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
     except Exception as error:
         raise HTTPException(400, provider.safe_error(error))
     run = create_run(db, "chat", conversation_id=conversation_id)
+    office.claim(db,value.attachment_ids,conversation_id)
     run.model_config = config
     db.add(
         store.Message(
@@ -435,6 +559,9 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
 @router.post("/conversations/{conversation_id}/retry", response_model=s.RunRead)
 async def retry_message(conversation_id: str, db=Depends(database)):
     item(db, store.Conversation, conversation_id)
+    if db.scalar(select(store.Run.id).where(store.Run.conversation_id == conversation_id,
+        store.Run.status.in_(["queued", "running"]))):
+        raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
     latest = db.scalar(
         select(store.Message)
         .where(store.Message.conversation_id == conversation_id)
@@ -731,50 +858,57 @@ def remove_memory(memory_id: str, db=Depends(database)):
     return {"deleted": True}
 
 
+# Legacy endpoints remain adapters. They never own or create a second kind of item.
+def legacy_reminder(row):
+    return {**s.ReminderRead.model_validate(row).model_dump(), "calendar_event_id": row.plan_id,
+            "status": "cancelled" if row.status in {"disabled", "removed"} else row.status}
+
+
 @router.get("/reminders", response_model=list[s.ReminderRead])
 def reminder_list(db=Depends(database)):
-    return db.scalars(select(store.Reminder).order_by(store.Reminder.due_at)).all()
+    return [legacy_reminder(row) for row in db.scalars(select(store.Reminder).where(store.Reminder.status != "removed").order_by(store.Reminder.due_at))]
 
 
 @router.post("/reminders", response_model=s.ReminderRead)
 def add_reminder(value: s.ReminderCreate, db=Depends(database)):
-    record = store.Reminder(
-        **value.model_dump(exclude={"due_at"}), due_at=reminders.utc_text(value.due_at)
-    )
-    db.add(record)
-    db.commit()
-    return record
+    due = value.due_at
+    plan = plans.create_events([plans.PlanWrite(title=value.title, notes=value.body, start=reminders.utc_text(due), end=reminders.utc_text(due + timedelta(minutes=1)), timezone=value.timezone, recurrence=value.recurrence, reminder_enabled=True, reminder_offsets=[0])])[0]
+    return legacy_reminder(db.get(store.Reminder, plan["reminder_id"]))
 
 
 @router.put("/reminders/{reminder_id}", response_model=s.ReminderRead)
 def edit_reminder(reminder_id: str, value: s.ReminderCreate, db=Depends(database)):
     record = item(db, store.Reminder, reminder_id)
-    reminders.invalidate_notifications(db, record.id)
-    for key, val in value.model_dump(exclude={"due_at"}).items():
-        setattr(record, key, val)
-    record.due_at = reminders.utc_text(value.due_at)
-    record.status = "active"
-    db.commit()
-    return record
+    if not record.plan_id:
+        raise HTTPException(409, "请重启以完成旧提醒迁移")
+    plan = plans.find(db, record.plan_id)
+    duration = datetime.fromisoformat(plan.end) - datetime.fromisoformat(plan.start) if not plan.all_day else timedelta(minutes=1)
+    plans.update_event(plan.id, plans.PlanWrite(title=value.title, notes=value.body, start=reminders.utc_text(value.due_at), end=reminders.utc_text(value.due_at + duration), timezone=value.timezone, recurrence=value.recurrence, reminder_enabled=True, reminder_offsets=[0]))
+    db.expire_all()
+    return legacy_reminder(db.get(store.Reminder, reminder_id))
 
 
 @router.post("/reminders/{reminder_id}/action", response_model=s.ReminderRead)
 def reminder_action(reminder_id: str, value: s.ReminderAction, db=Depends(database)):
     record = item(db, store.Reminder, reminder_id)
-    reminders.invalidate_notifications(db, record.id)
+    note = db.scalar(select(store.Notification).where(store.Notification.reminder_id == reminder_id, store.Notification.status != "cancelled").order_by(store.Notification.created_at.desc()).limit(1))
     if value.action == "snooze":
-        record.due_at = reminders.utc_text(
-            datetime.now(timezone.utc) + timedelta(minutes=value.minutes)
-        )
-        record.status = "active"
+        if not note:
+            raise HTTPException(409, "只有已触发的通知可以稍后提醒")
+        snooze_notification(note.id, s.NotificationSnooze(minutes=value.minutes), db)
+    elif record.plan_id:
+        if value.action == "reactivate":
+            plan = plans.find(db, record.plan_id)
+            data = plans.serialize(db, plan)
+            data.update(status="planned", reminder_enabled=True)
+            plans.update_event(plan.id, plans.PlanWrite(**data))
+        else:
+            action = "complete" if value.action == "complete" else "disable_reminders"
+            plans.act(record.plan_id, plans.PlanAction(action=action, occurrence_start=note.plan_occurrence_start if note else record.plan_occurrence_start))
     else:
-        record.status = {
-            "complete": "completed",
-            "cancel": "cancelled",
-            "reactivate": "active",
-        }[value.action]
-    db.commit()
-    return record
+        raise HTTPException(409, "请重启以完成旧提醒迁移")
+    db.expire_all()
+    return legacy_reminder(db.get(store.Reminder, reminder_id))
 
 
 @router.get("/notifications", response_model=list[s.NotificationRead])
@@ -792,11 +926,34 @@ def notifications(pending_only: bool = False, db=Depends(database)):
 
 @router.post("/notifications/{notification_id}/ack", response_model=s.NotificationRead)
 def ack_notification(notification_id: str, read: bool = False, db=Depends(database)):
-    record = item(db, store.Notification, notification_id)
-    if record.status != "cancelled":
-        record.status = "read" if read or record.status == "read" else "presented"
-    db.commit()
-    return record
+    with plans.lock:
+        record = item(db, store.Notification, notification_id)
+        if record.status != "cancelled":
+            if read:
+                record.status, record.snoozed_until = "read", None
+            elif record.status == "pending":
+                record.status = "presented"
+        db.commit()
+        return record
+
+
+@router.post("/notifications/{notification_id}/snooze", response_model=s.NotificationRead)
+def snooze_notification(notification_id: str, value: s.NotificationSnooze, db=Depends(database)):
+    with plans.lock:
+        record = item(db, store.Notification, notification_id)
+        if record.status == "cancelled":
+            raise HTTPException(409, "这条通知对应的提醒已取消")
+        if record.plan_id:
+            plan = plans.find(db, record.plan_id)
+            if plan.status != "planned" or plans.completed(db, plan, record.plan_occurrence_start):
+                raise HTTPException(409, "这次计划已完成或系列已结束")
+        for delivery in db.scalars(select(store.WechatDelivery).where(store.WechatDelivery.notification_id == record.id, store.WechatDelivery.status == "pending")):
+            delivery.status = "cancelled"
+        record.status = "snoozed"
+        record.snoozed_until = reminders.utc_text(datetime.now(timezone.utc) + timedelta(minutes=value.minutes))
+        record.generation += 1
+        db.commit()
+        return record
 
 
 @router.post("/attachments", response_model=s.AttachmentRead)
@@ -825,10 +982,66 @@ async def upload(file: UploadFile = File(...), db=Depends(database)):
         raise HTTPException(422, "无法读取图片，请上传有效的 JPG、PNG 或 WebP 图片")
 
 
+@router.post("/files", response_model=s.AttachmentRead)
+async def upload_office_file(file: UploadFile = File(...)):
+    raw = await file.read(office.LIMIT + 1)
+    return office.save_upload(file.filename or "文件", raw)
+
+
+@router.get("/files/{file_id}", response_model=s.AttachmentRead)
+def office_file_status(file_id: str):
+    return office.describe(file_id)
+
+
+@router.post("/files/{file_id}/retry", response_model=s.AttachmentRead)
+async def retry_office_parse(file_id: str):
+    office.describe(file_id)
+    with store.Session() as db:
+        row = db.get(store.OfficeFile,file_id)
+        if not row:
+            raise HTTPException(404,"文件不存在")
+        if row.status != "failed":
+            return office.describe(file_id)
+        row.status, row.error = "queued", ""
+        db.commit()
+    office.launch_parse(file_id)
+    return office.describe(file_id)
+
+
 @router.get("/attachments/{attachment_id}/content")
 def attachment_content(attachment_id: str, db=Depends(database)):
     record = item(db, store.Attachment, attachment_id)
     return FileResponse(ATTACHMENTS_DIR / f"{record.id}.jpg", media_type="image/jpeg")
+
+
+@router.get("/attachments/{attachment_id}", response_model=s.AttachmentRead)
+def attachment_info(attachment_id: str, db=Depends(database)):
+    record=item(db,store.Attachment,attachment_id)
+    return office.describe(attachment_id) if db.get(store.OfficeFile,attachment_id) else record
+
+
+@router.get("/files/{file_id}/preview")
+async def uploaded_file_preview(file_id: str, page: int = 1):
+    info=office.describe(file_id)
+    if info["file_status"] not in {"ready","partial"}:
+        raise HTTPException(409,info["error"] or "文件尚未解析完成")
+    with store.Session() as db:
+        detail=db.get(store.OfficeFile,file_id)
+        if info["media_type"] != "application/pdf":
+            return {"kind":"text","parts":detail.chunks[:100],"warnings":detail.warnings,"notice":"上传原件内容预览","truncated":len(detail.chunks)>100}
+    try:
+        return await office.worker("pdf_page",data=__import__("base64").b64encode((office.root()/f"{file_id}.bin").read_bytes()).decode(),page=page)
+    except ValueError as error:
+        raise HTTPException(422,str(error)) from None
+
+
+@router.get("/files/{file_id}/content")
+def uploaded_file_content(file_id: str):
+    info=office.describe(file_id)
+    path=office.root()/f"{file_id}.bin"
+    if not path.is_file():
+        raise HTTPException(404,"原文件缺失")
+    return FileResponse(path,media_type=info["media_type"],filename=info["name"],headers={"X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; sandbox"})
 
 
 @router.get("/wechat/status", response_model=s.WechatStatus)
@@ -873,4 +1086,5 @@ async def wechat_disconnect(request: Request):
         raise HTTPException(400, "连接已停止，但清除系统凭据失败，请重试解除绑定。")
 
 
+router.include_router(features.router)
 app.include_router(router)

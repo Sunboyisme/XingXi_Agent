@@ -1,7 +1,7 @@
 {
   "name": "bai-agent",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.4",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "scripts": {
@@ -21,15 +21,14 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
     "cn": "^0.4.0",
     "lucide-react": "^0.468.0",
+    "lunar-typescript": "1.8.6",
     "radix-ui": "^1.4.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.0.0",
     "tailwindcss": "^4.1.0"
   },
   "devDependencies": {

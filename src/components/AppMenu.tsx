@@ -4,7 +4,7 @@ import { Menubar } from "radix-ui";
 export type AppMenuActions = {
   newChat: () => void;
   newLearning: () => void;
-  newReminder: () => void;
+  newPlan: () => void;
   navigate: (page: string) => void;
   about: () => void;
   shortcuts: () => void;
@@ -19,6 +19,7 @@ export function AppMenu({
   onToggle,
   onFitWindow,
   onClose,
+  onQuit,
   onError,
 }: {
   actions: AppMenuActions;
@@ -26,6 +27,7 @@ export function AppMenu({
   onToggle?: () => void;
   onFitWindow?: () => void;
   onClose?: () => void;
+  onQuit?: () => void;
   onError: (message: string) => void;
 }) {
   const editor = useRef<Selection | null>(null);
@@ -129,7 +131,7 @@ export function AppMenu({
         <>
           {item("新建对话", actions.newChat, "Ctrl+N")}
           {item("新建学习目标", actions.newLearning)}
-          {item("新建提醒", actions.newReminder)}
+          {item("新建计划", actions.newPlan)}
           <Menubar.Separator className="app-menu-separator" />
           {item("连接与设置", () => actions.navigate("settings"), "Ctrl+,")}
           {onClose && (
@@ -138,6 +140,7 @@ export function AppMenu({
               {item("关闭窗口", onClose)}
             </>
           )}
+          {onQuit && item("退出XiaoXi", onQuit)}
         </>,
       )}
       {group(
@@ -159,7 +162,7 @@ export function AppMenu({
         <>
           {item("对话", () => actions.navigate("chat"), "Ctrl+1")}
           {item("学习", () => actions.navigate("learning"), "Ctrl+2")}
-          {item("提醒", () => actions.navigate("reminders"), "Ctrl+3")}
+          {item("计划", () => actions.navigate("plans"), "Ctrl+3")}
           <Menubar.Separator className="app-menu-separator" />
           {item(
             collapsed ? "显示聊天侧栏" : "隐藏聊天侧栏",

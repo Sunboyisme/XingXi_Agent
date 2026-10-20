@@ -3,8 +3,12 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 backend = Path(SPECPATH)
-datas = [(str(backend / "migrations"), "migrations"), (str(backend / "alembic.ini"), ".")]
+datas = [(str(backend / "migrations"), "migrations"), (str(backend / "alembic.ini"), "."), (str(backend / "app/builtin_skills"), "app/builtin_skills")]
 hiddenimports = []
+hiddenimports += ["app.office_worker", "app.office_formats"]
+for package in ("docx", "reportlab", "openpyxl", "xlsxwriter", "pypdf", "pymupdf", "defusedxml"):
+    hiddenimports += collect_submodules(package)
+    datas += collect_data_files(package)
 for package in ("uvicorn", "langchain", "langchain_core", "langchain_openai", "langgraph", "keyring.backends", "tiktoken_ext", "fastmcp", "mcp", "mcp_types", "httpx2"):
     # The optional CLI imports typer and may sys.exit during collection; the
     # desktop backend uses the client/runtime, never these command line apps.

@@ -1,0 +1,321 @@
+.chat-main .message.assistant {
+  display: flex;
+  align-items: flex-start;
+}
+
+.message-avatar.assistant-avatar {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 7%,
+    var(--ui-color-surface)
+  );
+  overflow: hidden;
+}
+
+.assistant-avatar .avatar-interaction,
+.assistant-avatar .bai-avatar {
+  width: 38px;
+  height: 38px;
+}
+
+.assistant-avatar .avatar-interaction {
+  border-radius: 50%;
+}
+
+.assistant-avatar .avatar-interaction:is(:hover, :focus-visible) {
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--ui-color-action) 14%, transparent);
+}
+
+.message.assistant .message-body {
+  padding-top: 1px;
+}
+
+.message.assistant .message-name {
+  margin: 2px 0 7px;
+  color: var(--ui-color-text-muted);
+  letter-spacing: 0.01em;
+}
+
+.reasoning-panel {
+  margin: 2px 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.reasoning-toggle {
+  width: fit-content;
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid
+    color-mix(in srgb, var(--ui-color-action) 14%, var(--ui-color-line));
+  border-radius: 13px 13px 13px 5px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 5%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-text-muted);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.reasoning-toggle:hover,
+.reasoning-toggle[aria-expanded="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-action) 28%,
+    var(--ui-color-line)
+  );
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 9%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-action);
+}
+
+.reasoning-toggle > svg:first-child {
+  color: var(--ui-color-action);
+}
+
+.reasoning-toggle > svg:last-child {
+  transition: transform 180ms ease;
+}
+
+.reasoning-content {
+  position: relative;
+  margin-top: 7px;
+  padding: 11px 14px 12px;
+  border: 1px solid
+    color-mix(in srgb, var(--ui-color-action) 10%, var(--ui-color-line));
+  border-radius: 5px 16px 16px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 3.5%,
+    var(--ui-color-surface)
+  );
+}
+
+.thinking {
+  gap: 5px;
+  width: fit-content;
+  min-height: 34px;
+  padding: 8px 12px;
+  border: 1px solid
+    color-mix(in srgb, var(--ui-color-action) 12%, var(--ui-color-line));
+  border-radius: 14px 14px 14px 5px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 4%,
+    var(--ui-color-surface)
+  );
+}
+
+.chat-buddy-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: min(100%, 460px);
+  margin: 0 auto 8px;
+  padding: 6px 12px 6px 7px;
+  border: 1px solid
+    color-mix(in srgb, var(--ui-color-action) 12%, var(--ui-color-line));
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 5%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  animation: chat-buddy-in 180ms ease-out;
+}
+
+.chat-buddy-note-avatar {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 10%,
+    var(--ui-color-surface)
+  );
+  overflow: hidden;
+}
+
+@keyframes chat-thinking-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@keyframes chat-buddy-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-buddy-note {
+    animation: none;
+  }
+}
+
+/* Thinking is a quiet status line, not a bordered message box. */
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  min-height: 32px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.thinking > .thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: auto;
+  height: 12px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+}
+
+.thinking-dots > i {
+  display: block;
+  width: 2px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ui-color-action);
+  opacity: 0.5;
+  animation: chat-thinking-bar 1.15s ease-in-out infinite;
+}
+
+.thinking-dots > i:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.thinking-dots > i:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+.thinking > .thinking-label {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+@keyframes chat-thinking-bar {
+  0%,
+  60%,
+  100% {
+    transform: scaleY(0.55);
+    opacity: 0.4;
+  }
+  30% {
+    transform: scaleY(1.2);
+    opacity: 1;
+  }
+}
+
+.incomplete-reply-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 12px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 12px;
+  background: var(--ui-color-bg);
+  color: var(--ui-color-text-muted);
+}
+
+.incomplete-reply-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--ui-color-action);
+}
+
+.incomplete-reply-notice.is-failed {
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-danger) 22%,
+    var(--ui-color-line)
+  );
+  background: color-mix(
+    in srgb,
+    var(--ui-color-danger-surface) 56%,
+    var(--ui-color-surface)
+  );
+}
+
+.incomplete-reply-notice.is-failed > svg {
+  color: var(--ui-color-danger);
+}
+
+.incomplete-reply-notice strong {
+  display: block;
+  color: var(--ui-color-heading);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.incomplete-reply-notice p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.error-notice {
+  align-items: flex-start;
+  padding: 11px 13px;
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-danger) 30%,
+    var(--ui-color-line)
+  );
+  border-radius: 12px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-danger-surface) 58%,
+    var(--ui-color-surface)
+  );
+  color: color-mix(in srgb, var(--ui-color-danger) 78%, var(--ui-color-text));
+  font-size: 12px;
+}
+
+.error-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dots > i {
+    animation: none;
+  }
+}

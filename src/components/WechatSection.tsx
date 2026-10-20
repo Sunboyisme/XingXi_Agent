@@ -14,6 +14,14 @@ import { api } from "@/lib/api";
 import type { components } from "@/lib/api.generated";
 import { ErrorNotice } from "./common";
 import { dateTime } from "@/lib/utils";
+import { ConnectionCard } from "./ConnectionCard";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "./ui/dialog";
 
 type Status = components["schemas"]["WechatStatus"];
 const phases: Record<string, string> = {
@@ -38,7 +46,8 @@ const deliveryLabels: Record<string, string> = {
   cancelled: "已取消",
 };
 
-export function WechatSection() {
+export function WechatSection({ compact = false }: { compact?: boolean }) {
+  const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -84,7 +93,7 @@ export function WechatSection() {
     }
   }
 
-  return (
+  const content = (
     <section className="settings-section wechat-section" aria-label="微信连接">
       <div className="section-title">
         <span className="wechat-icon">
@@ -236,5 +245,34 @@ export function WechatSection() {
         )}
       </div>
     </section>
+  );
+  if (!compact) return content;
+  return (
+    <ConnectionCard
+      title="微信连接"
+      icon={MessageCircle}
+      description="微信聊天与到期提醒"
+      status={status ? phases[status.phase] || "读取中" : "读取中"}
+      ready={status?.phase === "connected"}
+      detail={
+        error ||
+        status?.error ||
+        (status?.bound ? "已绑定本人账号" : "扫码绑定微信账号")
+      }
+      action="管理"
+      onConfigure={() => setOpen(true)}
+    >
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="connection-config-dialog wechat-config-dialog">
+          <DialogHeader>
+            <DialogTitle>微信连接</DialogTitle>
+            <DialogDescription>
+              管理绑定、连接状态与提醒投递。
+            </DialogDescription>
+          </DialogHeader>
+          {content}
+        </DialogContent>
+      </Dialog>
+    </ConnectionCard>
   );
 }

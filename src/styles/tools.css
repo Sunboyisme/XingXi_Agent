@@ -54,7 +54,7 @@
   position: absolute;
   left: 13px;
   top: 15px;
-  color: #8c7c6d;
+  color: var(--appearance-muted, #8c7c6d);
 }
 .tool-search input {
   padding-left: 38px;
@@ -65,7 +65,7 @@
   gap: 20px;
   align-items: center;
   padding: 16px 0;
-  border-bottom: 1px solid #79614b18;
+  border-bottom: 1px solid var(--appearance-border, #79614b18);
 }
 .managed-tool-row:last-child {
   border-bottom: 0;
@@ -81,15 +81,15 @@
 .managed-tool-copy p {
   margin: 5px 0;
   line-height: 1.6;
-  color: #766a60;
+  color: var(--appearance-muted, #766a60);
   font-size: 13px;
 }
 .managed-tool-copy small {
   font-size: 12px;
-  color: #718466;
+  color: var(--appearance-success, #718466);
 }
 .managed-tool-copy .tool-unavailable {
-  color: #9a6a4f;
+  color: var(--appearance-accent, #9a6a4f);
 }
 .tool-switch {
   display: flex;
@@ -97,7 +97,7 @@
   gap: 9px;
   flex-shrink: 0;
   font-size: 12px;
-  color: #766a60;
+  color: var(--appearance-muted, #766a60);
   cursor: pointer;
 }
 .mcp-service-heading {
@@ -116,7 +116,7 @@
 }
 .mcp-service-heading small,
 .mcp-empty {
-  color: #766a60;
+  color: var(--appearance-muted, #766a60);
   font-size: 13px;
 }
 .mcp-service-actions {
@@ -176,7 +176,7 @@
 .mcp-import-preview span,
 .mcp-import-preview small {
   font-size: 12px;
-  color: #766a60;
+  color: var(--appearance-muted, #766a60);
 }
 .memory-settings > .page-heading {
   align-items: flex-start;
@@ -186,7 +186,7 @@
   font-weight: 600;
 }
 .tool-result-title small {
-  color: #8c7c6d;
+  color: var(--appearance-muted, #8c7c6d);
   font-size: 11px;
 }
 @media (max-width: 600px) {

@@ -6,18 +6,18 @@ import {
   useState,
 } from "react";
 import {
+  AlertCircle,
+  ArrowDown,
   ArrowRight,
   ArrowUp,
   Cable,
-  Brain,
   Check,
   ChevronDown,
-  CircleAlert,
-  Layers2,
   Settings2,
   Square,
+  Sparkles,
 } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { DropdownMenu, Tooltip } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -29,45 +29,96 @@ import {
   type RunEvent,
   type Settings,
   type Attachment,
+  type CalendarEvent,
   type Goal,
-  type Reminder,
   type Memory,
 } from "@/lib/api";
-import { ErrorNotice, ImagesInput, Markdown, Picture } from "./common";
+import { ErrorNotice, ImagesInput, Markdown } from "./common";
+import { MessageAttachment } from "./OfficeFiles";
 import { ToolboxMenu } from "./ToolboxMenu";
+import { SkillsMenu } from "./SkillsMenu";
+import { Reasoning } from "./Reasoning";
+import { AnswerPresentation } from "./AnswerPresentation";
+import { AnswerActions } from "./AnswerActions";
 import { BaiAvatar } from "./BaiAvatar";
+import { ChatHome } from "./ChatHome";
 import {
   MemoryReview,
   MemorySavedNotice,
   type MemoryNotice,
 } from "./MemoryFeedback";
 
-function toolSummary(event: RunEvent): string {
-  const result = event.data.result as Record<string, unknown> | undefined;
-  if (!result) return "操作已完成";
-  if (result.error) return String(result.error);
-  if (result.summary) return String(result.summary).slice(0, 220);
-  if (result.text) return String(result.text).slice(0, 220);
-  if (result.structured_content)
-    return JSON.stringify(result.structured_content).slice(0, 220);
-  if (result.skipped) return String(result.skipped);
-  if (result.needs_clarification) return "找到多个同名地点，等待确认";
-  if (result.result !== undefined)
-    return `结果：${String(result.result)}${result.to_unit ? ` ${result.to_unit}` : ""}`;
-  if (result.datetime) return `${result.datetime} · ${result.weekday}`;
-  if (result.current) {
-    const current = result.current as Record<string, unknown>;
-    const location = result.location as Record<string, unknown>;
-    return `${location.name} · ${current.condition} · ${current.temperature_c}°C`;
+function IncompleteReplyNotice({ cancelled }: { cancelled: boolean }) {
+  return (
+    <div
+      className={`incomplete-reply-notice ${cancelled ? "is-cancelled" : "is-failed"}`}
+      role="status"
+    >
+      <AlertCircle size={15} />
+      <div>
+        <strong>{cancelled ? "回答停在这里" : "这次回答没有完成"}</strong>
+        <p>
+          {cancelled
+            ? "已经完成的工具操作仍会保留，可以继续追问或重新生成。"
+            : "可以重新生成，或者换个说法继续。"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type StoredChatDraft = {
+  text: string;
+  images: Attachment[];
+};
+
+function chatDraftKey(conversationId: string | null) {
+  return `bai-chat-draft:${conversationId || "new"}`;
+}
+
+function readChatDraft(conversationId: string | null): StoredChatDraft | null {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(chatDraftKey(conversationId)) || "null",
+    );
+    if (
+      !value ||
+      typeof value.text !== "string" ||
+      !Array.isArray(value.images)
+    )
+      return null;
+    return {
+      text: value.text,
+      images: value.images.filter(
+        (image: Attachment) =>
+          image &&
+          typeof image.id === "string" &&
+          typeof image.name === "string",
+      ),
+    };
+  } catch {
+    return null;
   }
-  if (Array.isArray(result.results))
-    return `找到 ${result.results.length} 条来源，详见回答中的链接`;
-  if (result.count !== undefined) return `找到 ${result.count} 条记录`;
-  if (result.read) return "已读取网页正文";
-  if (result.state === "candidate") return "已保存为候选记忆，等待确认";
-  if (result.state === "confirmed") return "记忆已保存";
-  if (result.title) return String(result.title);
-  return "操作已完成";
+}
+
+function storeChatDraft(conversationId: string | null, value: StoredChatDraft) {
+  try {
+    if (!value.text && !value.images.length) {
+      localStorage.removeItem(chatDraftKey(conversationId));
+      return;
+    }
+    localStorage.setItem(chatDraftKey(conversationId), JSON.stringify(value));
+  } catch {
+    /* Draft persistence should never make the composer unusable. */
+  }
+}
+
+function clearChatDraft(conversationId: string | null) {
+  try {
+    localStorage.removeItem(chatDraftKey(conversationId));
+  } catch {
+    /* Ignore storage failures in restricted windows. */
+  }
 }
 
 function resizeMessageInput(input: HTMLTextAreaElement) {
@@ -90,18 +141,22 @@ export function ChatPage({
   conversationId,
   onConversation,
   settings,
+  goals,
+  conversations = [],
   memories,
   refresh,
   onAction,
+  onPlan,
 }: {
   conversationId: string | null;
   onConversation: (id: string) => void;
   settings: Settings;
   goals: Goal[];
-  reminders: Reminder[];
+  conversations?: Conversation[];
   memories?: Memory[];
   refresh: () => Promise<void>;
   onAction: (page: string, create?: boolean) => void;
+  onPlan: (plan: CalendarEvent) => void;
 }) {
   const [modelKey, setModelKey] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -124,15 +179,24 @@ export function ChatPage({
   const thinkingEnabled =
     thinkingControl === "always" || (thinkingControl !== "none" && thinking);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState("");
-  const [images, setImages] = useState<Attachment[]>([]);
+  const initialDraft = useRef(readChatDraft(conversationId));
+  const [draft, setDraft] = useState(initialDraft.current?.text || "");
+  const [images, setImages] = useState<Attachment[]>(
+    initialDraft.current?.images || [],
+  );
+  const [attachmentBatch, setAttachmentBatch] = useState(0);
   const [stream, setStream] = useState("");
+  const [reasoning, setReasoning] = useState("");
+  const [contextStatus, setContextStatus] = useState("");
   const [tools, setTools] = useState<RunEvent[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [atLatest, setAtLatest] = useState(true);
+  const [activeTurn, setActiveTurn] = useState("");
+  const turnElements = useRef(new Map<string, HTMLElement>());
   const [uploading, setUploading] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [buddyNote, setBuddyNote] = useState("");
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
   const closeMemoryNotice = useCallback(() => setMemoryNotice(null), []);
   const receiveMemory = useCallback((event: RunEvent) => {
@@ -149,8 +213,55 @@ export function ChatPage({
   }, []);
   const controller = useRef<AbortController | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const thread = useRef<HTMLDivElement>(null);
+  const dropTarget = useRef<HTMLDivElement>(null);
+  const previewTarget = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
   const composer = useRef<HTMLTextAreaElement>(null);
+  const draftRef = useRef(draft);
+  const imagesRef = useRef(images);
+  draftRef.current = draft;
+  imagesRef.current = images;
+  const persistDraft = useCallback(
+    (text = draftRef.current, attachments = imagesRef.current) => {
+      storeChatDraft(conversationId, { text, images: attachments });
+    },
+    [conversationId],
+  );
+  function changeDraft(value: string) {
+    draftRef.current = value;
+    setDraft(value);
+    persistDraft(value, imagesRef.current);
+  }
+  function changeImages(values: Attachment[]) {
+    imagesRef.current = values;
+    setImages(values);
+    persistDraft(draftRef.current, values);
+  }
+  function focusComposer(note = "我在，想到什么就继续说吧。") {
+    setBuddyNote(note);
+    requestAnimationFrame(() => {
+      composer.current?.focus({ preventScroll: true });
+      composer.current?.setSelectionRange(
+        composer.current.value.length,
+        composer.current.value.length,
+      );
+    });
+  }
+  useEffect(() => {
+    if (!buddyNote) return;
+    const timer = window.setTimeout(() => setBuddyNote(""), 3600);
+    return () => window.clearTimeout(timer);
+  }, [buddyNote]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const input = composer.current;
+      if (!input || input.disabled) return;
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [conversationId]);
   useLayoutEffect(() => {
     if (composer.current) resizeMessageInput(composer.current);
   }, [draft]);
@@ -180,6 +291,9 @@ export function ChatPage({
       setRun(value);
       setBusy(true);
       setStream("");
+      setReasoning("");
+      setContextStatus("");
+      let reasoningStep = "";
       setTools([]);
       try {
         const result = await readEvents(
@@ -188,6 +302,23 @@ export function ChatPage({
             if (watch.signal.aborted) return;
             if (event.kind === "delta")
               setStream((text) => text + String(event.data.text || ""));
+            if (event.kind === "reasoning") {
+              const step = String(event.data.step || "");
+              const separator =
+                reasoningStep && step !== reasoningStep ? "\n\n" : "";
+              reasoningStep = step;
+              setReasoning(
+                (text) => text + separator + String(event.data.text || ""),
+              );
+            }
+            if (event.kind === "context")
+              setContextStatus(
+                event.data.status === "compacting"
+                  ? "正在整理上下文…"
+                  : event.data.status === "degraded"
+                    ? String(event.data.text)
+                    : "",
+              );
             if (event.kind === "tool") setTools((values) => [...values, event]);
             if (event.kind === "memory") {
               receiveMemory(event);
@@ -200,11 +331,11 @@ export function ChatPage({
         setRun(result);
         if (result.status === "failed")
           setError(result.error || "本次回答未完成");
-        if (result.status === "cancelled")
-          setError("本次生成已停止；已执行的工具操作可在对应页面查看。");
+        if (result.status === "cancelled") setError("");
         await loadMessages(id);
         await refresh();
         setStream("");
+        if (result.status === "completed") setReasoning("");
         setBusy(false);
       } catch (error) {
         if (!watch.signal.aborted) {
@@ -217,14 +348,24 @@ export function ChatPage({
   );
   useEffect(() => {
     let live = true;
+    const saved = readChatDraft(conversationId);
+    draftRef.current = saved?.text || "";
+    imagesRef.current = saved?.images || [];
+    setDraft(saved?.text || "");
+    setImages(saved?.images || []);
     setMessages([]);
     setStream("");
+    setReasoning("");
+    setContextStatus("");
+    setUploading(false);
     setTools([]);
     setMemoryNotice(null);
     setError("");
     setRun(null);
     setBusy(false);
+    setActiveTurn("");
     followLatest.current = true;
+    setAtLatest(true);
     if (conversationId) {
       const initialMessages = loadMessages(conversationId);
       void initialMessages.catch((error: Error) => {
@@ -249,6 +390,24 @@ export function ChatPage({
             );
             if (!live) return;
             setTools(history.filter((event) => event.kind === "tool"));
+            if (values[0].status !== "completed") {
+              const steps = new Map<string, string>();
+              history
+                .filter((event) => event.kind === "reasoning")
+                .forEach((event) => {
+                  const key = String(event.data.step || "");
+                  steps.set(
+                    key,
+                    (steps.get(key) || "") + String(event.data.text || ""),
+                  );
+                });
+              setReasoning([...steps.values()].join("\n\n"));
+            }
+            const contextEvent = history
+              .filter((event) => event.kind === "context")
+              .at(-1);
+            if (contextEvent?.data.status === "degraded")
+              setContextStatus(String(contextEvent.data.text));
             if (Date.now() - Date.parse(values[0].created_at) < 60000) {
               history
                 .filter((event) => event.kind === "memory")
@@ -259,8 +418,7 @@ export function ChatPage({
             setRun(values[0]);
             if (values[0].status === "failed")
               setError(values[0].error || "之前的回答未完成");
-            if (values[0].status === "cancelled")
-              setError("本次生成已停止；已执行的工具操作可在对应页面查看。");
+            if (values[0].status === "cancelled") setError("");
           }
         })
         .catch((error) => {
@@ -278,16 +436,30 @@ export function ChatPage({
         value.state === "candidate" &&
         value.source_conversation_id === conversationId,
     ) || [];
-  const candidateIds = candidates.map((value) => value.id).join(",");
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = scroller.current;
-    if (container && followLatest.current)
+    if (container && followLatest.current) {
       container.scrollTop = container.scrollHeight;
-  }, [messages, stream, tools, candidateIds]);
+      setAtLatest(true);
+    }
+  });
+  useEffect(() => {
+    const target = thread.current;
+    if (!target || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const container = scroller.current;
+      if (container && followLatest.current)
+        container.scrollTop = container.scrollHeight;
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [conversationId]);
   async function send() {
     if (busy || uploading || (!draft.trim() && !images.length)) return;
     setError("");
     setBusy(true);
+    followLatest.current = true;
+    setAtLatest(true);
     try {
       let id = conversationId;
       const created = !id;
@@ -298,7 +470,7 @@ export function ChatPage({
         id = value.id;
       }
       const value = await api<Run>(`/conversations/${id}/messages`, "POST", {
-        content: draft.trim() || "请根据这张图片帮助我分析。",
+        content: draft.trim() || "请根据上传的附件帮助我分析。",
         attachment_ids: images.map((x) => x.id),
         model_selection: selected
           ? {
@@ -310,6 +482,11 @@ export function ChatPage({
       });
       setDraft("");
       setImages([]);
+      imagesRef.current = [];
+      draftRef.current = "";
+      clearChatDraft(conversationId);
+      if (created) clearChatDraft(null);
+      setAttachmentBatch((value) => value + 1);
       await refresh();
       if (created) {
         // The conversation effect owns resuming a new conversation's run.
@@ -335,26 +512,62 @@ export function ChatPage({
       setError((error as Error).message);
     }
   }
+  const lastAssistant = messages
+    .filter((value) => value.role === "assistant")
+    .at(-1);
+  const incompleteRun =
+    !busy && run && ["failed", "cancelled"].includes(run.status) ? run : null;
+  const orphanReasoning =
+    Boolean(reasoning) &&
+    !messages.some(
+      (value) => value.role === "assistant" && value.reasoning === reasoning,
+    );
+  const showIncompleteReply =
+    Boolean(incompleteRun && !lastAssistant) || orphanReasoning;
   const empty = !messages.length && !busy;
+  const turns: (Message & { answer: string })[] = [];
+  for (const message of messages) {
+    if (message.role === "user") turns.push({ ...message, answer: "" });
+    else if (message.role === "assistant" && turns.length) {
+      const turn = turns[turns.length - 1];
+      turn.answer += (turn.answer ? "\n" : "") + message.content;
+    }
+  }
+  if (busy && stream && turns.length) {
+    const turn = turns[turns.length - 1];
+    turn.answer += (turn.answer ? "\n" : "") + stream;
+  }
   return (
-    <div className="chat-layout">
+    <div className="chat-layout" ref={dropTarget}>
       <div className={`chat-main ${empty ? "is-empty" : ""}`}>
         <div
           className={`chat-scroll ${empty ? "is-empty" : ""}`}
           ref={scroller}
           onScroll={(event) => {
             const element = event.currentTarget;
-            followLatest.current =
+            const latest =
               element.scrollHeight - element.scrollTop - element.clientHeight <
-              240;
+              36;
+            followLatest.current = latest;
+            setAtLatest(latest);
+            const boundary = element.getBoundingClientRect().top + 80;
+            let current = turns[0]?.id || "";
+            for (const turn of turns) {
+              const target = turnElements.current.get(turn.id);
+              if (target && target.getBoundingClientRect().top <= boundary)
+                current = turn.id;
+            }
+            setActiveTurn(current);
+          }}
+          onWheel={(event) => {
+            if (event.deltaY < 0) {
+              followLatest.current = false;
+              setAtLatest(false);
+            }
           }}
         >
           {empty ? (
             <div className="welcome">
-              <div className="welcome-buddy">
-                <BaiAvatar interactive className="welcome-avatar" />
-                <span className="welcome-greeting">嗨，我在呢</span>
-              </div>
               <div>
                 <p className="welcome-date">
                   {new Intl.DateTimeFormat("zh-CN", {
@@ -368,25 +581,91 @@ export function ChatPage({
               </div>
             </div>
           ) : (
-            <div className="message-list">
+            <div className="message-list" ref={thread}>
               {messages.map((value) => (
-                <article className={`message ${value.role}`} key={value.id}>
-                  <div className="message-avatar">
-                    {value.role === "assistant" ? (
-                      <BaiAvatar motion="still" />
-                    ) : (
+                <article
+                  className={`message ${value.role}`}
+                  key={value.id}
+                  ref={(element) => {
+                    if (value.role !== "user") return;
+                    if (element) turnElements.current.set(value.id, element);
+                    else turnElements.current.delete(value.id);
+                  }}
+                >
+                  {value.role !== "assistant" && (
+                    <div className="message-avatar">
                       <span>我</span>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  {value.role === "assistant" && (
+                    <div className="message-avatar assistant-avatar">
+                      <BaiAvatar
+                        interactive
+                        motion="still"
+                        label="和XiaoXi打个招呼，继续聊天"
+                        onClick={() =>
+                          focusComposer("我在呢。想追问什么，直接告诉我就好。")
+                        }
+                      />
+                    </div>
+                  )}
                   <div className="message-body">
                     <span className="message-name">
                       {value.role === "assistant" ? "XiaoXi" : "你"}
                     </span>
-                    <Markdown>{value.content}</Markdown>
+                    {value.role === "assistant" && (
+                      <Reasoning text={value.reasoning || ""} />
+                    )}
+                    <Markdown
+                      runId={
+                        value.role === "assistant"
+                          ? value.run_id || undefined
+                          : undefined
+                      }
+                    >
+                      {value.content}
+                    </Markdown>
+                    {value.role === "assistant" && (
+                      <AnswerPresentation
+                        runId={value.run_id || undefined}
+                        status={
+                          value.run_id === run?.id ? run?.status : "completed"
+                        }
+                        content={value.content}
+                      />
+                    )}
+                    {value.role === "assistant" && (
+                      <AnswerActions
+                        content={value.content}
+                        runId={
+                          value.run_id ||
+                          (value === lastAssistant &&
+                          run?.status === "completed"
+                            ? run.id
+                            : undefined)
+                        }
+                        runStatus={
+                          value.run_id === run?.id || value === lastAssistant
+                            ? run?.status
+                            : "completed"
+                        }
+                        tools={
+                          value === lastAssistant && run?.status === "completed"
+                            ? tools
+                            : undefined
+                        }
+                      />
+                    )}
+                    {value === lastAssistant && incompleteRun && (
+                      <IncompleteReplyNotice
+                        cancelled={incompleteRun.status === "cancelled"}
+                      />
+                    )}
+
                     {value.attachment_ids.length > 0 && (
                       <div className="message-pictures">
                         {value.attachment_ids.map((id) => (
-                          <Picture id={id} key={id} />
+                          <MessageAttachment id={id} key={id} />
                         ))}
                       </div>
                     )}
@@ -395,94 +674,74 @@ export function ChatPage({
               ))}
               {busy && (
                 <article className="message assistant">
-                  <div className="message-avatar">
-                    <BaiAvatar motion="thinking" />
+                  <div className="message-avatar assistant-avatar">
+                    <BaiAvatar
+                      interactive
+                      motion="thinking"
+                      label="XiaoXi正在思考，点我继续聊天"
+                      onClick={() => focusComposer("别急，我还在整理思路。")}
+                    />
                   </div>
                   <div className="message-body">
                     <span className="message-name">XiaoXi</span>
+                    <Reasoning text={reasoning} active />
                     {stream ? (
-                      <Markdown>{stream}</Markdown>
+                      <Markdown runId={run?.id}>{stream}</Markdown>
                     ) : (
-                      <div className="thinking">
-                        <span />
-                        <span />
-                        <span />
-                        <span>
-                          {tools.length ? "正在整理工具结果" : "正在思考"}
+                      <div
+                        className="thinking"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <span className="thinking-label">
+                          {contextStatus === "正在整理上下文…"
+                            ? contextStatus
+                            : tools.length
+                              ? "正在整理查到的内容"
+                              : reasoning
+                                ? "正在把想法写成回答"
+                                : "正在理清思路"}
+                        </span>
+                        <span className="thinking-dots" aria-hidden="true">
+                          <i />
+                          <i />
+                          <i />
                         </span>
                       </div>
                     )}
                   </div>
                 </article>
               )}
-            </div>
-          )}
-          {tools.length > 0 && (
-            <div className="tool-results">
-              <button
-                className="tool-results-toggle"
-                aria-expanded={expanded}
-                aria-controls="tool-record-list"
-                onClick={() => setExpanded(!expanded)}
-              >
-                <span className="tool-record-icon">
-                  <Layers2 size={17} />
-                </span>
-                <span className="tool-record-heading">
-                  <strong>已调用 {tools.length} 项工具</strong>
-                  <small>{expanded ? "执行结果" : "展开查看执行结果"}</small>
-                </span>
-                <ChevronDown className="tool-record-chevron" size={16} />
-              </button>
-              {expanded && (
-                <div id="tool-record-list" className="tool-record-list">
-                  {tools.map((event, i) => {
-                    const result = event.data.result as
-                      Record<string, unknown> | undefined;
-                    const failed =
-                      event.data.status === "error" || Boolean(result?.error);
-                    const needsConfirmation = Boolean(
-                      result?.needs_clarification,
-                    );
-                    return (
-                      <div
-                        className={`tool-result ${failed ? "tool-result-failed" : ""}`}
-                        key={i}
-                      >
-                        <span className="tool-result-symbol">
-                          {failed || needsConfirmation ? (
-                            <CircleAlert size={16} />
-                          ) : (
-                            <Check size={16} />
-                          )}
-                        </span>
-                        <div className="tool-result-copy">
-                          <div className="tool-result-title">
-                            <strong>{String(event.data.name)}</strong>
-                            {event.data.source === "mcp" && (
-                              <small>{String(event.data.source_label)}</small>
-                            )}
-                            {typeof event.data.duration_ms === "number" && (
-                              <small>
-                                {(event.data.duration_ms / 1000).toFixed(1)}s
-                              </small>
-                            )}
-                            <span className="tool-result-state">
-                              {event.data.status === "cancelled"
-                                ? "已取消"
-                                : failed
-                                  ? "调用失败"
-                                  : needsConfirmation
-                                    ? "待确认"
-                                    : "已返回"}
-                            </span>
-                          </div>
-                          <p>{toolSummary(event)}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              {showIncompleteReply && (
+                <article className="message assistant incomplete-reply">
+                  <div className="message-avatar assistant-avatar">
+                    <BaiAvatar
+                      interactive
+                      motion="still"
+                      label="和XiaoXi打个招呼，继续聊天"
+                      onClick={() =>
+                        focusComposer("没关系，想继续聊什么都可以。")
+                      }
+                    />
+                  </div>
+                  <div className="message-body">
+                    <span className="message-name">XiaoXi</span>
+                    {reasoning && <Reasoning text={reasoning} incomplete />}
+                    {incompleteRun && (
+                      <IncompleteReplyNotice
+                        cancelled={incompleteRun.status === "cancelled"}
+                      />
+                    )}
+                    {incompleteRun && (
+                      <AnswerActions
+                        content=""
+                        runId={incompleteRun.id}
+                        runStatus={incompleteRun.status}
+                        tools={tools}
+                      />
+                    )}
+                  </div>
+                </article>
               )}
             </div>
           )}
@@ -498,7 +757,84 @@ export function ChatPage({
             </section>
           )}
         </div>
+        {turns.length > 0 && (
+          <Tooltip.Provider
+            delayDuration={120}
+            skipDelayDuration={100}
+            disableHoverableContent
+          >
+            <nav className="chat-turn-nav" aria-label="对话定位">
+              {turns.map((turn, index) => {
+                const label = `第 ${index + 1} 轮：${turn.content.trim() || "图片消息"}`;
+                return (
+                  <Tooltip.Root key={turn.id}>
+                    <Tooltip.Trigger asChild>
+                      <button
+                        type="button"
+                        aria-label={label}
+                        aria-current={
+                          activeTurn === turn.id ? "step" : undefined
+                        }
+                        onClick={() => {
+                          const container = scroller.current;
+                          const target = turnElements.current.get(turn.id);
+                          if (!container || !target) return;
+                          followLatest.current = false;
+                          setAtLatest(false);
+                          setActiveTurn(turn.id);
+                          container.scrollTo({
+                            top:
+                              container.scrollTop +
+                              target.getBoundingClientRect().top -
+                              container.getBoundingClientRect().top -
+                              24,
+                            behavior: "instant",
+                          });
+                        }}
+                      />
+                    </Tooltip.Trigger>
+                    <Tooltip.Portal>
+                      <Tooltip.Content
+                        className="chat-turn-preview"
+                        side="left"
+                        sideOffset={12}
+                        collisionPadding={16}
+                      >
+                        <strong>{turn.content.trim() || "图片消息"}</strong>
+                        <p>{turn.answer.trim() || "尚无回答"}</p>
+                      </Tooltip.Content>
+                    </Tooltip.Portal>
+                  </Tooltip.Root>
+                );
+              })}
+            </nav>
+          </Tooltip.Provider>
+        )}
         <div className="composer-area">
+          {!empty && !atLatest && (
+            <button
+              className="chat-jump-latest"
+              onClick={() => {
+                followLatest.current = true;
+                setAtLatest(true);
+                scroller.current?.scrollTo({
+                  top: scroller.current.scrollHeight,
+                  behavior: "smooth",
+                });
+              }}
+            >
+              <ArrowDown size={14} />
+              回到最新
+            </button>
+          )}
+          {buddyNote && (
+            <div className="chat-buddy-note" role="status" aria-live="polite">
+              <span className="chat-buddy-note-avatar">
+                <BaiAvatar motion="still" />
+              </span>
+              <span>{buddyNote}</span>
+            </div>
+          )}
           {memoryNotice && (
             <MemorySavedNotice
               key={memoryNotice.change_id}
@@ -513,6 +849,11 @@ export function ChatPage({
               retry={run?.status === "failed" ? () => void retry() : undefined}
             />
           )}
+          {contextStatus && contextStatus !== "正在整理上下文…" && (
+            <p className="context-status" role="status">
+              {contextStatus}
+            </p>
+          )}
           {!modelReady && (
             <button
               className="setup-nudge"
@@ -524,12 +865,13 @@ export function ChatPage({
             </button>
           )}
           <div className="composer">
+            <div className="composer-attachments" ref={previewTarget} />
             <Textarea
               id="chat-message"
               ref={composer}
               aria-label="发送给XiaoXi的消息"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => changeDraft(e.target.value)}
               placeholder={modelReady ? "输入消息…" : "连接模型后开始对话"}
               rows={2}
               disabled={busy}
@@ -547,13 +889,18 @@ export function ChatPage({
             <div className="composer-bottom">
               <div className="composer-tools">
                 <ImagesInput
+                  allowFiles
+                  dropTarget={dropTarget}
+                  previewTarget={previewTarget}
+                  scopeKey={`${conversationId || "new"}:${attachmentBatch}`}
                   images={images}
-                  onChange={setImages}
+                  onChange={changeImages}
                   disabled={busy || !modelReady}
                   onError={setError}
                   onUploading={setUploading}
                 />
                 <ToolboxMenu onSettings={() => onAction("tools")} />
+                <SkillsMenu onSettings={() => onAction("skills")} />
                 <button
                   className="composer-thinking"
                   aria-label="思考模式"
@@ -574,7 +921,7 @@ export function ChatPage({
                   }
                   onClick={() => setThinking(!thinking)}
                 >
-                  <Brain size={15} />
+                  <Sparkles size={15} aria-hidden="true" />
                   <span>
                     {thinkingControl === "always" ? "始终思考" : "思考"}
                   </span>
@@ -673,6 +1020,27 @@ export function ChatPage({
             </div>
           </div>
         </div>
+        {empty && !conversationId && (
+          <ChatHome
+            conversations={conversations}
+            goals={goals}
+            timezone={settings.timezone}
+            onConversation={onConversation}
+            onAction={onAction}
+            onPlan={onPlan}
+            onPrompt={(text) => {
+              changeDraft(text);
+              requestAnimationFrame(() => {
+                const input = composer.current;
+                input?.focus();
+                input?.setSelectionRange(
+                  input.value.length,
+                  input.value.length,
+                );
+              });
+            }}
+          />
+        )}
       </div>
     </div>
   );

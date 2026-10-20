@@ -1,6 +1,13 @@
 import { SoftSelect } from "./ui/soft-select";
 import { useEffect, useState } from "react";
-import { Brain, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  Bookmark,
+  ChevronDown,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +23,7 @@ import {
 import { api, type Memory, type Settings } from "@/lib/api";
 import { ConfirmDelete, EmptyState, ErrorNotice } from "./common";
 import { MemoryReview, MemorySource } from "./MemoryFeedback";
+import { RetrievalDebugger } from "./RetrievalDebugger";
 
 const categories: Record<string, string> = {
   fact: "个人事实",
@@ -47,6 +55,7 @@ export function MemoryPage({
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Memory | null>(null);
   const [changingMode, setChangingMode] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   async function changeMode(mode: Settings["memory_mode"]) {
     if (changingMode) return;
     setChangingMode(true);
@@ -107,26 +116,22 @@ export function MemoryPage({
   );
   return (
     <div className={embedded ? "memory-settings" : "page-content"}>
-      <div className="page-heading">
-        <div>
-          {embedded ? <h2>记忆</h2> : <h1>记忆</h1>}
-          <p>查看、修改或删除XiaoXi记住的信息。</p>
+      <div className="memory-page-heading">
+        <div className="memory-title">
+          <div className="memory-title-row">
+            {embedded ? <h2>记忆</h2> : <h1>记忆</h1>}
+            {memories.length > 0 && (
+              <span className="memory-count">{memories.length}</span>
+            )}
+          </div>
+          <p>
+            查看、修改或删除XiaoXi记住的信息。向量检索只为这里的已生效记忆建立索引，没有额外的隐藏记忆。
+          </p>
         </div>
-        <div className="memory-heading-actions">
-          <SoftSelect
-            label="记忆保存方式"
-            value={memoryMode}
-            onValueChange={(v) => void changeMode(v as Settings["memory_mode"])}
-            options={[
-              { value: "auto", label: "自动记忆" },
-              { value: "confirm", label: "每次确认" },
-            ]}
-          />
-          <Button onClick={() => edit()}>
-            <Plus size={16} />
-            添加记忆
-          </Button>
-        </div>
+        <Button onClick={() => edit()}>
+          <Plus size={16} />
+          添加记忆
+        </Button>
       </div>
       {error && <ErrorNotice message={error} />}
       {candidates.length > 0 && (
@@ -139,17 +144,35 @@ export function MemoryPage({
           ))}
         </section>
       )}
-      {memories.length > 0 && (
-        <div className="search-field">
+      <div className="memory-toolbar">
+        <div className="search-field memory-search">
           <Search size={17} />
           <Input
             aria-label="搜索记忆"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索记忆…"
+            placeholder="搜索已记住的内容…"
           />
         </div>
-      )}
+        <div className="memory-toolbar-actions">
+          <RetrievalDebugger />
+          <label className="memory-mode-control">
+            <span>保存方式</span>
+            <SoftSelect
+              label="记忆保存方式"
+              value={memoryMode}
+              onValueChange={(v) =>
+                void changeMode(v as Settings["memory_mode"])
+              }
+              disabled={changingMode}
+              options={[
+                { value: "auto", label: "自动记忆" },
+                { value: "confirm", label: "每次确认" },
+              ]}
+            />
+          </label>
+        </div>
+      </div>
       {values.length ? (
         <div className="memory-grid">
           {values.map((value) => (
@@ -177,14 +200,35 @@ export function MemoryPage({
                   </Button>
                 </div>
               </div>
-              <p>{value.content}</p>
-              <MemorySource memory={value} />
+              <p
+                className={
+                  expanded === value.id
+                    ? "memory-content is-expanded"
+                    : "memory-content"
+                }
+              >
+                {value.content}
+              </p>
+              <div className="memory-card-footer">
+                <MemorySource memory={value} />
+                <button
+                  type="button"
+                  className="memory-detail-toggle"
+                  aria-expanded={expanded === value.id}
+                  onClick={() =>
+                    setExpanded(expanded === value.id ? null : value.id)
+                  }
+                >
+                  {expanded === value.id ? "收起详情" : "查看详情"}
+                  <ChevronDown size={13} aria-hidden="true" />
+                </button>
+              </div>
             </article>
           ))}
         </div>
       ) : (
         <EmptyState
-          icon={Brain}
+          icon={Bookmark}
           title={query ? "没有匹配的记忆" : "从一件你想让XiaoXi记住的事开始"}
           action={
             !query && (

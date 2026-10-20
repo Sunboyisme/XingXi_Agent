@@ -1,0 +1,414 @@
+/* 0.1.3 review: continuous workspace, quiet disclosures and direct skill import. */
+[data-slot="button"][data-variant="default"] {
+  background: var(--ui-color-action);
+  color: var(--ui-color-on-action);
+}
+[data-slot="button"][data-variant="default"]:hover {
+  background: var(--ui-color-action-hover);
+}
+.app-shell .sidebar {
+  position: relative;
+  flex-shrink: 0;
+  width: calc(
+    76px +
+      min(var(--chat-sidebar-width, 224px), max(180px, calc(100vw - 456px)))
+  );
+}
+.app-shell .chat-sidebar {
+  width: min(var(--chat-sidebar-width, 224px), max(180px, calc(100vw - 456px)));
+  background: var(--appearance-sidebar, #faf6f0);
+  border-right: 1px solid var(--ui-color-line);
+}
+.app-shell:not(.sidebar-collapsed) .main-panel {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.app-shell.sidebar-collapsed .sidebar {
+  width: 76px;
+}
+.sidebar-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 9px;
+  z-index: 12;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.sidebar-resize::after {
+  content: "";
+  display: block;
+  width: 2px;
+  height: 100%;
+  margin: auto;
+  background: transparent;
+  transition: background 120ms;
+}
+.sidebar-resize:hover::after,
+.sidebar-resize:focus-visible::after {
+  background: var(--ui-color-action);
+}
+.chat-sidebar .conversation-sidebar {
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+.answer-sources {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.answer-sources > summary,
+.retrieval-technical > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  padding: 10px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.answer-sources > summary::-webkit-details-marker,
+.retrieval-technical > summary::-webkit-details-marker {
+  display: none;
+}
+.answer-sources > summary {
+  width: fit-content;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.answer-sources > summary > span {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  margin: 0;
+  background: var(--ui-color-bg);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.disclosure-chevron {
+  flex-shrink: 0;
+  transition: transform 150ms;
+}
+details[open] > summary > .disclosure-chevron {
+  transform: rotate(180deg);
+}
+.answer-sources > div {
+  margin-top: 2px;
+  border-left: 2px solid var(--ui-color-line);
+  padding-left: 14px;
+  gap: 0;
+}
+.answer-sources a {
+  padding: 12px 4px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--ui-color-line);
+  background: transparent;
+}
+.answer-sources a:last-child {
+  border-bottom: 0;
+}
+.answer-sources a:hover {
+  background: transparent;
+}
+.answer-sources a:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.answer-sources strong {
+  align-items: baseline;
+}
+.answer-sources strong svg {
+  align-self: center;
+  flex-shrink: 0;
+}
+.answer-sources small {
+  font-size: 11px;
+}
+.answer-sources p {
+  color: var(--ui-color-text-muted);
+  margin-bottom: 0;
+}
+.external-link-error {
+  display: block;
+  font-size: 12px;
+  color: var(--ui-color-danger);
+  overflow-wrap: anywhere;
+}
+.retrieval-technical > summary {
+  justify-content: space-between;
+}
+.retrieval-technical .retrieval-candidate {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+.retrieval-technical .retrieval-candidate > strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 5px;
+  overflow-wrap: anywhere;
+}
+.retrieval-technical .retrieval-candidate > small {
+  display: block;
+  margin-bottom: 5px;
+}
+.calendar-page > .plan-calendar {
+  border: 0;
+  border-radius: 0;
+  position: relative;
+}
+.calendar-page.page-content {
+  padding: 18px 24px 24px;
+}
+.calendar-page .plan-toolbar {
+  padding: 6px 0 16px;
+}
+.calendar-page .plan-month-grid {
+  border-left: 1px solid var(--ui-color-line);
+  border-top: 1px solid var(--ui-color-line);
+}
+.calendar-page .plan-day {
+  border-right: 1px solid var(--ui-color-line);
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.plan-day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  min-height: 25px;
+}
+.plan-lunar {
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+  margin-right: auto;
+  white-space: nowrap;
+}
+.plan-week-lunar {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ui-color-text-muted);
+}
+.plan-lunar.solar-term,
+.plan-week-lunar.solar-term {
+  color: var(--appearance-success, #69805e);
+  font-weight: 500;
+}
+.plan-day[data-outside="true"] .plan-lunar {
+  opacity: 0.5;
+}
+.plan-day[data-today="true"] .plan-day-number {
+  background: var(--ui-color-action);
+  color: var(--ui-color-on-action);
+}
+.holiday-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  color: var(--appearance-accent, #ad6249);
+  font-size: 10px;
+}
+.holiday-label > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.holiday-label b,
+.holiday-mark {
+  flex-shrink: 0;
+  border-radius: 4px;
+  padding: 0 3px;
+  background: var(--appearance-soft-surface, #f5e8e1);
+  font-size: 10px;
+  font-weight: 500;
+}
+.holiday-label.work {
+  color: var(--ui-color-text-muted);
+}
+.holiday-label.work b,
+.holiday-mark.work {
+  background: var(--appearance-pressed-surface, #eeeae5);
+  color: var(--ui-color-text-muted);
+}
+.holiday-mark {
+  margin-left: 4px;
+  color: var(--appearance-accent, #ad6249);
+}
+.plan-reminder-time {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-left: 24px;
+}
+.plan-reminder-time > label {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.plan-reminder-time > input {
+  width: 140px;
+}
+.calendar-editor form > [data-slot="dialog-footer"] {
+  flex-wrap: wrap;
+}
+.skills-heading {
+  flex-wrap: wrap;
+}
+.skills-heading .row-actions {
+  flex-wrap: wrap;
+}
+.skill-dropzone {
+  min-height: 134px;
+  border: 1px dashed var(--appearance-border, #cfbead);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: var(--appearance-soft-surface, #fcf9f5);
+  color: var(--ui-color-text-muted);
+  transition:
+    background 150ms,
+    border-color 150ms;
+}
+.skill-dropzone > svg {
+  color: var(--appearance-muted, #a28c78);
+}
+.skill-dropzone strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ui-color-text);
+}
+.skill-dropzone > span {
+  font-size: 12px;
+}
+.skills-dragging .skill-dropzone {
+  border: 2px dashed var(--ui-color-action);
+  background: var(--appearance-soft-surface, #f6ebe2);
+}
+.skill-card-heading > button {
+  padding: 0;
+}
+.runtime-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.runtime-row-heading small {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+}
+.runtime-row-heading .available {
+  color: var(--status-success);
+}
+.runtime-resolved {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+  overflow-wrap: anywhere;
+}
+.script-runtime-page {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 20px;
+}
+.script-runtime-page h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+.runtime-intro {
+  margin: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.runtime-page-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.runtime-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+  min-width: 0;
+}
+.runtime-card h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.runtime-card h3 small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ui-color-text-muted);
+}
+.runtime-card > label {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  margin-top: 8px;
+}
+.runtime-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+  white-space: nowrap;
+}
+.runtime-status.available {
+  color: var(--status-success);
+}
+.runtime-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+}
+.runtime-page-actions > span {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+@media (max-width: 900px) {
+  .runtime-page-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .holiday-label > span {
+    display: none;
+  }
+  .calendar-page.page-content {
+    padding: 12px;
+  }
+}
+@media (max-width: 760px) {
+  .app-shell:not(.sidebar-collapsed) .sidebar {
+    width: 76px;
+  }
+  .app-shell:not(.sidebar-collapsed) .main-panel {
+    border-radius: 24px;
+  }
+  .sidebar-resize {
+    display: none;
+  }
+}

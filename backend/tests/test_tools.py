@@ -204,7 +204,10 @@ def test_catalog_matches_agent_tools_and_search_configuration(client, isolate):
     assert next(item for item in catalog if item["id"] == "get_weather")["available"]
     assert not next(item for item in catalog if item["id"] == "web_search")["available"]
     isolate["search"] = "synthetic-key"
-    assert all(item["available"] for item in client.get(API + "/tools").json())
+    catalog = client.get(API + "/tools").json()
+    skill_tools = {"load_skill", "read_skill_file", "run_skill_script"}
+    assert all(item["available"] for item in catalog if item["id"] not in skill_tools)
+    assert all(not item["available"] for item in catalog if item["id"] in skill_tools)
 
 
 @pytest.mark.parametrize(

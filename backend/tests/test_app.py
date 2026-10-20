@@ -4,7 +4,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from PIL import Image
 import pytest
-from sqlalchemy import select
 from app import db, main, config, provider, reminders, schemas
 from fastapi.testclient import TestClient
 
@@ -28,7 +27,7 @@ def course(client, title="学习前端"):
         json={"title": title, "objective": "能完成一个小实践", "foundation": "零基础"},
     ).json()
     run = wait_run(client, client.post(f"{API}/learning/goals/{goal['id']}/plan"))
-    assert run["status"] == "completed", run
+    assert run["status"] == "completed", run.get("error")
     return client.get(f"{API}/learning/goals/{goal['id']}").json()
 
 
@@ -314,7 +313,7 @@ def test_real_langchain_tool_loop_and_stream(configured):
     assert '"kind": "tool"' in events and '"kind": "delta"' in events
 
 
-def test_conversation_can_create_learning_framework(configured):
+def test_conversation_creates_learning_framework_when_explicit(configured):
     conv = configured.post(API + "/conversations", json={}).json()
     run = wait_run(
         configured,
@@ -323,7 +322,7 @@ def test_conversation_can_create_learning_framework(configured):
             json={"content": "我想学习做饭，能独立做晚餐"},
         ),
     )
-    assert run["status"] == "completed", run
+    assert run["status"] == "completed", run.get("error")
     goals = configured.get(API + "/learning/goals").json()
     assert (
         len(goals) == 1

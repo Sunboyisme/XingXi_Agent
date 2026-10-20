@@ -393,11 +393,11 @@
   position: absolute;
   bottom: -7px;
   right: -12px;
-  background: #fff4e8;
-  border: 1px solid #f4e1cd;
+  background: var(--appearance-soft-surface, #fff4e8);
+  border: 1px solid var(--appearance-border, #f4e1cd);
   border-radius: 99px;
   padding: 3px 10px;
-  color: #875739;
+  color: var(--appearance-accent, #875739);
   white-space: nowrap;
   font-size: 12px;
 }
@@ -545,7 +545,7 @@
   padding: 23px 20px;
   border: 0;
   border-radius: 24px;
-  background: #f9f5f0;
+  background: var(--appearance-soft-surface, #f9f5f0);
 }
 .continuity-card:hover {
   background: var(--surface-hover);
@@ -706,7 +706,7 @@
   color: var(--ui-color-text);
 }
 .message.user .message-body {
-  background: #f9f5f0;
+  background: var(--appearance-soft-surface, #f9f5f0);
   border: 0;
 }
 .message-name {
@@ -773,7 +773,7 @@
 .reminder-row {
   border: 0;
   border-radius: 24px;
-  background: #f9f5f0;
+  background: var(--appearance-soft-surface, #f9f5f0);
   padding: 23px;
 }
 .complete-circle {
@@ -796,7 +796,7 @@
 .learning-intro {
   border: 0;
   border-radius: 28px;
-  background: #f9f5f0;
+  background: var(--appearance-soft-surface, #f9f5f0);
 }
 .learning-method > div {
   border-radius: 22px;
@@ -882,7 +882,7 @@
   padding: 18px 12px 12px;
   border: 0;
   border-radius: 24px;
-  background: #f9f5f0;
+  background: var(--appearance-soft-surface, #f9f5f0);
 }
 .course-body .course-outline[hidden] {
   display: none;
@@ -924,7 +924,7 @@
   border-color: transparent;
   box-shadow: none;
   color: var(--ui-color-action);
-  background: #f1e3d7;
+  background: var(--appearance-pressed-surface, #f1e3d7);
 }
 .course-outline .outline-node:disabled {
   opacity: 1;
@@ -1010,7 +1010,7 @@
   margin: 0 0 22px;
   border: 0;
   border-radius: 12px;
-  background: #f9f5f0;
+  background: var(--appearance-soft-surface, #f9f5f0);
   font-size: 12px;
 }
 .lesson-inner > .markdown {
@@ -1057,7 +1057,7 @@
   height: 9px;
   margin: 13px 0;
   border-radius: 99px;
-  background: #e8dace;
+  background: var(--appearance-pressed-surface, #e8dace);
 }
 .lesson-skeleton > span:nth-child(2) {
   width: 86%;
@@ -1090,7 +1090,7 @@
 }
 .lesson-inner .exercise-box {
   margin: 8px 0 24px;
-  background: #f9f5f0;
+  background: var(--appearance-soft-surface, #f9f5f0);
   border: 0;
   padding: 24px;
 }
@@ -1780,7 +1780,7 @@
   border: 1px solid var(--ui-color-line);
   border-radius: 20px;
   overflow: hidden;
-  background: #f8f4ef;
+  background: var(--appearance-soft-surface, #f8f4ef);
   font-size: 13px;
 }
 .tool-results > .tool-results-toggle {

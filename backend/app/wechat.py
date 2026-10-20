@@ -445,12 +445,12 @@ class WechatChannel:
             notes = db.scalars(
                 select(Notification).where(
                     Notification.created_at >= state["reminders_since"],
-                    Notification.status != "cancelled",
+                    Notification.status.not_in(["cancelled", "snoozed"]),
                 )
             ).all()
         for note in notes:
             self.enqueue(
-                "reminder:" + note.id + ":" + state["account_id"],
+                "reminder:" + note.id + ":" + state["account_id"] + (f":snooze{note.generation}" if note.generation else ""),
                 "XiaoXi提醒你：" + note.title + ("\n" + note.body if note.body else ""),
                 state["account_id"],
                 note.id,
@@ -481,7 +481,7 @@ class WechatChannel:
                     if (
                         not state["reminders_enabled"]
                         or not note
-                        or note.status == "cancelled"
+                        or note.status in {"cancelled", "snoozed"}
                         or note.created_at < state["reminders_since"]
                     ):
                         item = db.get(WechatDelivery, row.id)

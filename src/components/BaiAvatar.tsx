@@ -12,10 +12,14 @@ export function BaiAvatar({
   className,
   motion = "idle",
   interactive = false,
+  onClick,
+  label = "和XiaoXi打个招呼",
 }: {
   className?: string;
   motion?: AvatarMotion;
   interactive?: boolean;
+  onClick?: () => void;
+  label?: string;
 }) {
   const [reaction, setReaction] = useState(0);
   const gradientId = useId();
@@ -89,10 +93,13 @@ export function BaiAvatar({
     <button
       type="button"
       className={["avatar-interaction", className].filter(Boolean).join(" ")}
-      aria-label="和XiaoXi打个招呼"
-      title="和XiaoXi打个招呼"
+      aria-label={label}
+      title={label}
       data-reaction={reaction ? (reaction % 2 ? "happy" : "wave") : undefined}
-      onClick={() => setReaction((value) => value + 1)}
+      onClick={() => {
+        setReaction((value) => value + 1);
+        onClick?.();
+      }}
     >
       {artwork}
     </button>
