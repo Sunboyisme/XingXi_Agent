@@ -1,3 +1,4 @@
+import { Hint } from "./common";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarPlus,
@@ -466,24 +467,24 @@ export function CalendarPage({
   const timeLabel = (e: CalendarEvent) =>
     e.all_day ? "全天" : zonedInput(e.start, timezone).slice(11);
   const eventButton = (e: CalendarEvent) => (
-    <button
-      key={`${e.id}:${e.occurrence_start || e.start}`}
-      className={`day-event ${e.status === "completed" ? "is-completed" : ""}`}
-      onClick={() =>
-        openAgenda(e.start.slice(0, 10), isRepeating(e) ? "repeat" : "todo")
-      }
-      title={e.title}
-    >
-      <span>
-        {!e.all_day && `${timeLabel(e)} `}
-        {e.title}
-      </span>
-      {e.status === "completed" ? (
-        <Check size={12} />
-      ) : isRepeating(e) ? (
-        <Repeat2 size={10} className="plan-event-repeat" />
-      ) : null}
-    </button>
+    <Hint key={`${e.id}:${e.occurrence_start || e.start}`} label={e.title}>
+      <button
+        className={`day-event ${e.status === "completed" ? "is-completed" : ""}`}
+        onClick={() =>
+          openAgenda(e.start.slice(0, 10), isRepeating(e) ? "repeat" : "todo")
+        }
+      >
+        <span>
+          {!e.all_day && `${timeLabel(e)} `}
+          {e.title}
+        </span>
+        {e.status === "completed" ? (
+          <Check size={12} />
+        ) : isRepeating(e) ? (
+          <Repeat2 size={10} className="plan-event-repeat" />
+        ) : null}
+      </button>
+    </Hint>
   );
   function weekEventPosition(event: CalendarEvent, day: string) {
     const dayStart = Date.parse(zonedISO(`${day}T00:00`, timezone));
@@ -496,17 +497,20 @@ export function CalendarPage({
     };
   }
   const weekEventButton = (event: CalendarEvent, day: string) => (
-    <button
-      className={`week-event ${event.status === "completed" ? "is-completed" : ""}`}
+    <Hint
       key={`${event.id}:${event.occurrence_start || event.start}:${day}`}
-      style={weekEventPosition(event, day)}
-      onClick={() => openAgenda(day, isRepeating(event) ? "repeat" : "todo")}
-      title={event.title}
+      label={event.title}
     >
-      <strong>
-        {zonedInput(event.start, timezone).slice(11)} {event.title}
-      </strong>
-    </button>
+      <button
+        className={`week-event ${event.status === "completed" ? "is-completed" : ""}`}
+        style={weekEventPosition(event, day)}
+        onClick={() => openAgenda(day, isRepeating(event) ? "repeat" : "todo")}
+      >
+        <strong>
+          {zonedInput(event.start, timezone).slice(11)} {event.title}
+        </strong>
+      </button>
+    </Hint>
   );
   const dayValues = dayList ? eventsOnDay(events, dayList, timezone) : [];
   const todoCount = dayValues.filter((event) => !isRepeating(event)).length;
@@ -678,14 +682,17 @@ export function CalendarPage({
                   return (
                     <div key={day}>
                       {values.length > 0 && (
-                        <button
-                          aria-label={`${day} 重复事项 ${values.length} 项`}
-                          title={values.map((event) => event.title).join("\n")}
-                          onClick={() => openAgenda(day, "repeat")}
+                        <Hint
+                          label={values.map((event) => event.title).join("\n")}
                         >
-                          <Repeat2 size={11} />
-                          {values.length}
-                        </button>
+                          <button
+                            aria-label={`${day} 重复事项 ${values.length} 项`}
+                            onClick={() => openAgenda(day, "repeat")}
+                          >
+                            <Repeat2 size={11} />
+                            {values.length}
+                          </button>
+                        </Hint>
                       )}
                     </div>
                   );
@@ -782,24 +789,28 @@ export function CalendarPage({
                     >
                       {Number(day.slice(8))}
                     </button>
-                    <span
-                      className={`plan-lunar ${lunarDates.get(day)?.festival ? "festival" : lunarDates.get(day)?.term ? "solar-term" : ""}`}
-                      title={lunarDates.get(day)?.title}
-                    >
-                      {lunarDates.get(day)?.festival ||
-                        lunarDates.get(day)?.term ||
-                        lunarDates.get(day)?.label}
-                    </span>
-                    {holidayOn(day) && (
+                    <Hint label={lunarDates.get(day)?.title}>
                       <span
-                        className={`holiday-label ${holidayOn(day)!.kind}`}
-                        title={`${holidayOn(day)!.name} · ${holidayOn(day)!.kind === "off" ? "放假" : "补班"}`}
+                        className={`plan-lunar ${lunarDates.get(day)?.festival ? "festival" : lunarDates.get(day)?.term ? "solar-term" : ""}`}
                       >
-                        {!lunarDates.get(day)?.festival && (
-                          <span>{holidayOn(day)!.name}</span>
-                        )}
-                        <b>{holidayOn(day)!.kind === "off" ? "休" : "班"}</b>
+                        {lunarDates.get(day)?.festival ||
+                          lunarDates.get(day)?.term ||
+                          lunarDates.get(day)?.label}
                       </span>
+                    </Hint>
+                    {holidayOn(day) && (
+                      <Hint
+                        label={`${holidayOn(day)!.name} · ${holidayOn(day)!.kind === "off" ? "放假" : "补班"}`}
+                      >
+                        <span
+                          className={`holiday-label ${holidayOn(day)!.kind}`}
+                        >
+                          {!lunarDates.get(day)?.festival && (
+                            <span>{holidayOn(day)!.name}</span>
+                          )}
+                          <b>{holidayOn(day)!.kind === "off" ? "休" : "班"}</b>
+                        </span>
+                      </Hint>
                     )}
                   </div>
                   <div className="plan-day-events">
@@ -827,19 +838,22 @@ export function CalendarPage({
                         </button>
                       )}
                       {repeatedValues.length > 0 && (
-                        <button
-                          className="plan-daily-repeat-hint"
-                          aria-label={`${day} 重复事项 ${repeatedValues.length} 项`}
-                          title={repeatedValues
+                        <Hint
+                          label={repeatedValues
                             .map(
                               (event) => `${timeLabel(event)} ${event.title}`,
                             )
                             .join("\n")}
-                          onClick={() => openAgenda(day, "repeat")}
                         >
-                          <Repeat2 size={11} />
-                          <span>{repeatedValues.length}</span>
-                        </button>
+                          <button
+                            className="plan-daily-repeat-hint"
+                            aria-label={`${day} 重复事项 ${repeatedValues.length} 项`}
+                            onClick={() => openAgenda(day, "repeat")}
+                          >
+                            <Repeat2 size={11} />
+                            <span>{repeatedValues.length}</span>
+                          </button>
+                        </Hint>
                       )}
                     </div>
                   </div>

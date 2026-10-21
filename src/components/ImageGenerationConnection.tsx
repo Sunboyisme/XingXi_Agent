@@ -1,3 +1,4 @@
+import { Hint } from "./common";
 import { useEffect, useState } from "react";
 import { Images, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -354,13 +355,15 @@ export function ImageGenerationConnection() {
             role={error || testResult?.ok === false ? "alert" : "status"}
             aria-live="polite"
           >
-            <p title={error || testResult?.message || ""}>
-              {testing
-                ? "正在生成测试图，请稍候…"
-                : error ||
-                  testResult?.message ||
-                  "可先测试当前填写内容，再保存。百炼 Qwen 自动适配。"}
-            </p>
+            <Hint label={error || testResult?.message || ""}>
+              <p>
+                {testing
+                  ? "正在生成测试图，请稍候…"
+                  : error ||
+                    testResult?.message ||
+                    "可先测试当前填写内容，再保存。百炼 Qwen 自动适配。"}
+              </p>
+            </Hint>
             {testResult && (
               <>
                 <span>
@@ -373,12 +376,11 @@ export function ImageGenerationConnection() {
                       ? ` · HTTP ${testResult.http_status}`
                       : ""}
                 </span>
-                <span
-                  className="image-generation-test-endpoint"
-                  title={testResult.endpoint}
-                >
-                  {testResult.endpoint}
-                </span>
+                <Hint label={testResult.endpoint}>
+                  <span className="image-generation-test-endpoint">
+                    {testResult.endpoint}
+                  </span>
+                </Hint>
               </>
             )}
           </div>

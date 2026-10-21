@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Sparkles } from "lucide-react";
 import { Markdown } from "./common";
 
@@ -12,9 +12,17 @@ export function Reasoning({
   incomplete?: boolean;
 }) {
   const [open, setOpen] = useState(active);
+  const content = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
   useEffect(() => {
-    if (!active) setOpen(false);
+    setOpen(active);
+    following.current = true;
   }, [active]);
+  useEffect(() => {
+    const element = content.current;
+    if (active && open && element && following.current)
+      element.scrollTop = element.scrollHeight;
+  }, [text, active, open]);
   if (!text) return null;
   return (
     <section
@@ -38,7 +46,19 @@ export function Reasoning({
         <ChevronDown size={15} className={open ? "is-open" : ""} />
       </button>
       {open && (
-        <div className="reasoning-content">
+        <div
+          className="reasoning-content"
+          ref={content}
+          onWheel={(event) => {
+            if (event.deltaY < 0) following.current = false;
+          }}
+          onScroll={(event) => {
+            const element = event.currentTarget;
+            following.current =
+              element.scrollHeight - element.scrollTop - element.clientHeight <
+              24;
+          }}
+        >
           <Markdown>{text}</Markdown>
         </div>
       )}

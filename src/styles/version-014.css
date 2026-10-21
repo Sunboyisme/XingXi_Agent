@@ -1090,6 +1090,25 @@ body:has(.reminder-popup),
   list-style: none;
 }
 
+.skill-menu .skill-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px;
+  text-align: left;
+}
+.skill-menu .toolbox-row-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.skill-menu .mini-toggle {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
 .skill-menu .toolbox-row-copy small {
   display: -webkit-box;
   -webkit-box-orient: vertical;

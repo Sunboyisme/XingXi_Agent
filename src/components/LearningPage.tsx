@@ -49,6 +49,7 @@ import {
   nodeStatus,
   ConfirmDelete,
   Toast,
+  Hint,
 } from "./common";
 import { BaiAvatar } from "./BaiAvatar";
 
@@ -77,6 +78,11 @@ export function LearningPage({
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
+  const [learningStream, setLearningStream] = useState<{
+    nodeId: string;
+    stage: string;
+    fields: Record<string, string>;
+  } | null>(null);
   const [answer, setAnswer] = useState("");
   const [images, setImages] = useState<Attachment[]>([]);
   const [hints, setHints] = useState(false);
@@ -121,6 +127,7 @@ export function LearningPage({
   useEffect(() => {
     let live = true;
     setLesson(null);
+    setLearningStream(null);
     setHints(false);
     if (nodeId)
       api<Lesson | null>(`/learning/nodes/${nodeId}/lesson`)
@@ -160,8 +167,23 @@ export function LearningPage({
     watch.current = controller;
     setRun(value);
     setBusy(true);
+    setLearningStream(null);
     try {
-      const result = await readEvents(value.id, () => {}, controller.signal);
+      const result = await readEvents(
+        value.id,
+        (event) => {
+          if (controller.signal.aborted || event.kind !== "learning_content")
+            return;
+          const target = String(event.data.node_id || "");
+          if (target !== activeNode.current) return;
+          setLearningStream({
+            nodeId: target,
+            stage: String(event.data.stage),
+            fields: event.data.fields as Record<string, string>,
+          });
+        },
+        controller.signal,
+      );
       if (!controller.signal.aborted)
         await finishRun(result, controller.signal, targetNode);
     } catch (error) {
@@ -604,7 +626,53 @@ export function LearningPage({
                             .join("、")}
                         </div>
                       )}
-                      {lesson ? (
+                      {learningStream?.nodeId === nodeId &&
+                        (busy ||
+                          run?.status === "failed" ||
+                          run?.status === "cancelled") && (
+                          <section
+                            className="lesson-stream"
+                            aria-label="学习内容生成进度"
+                            aria-busy={busy}
+                          >
+                            {learningStream.stage === "assessment" && (
+                              <h3>练习反馈</h3>
+                            )}
+                            <Markdown>
+                              {learningStream.fields.content ||
+                                learningStream.fields.explanation ||
+                                ""}
+                            </Markdown>
+                            {learningStream.fields.exercise && (
+                              <>
+                                <h2>现在轮到你试一试</h2>
+                                <Markdown>
+                                  {learningStream.fields.exercise}
+                                </Markdown>
+                              </>
+                            )}
+                            {learningStream.fields.criteria && (
+                              <>
+                                <h3>检查标准</h3>
+                                <Markdown>
+                                  {learningStream.fields.criteria}
+                                </Markdown>
+                              </>
+                            )}
+                            {learningStream.fields.next_step && (
+                              <Markdown>
+                                {learningStream.fields.next_step}
+                              </Markdown>
+                            )}
+                            <p className="muted">
+                              {busy
+                                ? "正在继续生成…"
+                                : "本次生成未完成，以上内容尚未保存为正式教学。"}
+                            </p>
+                          </section>
+                        )}
+                      {lesson &&
+                      !(busy && learningStream?.stage === "lesson") ? (
                         <>
                           <Markdown>{lesson.content}</Markdown>
                           <section className="exercise-box">
@@ -699,7 +767,9 @@ export function LearningPage({
                             )}
                           </section>
                         </>
-                      ) : (
+                      ) : busy &&
+                        learningStream?.stage === "lesson" &&
+                        learningStream.fields.content ? null : (
                         <div className="start-lesson">
                           {busy ? (
                             <div
@@ -731,16 +801,17 @@ export function LearningPage({
                         </div>
                       )}
                       <div className="lesson-footer">
-                        <Button
-                          variant="ghost"
-                          aria-label="跳过，保留未验证状态"
-                          title="保留未验证状态"
-                          disabled={busy}
-                          onClick={() => void skip()}
-                        >
-                          <SkipForward size={15} />
-                          跳过
-                        </Button>
+                        <Hint label="保留未验证状态">
+                          <Button
+                            variant="ghost"
+                            aria-label="跳过，保留未验证状态"
+                            disabled={busy}
+                            onClick={() => void skip()}
+                          >
+                            <SkipForward size={15} />
+                            跳过
+                          </Button>
+                        </Hint>
                         <nav
                           className="lesson-navigation"
                           aria-label="知识点切换"

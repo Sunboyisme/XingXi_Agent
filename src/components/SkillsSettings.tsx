@@ -1,3 +1,4 @@
+import { Hint } from "./common";
 import {
   type ReactNode,
   useCallback,
@@ -277,9 +278,9 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                 {skill.enabled ? "已启用" : "未启用"}
               </label>
             </div>
-            <p className="skill-card-description" title={skill.description}>
-              {skill.description}
-            </p>
+            <Hint label={skill.description}>
+              <p className="skill-card-description">{skill.description}</p>
+            </Hint>
             <div className="skill-card-footer">
               <span>
                 {skill.name === "text-notes" && (

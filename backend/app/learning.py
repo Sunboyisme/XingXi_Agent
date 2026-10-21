@@ -67,6 +67,7 @@ async def generate_course(goal_id: str) -> dict:
 
 
 class TutorState(TypedDict, total=False):
+    run_id: str
     node_id: str
     lesson_id: str
     submission: dict
@@ -74,6 +75,7 @@ class TutorState(TypedDict, total=False):
 
 
 async def teach(state: TutorState):
+    from .runs import emit
     with Session() as db:
         node = db.get(KnowledgeNode, state["node_id"])
         goal = db.get(Goal, node.goal_id)
@@ -95,6 +97,9 @@ async def teach(state: TutorState):
         TUTOR_RULES
         + "\n本次只教当前知识点，使用中文 Markdown，清晰解释、最小示例和一个具体练习。不要直接给出练习答案。",
         text,
+        on_partial=(lambda fields: emit(state["run_id"], "learning_content", {
+            "node_id": state["node_id"], "stage": "lesson", "fields": fields,
+        })) if state.get("run_id") else None,
     )
     with Session() as db:
         node = db.get(KnowledgeNode, state["node_id"])
@@ -125,6 +130,7 @@ def await_submission(state: TutorState):
 
 
 async def assess(state: TutorState):
+    from .runs import emit
     submission = state["submission"]
     with Session() as db:
         previous = db.scalar(
@@ -142,6 +148,9 @@ async def assess(state: TutorState):
         + "\n检查练习，解释具体问题、优点、缺口和下一步。如果证据不足，passed=false，提出补充问题。evidence 说明你实际看到的材料，不声称运行代码或现场观察。",
         text,
         submission.get("attachment_ids", []),
+        on_partial=(lambda fields: emit(state["run_id"], "learning_content", {
+            "node_id": state["node_id"], "stage": "assessment", "fields": fields,
+        })) if state.get("run_id") else None,
     )
     result = feedback.model_dump()
     with Session() as db:

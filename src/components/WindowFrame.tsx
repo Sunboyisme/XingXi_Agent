@@ -1,3 +1,4 @@
+import { Hint } from "./common";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Bell,
@@ -76,21 +77,22 @@ export function WindowFrame({
           XiaoXi
         </span>
         {sidebarAvailable && (
-          <button
-            className="sidebar-toggle"
-            aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
-            title={collapsed ? "展开侧栏" : "收起侧栏"}
-            aria-expanded={!collapsed}
-            aria-controls="chat-sidebar"
-            disabled={!onToggle}
-            onClick={onToggle}
-          >
-            {collapsed ? (
-              <PanelLeftOpen size={18} />
-            ) : (
-              <PanelLeftClose size={18} />
-            )}
-          </button>
+          <Hint label={collapsed ? "展开侧栏" : "收起侧栏"}>
+            <button
+              className="sidebar-toggle"
+              aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+              aria-expanded={!collapsed}
+              aria-controls="chat-sidebar"
+              disabled={!onToggle}
+              onClick={onToggle}
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={18} />
+              ) : (
+                <PanelLeftClose size={18} />
+              )}
+            </button>
+          </Hint>
         )}
         {menuActions && (
           <AppMenu
@@ -127,30 +129,35 @@ export function WindowFrame({
         )}
         {native && (
           <div className="window-controls">
-            <button
-              aria-label="最小化"
-              title="最小化"
-              onClick={() => void control(() => getCurrentWindow().minimize())}
-            >
-              <Minus size={15} />
-            </button>
-            <button
-              aria-label={maximized ? "还原窗口" : "最大化"}
-              title={maximized ? "还原窗口" : "最大化"}
-              onClick={() =>
-                void control(() => getCurrentWindow().toggleMaximize())
-              }
-            >
-              {maximized ? <Copy size={13} /> : <Square size={13} />}
-            </button>
-            <button
-              className="window-close"
-              aria-label="关闭窗口"
-              title="关闭窗口"
-              onClick={() => void control(() => getCurrentWindow().close())}
-            >
-              <X size={17} />
-            </button>
+            <Hint label="最小化">
+              <button
+                aria-label="最小化"
+                onClick={() =>
+                  void control(() => getCurrentWindow().minimize())
+                }
+              >
+                <Minus size={15} />
+              </button>
+            </Hint>
+            <Hint label={maximized ? "还原窗口" : "最大化"}>
+              <button
+                aria-label={maximized ? "还原窗口" : "最大化"}
+                onClick={() =>
+                  void control(() => getCurrentWindow().toggleMaximize())
+                }
+              >
+                {maximized ? <Copy size={13} /> : <Square size={13} />}
+              </button>
+            </Hint>
+            <Hint label="关闭窗口">
+              <button
+                className="window-close"
+                aria-label="关闭窗口"
+                onClick={() => void control(() => getCurrentWindow().close())}
+              >
+                <X size={17} />
+              </button>
+            </Hint>
           </div>
         )}
       </header>

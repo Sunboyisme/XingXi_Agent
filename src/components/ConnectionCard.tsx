@@ -1,3 +1,4 @@
+import { Hint } from "./common";
 import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import { Button } from "./ui/button";
 
@@ -36,7 +37,9 @@ export function ConnectionCard({
       <h3>{title}</h3>
       <p className="service-card-description">{description}</p>
       <div className="service-card-bottom">
-        <span title={detail}>{detail}</span>
+        <Hint label={detail}>
+          <span>{detail}</span>
+        </Hint>
         <Button
           size="sm"
           variant="ghost"

@@ -26,6 +26,7 @@ const labels: Record<string, string> = {
   plan_occurrences: "完成记录",
   plan_segments: "重复规则调整",
   artifacts: "工具产物",
+  complex_tasks: "复杂任务",
   goals: "学习目标",
   attachments: "图片",
 };

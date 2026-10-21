@@ -22,7 +22,14 @@ export function SkillsMenu({
     setLoading(true);
     setError("");
     try {
-      setSkills(await api<Skill[]>("/skills"));
+      setSkills(
+        (await api<Skill[]>("/skills")).sort((a, b) =>
+          a.name.localeCompare(b.name, "zh-CN", {
+            numeric: true,
+            sensitivity: "base",
+          }),
+        ),
+      );
     } catch (error) {
       setError((error as Error).message);
     } finally {
@@ -96,7 +103,7 @@ export function SkillsMenu({
                   role="menuitemcheckbox"
                   aria-checked={skill.enabled}
                   disabled={Boolean(saving)}
-                  className="model-menu-item toolbox-item"
+                  className="model-menu-item skill-menu-item"
                   onClick={() => void toggle(skill)}
                 >
                   <span className="toolbox-row-copy">

@@ -24,10 +24,11 @@ export function Hint({
   side = "top",
   children,
 }: {
-  label: string;
+  label?: string;
   side?: "top" | "right" | "bottom" | "left";
   children: React.ReactElement;
 }) {
+  if (!label) return children;
   return (
     <Tooltip.Provider delayDuration={260} skipDelayDuration={100}>
       <Tooltip.Root>

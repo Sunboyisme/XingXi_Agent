@@ -1,3 +1,4 @@
+import { Hint } from "./common";
 import { SoftSelect } from "./ui/soft-select";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -87,14 +88,15 @@ function MCPValueInput({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
-      <button
-        type="button"
-        aria-label={`${visible ? "隐藏" : "显示"}${label}`}
-        title={visible ? "隐藏" : "显示"}
-        onClick={() => setVisible(!visible)}
-      >
-        {visible ? <EyeOff size={15} /> : <Eye size={15} />}
-      </button>
+      <Hint label={visible ? "隐藏" : "显示"}>
+        <button
+          type="button"
+          aria-label={`${visible ? "隐藏" : "显示"}${label}`}
+          onClick={() => setVisible(!visible)}
+        >
+          {visible ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      </Hint>
     </div>
   );
 }
@@ -576,7 +578,9 @@ function ToolRow({
     <div className="managed-tool-row">
       <div className="managed-tool-copy">
         <strong>{tool.name}</strong>
-        <p title={tool.description}>{tool.description}</p>
+        <Hint label={tool.description}>
+          <p>{tool.description}</p>
+        </Hint>
         {!tool.available && (
           <small className="tool-unavailable">{tool.note}</small>
         )}
