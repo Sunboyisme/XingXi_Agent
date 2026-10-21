@@ -43,7 +43,9 @@ test("skill menu lists imported skills and persists an enabled switch", async ()
   });
   const onSettings = vi.fn();
   render(<SkillsMenu onSettings={onSettings} />);
-  fireEvent.click(screen.getByRole("button", { name: "技能" }));
+  fireEvent.keyDown(screen.getByRole("button", { name: "技能" }), {
+    key: "ArrowDown",
+  });
   const skill = await screen.findByRole("menuitemcheckbox", {
     name: /笔记整理/,
   });

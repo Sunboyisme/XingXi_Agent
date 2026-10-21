@@ -126,7 +126,7 @@ def next_due(db, plan, offset, after, allow_overdue=False):
 
     def add(rule, key, finish):
         value, record = effective(db, rule, key, finish)
-        if not value.reminder_enabled or offset not in value.reminder_offsets or (record and record.status == "completed"):
+        if not value.reminder_enabled or offset not in value.reminder_offsets or (record and record.status in {"completed", "cancelled"}):
             return False
         due = due_for(value, value.start, offset)
         if datetime.fromisoformat(due) > after or (allow_overdue and rule.recurrence == "none"):

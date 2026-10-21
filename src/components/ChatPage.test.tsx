@@ -72,7 +72,7 @@ test("chat home has no character artwork and retains the editable composer", () 
       onConversation={vi.fn()}
       goals={[]}
       settings={settings}
-      refresh={vi.fn()}
+      refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
       onPlan={vi.fn()}
     />,
@@ -88,7 +88,7 @@ test("chat home has no character artwork and retains the editable composer", () 
   expect((input as HTMLTextAreaElement).value).toBe("还没写完的消息");
 });
 
-test("home shortcuts replace the draft without sending it", async () => {
+test("home shortcuts preserve the existing draft without sending it", async () => {
   apiMock.mockResolvedValue([]);
   render(
     <ChatPage
@@ -96,7 +96,7 @@ test("home shortcuts replace the draft without sending it", async () => {
       onConversation={vi.fn()}
       goals={[]}
       settings={settings}
-      refresh={vi.fn()}
+      refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
       onPlan={vi.fn()}
     />,
@@ -107,9 +107,82 @@ test("home shortcuts replace the draft without sending it", async () => {
   fireEvent.change(input, { target: { value: "我已经写了一段" } });
   fireEvent.click(screen.getByRole("button", { name: "添加安排" }));
   expect(input.value).toBe(
-    "帮我安排今天的时间。先问问我今天最想完成什么，再给出一个轻松可行的安排。",
+    "帮我安排今天的时间。先问问我今天最想完成什么，再给出一个轻松可行的安排。\n\n我已经写了一段",
   );
   expect(apiMock.mock.calls.every((call) => call.length === 1)).toBe(true);
+});
+
+test("an accepted first message enters its conversation even if list refresh fails", async () => {
+  apiMock.mockImplementation(async (path: string, method?: string) => {
+    if (path === "/conversations" && method === "POST")
+      return { id: "accepted" };
+    if (path === "/conversations/accepted/messages" && method === "POST")
+      return { id: "accepted-run", status: "queued" };
+    return [];
+  });
+  const onConversation = vi.fn();
+  render(
+    <ChatPage
+      conversationId={null}
+      onConversation={onConversation}
+      goals={[]}
+      settings={settings}
+      refresh={vi.fn().mockRejectedValue(new Error("list unavailable"))}
+      onAction={vi.fn()}
+      onPlan={vi.fn()}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("发送给XiaoXi的消息"), {
+    target: { value: "一条已接收的消息" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+  await waitFor(() => expect(onConversation).toHaveBeenCalledWith("accepted"));
+  expect(
+    (screen.getByLabelText("发送给XiaoXi的消息") as HTMLTextAreaElement).value,
+  ).toBe("");
+});
+
+test("a delayed retry response cannot attach to a different conversation", async () => {
+  let resolveRetry!: (value: unknown) => void;
+  apiMock.mockImplementation(async (path: string, method?: string) => {
+    if (path === "/conversations/a/retry" && method === "POST")
+      return new Promise((resolve) => {
+        resolveRetry = resolve;
+      });
+    if (path === "/runs?conversation_id=a")
+      return [
+        {
+          id: "failed-a",
+          status: "failed",
+          kind: "chat",
+          created_at: "2026-10-21T00:00:00Z",
+          error: "连接中断",
+        },
+      ];
+    if (path === "/conversations/a/messages")
+      return [
+        { id: "user-a", role: "user", content: "A 的问题", attachment_ids: [] },
+      ];
+    return [];
+  });
+  vi.mocked(readEvents).mockImplementation(() => new Promise<never>(() => {}));
+  const props = {
+    onConversation: vi.fn(),
+    goals: [],
+    settings,
+    refresh: vi.fn().mockResolvedValue(undefined),
+    onAction: vi.fn(),
+    onPlan: vi.fn(),
+  };
+  const view = render(<ChatPage {...props} conversationId="a" />);
+  fireEvent.click(await screen.findByRole("button", { name: "重新生成" }));
+  await waitFor(() => expect(resolveRetry).toBeDefined());
+  view.rerender(<ChatPage {...props} conversationId="b" />);
+  await act(async () => {
+    resolveRetry({ id: "retry-a", status: "queued" });
+  });
+  expect(readEvents).not.toHaveBeenCalled();
+  expect(screen.queryByText("A 的问题")).toBeNull();
 });
 
 test("a run completed before conversation handoff still shows its persisted answer", async () => {
@@ -260,7 +333,7 @@ test("new chats focus the composer and restore an unsent draft after remount", a
       onConversation={vi.fn()}
       goals={[]}
       settings={settings}
-      refresh={vi.fn()}
+      refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
       onPlan={vi.fn()}
     />,
@@ -278,7 +351,7 @@ test("new chats focus the composer and restore an unsent draft after remount", a
       onConversation={vi.fn()}
       goals={[]}
       settings={settings}
-      refresh={vi.fn()}
+      refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
       onPlan={vi.fn()}
     />,
@@ -313,7 +386,7 @@ test("restores draft text and attached images after leaving the chat page", asyn
       onConversation={vi.fn()}
       goals={[]}
       settings={settings}
-      refresh={vi.fn()}
+      refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
       onPlan={vi.fn()}
     />,

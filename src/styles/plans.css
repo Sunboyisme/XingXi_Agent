@@ -563,6 +563,15 @@
   font-size: 13px;
   color: var(--ui-color-text-muted);
 }
+.day-event.is-cancelled,
+.week-event.is-cancelled,
+.week-allday-event.is-cancelled {
+  opacity: 0.65;
+  text-decoration: line-through;
+}
+.plan-editor-fields {
+  display: contents;
+}
 @media (max-width: 760px) {
   .calendar-page .plan-toolbar {
     grid-template-columns: minmax(0, 1fr) auto;

@@ -1534,6 +1534,10 @@ export interface components {
             attachment_ids?: string[];
             model_selection?: components["schemas"]["ModelSelection"] | null;
         };
+        /** ChatRetry */
+        ChatRetry: {
+            model_selection?: components["schemas"]["ModelSelection"] | null;
+        };
         /** ConversationCreate */
         ConversationCreate: {
             /**
@@ -2019,6 +2023,10 @@ export interface components {
             reasoning: string;
             /** Run Id */
             run_id?: string | null;
+            /** Run Status */
+            run_status?: string | null;
+            /** Task Id */
+            task_id?: string | null;
         };
         /** ModelOption */
         ModelOption: {
@@ -2144,7 +2152,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "complete" | "restore" | "end_series" | "disable_reminders";
+            action: "complete" | "cancel_occurrence" | "restore" | "end_series" | "disable_reminders";
             /** Occurrence Start */
             occurrence_start?: string | null;
         };
@@ -2181,7 +2189,7 @@ export interface components {
              * @default planned
              * @enum {string}
              */
-            status: "planned" | "completed" | "ended" | "deleted";
+            status: "planned" | "completed" | "ended" | "deleted" | "cancelled";
             /**
              * Recurrence
              * @default none
@@ -3895,7 +3903,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChatRetry"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

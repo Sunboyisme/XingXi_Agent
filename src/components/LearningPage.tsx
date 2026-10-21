@@ -77,6 +77,10 @@ export function LearningPage({
   const [notice, setNotice] = useState("");
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const stopLock = useRef(false);
+  const selectedGoalId = useRef(goalId);
+  selectedGoalId.current = goalId;
   const [run, setRun] = useState<Run | null>(null);
   const [learningStream, setLearningStream] = useState<{
     nodeId: string;
@@ -113,6 +117,8 @@ export function LearningPage({
     watch.current?.abort();
     setBusy(false);
     setRun(null);
+    setStopping(false);
+    stopLock.current = false;
     setGoalId(value.id);
     localStorage.setItem("bai-current-goal", value.id);
     setNodeId(value.current_node_id || value.nodes[0]?.id || "");
@@ -163,6 +169,8 @@ export function LearningPage({
   }
   async function track(value: Run, targetNode?: string) {
     watch.current?.abort();
+    stopLock.current = false;
+    setStopping(false);
     const controller = new AbortController();
     watch.current = controller;
     setRun(value);
@@ -190,6 +198,36 @@ export function LearningPage({
       if (!controller.signal.aborted) {
         setError((error as Error).message);
         setBusy(false);
+      }
+    }
+  }
+  async function stopLearning() {
+    if (!run || stopLock.current) return;
+    const targetGoal = goalId;
+    const controller = watch.current;
+    const isCurrent = () =>
+      selectedGoalId.current === targetGoal &&
+      watch.current === controller &&
+      !controller?.signal.aborted;
+    stopLock.current = true;
+    setStopping(true);
+    setError("");
+    try {
+      const stopped = await api<Run>(`/runs/${run.id}/cancel`, "POST");
+      if (!isCurrent()) return;
+      setRun(stopped);
+      setBusy(false);
+      setLearningStream(null);
+      void refresh().catch(() => {
+        if (isCurrent())
+          setError("学习任务已停止，进度暂未刷新，请重新进入学习页查看。");
+      });
+    } catch (error) {
+      if (isCurrent()) setError(`停止失败：${(error as Error).message}`);
+    } finally {
+      if (isCurrent()) {
+        stopLock.current = false;
+        setStopping(false);
       }
     }
   }
@@ -577,11 +615,10 @@ export function LearningPage({
                             ? "正在检查练习"
                             : "正在准备教学"}
                         <button
-                          onClick={() => {
-                            if (run) void api(`/runs/${run.id}/cancel`, "POST");
-                          }}
+                          disabled={!run || stopping}
+                          onClick={() => void stopLearning()}
                         >
-                          停止
+                          {stopping ? "正在停止…" : "停止"}
                         </button>
                       </span>
                     )}

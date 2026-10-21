@@ -180,6 +180,10 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
                 )
             )
         elif record.role == "assistant":
+            # A retry answers the original request; its interrupted draft is
+            # retained for the user, but is not a completed model response.
+            if (record.provider_context or {}).get("incomplete"):
+                continue
             context = record.provider_context or {}
             same_model = (
                 model_config
@@ -330,6 +334,32 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
     emit(run_id, "answer", {"text": text})
     _remember_clear_preference(run_id, conversation_id)
     return {"content": text, "conversation_id": conversation_id}
+
+
+def persist_incomplete_reply(run_id):
+    """Preserve only text already exposed to the user, including answer resets."""
+    with Session() as db:
+        run = db.get(Run, run_id)
+        if not run or run.kind != "chat" or run.task_id or not run.conversation_id:
+            return
+        if db.scalar(select(Message.id).where(Message.run_id == run_id, Message.role == "assistant")):
+            return
+        text, reasoning = "", {}
+        for event in db.scalars(select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.id)):
+            if event.kind == "delta":
+                text += str(event.data.get("text") or "")
+            elif event.kind == "answer":
+                text = str(event.data.get("text") or "")
+            elif event.kind == "reasoning":
+                step = str(event.data.get("step") or "")
+                reasoning[step] = reasoning.get(step, "") + str(event.data.get("text") or "")
+        if not text.strip():
+            return
+        db.add(Message(conversation_id=run.conversation_id, role="assistant", run_id=run_id,
+                       content=text, reasoning="\n\n".join(reasoning.values()),
+                       provider_context={"incomplete": True}))
+        db.get(Conversation, run.conversation_id).updated_at = now()
+        db.commit()
 
 
 def recover_durable_reply(run_id):

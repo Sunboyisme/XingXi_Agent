@@ -39,6 +39,8 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
                 run = db.get(Run, run_id)
                 run.status = "cancelled"
                 db.commit()
+            from .agent import persist_incomplete_reply
+            persist_incomplete_reply(run_id)
             emit(run_id, "cancelled", {})
         except Exception as error:
             from .complex_tasks import pause_run
@@ -78,6 +80,8 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
                 run.error = message
                 run.result = {**run.result, "error_details": details}
                 db.commit()
+            from .agent import persist_incomplete_reply
+            persist_incomplete_reply(run_id)
             emit(run_id, "error", {"message": message, "details": details})
         finally:
             tasks.pop(run_id, None)

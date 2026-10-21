@@ -27,6 +27,13 @@ export function SearchConnection({
   const [clear, setClear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  function changeOpen(value: boolean) {
+    if (busy) return;
+    setKey("");
+    setClear(false);
+    setError("");
+    setOpen(value);
+  }
   async function save() {
     setBusy(true);
     setError("");
@@ -57,17 +64,9 @@ export function SearchConnection({
       detail={
         settings.search_configured ? "搜索工具可用" : "添加 Tavily API 密钥"
       }
-      onConfigure={() => {
-        setError("");
-        setOpen(true);
-      }}
+      onConfigure={() => changeOpen(true)}
     >
-      <Dialog
-        open={open}
-        onOpenChange={(value) => {
-          if (!busy) setOpen(value);
-        }}
-      >
+      <Dialog open={open} onOpenChange={changeOpen}>
         <DialogContent className="connection-config-dialog">
           <DialogHeader>
             <DialogTitle>联网查资料</DialogTitle>
@@ -110,7 +109,7 @@ export function SearchConnection({
             <Button
               variant="outline"
               disabled={busy}
-              onClick={() => setOpen(false)}
+              onClick={() => changeOpen(false)}
             >
               取消
             </Button>

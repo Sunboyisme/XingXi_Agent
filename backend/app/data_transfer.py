@@ -20,7 +20,7 @@ LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
                 "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes"}
 COUNTS = {"conversations": "对话", "messages": "消息", "memories": "记忆",
           "memory_vectors": "向量", "reminders": "提醒时间", "goals": "学习目标",
-          "attachments": "附件", "office_files": "办公资料", "calendar_events": "计划", "plan_occurrences": "完成记录", "plan_segments": "重复规则调整", "artifacts": "工具产物", "complex_tasks": "复杂任务"}
+          "attachments": "附件", "office_files": "办公资料", "calendar_events": "计划", "plan_occurrences": "单次状态记录", "plan_segments": "重复规则调整", "artifacts": "工具产物", "complex_tasks": "复杂任务"}
 
 
 def root():

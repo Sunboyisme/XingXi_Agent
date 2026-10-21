@@ -323,6 +323,8 @@ class MessageRead(RecordRead):
     attachment_ids: list[str]
     reasoning: str = ""
     run_id: str | None = None
+    run_status: str | None = None
+    task_id: str | None = None
 
 
 class ImageGenerationWrite(BaseModel):
@@ -433,6 +435,10 @@ class RetrievalRead(BaseModel):
 class ChatInput(BaseModel):
     content: str = Field(min_length=1, max_length=30000)
     attachment_ids: list[str] = Field(default_factory=list, max_length=4)
+    model_selection: ModelSelection | None = None
+
+
+class ChatRetry(BaseModel):
     model_selection: ModelSelection | None = None
 
 

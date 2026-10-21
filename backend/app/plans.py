@@ -134,6 +134,7 @@ class PlanWrite(BaseModel):
 
 
 class PlanRead(PlanWrite):
+    status: Literal["planned", "completed", "ended", "deleted", "cancelled"] = "planned"
     id: str
     reminder_id: str | None = None
     source_message_id: str | None = None
@@ -158,7 +159,7 @@ class PlanBatch(BaseModel):
 
 
 class PlanAction(BaseModel):
-    action: Literal["complete", "restore", "end_series", "disable_reminders"]
+    action: Literal["complete", "cancel_occurrence", "restore", "end_series", "disable_reminders"]
     occurrence_start: str | None = None
 
 
@@ -213,7 +214,7 @@ def read_occurrence(db, row, key):
         raise HTTPException(422, "该日期不属于这个重复系列")
     rule, finish, index = found
     value, record = recurrence.effective(db, rule, key, finish)
-    state = "completed" if record and record.status == "completed" else row.status
+    state = record.status if record and record.status in {"completed", "cancelled"} else row.status
     return serialize(db, value, value.start, value.end, state, root=row, occurrence_key=key, index=index, series_title=rule.title)
 
 
@@ -230,7 +231,8 @@ def cancel_notes(db, key, start=None):
 
 def completed(db, plan, start):
     row = db.get(PlanOccurrence, (plan.id, start))
-    return row is not None and row.status == "completed"
+    # Completed and cancelled instances are both ineligible for delivery.
+    return row is not None and row.status in {"completed", "cancelled"}
 
 
 def sync_rules(db, plan, offsets, reset=True):
@@ -371,8 +373,8 @@ def rebase_occurrences(db, row, value, from_key=None):
             raise HTTPException(422, "新规则会移除已有完成记录或单次调整，请保留其重复范围，或选择本次及以后修改")
         effective, _ = recurrence.effective(db, rule, record.start, finish)
         override = record.override
-        if record.status == "completed":
-            # A past completion must keep the time/content actually completed.
+        if record.status in {"completed", "cancelled"}:
+            # Keep the actual time/content of completed or cancelled instances.
             override = {name: getattr(effective, name) for name in PlanWrite.model_fields}
         replacements.append(dict(plan_id=row.id, start=times[0], status=record.status,
                                  completed_at=record.completed_at, override=override))
@@ -500,7 +502,21 @@ def act(key, value):
             if not recurrence.resolve(db, row, start):
                 raise HTTPException(422, "该日期不属于这个重复系列")
             record = db.get(PlanOccurrence, (key, start))
-            if value.action == "complete":
+            if value.action == "cancel_occurrence":
+                if row.recurrence == "none":
+                    raise HTTPException(422, "仅重复计划支持取消本次；普通计划请使用删除")
+                if row.status != "planned" or (record and record.status == "completed"):
+                    raise HTTPException(409, "只能取消尚未完成的重复安排")
+                if record is None:
+                    db.add(PlanOccurrence(plan_id=key, start=start, status="cancelled"))
+                else:
+                    record.status, record.completed_at = "cancelled", now()
+                cancel_notes(db, key, start)
+                db.flush()
+                sync_rules(db, row, row.reminder_offsets)
+            elif value.action == "complete":
+                if record and record.status == "cancelled":
+                    raise HTTPException(409, "本次已取消，请先恢复后再完成")
                 if record is None:
                     db.add(PlanOccurrence(plan_id=key, start=start, status="completed"))
                 else:
@@ -529,7 +545,7 @@ def act(key, value):
                             rule.plan_occurrence_start, rule.due_at, _ = following
                             rule.status = "active"
         db.commit()
-        if value.action in ("complete", "restore"):
+        if value.action in ("complete", "restore", "cancel_occurrence"):
             return read_occurrence(db, row, start)
         return serialize(db, row)
 
@@ -550,7 +566,7 @@ def list_events(start=None, end=None):
         result = []
         for row in rows:
             for rule, value, key, record, index in recurrence.instances(db, row, start, end):
-                state = "completed" if record and record.status == "completed" else row.status
+                state = record.status if record and record.status in {"completed", "cancelled"} else row.status
                 if row.status != "ended" or state == "completed":
                     result.append(serialize(db, value, value.start, value.end, state, root=row, occurrence_key=key, index=index, series_title=rule.title))
                 if len(result) > 5000:

@@ -67,7 +67,7 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-test("settings tabs preserve search drafts and save without overwriting models or memory mode", async () => {
+test("cancelling search edits discards the draft without overwriting models or memory mode", async () => {
   apiMock.mockImplementation(async (path: string) =>
     path === "/settings"
       ? settings
@@ -102,7 +102,10 @@ test("settings tabs preserve search drafts and save without overwriting models o
   fireEvent.click(screen.getByRole("button", { name: "配置联网查资料" }));
   expect(
     (screen.getByLabelText("Tavily API 密钥") as HTMLInputElement).value,
-  ).toBe("synthetic-search-draft");
+  ).toBe("");
+  fireEvent.change(screen.getByLabelText("Tavily API 密钥"), {
+    target: { value: "synthetic-new-search-key" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
   await waitFor(() =>
     expect(apiMock).toHaveBeenCalledWith(
@@ -110,7 +113,7 @@ test("settings tabs preserve search drafts and save without overwriting models o
       "PUT",
       expect.objectContaining({
         providers: [],
-        search_key: "synthetic-search-draft",
+        search_key: "synthetic-new-search-key",
       }),
     ),
   );

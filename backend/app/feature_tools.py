@@ -245,7 +245,7 @@ def build(run_id, conversation_id):
 
     @tool
     def action_plan(plan_id: str, action: str, occurrence_start: str = "") -> str:
-        """操作同一份计划。完成本次用 complete（重复计划必须传本次 occurrence_start），恢复本次用 restore；关闭提醒用 disable_reminders，保留计划；结束整个重复系列用 end_series。先查询核对编号与本次时间，按用户明确要求执行。知道了与稍后提醒属于通知，不是计划操作。"""
+        """操作同一份计划。完成本次用 complete；仅取消某次重复安排用 cancel_occurrence，不标为完成也不结束系列。重复计划必须传查询得到的本次 occurrence_start。恢复已完成或已取消的本次用 restore；关闭提醒用 disable_reminders，保留计划；结束整个重复系列用 end_series。先查询核对编号与本次时间，按用户明确要求执行。知道了与稍后提醒属于通知，不是计划操作。"""
         return safe(
             lambda: calendar.act(
                 plan_id,
@@ -268,7 +268,7 @@ def build(run_id, conversation_id):
 
 
 INFO = {
-    "action_plan": ("操作计划", "完成本次、关闭提醒或结束整个重复系列", False),
+    "action_plan": ("操作计划", "完成、取消或恢复本次，关闭提醒或结束整个系列", False),
     "list_plans": ("查询计划", "查看日期范围内的计划", False),
     "create_plans": (
         "安排计划",

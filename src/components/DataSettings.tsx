@@ -23,7 +23,7 @@ const labels: Record<string, string> = {
   memory_vectors: "向量",
   reminders: "提醒时间",
   calendar_events: "计划",
-  plan_occurrences: "完成记录",
+  plan_occurrences: "单次状态记录",
   plan_segments: "重复规则调整",
   artifacts: "工具产物",
   complex_tasks: "复杂任务",

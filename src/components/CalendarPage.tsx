@@ -10,6 +10,8 @@ import {
   Plus,
   Repeat2,
   Trash2,
+  RotateCcw,
+  X,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { api, type CalendarEvent, type CalendarEventWrite } from "@/lib/api";
@@ -133,6 +135,7 @@ export function CalendarPage({
   const [agendaNotice, setAgendaNotice] = useState("");
   const requestSequence = useRef(0);
   const [deleting, setDeleting] = useState<CalendarEvent | null>(null);
+  const [cancelling, setCancelling] = useState<CalendarEvent | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -152,6 +155,7 @@ export function CalendarPage({
     calendar_display: "summary" as "summary" | "always",
     reminder_values: [`${today}T09:00`],
   });
+  const formBaseline = useRef<typeof form | null>(null);
   const first = `${anchor.slice(0, 7)}-01`;
   const offset = (new Date(`${first}T00:00:00Z`).getUTCDay() + 6) % 7;
   const daysInMonth = new Date(
@@ -220,6 +224,7 @@ export function CalendarPage({
       selectedEvent?: CalendarEvent,
       scope: "this" | "future" | "series" = "this",
       source?: CalendarEvent,
+      changes?: Partial<typeof form>,
     ) => {
       const event = source || selectedEvent;
       setEditing(selectedEvent || null);
@@ -228,69 +233,71 @@ export function CalendarPage({
       const first = event?.start;
       const last = event?.end;
       const allDay = event?.all_day;
-      setForm(
-        event
-          ? {
-              ...event,
-              all_day: Boolean(allDay),
-              status:
-                event.recurrence !== "none"
-                  ? ((event.series_status || "planned") as
-                      "planned" | "completed" | "ended" | "deleted")
+      const nextForm: typeof form = event
+        ? {
+            ...event,
+            all_day: Boolean(allDay),
+            status:
+              event.recurrence !== "none"
+                ? ((event.series_status || "planned") as
+                    "planned" | "completed" | "ended" | "deleted")
+                : event.status === "cancelled"
+                  ? "planned"
                   : event.status,
-              recurrence: event.recurrence || "none",
-              repeat_interval: event.repeat_interval || 1,
-              repeat_end_mode: event.repeat_until
-                ? "until"
-                : event.repeat_count
-                  ? "count"
-                  : "never",
-              repeat_until:
-                event.repeat_until || dateMove((first || day).slice(0, 10), 30),
-              repeat_count:
-                scope === "future" && event.repeat_count
-                  ? Math.max(1, event.repeat_count - event.occurrence_index)
-                  : event.repeat_count || 10,
-              calendar_display: event.calendar_display,
-              reminder_values: (event.reminder_offsets?.length
-                ? event.reminder_offsets
-                : [allDay ? 540 : 0]
-              ).map((offset) => {
-                const base = allDay
-                  ? `${first}T00:00`
-                  : zonedInput(first!, event.timezone);
-                return new Date(Date.parse(`${base}:00Z`) + offset * 60000)
-                  .toISOString()
-                  .slice(0, 16);
-              }),
-              reminder_time: event.reminder_time || "09:00",
-              reminder_at: event.reminder_at
-                ? zonedInput(event.reminder_at, event.timezone)
-                : "",
-              start: allDay ? first! : zonedInput(first!, event.timezone),
-              end: allDay
-                ? dateMove(last!, -1)
-                : zonedInput(last!, event.timezone),
-            }
-          : {
-              title: "",
-              notes: "",
-              start: day,
-              end: day,
-              all_day: true,
-              reminder_enabled: false,
-              reminder_time: "09:00",
-              reminder_at: "",
-              status: "planned",
-              recurrence: "none",
-              repeat_interval: 1,
-              repeat_end_mode: "never",
-              repeat_until: dateMove(day, 30),
-              repeat_count: 10,
-              calendar_display: "summary",
-              reminder_values: [`${day}T09:00`],
-            },
-      );
+            recurrence: event.recurrence || "none",
+            repeat_interval: event.repeat_interval || 1,
+            repeat_end_mode: event.repeat_until
+              ? "until"
+              : event.repeat_count
+                ? "count"
+                : "never",
+            repeat_until:
+              event.repeat_until || dateMove((first || day).slice(0, 10), 30),
+            repeat_count:
+              scope === "future" && event.repeat_count
+                ? Math.max(1, event.repeat_count - event.occurrence_index)
+                : event.repeat_count || 10,
+            calendar_display: event.calendar_display,
+            reminder_values: (event.reminder_offsets?.length
+              ? event.reminder_offsets
+              : [allDay ? 540 : 0]
+            ).map((offset) => {
+              const base = allDay
+                ? `${first}T00:00`
+                : zonedInput(first!, event.timezone);
+              return new Date(Date.parse(`${base}:00Z`) + offset * 60000)
+                .toISOString()
+                .slice(0, 16);
+            }),
+            reminder_time: event.reminder_time || "09:00",
+            reminder_at: event.reminder_at
+              ? zonedInput(event.reminder_at, event.timezone)
+              : "",
+            start: allDay ? first! : zonedInput(first!, event.timezone),
+            end: allDay
+              ? dateMove(last!, -1)
+              : zonedInput(last!, event.timezone),
+          }
+        : {
+            title: "",
+            notes: "",
+            start: day,
+            end: day,
+            all_day: true,
+            reminder_enabled: false,
+            reminder_time: "09:00",
+            reminder_at: "",
+            status: "planned",
+            recurrence: "none",
+            repeat_interval: 1,
+            repeat_end_mode: "never",
+            repeat_until: dateMove(day, 30),
+            repeat_count: 10,
+            calendar_display: "summary",
+            reminder_values: [`${day}T09:00`],
+          };
+      formBaseline.current = nextForm;
+      setForm({ ...nextForm, ...changes });
       setError("");
       setDayList("");
       setEditor(true);
@@ -301,12 +308,22 @@ export function CalendarPage({
     if (!editing || busy) return;
     setBusy(true);
     setError("");
+    const baseline = formBaseline.current;
+    const changes = Object.fromEntries(
+      (Object.keys(form) as (keyof typeof form)[])
+        .filter(
+          (key) =>
+            baseline &&
+            JSON.stringify(form[key]) !== JSON.stringify(baseline[key]),
+        )
+        .map((key) => [key, form[key]]),
+    ) as Partial<typeof form>;
     try {
       const source =
         scope === "series"
           ? await api<CalendarEvent>(`/plans/${editing.id}`)
           : editing;
-      edit(editing.start.slice(0, 10), editing, scope, source);
+      edit(editing.start.slice(0, 10), editing, scope, source, changes);
     } catch (error) {
       setError((error as Error).message);
     } finally {
@@ -427,6 +444,7 @@ export function CalendarPage({
     };
   }
   async function save() {
+    if (busy || editing?.status === "cancelled") return;
     setBusy(true);
     setError("");
     try {
@@ -448,8 +466,13 @@ export function CalendarPage({
             : {}),
         },
       );
-      await Promise.all([load(), refresh()]);
       setEditor(false);
+      await Promise.all([
+        load(),
+        refresh().catch(() =>
+          setError("计划已保存，部分列表暂未刷新，请稍后刷新查看。"),
+        ),
+      ]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -460,7 +483,7 @@ export function CalendarPage({
     if (busy) return false;
     setBusy(true);
     try {
-      const restoring = event.status === "completed";
+      const restoring = ["completed", "cancelled"].includes(event.status);
       await api(`/plans/${event.id}/action`, "POST", {
         action: restoring ? "restore" : "complete",
         occurrence_start: event.occurrence_start || event.start,
@@ -468,7 +491,12 @@ export function CalendarPage({
       setAgendaNotice(
         restoring ? `已恢复「${event.title}」` : `已完成「${event.title}」`,
       );
-      await Promise.all([load(), refresh()]);
+      await Promise.all([
+        load(),
+        refresh().catch(() =>
+          setError("操作已保存，部分列表暂未刷新，请稍后刷新查看。"),
+        ),
+      ]);
       return true;
     } catch (e) {
       setError((e as Error).message);
@@ -507,7 +535,7 @@ export function CalendarPage({
   const eventButton = (e: CalendarEvent, day?: string) => (
     <Hint key={`${e.id}:${e.occurrence_start || e.start}`} label={e.title}>
       <button
-        className={`day-event ${e.status === "completed" ? "is-completed" : ""}`}
+        className={`day-event ${e.status === "completed" ? "is-completed" : e.status === "cancelled" ? "is-cancelled" : ""}`}
         onClick={() =>
           openAgenda(
             day ||
@@ -521,6 +549,7 @@ export function CalendarPage({
         <span>
           {!e.all_day && `${timeLabel(e)} `}
           {e.title}
+          {e.status === "cancelled" && " · 已取消"}
         </span>
         {e.status === "completed" ? (
           <Check size={12} />
@@ -546,12 +575,13 @@ export function CalendarPage({
       label={event.title}
     >
       <button
-        className={`week-event ${event.status === "completed" ? "is-completed" : ""}`}
+        className={`week-event ${event.status === "completed" ? "is-completed" : event.status === "cancelled" ? "is-cancelled" : ""}`}
         style={weekEventPosition(event, day)}
         onClick={() => openAgenda(day, isRepeating(event) ? "repeat" : "todo")}
       >
         <strong>
           {zonedInput(event.start, timezone).slice(11)} {event.title}
+          {event.status === "cancelled" && " · 已取消"}
         </strong>
       </button>
     </Hint>
@@ -759,7 +789,7 @@ export function CalendarPage({
                       .map((event) => (
                         <button
                           key={`${event.id}:${event.occurrence_start || event.start}`}
-                          className={`week-allday-event ${event.status === "completed" ? "is-completed" : ""}`}
+                          className={`week-allday-event ${event.status === "completed" ? "is-completed" : event.status === "cancelled" ? "is-cancelled" : ""}`}
                           onClick={() =>
                             openAgenda(
                               day,
@@ -768,6 +798,7 @@ export function CalendarPage({
                           }
                         >
                           {event.title}
+                          {event.status === "cancelled" && " · 已取消"}
                         </button>
                       ))}
                   </div>
@@ -960,11 +991,12 @@ export function CalendarPage({
               >
                 <button
                   className="complete-circle"
-                  aria-label={`${event.status === "completed" ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}
+                  aria-label={`${["completed", "cancelled"].includes(event.status) ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}
                   disabled={busy}
                   onClick={() => void complete(event)}
                 >
                   {event.status === "completed" && <Check size={13} />}
+                  {event.status === "cancelled" && <RotateCcw size={13} />}
                 </button>
                 <div className="plan-occurrence-content">
                   {eventButton(event, dayList)}
@@ -1052,331 +1084,344 @@ export function CalendarPage({
             }}
           >
             {error && <ErrorNotice message={error} />}
-            {editing && isRepeating(editing) && (
-              <div className="form-field">
-                <Label htmlFor="plan-edit-scope">修改范围</Label>
-                <SoftSelect
-                  id="plan-edit-scope"
-                  label="修改范围"
-                  value={editScope}
-                  disabled={busy}
-                  onValueChange={(value) =>
-                    void changeEditScope(value as typeof editScope)
-                  }
-                  options={[
-                    { value: "this", label: "仅本次" },
-                    { value: "future", label: "本次及以后" },
-                    { value: "series", label: "整个系列" },
-                  ]}
-                />
-                <p className="muted">
-                  {editScope === "this"
-                    ? "仅调整所选这一次，其他日期保持原安排。"
-                    : editScope === "future"
-                      ? "从所选日期起使用新规则，之前的安排保留。"
-                      : "将修改整个系列的规则；已有完成记录和单次调整会保留。"}
-                </p>
-              </div>
-            )}
-            {editorMode === "repeat" && (
-              <p className="plan-repeat-intro">
-                <Repeat2 size={16} />
-                <span>重复日程会自动排入日历，点击日期可查看每次安排。</span>
+            {editing?.status === "cancelled" && (
+              <p role="status" className="muted">
+                本次已取消。恢复本次后可修改安排，其他日期继续按原规则执行。
               </p>
             )}
-            <div className="form-field">
-              <Label htmlFor="plan-title">计划名称</Label>
-              <Input
-                id="plan-title"
-                value={form.title}
-                maxLength={300}
-                required
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-              />
-            </div>
-            {editorMode === "repeat" && (!editing || editScope !== "this") && (
-              <>
-                <div className="plan-repeat-settings">
-                  <div className="form-field">
-                    <Label htmlFor="plan-repeat">重复频率</Label>
-                    <SoftSelect
-                      id="plan-repeat"
-                      label="重复频率"
-                      value={form.recurrence}
-                      onValueChange={(value) =>
-                        setForm({
-                          ...form,
-                          recurrence: value as typeof form.recurrence,
-                        })
-                      }
-                      options={[
-                        { value: "daily", label: "每天" },
-                        { value: "weekly", label: "每周" },
-                        { value: "monthly", label: "每月" },
-                      ]}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <Label htmlFor="plan-repeat-interval">
-                      间隔（
-                      {form.recurrence === "daily"
-                        ? "天"
-                        : form.recurrence === "weekly"
-                          ? "周"
-                          : "月"}
-                      ）
-                    </Label>
-                    <Input
-                      id="plan-repeat-interval"
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={form.repeat_interval}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          repeat_interval: Number(event.target.value),
-                        })
-                      }
-                    />
-                  </div>
+            <fieldset
+              className="plan-editor-fields"
+              disabled={busy || editing?.status === "cancelled"}
+            >
+              {editing && isRepeating(editing) && (
+                <div className="form-field">
+                  <Label htmlFor="plan-edit-scope">修改范围</Label>
+                  <SoftSelect
+                    id="plan-edit-scope"
+                    label="修改范围"
+                    value={editScope}
+                    disabled={busy || editing.status === "cancelled"}
+                    onValueChange={(value) =>
+                      void changeEditScope(value as typeof editScope)
+                    }
+                    options={[
+                      { value: "this", label: "仅本次" },
+                      { value: "future", label: "本次及以后" },
+                      { value: "series", label: "整个系列" },
+                    ]}
+                  />
+                  <p className="muted">
+                    {editScope === "this"
+                      ? "仅调整所选这一次，其他日期保持原安排。"
+                      : editScope === "future"
+                        ? "从所选日期起使用新规则，之前的安排保留。"
+                        : "将修改整个系列的规则；已有完成记录和单次调整会保留。"}
+                  </p>
                 </div>
-                <div className="plan-recurrence-options">
-                  <div className="form-field">
-                    <Label htmlFor="plan-calendar-display">月历显示</Label>
-                    <SoftSelect
-                      id="plan-calendar-display"
-                      label="月历显示"
-                      value={form.calendar_display}
-                      disabled={busy}
-                      onValueChange={(value) =>
-                        setForm({
-                          ...form,
-                          calendar_display:
-                            value as typeof form.calendar_display,
-                        })
-                      }
-                      options={[
-                        { value: "summary", label: "汇总为日常事项" },
-                        { value: "always", label: "始终展开显示" },
-                      ]}
-                    />
-                  </div>
-                  <div className="plan-repeat-settings">
-                    <div className="form-field">
-                      <Label htmlFor="plan-repeat-end">重复结束</Label>
-                      <SoftSelect
-                        id="plan-repeat-end"
-                        label="重复结束"
-                        value={form.repeat_end_mode}
-                        onValueChange={(value) =>
-                          setForm({
-                            ...form,
-                            repeat_end_mode:
-                              value as typeof form.repeat_end_mode,
-                          })
-                        }
-                        options={[
-                          { value: "never", label: "永不结束" },
-                          { value: "until", label: "截止日期" },
-                          { value: "count", label: "重复次数" },
-                        ]}
-                      />
-                    </div>
-                    {form.repeat_end_mode === "until" && (
+              )}
+              {editorMode === "repeat" && (
+                <p className="plan-repeat-intro">
+                  <Repeat2 size={16} />
+                  <span>重复日程会自动排入日历，点击日期可查看每次安排。</span>
+                </p>
+              )}
+              <div className="form-field">
+                <Label htmlFor="plan-title">计划名称</Label>
+                <Input
+                  id="plan-title"
+                  value={form.title}
+                  maxLength={300}
+                  required
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
+              </div>
+              {editorMode === "repeat" &&
+                (!editing || editScope !== "this") && (
+                  <>
+                    <div className="plan-repeat-settings">
                       <div className="form-field">
-                        <Label htmlFor="plan-repeat-until">
-                          截止日期（含当天）
-                        </Label>
-                        <DateTimePicker
-                          id="plan-repeat-until"
-                          label="截止日期（含当天）"
-                          dateOnly
-                          value={form.repeat_until}
-                          timezone={editing?.timezone || timezone}
-                          onChange={(value) =>
-                            setForm({ ...form, repeat_until: value })
+                        <Label htmlFor="plan-repeat">重复频率</Label>
+                        <SoftSelect
+                          id="plan-repeat"
+                          label="重复频率"
+                          value={form.recurrence}
+                          onValueChange={(value) =>
+                            setForm({
+                              ...form,
+                              recurrence: value as typeof form.recurrence,
+                            })
                           }
-                          disabled={busy}
+                          options={[
+                            { value: "daily", label: "每天" },
+                            { value: "weekly", label: "每周" },
+                            { value: "monthly", label: "每月" },
+                          ]}
                         />
                       </div>
-                    )}
-                    {form.repeat_end_mode === "count" && (
                       <div className="form-field">
-                        <Label htmlFor="plan-repeat-count">
-                          重复次数（含首次）
+                        <Label htmlFor="plan-repeat-interval">
+                          间隔（
+                          {form.recurrence === "daily"
+                            ? "天"
+                            : form.recurrence === "weekly"
+                              ? "周"
+                              : "月"}
+                          ）
                         </Label>
                         <Input
-                          id="plan-repeat-count"
+                          id="plan-repeat-interval"
                           type="number"
                           min={1}
-                          max={10000}
-                          required
-                          value={form.repeat_count}
+                          max={365}
+                          value={form.repeat_interval}
                           onChange={(event) =>
                             setForm({
                               ...form,
-                              repeat_count: Number(event.target.value),
+                              repeat_interval: Number(event.target.value),
                             })
                           }
                         />
                       </div>
-                    )}
-                  </div>
+                    </div>
+                    <div className="plan-recurrence-options">
+                      <div className="form-field">
+                        <Label htmlFor="plan-calendar-display">月历显示</Label>
+                        <SoftSelect
+                          id="plan-calendar-display"
+                          label="月历显示"
+                          value={form.calendar_display}
+                          disabled={busy}
+                          onValueChange={(value) =>
+                            setForm({
+                              ...form,
+                              calendar_display:
+                                value as typeof form.calendar_display,
+                            })
+                          }
+                          options={[
+                            { value: "summary", label: "汇总为日常事项" },
+                            { value: "always", label: "始终展开显示" },
+                          ]}
+                        />
+                      </div>
+                      <div className="plan-repeat-settings">
+                        <div className="form-field">
+                          <Label htmlFor="plan-repeat-end">重复结束</Label>
+                          <SoftSelect
+                            id="plan-repeat-end"
+                            label="重复结束"
+                            value={form.repeat_end_mode}
+                            onValueChange={(value) =>
+                              setForm({
+                                ...form,
+                                repeat_end_mode:
+                                  value as typeof form.repeat_end_mode,
+                              })
+                            }
+                            options={[
+                              { value: "never", label: "永不结束" },
+                              { value: "until", label: "截止日期" },
+                              { value: "count", label: "重复次数" },
+                            ]}
+                          />
+                        </div>
+                        {form.repeat_end_mode === "until" && (
+                          <div className="form-field">
+                            <Label htmlFor="plan-repeat-until">
+                              截止日期（含当天）
+                            </Label>
+                            <DateTimePicker
+                              id="plan-repeat-until"
+                              label="截止日期（含当天）"
+                              dateOnly
+                              value={form.repeat_until}
+                              timezone={editing?.timezone || timezone}
+                              onChange={(value) =>
+                                setForm({ ...form, repeat_until: value })
+                              }
+                              disabled={busy}
+                            />
+                          </div>
+                        )}
+                        {form.repeat_end_mode === "count" && (
+                          <div className="form-field">
+                            <Label htmlFor="plan-repeat-count">
+                              重复次数（含首次）
+                            </Label>
+                            <Input
+                              id="plan-repeat-count"
+                              type="number"
+                              min={1}
+                              max={10000}
+                              required
+                              value={form.repeat_count}
+                              onChange={(event) =>
+                                setForm({
+                                  ...form,
+                                  repeat_count: Number(event.target.value),
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              <div className="plan-time-toggle">
+                <label className="plan-check">
+                  <input
+                    type="checkbox"
+                    checked={!form.all_day}
+                    onChange={(e) => toggleAllDay(!e.target.checked)}
+                  />
+                  指定时间
+                </label>
+                <span className="plan-time-hint">不勾选则按全天安排</span>
+              </div>
+              <div className="plan-editor-dates">
+                <div className="form-field">
+                  <Label htmlFor="plan-start">开始</Label>
+                  <DateTimePicker
+                    id="plan-start"
+                    label="开始"
+                    dateOnly={form.all_day}
+                    timezone={editing?.timezone || timezone}
+                    value={form.start}
+                    disabled={busy}
+                    onChange={(start) =>
+                      setForm((value) => ({
+                        ...value,
+                        start,
+                        end: nextPlanEnd(start, value.end, value.all_day),
+                        reminder_values: value.reminder_values.map(
+                          (reminder) =>
+                            reminder === value.start
+                              ? start
+                              : value.all_day &&
+                                  reminder.slice(0, 10) ===
+                                    value.start.slice(0, 10)
+                                ? start.slice(0, 10) + reminder.slice(10)
+                                : reminder,
+                        ),
+                        reminder_at:
+                          value.reminder_at === value.start
+                            ? ""
+                            : value.reminder_at,
+                      }))
+                    }
+                  />
                 </div>
-              </>
-            )}
-            <div className="plan-time-toggle">
+                <div className="form-field">
+                  <Label htmlFor="plan-end">
+                    结束{form.all_day ? "（含当天）" : ""}
+                  </Label>
+                  <DateTimePicker
+                    id="plan-end"
+                    label={form.all_day ? "结束（含当天）" : "结束"}
+                    dateOnly={form.all_day}
+                    timezone={editing?.timezone || timezone}
+                    value={form.end}
+                    disabled={busy}
+                    onChange={(end) => setForm({ ...form, end })}
+                  />
+                </div>
+              </div>
+              <div className="form-field">
+                <Label htmlFor="plan-notes">备注</Label>
+                <Textarea
+                  id="plan-notes"
+                  value={form.notes}
+                  maxLength={6000}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </div>
               <label className="plan-check">
                 <input
                   type="checkbox"
-                  checked={!form.all_day}
-                  onChange={(e) => toggleAllDay(!e.target.checked)}
-                />
-                指定时间
-              </label>
-              <span className="plan-time-hint">不勾选则按全天安排</span>
-            </div>
-            <div className="plan-editor-dates">
-              <div className="form-field">
-                <Label htmlFor="plan-start">开始</Label>
-                <DateTimePicker
-                  id="plan-start"
-                  label="开始"
-                  dateOnly={form.all_day}
-                  timezone={editing?.timezone || timezone}
-                  value={form.start}
-                  disabled={busy}
-                  onChange={(start) =>
-                    setForm((value) => ({
-                      ...value,
-                      start,
-                      end: nextPlanEnd(start, value.end, value.all_day),
-                      reminder_values: value.reminder_values.map((reminder) =>
-                        reminder === value.start
-                          ? start
-                          : value.all_day &&
-                              reminder.slice(0, 10) === value.start.slice(0, 10)
-                            ? start.slice(0, 10) + reminder.slice(10)
-                            : reminder,
-                      ),
-                      reminder_at:
-                        value.reminder_at === value.start
-                          ? ""
-                          : value.reminder_at,
-                    }))
+                  checked={form.reminder_enabled}
+                  onChange={(e) =>
+                    setForm({ ...form, reminder_enabled: e.target.checked })
                   }
                 />
-              </div>
-              <div className="form-field">
-                <Label htmlFor="plan-end">
-                  结束{form.all_day ? "（含当天）" : ""}
-                </Label>
-                <DateTimePicker
-                  id="plan-end"
-                  label={form.all_day ? "结束（含当天）" : "结束"}
-                  dateOnly={form.all_day}
-                  timezone={editing?.timezone || timezone}
-                  value={form.end}
-                  disabled={busy}
-                  onChange={(end) => setForm({ ...form, end })}
-                />
-              </div>
-            </div>
-            <div className="form-field">
-              <Label htmlFor="plan-notes">备注</Label>
-              <Textarea
-                id="plan-notes"
-                value={form.notes}
-                maxLength={6000}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-            </div>
-            <label className="plan-check">
-              <input
-                type="checkbox"
-                checked={form.reminder_enabled}
-                onChange={(e) =>
-                  setForm({ ...form, reminder_enabled: e.target.checked })
-                }
-              />
-              设置提醒时间
-            </label>
-            {form.reminder_enabled && (
-              <div className="plan-reminders-editor">
-                {form.reminder_values.map((value, index) => (
-                  <div className="plan-reminder-row" key={index}>
-                    <div className="form-field">
-                      <Label htmlFor={`plan-reminder-${index}`}>
-                        {form.reminder_values.length > 1
-                          ? `提醒时间 ${index + 1}`
-                          : "提醒时间"}
-                      </Label>
-                      <DateTimePicker
-                        id={`plan-reminder-${index}`}
-                        label={
-                          form.reminder_values.length > 1
+                设置提醒时间
+              </label>
+              {form.reminder_enabled && (
+                <div className="plan-reminders-editor">
+                  {form.reminder_values.map((value, index) => (
+                    <div className="plan-reminder-row" key={index}>
+                      <div className="form-field">
+                        <Label htmlFor={`plan-reminder-${index}`}>
+                          {form.reminder_values.length > 1
                             ? `提醒时间 ${index + 1}`
-                            : "提醒时间"
-                        }
-                        timezone={editing?.timezone || timezone}
-                        value={value}
-                        disabled={busy}
-                        onChange={(time) =>
-                          setForm({
-                            ...form,
-                            reminder_values: form.reminder_values.map(
-                              (item, i) => (i === index ? time : item),
-                            ),
-                          })
-                        }
-                      />
+                            : "提醒时间"}
+                        </Label>
+                        <DateTimePicker
+                          id={`plan-reminder-${index}`}
+                          label={
+                            form.reminder_values.length > 1
+                              ? `提醒时间 ${index + 1}`
+                              : "提醒时间"
+                          }
+                          timezone={editing?.timezone || timezone}
+                          value={value}
+                          disabled={busy}
+                          onChange={(time) =>
+                            setForm({
+                              ...form,
+                              reminder_values: form.reminder_values.map(
+                                (item, i) => (i === index ? time : item),
+                              ),
+                            })
+                          }
+                        />
+                      </div>
+                      {form.reminder_values.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`移除提醒 ${index + 1}`}
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              reminder_values: form.reminder_values.filter(
+                                (_, i) => i !== index,
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      )}
                     </div>
-                    {form.reminder_values.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`移除提醒 ${index + 1}`}
-                        onClick={() =>
-                          setForm({
-                            ...form,
-                            reminder_values: form.reminder_values.filter(
-                              (_, i) => i !== index,
-                            ),
-                          })
-                        }
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={form.reminder_values.length >= 10 || busy}
-                  onClick={() => {
-                    const base =
-                      form.reminder_values.at(-1) ||
-                      `${form.start.slice(0, 10)}T09:00`;
-                    setForm({
-                      ...form,
-                      reminder_values: [
-                        ...form.reminder_values,
-                        new Date(Date.parse(`${base}:00Z`) - 10 * 60000)
-                          .toISOString()
-                          .slice(0, 16),
-                      ],
-                    });
-                  }}
-                >
-                  <Plus size={14} />
-                  添加提醒时间
-                </Button>
-              </div>
-            )}
+                  ))}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={form.reminder_values.length >= 10 || busy}
+                    onClick={() => {
+                      const base =
+                        form.reminder_values.at(-1) ||
+                        `${form.start.slice(0, 10)}T09:00`;
+                      setForm({
+                        ...form,
+                        reminder_values: [
+                          ...form.reminder_values,
+                          new Date(Date.parse(`${base}:00Z`) - 10 * 60000)
+                            .toISOString()
+                            .slice(0, 16),
+                        ],
+                      });
+                    }}
+                  >
+                    <Plus size={14} />
+                    添加提醒时间
+                  </Button>
+                </div>
+              )}
+            </fieldset>
             <DialogFooter>
               {editing && editing.status !== "ended" && (
                 <Button
@@ -1393,7 +1438,7 @@ export function CalendarPage({
                   }}
                 >
                   <Check size={15} />
-                  {editing.status === "completed"
+                  {["completed", "cancelled"].includes(editing.status)
                     ? editing.recurrence !== "none"
                       ? "恢复本次"
                       : "恢复事项"
@@ -1402,6 +1447,22 @@ export function CalendarPage({
                       : "完成事项"}
                 </Button>
               )}
+              {editing &&
+                isRepeating(editing) &&
+                editing.status === "planned" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      setError("");
+                      setCancelling(editing);
+                    }}
+                  >
+                    <X size={15} />
+                    取消本次
+                  </Button>
+                )}
               {editing && (
                 <Button
                   type="button"
@@ -1413,13 +1474,52 @@ export function CalendarPage({
                   {editing.recurrence !== "none" ? "结束整个系列" : "删除"}
                 </Button>
               )}
-              <Button type="submit" disabled={busy || !form.title.trim()}>
+              <Button
+                type="submit"
+                disabled={
+                  busy || editing?.status === "cancelled" || !form.title.trim()
+                }
+              >
                 {busy ? "正在保存…" : "保存计划"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+      <ConfirmDelete
+        open={Boolean(cancelling)}
+        title="取消这一次安排？"
+        description="仅取消所选这一次及其提醒，其他日期继续按原规则执行。取消后可在当天事项中恢复本次。"
+        label="取消本次"
+        cancelLabel="保留本次"
+        error={error}
+        onClose={() => setCancelling(null)}
+        onConfirm={async () => {
+          if (!cancelling) return;
+          try {
+            await api(`/plans/${cancelling.id}/action`, "POST", {
+              action: "cancel_occurrence",
+              occurrence_start: cancelling.occurrence_start || cancelling.start,
+            });
+            const day = cancelling.all_day
+              ? cancelling.start
+              : zonedInput(cancelling.start, timezone).slice(0, 10);
+            setCancelling(null);
+            setEditor(false);
+            setDayList(day);
+            setAgendaTab("repeat");
+            setAgendaNotice(
+              `已取消本次「${cancelling.title}」，可点击恢复按钮恢复。`,
+            );
+            await Promise.all([
+              load(),
+              refresh().catch(() => setError("本次已取消，部分列表暂未刷新。")),
+            ]);
+          } catch (error) {
+            setError((error as Error).message);
+          }
+        }}
+      />
       <ConfirmDelete
         open={Boolean(deleting)}
         title={

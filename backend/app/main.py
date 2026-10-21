@@ -560,11 +560,18 @@ def new_conversation(value: s.ConversationCreate, db=Depends(database)):
 )
 def messages(conversation_id: str, db=Depends(database)):
     item(db, store.Conversation, conversation_id)
-    return db.scalars(
+    records = db.scalars(
         select(store.Message)
         .where(store.Message.conversation_id == conversation_id)
         .order_by(store.Message.created_at, store.MESSAGE_ORDER)
     ).all()
+    run_details = {row.id: row for row in db.execute(select(store.Run.id, store.Run.status, store.Run.task_id).where(
+        store.Run.conversation_id == conversation_id,
+    )).all()}
+    return [s.MessageRead.model_validate(record).model_copy(update={
+        "run_status": run_details[record.run_id].status if record.run_id in run_details else None,
+        "task_id": run_details[record.run_id].task_id if record.run_id in run_details else None,
+    }) for record in records]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=s.RunRead)
@@ -616,7 +623,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
 
 
 @router.post("/conversations/{conversation_id}/retry", response_model=s.RunRead)
-async def retry_message(conversation_id: str, db=Depends(database)):
+async def retry_message(conversation_id: str, value: s.ChatRetry | None = None, db=Depends(database)):
     item(db, store.Conversation, conversation_id)
     if db.scalar(select(store.Run.id).where(store.Run.conversation_id == conversation_id,
         store.Run.status.in_(["queued", "running"]))):
@@ -624,17 +631,40 @@ async def retry_message(conversation_id: str, db=Depends(database)):
     latest = db.scalar(
         select(store.Message)
         .where(store.Message.conversation_id == conversation_id)
-        .order_by(store.Message.created_at.desc())
+        .order_by(store.Message.created_at.desc(), store.MESSAGE_ORDER.desc())
     )
-    if not latest or latest.role != "user":
-        raise HTTPException(409, "没有需要重试的消息")
     previous = db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id).order_by(store.Run.created_at.desc()))
-    config = previous.model_config if previous and previous.model_config else model_profiles.resolve(db.get(store.Settings, PROFILE_ID))
-    run = create_run(db, "chat", conversation_id=conversation_id)
+    if not latest or not previous or previous.status not in {"failed", "cancelled"}:
+        raise HTTPException(409, "没有需要重试的消息")
+    if latest.role != "user" and (latest.role != "assistant" or latest.run_id != previous.id):
+        raise HTTPException(409, "没有需要重试的消息")
+    source = db.get(store.Message, previous.source_message_id) if previous.source_message_id else None
+    if source is None:
+        source = db.scalar(select(store.Message).where(
+            store.Message.conversation_id == conversation_id, store.Message.role == "user",
+        ).order_by(store.Message.created_at.desc(), store.MESSAGE_ORDER.desc()))
+    if not source or source.conversation_id != conversation_id:
+        raise HTTPException(409, "原始用户消息不存在")
+    selection = value.model_selection if value else None
+    if selection is None and previous.model_config:
+        selection = s.ModelSelection(
+            provider_id=previous.model_config["provider_id"],
+            model_name=previous.model_config["model_name"],
+            thinking_enabled=previous.model_config.get("thinking_enabled", False),
+        )
+    try:
+        config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), selection)
+        provider.model(config)
+        provider.user_content(source.content, source.attachment_ids, config)
+    except Exception as error:
+        raise HTTPException(400, provider.safe_error(error))
+    run = create_run(db, "chat", conversation_id=conversation_id, commit=False)
     run.model_config = config
-    if previous and previous.task_id:
+    run.source_message_id = source.id
+    if previous.task_id:
         run.task_id = previous.task_id
-        run.source_message_id = previous.source_message_id
+        task = complex_tasks.require(db, previous.task_id)
+        task.model_config = config
     db.commit()
     runs.launch(run.id, lambda: agent.chat(run.id, conversation_id))
     return run
@@ -1097,7 +1127,7 @@ def snooze_notification(notification_id: str, value: s.NotificationSnooze, db=De
         if record.plan_id:
             plan = plans.find(db, record.plan_id)
             if plan.status != "planned" or plans.completed(db, plan, record.plan_occurrence_start):
-                raise HTTPException(409, "这次计划已完成或系列已结束")
+                raise HTTPException(409, "这次计划已完成、已取消或系列已结束")
         for delivery in db.scalars(select(store.WechatDelivery).where(store.WechatDelivery.notification_id == record.id, store.WechatDelivery.status == "pending")):
             delivery.status = "cancelled"
         record.status = "snoozed"

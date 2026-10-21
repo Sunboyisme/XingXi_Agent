@@ -90,7 +90,8 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
             ),
             0,
         )
-    remaining = records[cursor:]
+    remaining = [record for record in records[cursor:]
+                 if not (record.provider_context or {}).get("incomplete")]
     estimate = overhead + tokens(summary) + sum(map(message_tokens, remaining))
     if estimate > SOFT_TOKENS and len(remaining) > RECENT_MESSAGES:
         older, recent = remaining[:-RECENT_MESSAGES], remaining[-RECENT_MESSAGES:]
@@ -206,6 +207,7 @@ def search_history(conversation_id: str, query: str, role: str = "all"):
             "content": r.content[:2400],
             "created_at": r.created_at,
             "truncated": len(r.content) > 2400,
+            "incomplete": bool((r.provider_context or {}).get("incomplete")),
             "attachment_ids": r.attachment_ids,
         }
         for score, r in ranked[:5]

@@ -133,6 +133,8 @@ export function App() {
   const [planOccurrence, setPlanOccurrence] = useState<string | null>();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [error, setError] = useState("");
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const reminderAction = useRef(false);
   const [loading, setLoading] = useState(true);
   const [createKey, setCreateKey] = useState(0);
   const [deleting, setDeleting] = useState<Conversation | null>(null);
@@ -246,6 +248,7 @@ export function App() {
       );
       try {
         localStorage.removeItem(`bai-chat-draft:${deleting.id}`);
+        localStorage.removeItem(`bai-chat-model:${deleting.id}`);
       } catch {
         /* Storage restrictions must not prevent deletion. */
       }
@@ -269,17 +272,29 @@ export function App() {
     localStorage.setItem("bai-sidebar-collapsed", String(collapsed));
   }
   async function acknowledgeReminders() {
-    const visible = notifications.filter((x) =>
-      ["pending", "presented"].includes(x.status),
-    );
-    for (const value of visible.slice(0, 3))
-      await api(`/notifications/${value.id}/ack?read=true`, "POST");
-    await refresh();
-    if (visible.length <= 3) await getCurrentWindow().close();
+    if (reminderAction.current) return;
+    reminderAction.current = true;
+    setReminderBusy(true);
+    setError("");
+    try {
+      const visible = notifications.filter((x) =>
+        ["pending", "presented"].includes(x.status),
+      );
+      for (const value of visible.slice(0, 3))
+        await api(`/notifications/${value.id}/ack?read=true`, "POST");
+      await refresh();
+      if (visible.length <= 3) await getCurrentWindow().close();
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      reminderAction.current = false;
+      setReminderBusy(false);
+    }
   }
   function startNewChat() {
     try {
       localStorage.removeItem("bai-chat-draft:new");
+      localStorage.removeItem("bai-chat-model:new");
     } catch {
       /* A blocked storage API must not prevent starting a new chat. */
     }
@@ -381,12 +396,20 @@ export function App() {
             </span>
             <button
               className="popup-dismiss"
-              aria-label="将提醒标为已读"
-              onClick={() => void acknowledgeReminders()}
+              aria-label="关闭提醒窗口，保留未读"
+              disabled={reminderBusy}
+              onClick={() =>
+                void getCurrentWindow()
+                  .close()
+                  .catch((error: Error) => setError(error.message))
+              }
             >
               <X size={16} />
             </button>
           </header>
+          {error && (
+            <ErrorNotice message={error} onClose={() => setError("")} />
+          )}
           <div className="popup-list">
             {notifications
               .filter((x) => ["pending", "presented"].includes(x.status))
@@ -400,17 +423,29 @@ export function App() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    disabled={reminderBusy}
                     onClick={async () => {
-                      await api(`/notifications/${value.id}/snooze`, "POST", {
-                        minutes: 10,
-                      });
-                      await refresh();
-                      if (
-                        notifications.filter((note) =>
-                          ["pending", "presented"].includes(note.status),
-                        ).length <= 1
-                      )
-                        await getCurrentWindow().close();
+                      if (reminderAction.current) return;
+                      reminderAction.current = true;
+                      setReminderBusy(true);
+                      setError("");
+                      try {
+                        await api(`/notifications/${value.id}/snooze`, "POST", {
+                          minutes: 10,
+                        });
+                        await refresh();
+                        if (
+                          notifications.filter((note) =>
+                            ["pending", "presented"].includes(note.status),
+                          ).length <= 1
+                        )
+                          await getCurrentWindow().close();
+                      } catch (error) {
+                        setError((error as Error).message);
+                      } finally {
+                        reminderAction.current = false;
+                        setReminderBusy(false);
+                      }
                     }}
                   >
                     10 分钟后再提醒
@@ -428,7 +463,12 @@ export function App() {
               )}{" "}
               个提醒
             </span>
-            <Button onClick={() => void acknowledgeReminders()}>知道了</Button>
+            <Button
+              disabled={reminderBusy}
+              onClick={() => void acknowledgeReminders()}
+            >
+              {reminderBusy ? "正在处理…" : "知道了"}
+            </Button>
           </footer>
         </section>
       </div>

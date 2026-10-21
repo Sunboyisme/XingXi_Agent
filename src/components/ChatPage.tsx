@@ -53,7 +53,15 @@ import {
   type MemoryNotice,
 } from "./MemoryFeedback";
 
-function IncompleteReplyNotice({ cancelled }: { cancelled: boolean }) {
+function IncompleteReplyNotice({
+  cancelled,
+  onRetry,
+  disabled,
+}: {
+  cancelled: boolean;
+  onRetry?: () => void;
+  disabled?: boolean;
+}) {
   return (
     <div
       className={`incomplete-reply-notice ${cancelled ? "is-cancelled" : "is-failed"}`}
@@ -68,6 +76,11 @@ function IncompleteReplyNotice({ cancelled }: { cancelled: boolean }) {
             : "可以重新生成，或者换个说法继续。"}
         </p>
       </div>
+      {onRetry && (
+        <Button size="sm" variant="ghost" disabled={disabled} onClick={onRetry}>
+          重新生成
+        </Button>
+      )}
     </div>
   );
 }
@@ -84,6 +97,35 @@ type StoredChatDraft = {
   text: string;
   images: Attachment[];
 };
+
+function readModelPreference(conversationId: string | null) {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(`bai-chat-model:${conversationId || "new"}`) ||
+        "null",
+    );
+    return value?.version === 1 && typeof value.key === "string"
+      ? { key: value.key, thinking: value.thinking === true }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeModelPreference(
+  conversationId: string | null,
+  key: string,
+  thinking: boolean,
+) {
+  try {
+    localStorage.setItem(
+      `bai-chat-model:${conversationId || "new"}`,
+      JSON.stringify({ version: 1, key, thinking }),
+    );
+  } catch {
+    /* Storage restrictions must not block model selection. */
+  }
+}
 
 type ImageGenerationProgress = {
   status: "started" | "progress" | "finished";
@@ -303,8 +345,17 @@ export function ChatPage({
   onAction: (page: string, create?: boolean) => void;
   onPlan: (plan: CalendarEvent) => void;
 }) {
-  const [modelKey, setModelKey] = useState("");
-  const [thinking, setThinking] = useState(false);
+  const [modelKey, setModelKey] = useState(
+    () => readModelPreference(conversationId)?.key || "",
+  );
+  const [thinking, setThinking] = useState(
+    () => readModelPreference(conversationId)?.thinking || false,
+  );
+  useEffect(() => {
+    const saved = readModelPreference(conversationId);
+    setModelKey(saved?.key || "");
+    setThinking(saved?.thinking || false);
+  }, [conversationId]);
   const choices = settings.providers.flatMap((profile) =>
     profile.models.map((model) => ({
       profile,
@@ -349,6 +400,7 @@ export function ChatPage({
     useState<ImageGenerationProgress | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const [error, setError] = useState("");
+  const [syncWarning, setSyncWarning] = useState("");
   const [busy, setBusy] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editedText, setEditedText] = useState("");
@@ -360,16 +412,11 @@ export function ChatPage({
   const [composerMenu, setComposerMenu] = useState<"mcp" | "skills" | null>(
     null,
   );
-  const composerMenuOpenedAt = useRef(0);
   function changeComposerMenu(next: "mcp" | "skills", open: boolean) {
     if (open) {
-      composerMenuOpenedAt.current = Date.now();
       setComposerMenu(next);
       return;
     }
-    // Radix emits open→close in the same pointer sequence when another
-    // composer panel was open. Keep the panel that just opened.
-    if (Date.now() - composerMenuOpenedAt.current < 300) return;
     setComposerMenu((current) => (current === next ? null : current));
   }
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
@@ -387,6 +434,28 @@ export function ChatPage({
     });
   }, []);
   const controller = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (
+      modelKey &&
+      !settings.providers.some((profile) =>
+        profile.models.some(
+          (model) => `${profile.id}:${model.name}` === modelKey,
+        ),
+      )
+    ) {
+      setModelKey("");
+      setThinking(false);
+      storeModelPreference(conversationId, "", false);
+      setBuddyNote("原先选择的模型已移除，已切换为当前默认模型。");
+    }
+  }, [modelKey, settings.providers, conversationId]);
   const scroller = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const dropTarget = useRef<HTMLDivElement>(null);
@@ -477,12 +546,23 @@ export function ChatPage({
   }, []);
   const currentId = useRef(conversationId);
   currentId.current = conversationId;
+  const messageRequest = useRef(0);
   const loadMessages = useCallback(async (id: string) => {
+    const request = ++messageRequest.current;
     const values = await api<Message[]>(`/conversations/${id}/messages`);
-    if (currentId.current === id) setMessages(values);
+    if (
+      mounted.current &&
+      currentId.current === id &&
+      request === messageRequest.current
+    ) {
+      setMessages(values);
+      return true;
+    }
+    return false;
   }, []);
   const track = useCallback(
     async (value: Run, id: string) => {
+      if (!mounted.current || currentId.current !== id) return;
       controller.current?.abort();
       const watch = new AbortController();
       controller.current = watch;
@@ -593,13 +673,21 @@ export function ChatPage({
         if (result.status === "failed")
           setError(result.error || "本次回答未完成");
         if (result.status === "cancelled") setError("");
-        await loadMessages(id);
+        let loaded = false;
+        try {
+          loaded = await loadMessages(id);
+        } catch {
+          if (!watch.signal.aborted)
+            setSyncWarning("回答状态已保存，聊天记录暂未刷新，请重试刷新。");
+        }
         if (watch.signal.aborted) return;
-        await refresh();
-        if (watch.signal.aborted) return;
-        setStream("");
+        if (loaded) setStream("");
         if (result.status === "completed") setReasoning("");
         setBusy(false);
+        void refresh().catch(() => {
+          if (!watch.signal.aborted)
+            setSyncWarning("回答已结束，部分列表暂未刷新，请重试刷新。");
+        });
       } catch (error) {
         if (!watch.signal.aborted) {
           setError((error as Error).message);
@@ -625,6 +713,7 @@ export function ChatPage({
     setImageGeneration(null);
     setMemoryNotice(null);
     setError("");
+    setSyncWarning("");
     setRun(null);
     setTasks([]);
     setSubmitting(false);
@@ -658,20 +747,30 @@ export function ChatPage({
       api<Run[]>(`/runs?conversation_id=${conversationId}`)
         .then(async (values) => {
           // Finish the initial snapshot before a later reload can replace it.
-          await initialMessages;
+          await initialMessages.catch(() => {});
           if (!live) return;
           const active = values.find((value) =>
             ["queued", "running"].includes(value.status),
           );
           if (active) void track(active, conversationId);
           else if (values[0]) {
+            setRun(values[0]);
             // A fast run can finish between the first message load and this request.
             // Restore the persisted answer and tool results, including fast runs.
-            await loadMessages(conversationId);
+            await loadMessages(conversationId).catch(() => {
+              if (live)
+                setSyncWarning(
+                  "运行状态已恢复，聊天记录暂未刷新，请重试刷新。",
+                );
+            });
             if (!live) return;
             const history = await api<RunEvent[]>(
               `/runs/${values[0].id}/tools`,
-            );
+            ).catch(() => {
+              if (live)
+                setSyncWarning("聊天已恢复，工具记录暂未读取，请稍后再试。");
+              return [];
+            });
             if (!live) return;
             setTools(history.filter((event) => event.kind === "tool"));
             if (values[0].status !== "completed") {
@@ -697,9 +796,11 @@ export function ChatPage({
                 .filter((event) => event.kind === "memory")
                 .forEach(receiveMemory);
             }
-            await refresh();
-            if (!live) return;
             setRun(values[0]);
+            void refresh().catch(() => {
+              if (live)
+                setSyncWarning("聊天已恢复，部分列表暂未刷新，请重试刷新。");
+            });
             if (
               values[0].status === "failed" &&
               !isRunErrorDismissed(values[0].id)
@@ -723,7 +824,7 @@ export function ChatPage({
         value.state === "candidate" &&
         value.source_conversation_id === conversationId,
     ) || [];
-  const empty = !messages.length && !busy;
+  const empty = !messages.length && !busy && !stream && !reasoning && !run;
   useLayoutEffect(() => {
     const container = scroller.current;
     if (container && followLatest.current) {
@@ -759,7 +860,9 @@ export function ChatPage({
     const sendingTo = conversationId;
     const sequence = actionSequence.current;
     const isCurrent = () =>
-      currentId.current === sendingTo && actionSequence.current === sequence;
+      mounted.current &&
+      currentId.current === sendingTo &&
+      actionSequence.current === sequence;
     setSubmitting(true);
     setError("");
     if (!supplement) setBusy(true);
@@ -794,9 +897,10 @@ export function ChatPage({
             }
           : undefined,
       });
+      if (created) storeModelPreference(id, selected?.key || "", thinking);
       if (!isCurrent()) {
         if (!edited) clearChatDraft(sendingTo);
-        await refresh();
+        void refresh().catch(() => {});
         return true;
       }
       if (!edited) {
@@ -811,17 +915,23 @@ export function ChatPage({
         setEditingMessageId("");
         setEditedText("");
       }
-      await refresh();
-      if (!isCurrent()) return true;
       if (created) {
         // The conversation effect owns resuming a new conversation's run.
         onConversation(id);
       } else if (currentId.current === id) {
-        await loadMessages(id);
-        if (!isCurrent()) return true;
         if (!supplement || value.id !== run?.id) void track(value, id);
         else setBuddyNote("已收到，当前步骤结束后处理补充要求。");
+        void loadMessages(id).catch(() => {
+          if (isCurrent())
+            setSyncWarning("消息已发送，聊天记录暂未刷新，请重试刷新。");
+        });
       }
+      // The accepted run owns the reply immediately; list refresh cannot turn
+      // an accepted submission into a failed send or discard its identity.
+      void refresh().catch(() => {
+        if (mounted.current && (currentId.current === id || isCurrent()))
+          setSyncWarning("消息已发送，部分列表暂未刷新，请重试刷新。");
+      });
       return true;
     } catch (error) {
       if (isCurrent()) {
@@ -842,12 +952,19 @@ export function ChatPage({
     const stoppingIn = conversationId;
     const sequence = actionSequence.current;
     const isCurrent = () =>
-      currentId.current === stoppingIn && actionSequence.current === sequence;
+      mounted.current &&
+      currentId.current === stoppingIn &&
+      actionSequence.current === sequence;
     setStopping(true);
     try {
       const stopped = await api<Run>(`/runs/${run.id}/cancel`, "POST");
       if (isCurrent()) {
         setRun(stopped);
+        await loadMessages(stoppingIn!).catch(() => {
+          if (isCurrent())
+            setSyncWarning("已停止生成，保存的回答暂未刷新，请重试刷新。");
+        });
+        if (!isCurrent()) return;
         setBusy(false);
       }
     } catch (error) {
@@ -860,15 +977,52 @@ export function ChatPage({
     }
   }
   async function retry() {
-    if (!conversationId) return;
+    if (!conversationId || actionLock.current || busy || !modelReady) return;
+    const id = conversationId;
+    const sequence = actionSequence.current;
+    const isCurrent = () =>
+      mounted.current &&
+      currentId.current === id &&
+      actionSequence.current === sequence;
+    actionLock.current = true;
+    setSubmitting(true);
     setError("");
     try {
-      void track(
-        await api<Run>(`/conversations/${conversationId}/retry`, "POST"),
-        conversationId,
-      );
+      const value = await api<Run>(`/conversations/${id}/retry`, "POST", {
+        model_selection: selected
+          ? {
+              provider_id: selected.profile.id,
+              model_name: selected.model.name,
+              thinking_enabled: thinkingEnabled,
+            }
+          : undefined,
+      });
+      if (!isCurrent()) return;
+      void track(value, id);
     } catch (error) {
-      setError((error as Error).message);
+      if (isCurrent()) setError((error as Error).message);
+    } finally {
+      if (isCurrent()) {
+        actionLock.current = false;
+        setSubmitting(false);
+      }
+    }
+  }
+  async function refreshChatView() {
+    const id = conversationId;
+    const sequence = actionSequence.current;
+    const isCurrent = () =>
+      mounted.current &&
+      currentId.current === id &&
+      actionSequence.current === sequence;
+    try {
+      await Promise.all([id ? loadMessages(id) : Promise.resolve(), refresh()]);
+      if (isCurrent()) setSyncWarning("");
+    } catch {
+      if (isCurrent())
+        setSyncWarning(
+          "暂时无法刷新，消息和运行记录仍保存在本机，请稍后再试。",
+        );
     }
   }
   function closeError() {
@@ -903,7 +1057,14 @@ export function ChatPage({
       (value) => value.role === "assistant" && value.run_id === run?.id,
     );
   const showIncompleteReply =
-    Boolean(incompleteRun && !incompleteAssistant) || orphanReasoning;
+    Boolean(incompleteRun && !incompleteAssistant) ||
+    orphanReasoning ||
+    (!busy &&
+      !run?.task_id &&
+      Boolean(stream) &&
+      !messages.some(
+        (message) => message.run_id === run?.id && message.role === "assistant",
+      ));
   const turns: (Message & { answer: string })[] = [];
   for (const message of messages) {
     if (message.role === "user") turns.push({ ...message, answer: "" });
@@ -1142,7 +1303,9 @@ export function ChatPage({
                       <AnswerPresentation
                         runId={value.run_id || undefined}
                         status={
-                          value.run_id === run?.id ? run?.status : "completed"
+                          value.run_id === run?.id
+                            ? run?.status
+                            : value.run_status || "completed"
                         }
                         content={value.content}
                       />
@@ -1160,7 +1323,7 @@ export function ChatPage({
                         runStatus={
                           value.run_id === run?.id || value === lastAssistant
                             ? run?.status
-                            : "completed"
+                            : value.run_status || "completed"
                         }
                         tools={
                           value === lastAssistant && run?.status === "completed"
@@ -1169,11 +1332,27 @@ export function ChatPage({
                         }
                       />
                     )}
-                    {value === incompleteAssistant && incompleteRun && (
-                      <IncompleteReplyNotice
-                        cancelled={incompleteRun.status === "cancelled"}
-                      />
-                    )}
+                    {value.role === "assistant" &&
+                      !synthetic &&
+                      !value.task_id &&
+                      !cards.length &&
+                      !(value.run_id === run?.id && run?.task_id) &&
+                      ["failed", "cancelled"].includes(
+                        value.run_status ||
+                          (value.run_id === run?.id ? run?.status || "" : ""),
+                      ) && (
+                        <IncompleteReplyNotice
+                          cancelled={
+                            (value.run_status || run?.status) === "cancelled"
+                          }
+                          onRetry={
+                            value === lastAssistant && value.run_id === run?.id
+                              ? () => void retry()
+                              : undefined
+                          }
+                          disabled={busy || submitting || !modelReady}
+                        />
+                      )}
 
                     {value.attachment_ids.length > 0 && (
                       <div className="message-pictures">
@@ -1233,16 +1412,22 @@ export function ChatPage({
                   <div className="message-body">
                     <span className="message-name">XiaoXi</span>
                     {reasoning && <Reasoning text={reasoning} incomplete />}
+                    {stream && <Markdown runId={run?.id}>{stream}</Markdown>}
+                    {stream && !incompleteRun && (
+                      <p role="status">记录暂未同步，已显示内容保留在这里。</p>
+                    )}
                     {incompleteRun && (
                       <IncompleteReplyNotice
                         cancelled={incompleteRun.status === "cancelled"}
+                        onRetry={() => void retry()}
+                        disabled={submitting || !modelReady}
                       />
                     )}
-                    {incompleteRun && (
+                    {(incompleteRun || stream) && (
                       <AnswerActions
-                        content=""
-                        runId={incompleteRun.id}
-                        runStatus={incompleteRun.status}
+                        content={stream}
+                        runId={incompleteRun?.id || run?.id}
+                        runStatus={incompleteRun?.status || run?.status}
                         tools={tools}
                       />
                     )}
@@ -1368,6 +1553,13 @@ export function ChatPage({
               }
             />
           )}
+          {syncWarning && (
+            <ErrorNotice
+              message={syncWarning}
+              onClose={() => setSyncWarning("")}
+              retry={() => void refreshChatView()}
+            />
+          )}
           {contextStatus && contextStatus !== "正在整理上下文…" && (
             <p className="context-status" role="status">
               {contextStatus}
@@ -1460,7 +1652,14 @@ export function ChatPage({
                       thinkingControl === "none" ||
                       thinkingControl === "always"
                     }
-                    onClick={() => setThinking(!thinking)}
+                    onClick={() => {
+                      setThinking(!thinking);
+                      storeModelPreference(
+                        conversationId,
+                        selected?.key || "",
+                        !thinking,
+                      );
+                    }}
                   >
                     <Sparkles size={15} aria-hidden="true" />
                     <span>
@@ -1498,6 +1697,11 @@ export function ChatPage({
                             onSelect={() => {
                               setModelKey(choice.key);
                               setThinking(false);
+                              storeModelPreference(
+                                conversationId,
+                                choice.key,
+                                false,
+                              );
                             }}
                           >
                             <span>
@@ -1561,7 +1765,11 @@ export function ChatPage({
             onAction={onAction}
             onPlan={onPlan}
             onPrompt={(text) => {
-              changeDraft(text);
+              changeDraft(
+                draftRef.current.trim()
+                  ? `${text.trimEnd()}\n\n${draftRef.current}`
+                  : text,
+              );
               requestAnimationFrame(() => {
                 const input = composer.current;
                 input?.focus();
