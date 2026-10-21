@@ -82,16 +82,18 @@ export function ErrorNotice({
   message,
   retry,
   action,
+  onClose,
 }: {
   message: string;
   retry?: () => void;
   action?: { label: string; onClick: () => void };
+  onClose?: () => void;
 }) {
   return (
     <div className="error-notice" role="alert">
       <AlertCircle size={17} />
       <span className="error-notice-text">{message}</span>
-      {(action || retry) && (
+      {(action || retry || onClose) && (
         <span className="error-notice-actions">
           {action && (
             <Button size="sm" variant="ghost" onClick={action.onClick}>
@@ -101,6 +103,17 @@ export function ErrorNotice({
           {retry && (
             <Button size="sm" variant="ghost" onClick={retry}>
               重试
+            </Button>
+          )}
+          {onClose && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="关闭错误提示"
+              onClick={onClose}
+            >
+              <X size={15} aria-hidden="true" />
             </Button>
           )}
         </span>

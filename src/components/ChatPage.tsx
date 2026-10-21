@@ -73,6 +73,14 @@ function IncompleteReplyNotice({ cancelled }: { cancelled: boolean }) {
   );
 }
 
+function isRunErrorDismissed(runId: string) {
+  try {
+    return sessionStorage.getItem(`bai-dismissed-chat-error:${runId}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
 type StoredChatDraft = {
   text: string;
   images: Attachment[];
@@ -629,7 +637,10 @@ export function ChatPage({
             await refresh();
             if (!live) return;
             setRun(values[0]);
-            if (values[0].status === "failed")
+            if (
+              values[0].status === "failed" &&
+              !isRunErrorDismissed(values[0].id)
+            )
               setError(values[0].error || "之前的回答未完成");
             if (values[0].status === "cancelled") setError("");
           }
@@ -747,6 +758,17 @@ export function ChatPage({
     } catch (error) {
       setError((error as Error).message);
     }
+  }
+  function closeError() {
+    if (run?.status === "failed") {
+      try {
+        sessionStorage.setItem(`bai-dismissed-chat-error:${run.id}`, "1");
+      } catch {
+        // Closing the current notice still works when session storage is unavailable.
+      }
+    }
+    setError("");
+    composer.current?.focus({ preventScroll: true });
   }
   const lastAssistant = messages
     .filter((value) => value.role === "assistant")
@@ -1197,6 +1219,7 @@ export function ChatPage({
                   : error
               }
               retry={run?.status === "failed" ? () => void retry() : undefined}
+              onClose={closeError}
               action={
                 /密钥|接口|认证|模型|连接|配置|401|403|unauthorized/i.test(
                   error,
