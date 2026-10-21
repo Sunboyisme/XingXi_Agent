@@ -1,5 +1,7 @@
 """Canonical plans. Reminder rows are private scheduling rules, never separate items."""
 
+import hashlib
+import json
 import re
 from datetime import UTC, date, datetime, timedelta
 from threading import RLock
@@ -16,12 +18,13 @@ from .db import (
     CalendarEvent,
     Notification,
     PlanOccurrence,
+    PlanCreation,
     PlanSegment,
     Reminder,
     Session,
     now,
 )
-from .plan_schedule import due_for, utc
+from .plan_schedule import due_for, occurrence, utc
 from . import plan_recurrence as recurrence
 
 lock = RLock()
@@ -277,11 +280,23 @@ def sync_rules(db, plan, offsets, reset=True):
         cancel_notes(db, plan.id)
 
 
+def creation_fingerprint(values):
+    # Ignore ordering while retaining all reminder, timezone and display options.
+    requests = sorted(json.dumps(value.model_dump(), sort_keys=True, ensure_ascii=True) for value in values)
+    return hashlib.sha256(json.dumps(requests).encode()).hexdigest()
+
+
 def create_events(values, source_message_id=None):
+    fingerprint = creation_fingerprint(values)
     with lock, Session() as db:
         previous = (
-            db.get(CalendarBatch, source_message_id) if source_message_id else None
+            db.get(PlanCreation, (source_message_id, fingerprint)) if source_message_id else None
         )
+        legacy = db.get(CalendarBatch, source_message_id) if source_message_id and not previous else None
+        if legacy:
+            rows = [db.get(CalendarEvent, key) for key in legacy.event_ids]
+            if all(rows) and creation_fingerprint([PlanWrite(**{field: getattr(row, field) for field in PlanWrite.model_fields}) for row in rows]) == fingerprint:
+                previous = legacy
         if previous:
             return [
                 serialize(db, row)
@@ -306,6 +321,11 @@ def create_events(values, source_message_id=None):
                     CalendarEvent.repeat_count == value.repeat_count,
                     CalendarEvent.notes == value.notes,
                     CalendarEvent.all_day == value.all_day,
+                    CalendarEvent.timezone == value.timezone,
+                    CalendarEvent.reminder_enabled == value.reminder_enabled,
+                    CalendarEvent.reminder_offsets == value.reminder_offsets,
+                    CalendarEvent.calendar_display == value.calendar_display,
+                    CalendarEvent.status == value.status,
                 )
             )
             if row is None:
@@ -319,13 +339,57 @@ def create_events(values, source_message_id=None):
             result.append(row)
         if source_message_id:
             db.add(
-                CalendarBatch(
+                PlanCreation(
                     source_message_id=source_message_id,
+                    fingerprint=fingerprint,
                     event_ids=[r.id for r in result],
                 )
             )
         db.commit()
         return [serialize(db, row) for row in result]
+
+
+def rebase_occurrences(db, row, value, from_key=None):
+    """Carry completion/exception identity by ordinal, preserving its actual time."""
+    records = list(db.scalars(select(PlanOccurrence).where(PlanOccurrence.plan_id == row.id)))
+    replacements, mapping = [], {}
+    selected = []
+    boundary = 0
+    if from_key:
+        rule, _, index = recurrence.resolve(db, row, from_key)
+        boundary = recurrence.position(db, row, rule, index)
+    for record in records:
+        found = recurrence.resolve(db, row, record.start)
+        if not found:
+            raise HTTPException(422, "已有记录与当前规则不一致，未覆盖记录；请使用仅本次或本次及以后修改")
+        rule, finish, index = found
+        position = recurrence.position(db, row, rule, index)
+        if position < boundary:
+            continue
+        times = occurrence(value, position - boundary)
+        if not times:
+            raise HTTPException(422, "新规则会移除已有完成记录或单次调整，请保留其重复范围，或选择本次及以后修改")
+        effective, _ = recurrence.effective(db, rule, record.start, finish)
+        override = record.override
+        if record.status == "completed":
+            # A past completion must keep the time/content actually completed.
+            override = {name: getattr(effective, name) for name in PlanWrite.model_fields}
+        replacements.append(dict(plan_id=row.id, start=times[0], status=record.status,
+                                 completed_at=record.completed_at, override=override))
+        mapping[record.start] = times[0]
+        selected.append(record)
+    remaining = {record.start for record in records if record not in selected}
+    if len({item["start"] for item in replacements}) != len(replacements) or any(item["start"] in remaining for item in replacements):
+        raise HTTPException(422, "新规则会使已有记录重叠，未修改系列")
+    for record in selected:
+        db.delete(record)
+    db.flush()
+    for item in replacements:
+        db.add(PlanOccurrence(**item))
+    for note in db.scalars(select(Notification).where(Notification.plan_id == row.id)):
+        if note.plan_occurrence_start in mapping:
+            note.plan_occurrence_start = mapping[note.plan_occurrence_start]
+    db.flush()
 
 
 def update_event(key, value):
@@ -359,6 +423,7 @@ def update_event(key, value):
                 boundary = recurrence.day_of(key_start, found[0].timezone)
                 if recurrence.day_of(value.start, value.timezone) < boundary:
                     raise HTTPException(422, "本次及以后不能移到所选日期之前，请选择仅本次")
+                rebase_occurrences(db, row, value, key_start)
                 for segment in db.scalars(select(PlanSegment).where(PlanSegment.plan_id == key, PlanSegment.from_day >= boundary)):
                     db.delete(segment)
                 db.flush()
@@ -371,6 +436,8 @@ def update_event(key, value):
         else:
             reset = any(getattr(row, name) != getattr(value, name) for name in ("start", "end", "timezone", "recurrence", "repeat_interval", "repeat_until", "repeat_count", "reminder_enabled", "reminder_offsets", "status"))
             pattern_changed = any(getattr(row, name) != getattr(value, name) for name in ("start", "end", "all_day", "timezone", "recurrence", "repeat_interval", "repeat_until", "repeat_count"))
+            if pattern_changed:
+                rebase_occurrences(db, row, value)
             changed_fields = {name: item for name, item in data.items() if getattr(row, name) != item}
             for segment in db.scalars(select(PlanSegment).where(PlanSegment.plan_id == key)):
                 if pattern_changed:

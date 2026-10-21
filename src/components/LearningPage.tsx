@@ -39,8 +39,8 @@ import {
   type Node,
   type Lesson,
   type Run,
-  type Attachment,
 } from "@/lib/api";
+import { clearLearningDraft, useLearningDraft } from "@/lib/learningDraft";
 import {
   EmptyState,
   ErrorNotice,
@@ -83,8 +83,10 @@ export function LearningPage({
     stage: string;
     fields: Record<string, string>;
   } | null>(null);
-  const [answer, setAnswer] = useState("");
-  const [images, setImages] = useState<Attachment[]>([]);
+  const { answer, setAnswer, images, setImages } = useLearningDraft(
+    nodeId,
+    lesson,
+  );
   const [hints, setHints] = useState(false);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(() =>
@@ -115,8 +117,6 @@ export function LearningPage({
     localStorage.setItem("bai-current-goal", value.id);
     setNodeId(value.current_node_id || value.nodes[0]?.id || "");
     setError("");
-    setAnswer("");
-    setImages([]);
   }
   useEffect(() => {
     if (selectedGoal && !nodeId)
@@ -250,8 +250,6 @@ export function LearningPage({
     setBusy(true);
     setNodeId(value.id);
     setError("");
-    setAnswer("");
-    setImages([]);
     try {
       void track(
         await api<Run>(`/learning/nodes/${value.id}/lesson`, "POST"),
@@ -522,8 +520,6 @@ export function LearningPage({
                       disabled={busy}
                       onClick={() => {
                         setNodeId(value.id);
-                        setAnswer("");
-                        setImages([]);
                         if (
                           typeof window.matchMedia === "function" &&
                           window.matchMedia("(max-width: 1099px)").matches
@@ -822,8 +818,6 @@ export function LearningPage({
                               disabled={busy}
                               onClick={() => {
                                 setNodeId(previous.id);
-                                setAnswer("");
-                                setImages([]);
                               }}
                             >
                               <ArrowLeft size={15} />
@@ -836,8 +830,6 @@ export function LearningPage({
                               disabled={busy}
                               onClick={() => {
                                 setNodeId(next.id);
-                                setAnswer("");
-                                setImages([]);
                               }}
                             >
                               下一个知识点
@@ -973,6 +965,7 @@ export function LearningPage({
           if (!deleting) return;
           try {
             await api(`/learning/goals/${deleting.id}`, "DELETE");
+            deleting.nodes.forEach((node) => clearLearningDraft(node.id));
             await refresh();
             setDeleting(null);
             setGoalId("");

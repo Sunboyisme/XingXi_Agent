@@ -40,6 +40,38 @@ def resolve(db, plan, key):
     return None
 
 
+def count_before_day(rule, day):
+    """Count rule instances strictly before a local day, without expanding years."""
+    unbounded = SimpleNamespace(**{name: getattr(rule, name) for name in FIELDS})
+    unbounded.repeat_count = unbounded.repeat_until = None
+
+    def count(boundary):
+        point = datetime.fromisoformat(boundary).replace(tzinfo=ZoneInfo(rule.timezone))
+        index = index_near(unbounded, point)
+        times = occurrence(unbounded, index)
+        return index + int(bool(times and day_of(times[0], rule.timezone) < boundary))
+
+    result = count(day)
+    if rule.repeat_count is not None:
+        result = min(result, rule.repeat_count)
+    if rule.repeat_until:
+        end = (datetime.fromisoformat(rule.repeat_until) + timedelta(days=1)).date().isoformat()
+        result = min(result, count(end))
+    return result
+
+
+def position(db, plan, rule, index):
+    """Absolute ordinal across rule segments, used when rebasing a whole series."""
+    total = 0
+    for candidate in variants(db, plan):
+        first = count_before_day(candidate, candidate.window_start) if candidate.window_start else 0
+        if candidate.window_start == rule.window_start:
+            return total + index - first
+        if candidate.window_end:
+            total += max(0, count_before_day(candidate, candidate.window_end) - first)
+    raise ValueError("无法定位已有事项在系列中的位置")
+
+
 def effective(db, rule, key, end):
     record = db.get(PlanOccurrence, (rule.id, key))
     values = {name: getattr(rule, name) for name in FIELDS}

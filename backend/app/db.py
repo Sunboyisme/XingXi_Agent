@@ -346,6 +346,13 @@ class CalendarBatch(Base):
     event_ids: Mapped[list] = mapped_column(JSON, default=list)
 
 
+class PlanCreation(Base):
+    __tablename__ = "plan_creations"
+    source_message_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_ids: Mapped[list] = mapped_column(JSON, default=list)
+
+
 class PlanOccurrence(Base):
     __tablename__ = "plan_occurrences"
     plan_id: Mapped[str] = mapped_column(ForeignKey("calendar_events.id", ondelete="CASCADE"), primary_key=True)

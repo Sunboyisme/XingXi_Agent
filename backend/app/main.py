@@ -15,7 +15,7 @@ from langgraph.types import Command
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
-from . import features, skills, office, complex_tasks
+from . import features, skills, office, complex_tasks, conversation_cleanup
 from . import (
     agent,
     data_transfer,
@@ -52,11 +52,8 @@ from .config import (
 async def lifespan(app: FastAPI):
     data_transfer.recover_interrupted()
     store.migrate()
-    with store.Session() as db:
-        for pending_file in db.scalars(select(store.OfficeFile).where(store.OfficeFile.status.in_(["queued","parsing"]))):
-            pending_file.status, pending_file.error = "failed", "上次解析被中断，请重新上传；原文件已保留"
-        db.commit()
     data_transfer.apply_pending()
+    office.recover_uploads()
     complex_tasks.recover()
     skills.ensure_builtin()
     retrieval.last_error = ""
@@ -185,7 +182,7 @@ def settings_read(db):
     )
 
 
-def create_run(db, kind, conversation_id=None, goal_id=None):
+def create_run(db, kind, conversation_id=None, goal_id=None, *, commit=True):
     query = select(store.Run).where(store.Run.status.in_(["queued", "running"]))
     query = (
         query.where(store.Run.conversation_id == conversation_id)
@@ -196,7 +193,10 @@ def create_run(db, kind, conversation_id=None, goal_id=None):
         raise HTTPException(409, "当前还有任务正在执行，请等待或停止后重试。")
     value = store.Run(kind=kind, conversation_id=conversation_id, goal_id=goal_id)
     db.add(value)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return value
 
 
@@ -213,8 +213,8 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(auth)])
 def data_idle():
     with store.Session() as db:
         active = db.scalar(select(store.Run.id).where(store.Run.status.in_(["queued", "running"])))
-    if active or runs.tasks or retrieval.indexing:
-        raise HTTPException(409, "请等待当前任务和记忆索引完成后再操作数据。")
+    if active or runs.tasks or retrieval.indexing or office.tasks:
+        raise HTTPException(409, "请等待当前任务、文件解析和记忆索引完成后再操作数据。")
     if wechat.read_state().get("enabled"):
         raise HTTPException(409, "请先暂停微信连接，再操作数据。")
 
@@ -595,7 +595,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
         provider.user_content(value.content, value.attachment_ids, config)
     except Exception as error:
         raise HTTPException(400, provider.safe_error(error))
-    run = create_run(db, "chat", conversation_id=conversation_id)
+    run = create_run(db, "chat", conversation_id=conversation_id, commit=False)
     office.claim(db,value.attachment_ids,conversation_id)
     run.model_config = config
     message = store.Message(
@@ -728,9 +728,7 @@ def delete_conversation(conversation_id: str, db=Depends(database)):
         )
     ):
         raise HTTPException(409, "请先停止正在执行的对话")
-    db.delete(record)
-    db.commit()
-    return {"deleted": True}
+    return conversation_cleanup.remove(db, record)
 
 
 @router.get("/runs", response_model=list[s.RunRead])
@@ -1059,16 +1057,22 @@ def reminder_action(reminder_id: str, value: s.ReminderAction, db=Depends(databa
 
 
 @router.get("/notifications", response_model=list[s.NotificationRead])
-def notifications(pending_only: bool = False, db=Depends(database)):
+def notifications(pending_only: bool = False, unread_only: bool = False,
+                  offset: int = 0, limit: int = 50, db=Depends(database)):
+    if offset < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "通知分页范围无效")
     query = (
         select(store.Notification)
         .where(store.Notification.status != "cancelled")
-        .order_by(store.Notification.created_at.desc())
-        .limit(50)
+        .order_by(store.Notification.created_at.desc(), store.Notification.id.desc())
     )
     if pending_only:
         query = query.where(store.Notification.status == "pending")
-    return db.scalars(query).all()
+    elif unread_only:
+        # The app shell and reminder window need every actionable notification.
+        query = query.where(store.Notification.status.in_(["pending", "presented"]))
+        return db.scalars(query).all()
+    return db.scalars(query.offset(offset).limit(limit)).all()
 
 
 @router.post("/notifications/{notification_id}/ack", response_model=s.NotificationRead)

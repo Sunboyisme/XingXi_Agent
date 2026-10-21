@@ -148,7 +148,7 @@ export function App() {
       api<Conversation[]>("/conversations"),
       api<Goal[]>("/learning/goals"),
       api<Memory[]>("/memories"),
-      api<Notification[]>("/notifications"),
+      api<Notification[]>("/notifications?unread_only=true"),
     ]);
     // Slow earlier snapshots must not overwrite a newer tool/memory update.
     if (version !== refreshVersion.current) return;
@@ -182,7 +182,7 @@ export function App() {
   useEffect(() => {
     if (!settings) return;
     const timer = setInterval(() => {
-      void api<Notification[]>("/notifications")
+      void api<Notification[]>("/notifications?unread_only=true")
         .then(setNotifications)
         .catch(() => {});
     }, 5000);
@@ -237,10 +237,25 @@ export function App() {
   async function deleteConversation() {
     if (!deleting) return;
     try {
-      await api(`/conversations/${deleting.id}`, "DELETE");
+      const result = await api<{ cleanup_pending: number }>(
+        `/conversations/${deleting.id}`,
+        "DELETE",
+      );
+      window.dispatchEvent(
+        new CustomEvent("bai-conversation-deleted", { detail: deleting.id }),
+      );
+      try {
+        localStorage.removeItem(`bai-chat-draft:${deleting.id}`);
+      } catch {
+        /* Storage restrictions must not prevent deletion. */
+      }
       if (conversationId === deleting.id) setConversationId(null);
       await refresh();
       setDeleting(null);
+      if (result.cleanup_pending)
+        setError(
+          "对话记录已删除，部分文件被占用，暂未从磁盘清理；请关闭占用文件后在数据目录中处理。",
+        );
     } catch (error) {
       setError((error as Error).message);
     }
@@ -634,7 +649,7 @@ export function App() {
         <ConfirmDelete
           open={Boolean(deleting)}
           title="删除这段对话？"
-          description="删除对话不会删除已经保存的记忆、课程或提醒。"
+          description="将删除聊天消息、运行记录和专属附件、生成文件。已经保存的记忆、课程或提醒会保留。"
           label="删除对话"
           error={error}
           onClose={() => setDeleting(null)}

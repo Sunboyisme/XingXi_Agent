@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Check, Clock3, ExternalLink } from "lucide-react";
 import { api, type Notification } from "@/lib/api";
 import { Button } from "./ui/button";
@@ -28,17 +28,61 @@ export function NotificationsPanel({
   const [all, setAll] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const values = notifications.filter(
-    (note) => all || ["pending", "presented"].includes(note.status),
-  );
+  const [history, setHistory] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [more, setMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState(0);
+  const historyRequest = useRef(0);
+  async function loadHistory(offset: number) {
+    const request = ++historyRequest.current;
+    setLoading(true);
+    setError("");
+    try {
+      const page = await api<Notification[]>(
+        `/notifications?offset=${offset}&limit=50`,
+      );
+      if (request !== historyRequest.current) return;
+      setHistory((items) =>
+        offset === 0
+          ? page
+          : [
+              ...items,
+              ...page.filter(
+                (note) => !items.some((item) => item.id === note.id),
+              ),
+            ],
+      );
+      setMore(page.length === 50);
+      setNextOffset(offset + page.length);
+    } catch (error) {
+      if (request === historyRequest.current)
+        setError((error as Error).message);
+    } finally {
+      if (request === historyRequest.current) setLoading(false);
+    }
+  }
+  useEffect(() => {
+    setHistory([]);
+    setMore(false);
+    setNextOffset(0);
+    setLoading(false);
+    if (open && all) void loadHistory(0);
+    return () => {
+      historyRequest.current++;
+    };
+  }, [open, all]);
+  const values = all ? history : notifications;
   async function act(note: Notification, snooze = false) {
     setBusy(note.id);
     setError("");
     try {
-      await api(
+      const updated = await api<Notification>(
         `/notifications/${note.id}/${snooze ? "snooze" : "ack?read=true"}`,
         "POST",
         snooze ? { minutes: 10 } : undefined,
+      );
+      setHistory((items) =>
+        items.map((item) => (item.id === updated.id ? updated : item)),
       );
       await refresh();
     } catch (error) {
@@ -75,8 +119,13 @@ export function NotificationsPanel({
             全部
           </button>
         </div>
-        {error && <ErrorNotice message={error} />}
-        {!values.length && (
+        {error && (
+          <ErrorNotice
+            message={error}
+            retry={all ? () => void loadHistory(nextOffset) : undefined}
+          />
+        )}
+        {!values.length && !loading && (
           <p className="notification-empty">
             {all ? "还没有通知" : "没有未读通知"}
           </p>
@@ -115,7 +164,7 @@ export function NotificationsPanel({
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={Boolean(busy)}
+                      disabled={Boolean(busy) || loading}
                       onClick={() => void act(note, true)}
                     >
                       <Clock3 size={14} />
@@ -124,7 +173,7 @@ export function NotificationsPanel({
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={Boolean(busy)}
+                      disabled={Boolean(busy) || loading}
                       onClick={() => void act(note)}
                     >
                       <Check size={14} />
@@ -136,6 +185,15 @@ export function NotificationsPanel({
             </article>
           ))}
         </div>
+        {all && (more || loading) && (
+          <Button
+            variant="ghost"
+            disabled={loading}
+            onClick={() => void loadHistory(nextOffset)}
+          >
+            {loading ? "正在读取…" : "加载更多通知"}
+          </Button>
+        )}
       </DialogContent>
     </Dialog>
   );

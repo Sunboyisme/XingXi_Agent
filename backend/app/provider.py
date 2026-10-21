@@ -123,6 +123,15 @@ def model(config=None) -> ChatOpenAI:
         )
 
 
+def supported_attachments(attachment_ids, config):
+    """Vision controls pictures; text document references work with every model."""
+    if not config or config["vision_enabled"]:
+        return attachment_ids
+    from .db import OfficeFile
+    with Session() as db:
+        return [key for key in attachment_ids if db.get(OfficeFile, key)]
+
+
 def user_content(text: str, attachment_ids: list[str] | None = None, config=None):
     if config is None:
         from .task_context import current

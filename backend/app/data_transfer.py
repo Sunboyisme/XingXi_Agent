@@ -123,8 +123,19 @@ def validate(stage):
         raise ValueError("不是 XiaoXi 数据文件")
     with connect(stage / "bai.sqlite") as incoming, connect(root() / "bai.sqlite") as current:
         incoming.execute("PRAGMA trusted_schema=OFF")
+        incoming_schema, current_schema = schema(incoming), schema(current)
+        incoming_revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
+        current_revision = current.execute("SELECT version_num FROM alembic_version").fetchone()
+        # This additive migration must not invalidate the preceding 0.1.5 exports.
+        # Only the exact known predecessor schema is upgraded, in the staging copy.
+        if (incoming_revision == ("0016",) and current_revision == ("0017",)
+            and incoming_schema == {name: sql for name, sql in current_schema.items() if name != "plan_creations"}
+            and not incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]):
+            incoming.execute(current_schema["plan_creations"])
+            incoming.execute("UPDATE alembic_version SET version_num='0017' WHERE version_num='0016'")
+            incoming_schema = schema(incoming)
         # Reject SQL objects supplied by other applications or modified archives.
-        if schema(incoming) != schema(current) or incoming.execute(
+        if incoming_schema != current_schema or incoming.execute(
             "SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')"
         ).fetchone()[0]:
             raise ValueError("数据结构不兼容，请使用当前版本导出的文件")

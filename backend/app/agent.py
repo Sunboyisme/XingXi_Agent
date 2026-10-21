@@ -174,9 +174,7 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
                 HumanMessage(
                     content=provider.user_content(
                         record.content,
-                        record.attachment_ids
-                        if not model_config or model_config["vision_enabled"]
-                        else [],
+                        provider.supported_attachments(record.attachment_ids, model_config),
                         model_config or None,
                     )
                 )

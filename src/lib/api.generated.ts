@@ -4820,6 +4820,9 @@ export interface operations {
         parameters: {
             query?: {
                 pending_only?: boolean;
+                unread_only?: boolean;
+                offset?: number;
+                limit?: number;
             };
             header?: never;
             path?: never;

@@ -397,6 +397,18 @@ export function ChatPage({
   const imagesRef = useRef(images);
   draftRef.current = draft;
   imagesRef.current = images;
+  useEffect(() => {
+    const discard = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== conversationId) return;
+      draftRef.current = "";
+      imagesRef.current = [];
+      setDraft("");
+      setImages([]);
+    };
+    window.addEventListener("bai-conversation-deleted", discard);
+    return () =>
+      window.removeEventListener("bai-conversation-deleted", discard);
+  }, [conversationId]);
   const persistDraft = useCallback(
     (text = draftRef.current, attachments = imagesRef.current) => {
       storeChatDraft(conversationId, { text, images: attachments });

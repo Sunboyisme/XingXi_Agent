@@ -177,8 +177,7 @@ async def assess(state: TutorState):
             .where(KnowledgeNode.goal_id == goal.id)
             .order_by(KnowledgeNode.ordinal)
         ).all()
-        if all(x.status in ("passed", "skipped") for x in nodes):
-            goal.status = "completed"
+        goal.status = "completed" if all(x.status in ("passed", "skipped") for x in nodes) else "active"
         db.commit()
     return {"feedback": result}
 

@@ -30,7 +30,7 @@ import { DateTimePicker } from "./DateTimePicker";
 import { SoftSelect } from "./ui/soft-select";
 import { holidayOn } from "@/lib/holidays";
 import { lunarDate } from "@/lib/lunarCalendar";
-import { isRepeating } from "@/lib/planPresentation";
+import { isRepeating, isRoutine } from "@/lib/planPresentation";
 
 export function dateMove(key: string, days: number) {
   const date = new Date(`${key}T00:00:00Z`);
@@ -125,6 +125,9 @@ export function CalendarPage({
   const [editor, setEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<"single" | "repeat">("single");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
+  const [editScope, setEditScope] = useState<"this" | "future" | "series">(
+    "this",
+  );
   const [dayList, setDayList] = useState("");
   const [agendaTab, setAgendaTab] = useState<"todo" | "repeat">("todo");
   const [agendaNotice, setAgendaNotice] = useState("");
@@ -168,7 +171,7 @@ export function CalendarPage({
   );
   const hasAllDayEvents = weekDays.some((day) =>
     eventsOnDay(events, day, timezone).some(
-      (event) => event.all_day && !isRepeating(event),
+      (event) => event.all_day && !isRoutine(event),
     ),
   );
   const lunarDates = useMemo(
@@ -211,76 +214,105 @@ export function CalendarPage({
   useEffect(() => {
     void load();
   }, [load]);
-  const edit = useCallback((day: string, event?: CalendarEvent) => {
-    setEditing(event || null);
-    setEditorMode(event && isRepeating(event) ? "repeat" : "single");
-    const first = event ? event.series_start || event.start : undefined;
-    const last = event ? event.series_end || event.end : undefined;
-    const allDay = event ? (event.series_all_day ?? event.all_day) : undefined;
-    setForm(
-      event
-        ? {
-            ...event,
-            all_day: Boolean(allDay),
-            status:
-              event.recurrence !== "none"
-                ? ((event.series_status || "planned") as
-                    "planned" | "completed" | "ended" | "deleted")
-                : event.status,
-            recurrence: event.recurrence || "none",
-            repeat_interval: event.repeat_interval || 1,
-            repeat_end_mode: event.repeat_until
-              ? "until"
-              : event.repeat_count
-                ? "count"
-                : "never",
-            repeat_until:
-              event.repeat_until || dateMove((first || day).slice(0, 10), 30),
-            repeat_count: event.repeat_count || 10,
-            calendar_display: "summary",
-            reminder_values: (event.reminder_offsets?.length
-              ? event.reminder_offsets
-              : [allDay ? 540 : 0]
-            ).map((offset) => {
-              const base = allDay
-                ? `${first}T00:00`
-                : zonedInput(first!, event.timezone);
-              return new Date(Date.parse(`${base}:00Z`) + offset * 60000)
-                .toISOString()
-                .slice(0, 16);
-            }),
-            reminder_time: event.reminder_time || "09:00",
-            reminder_at: event.reminder_at
-              ? zonedInput(event.reminder_at, event.timezone)
-              : "",
-            start: allDay ? first! : zonedInput(first!, event.timezone),
-            end: allDay
-              ? dateMove(last!, -1)
-              : zonedInput(last!, event.timezone),
-          }
-        : {
-            title: "",
-            notes: "",
-            start: day,
-            end: day,
-            all_day: true,
-            reminder_enabled: false,
-            reminder_time: "09:00",
-            reminder_at: "",
-            status: "planned",
-            recurrence: "none",
-            repeat_interval: 1,
-            repeat_end_mode: "never",
-            repeat_until: dateMove(day, 30),
-            repeat_count: 10,
-            calendar_display: "summary",
-            reminder_values: [`${day}T09:00`],
-          },
-    );
+  const edit = useCallback(
+    (
+      day: string,
+      selectedEvent?: CalendarEvent,
+      scope: "this" | "future" | "series" = "this",
+      source?: CalendarEvent,
+    ) => {
+      const event = source || selectedEvent;
+      setEditing(selectedEvent || null);
+      setEditScope(scope);
+      setEditorMode(event && isRepeating(event) ? "repeat" : "single");
+      const first = event?.start;
+      const last = event?.end;
+      const allDay = event?.all_day;
+      setForm(
+        event
+          ? {
+              ...event,
+              all_day: Boolean(allDay),
+              status:
+                event.recurrence !== "none"
+                  ? ((event.series_status || "planned") as
+                      "planned" | "completed" | "ended" | "deleted")
+                  : event.status,
+              recurrence: event.recurrence || "none",
+              repeat_interval: event.repeat_interval || 1,
+              repeat_end_mode: event.repeat_until
+                ? "until"
+                : event.repeat_count
+                  ? "count"
+                  : "never",
+              repeat_until:
+                event.repeat_until || dateMove((first || day).slice(0, 10), 30),
+              repeat_count:
+                scope === "future" && event.repeat_count
+                  ? Math.max(1, event.repeat_count - event.occurrence_index)
+                  : event.repeat_count || 10,
+              calendar_display: event.calendar_display,
+              reminder_values: (event.reminder_offsets?.length
+                ? event.reminder_offsets
+                : [allDay ? 540 : 0]
+              ).map((offset) => {
+                const base = allDay
+                  ? `${first}T00:00`
+                  : zonedInput(first!, event.timezone);
+                return new Date(Date.parse(`${base}:00Z`) + offset * 60000)
+                  .toISOString()
+                  .slice(0, 16);
+              }),
+              reminder_time: event.reminder_time || "09:00",
+              reminder_at: event.reminder_at
+                ? zonedInput(event.reminder_at, event.timezone)
+                : "",
+              start: allDay ? first! : zonedInput(first!, event.timezone),
+              end: allDay
+                ? dateMove(last!, -1)
+                : zonedInput(last!, event.timezone),
+            }
+          : {
+              title: "",
+              notes: "",
+              start: day,
+              end: day,
+              all_day: true,
+              reminder_enabled: false,
+              reminder_time: "09:00",
+              reminder_at: "",
+              status: "planned",
+              recurrence: "none",
+              repeat_interval: 1,
+              repeat_end_mode: "never",
+              repeat_until: dateMove(day, 30),
+              repeat_count: 10,
+              calendar_display: "summary",
+              reminder_values: [`${day}T09:00`],
+            },
+      );
+      setError("");
+      setDayList("");
+      setEditor(true);
+    },
+    [],
+  );
+  async function changeEditScope(scope: "this" | "future" | "series") {
+    if (!editing || busy) return;
+    setBusy(true);
     setError("");
-    setDayList("");
-    setEditor(true);
-  }, []);
+    try {
+      const source =
+        scope === "series"
+          ? await api<CalendarEvent>(`/plans/${editing.id}`)
+          : editing;
+      edit(editing.start.slice(0, 10), editing, scope, source);
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   function startCreate(
     day: string,
     recurrence: "none" | "daily" | "weekly" | "monthly" = "none",
@@ -350,22 +382,28 @@ export function CalendarPage({
   }
   function payload(): CalendarEventWrite {
     const zone = editing?.timezone || timezone;
+    const onlyThis = Boolean(
+      editing && isRepeating(editing) && editScope === "this",
+    );
     return {
       ...form,
-      recurrence: editorMode === "single" ? "none" : form.recurrence,
+      recurrence:
+        editorMode === "single" || onlyThis ? "none" : form.recurrence,
       repeat_until:
         editorMode === "repeat" &&
+        !onlyThis &&
         form.recurrence !== "none" &&
         form.repeat_end_mode === "until"
           ? form.repeat_until
           : null,
       repeat_count:
         editorMode === "repeat" &&
+        !onlyThis &&
         form.recurrence !== "none" &&
         form.repeat_end_mode === "count"
           ? form.repeat_count
           : null,
-      calendar_display: "summary",
+      calendar_display: form.calendar_display,
       reminder_offsets: form.reminder_values.map((value) =>
         Math.round(
           (Date.parse(`${value}:00Z`) -
@@ -404,7 +442,7 @@ export function CalendarPage({
           ...payload(),
           ...(editing
             ? {
-                scope: "series",
+                scope: isRepeating(editing) ? editScope : "series",
                 occurrence_start: editing.occurrence_start || editing.start,
               }
             : {}),
@@ -466,12 +504,18 @@ export function CalendarPage({
   }
   const timeLabel = (e: CalendarEvent) =>
     e.all_day ? "全天" : zonedInput(e.start, timezone).slice(11);
-  const eventButton = (e: CalendarEvent) => (
+  const eventButton = (e: CalendarEvent, day?: string) => (
     <Hint key={`${e.id}:${e.occurrence_start || e.start}`} label={e.title}>
       <button
         className={`day-event ${e.status === "completed" ? "is-completed" : ""}`}
         onClick={() =>
-          openAgenda(e.start.slice(0, 10), isRepeating(e) ? "repeat" : "todo")
+          openAgenda(
+            day ||
+              (e.all_day
+                ? e.start
+                : zonedInput(e.start, timezone).slice(0, 10)),
+            isRepeating(e) ? "repeat" : "todo",
+          )
         }
       >
         <span>
@@ -523,7 +567,7 @@ export function CalendarPage({
   const weekRepeats = new Map(
     weekDays.map((day) => [
       day,
-      eventsOnDay(events, day, timezone).filter(isRepeating),
+      eventsOnDay(events, day, timezone).filter(isRoutine),
     ]),
   );
   const hasWeekRepeats = [...weekRepeats.values()].some(
@@ -711,7 +755,7 @@ export function CalendarPage({
                     }}
                   >
                     {eventsOnDay(events, day, timezone)
-                      .filter((event) => event.all_day && !isRepeating(event))
+                      .filter((event) => event.all_day && !isRoutine(event))
                       .map((event) => (
                         <button
                           key={`${event.id}:${event.occurrence_start || event.start}`}
@@ -750,7 +794,7 @@ export function CalendarPage({
                     }}
                   >
                     {eventsOnDay(events, day, timezone)
-                      .filter((event) => !event.all_day && !isRepeating(event))
+                      .filter((event) => !event.all_day && !isRoutine(event))
                       .map((event) => weekEventButton(event, day))}
                   </div>
                 ))}
@@ -765,10 +809,8 @@ export function CalendarPage({
           >
             {days.map((day) => {
               const values = eventsOnDay(events, day, timezone);
-              const visibleValues = values.filter(
-                (event) => !isRepeating(event),
-              );
-              const repeatedValues = values.filter(isRepeating);
+              const visibleValues = values.filter((event) => !isRoutine(event));
+              const repeatedValues = values.filter(isRoutine);
               return (
                 <section
                   key={day}
@@ -818,7 +860,7 @@ export function CalendarPage({
                       {[...visibleValues]
                         .sort((a, b) => a.start.localeCompare(b.start))
                         .slice(0, visibleEvents)
-                        .map(eventButton)}
+                        .map((event) => eventButton(event, day))}
                     </div>
                     <div className="plan-day-summary">
                       {visibleValues.length > visibleEvents && (
@@ -925,7 +967,7 @@ export function CalendarPage({
                   {event.status === "completed" && <Check size={13} />}
                 </button>
                 <div className="plan-occurrence-content">
-                  {eventButton(event)}
+                  {eventButton(event, dayList)}
                 </div>
                 <Button
                   type="button"
@@ -1010,12 +1052,36 @@ export function CalendarPage({
             }}
           >
             {error && <ErrorNotice message={error} />}
+            {editing && isRepeating(editing) && (
+              <div className="form-field">
+                <Label htmlFor="plan-edit-scope">修改范围</Label>
+                <SoftSelect
+                  id="plan-edit-scope"
+                  label="修改范围"
+                  value={editScope}
+                  disabled={busy}
+                  onValueChange={(value) =>
+                    void changeEditScope(value as typeof editScope)
+                  }
+                  options={[
+                    { value: "this", label: "仅本次" },
+                    { value: "future", label: "本次及以后" },
+                    { value: "series", label: "整个系列" },
+                  ]}
+                />
+                <p className="muted">
+                  {editScope === "this"
+                    ? "仅调整所选这一次，其他日期保持原安排。"
+                    : editScope === "future"
+                      ? "从所选日期起使用新规则，之前的安排保留。"
+                      : "将修改整个系列的规则；已有完成记录和单次调整会保留。"}
+                </p>
+              </div>
+            )}
             {editorMode === "repeat" && (
               <p className="plan-repeat-intro">
                 <Repeat2 size={16} />
-                <span>
-                  重复日程会自动排入日历，具体每次安排可在周历中查看。
-                </span>
+                <span>重复日程会自动排入日历，点击日期可查看每次安排。</span>
               </p>
             )}
             <div className="form-field">
@@ -1028,7 +1094,7 @@ export function CalendarPage({
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
             </div>
-            {editorMode === "repeat" && (
+            {editorMode === "repeat" && (!editing || editScope !== "this") && (
               <>
                 <div className="plan-repeat-settings">
                   <div className="form-field">
@@ -1076,6 +1142,26 @@ export function CalendarPage({
                   </div>
                 </div>
                 <div className="plan-recurrence-options">
+                  <div className="form-field">
+                    <Label htmlFor="plan-calendar-display">月历显示</Label>
+                    <SoftSelect
+                      id="plan-calendar-display"
+                      label="月历显示"
+                      value={form.calendar_display}
+                      disabled={busy}
+                      onValueChange={(value) =>
+                        setForm({
+                          ...form,
+                          calendar_display:
+                            value as typeof form.calendar_display,
+                        })
+                      }
+                      options={[
+                        { value: "summary", label: "汇总为日常事项" },
+                        { value: "always", label: "始终展开显示" },
+                      ]}
+                    />
+                  </div>
                   <div className="plan-repeat-settings">
                     <div className="form-field">
                       <Label htmlFor="plan-repeat-end">重复结束</Label>

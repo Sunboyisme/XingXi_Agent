@@ -22,6 +22,14 @@ slots = asyncio.Semaphore(2)
 generation_locks = {}
 
 
+def recover_uploads():
+    """Run after restoring data as well as after an interrupted app session."""
+    with Session() as db:
+        for row in db.scalars(select(OfficeFile).where(OfficeFile.status.in_(["queued", "parsing"]))):
+            row.status, row.error = "failed", "上次解析被中断，可重试解析；原文件已保留"
+        db.commit()
+
+
 def root():
     path = config.ATTACHMENTS_DIR / "files"
     path.mkdir(exist_ok=True)
