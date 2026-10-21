@@ -158,7 +158,7 @@ export function RemotePicture({
   return error ? (
     <button
       className="image-load-error"
-        aria-label={`${error}，点击重试`}
+      aria-label={`${error}，点击重试`}
       onClick={() => setAttempt(attempt + 1)}
     >
       图片加载失败，重试
@@ -168,7 +168,7 @@ export function RemotePicture({
   );
 }
 
-function ArtifactDownload({ artifact }: { artifact: Artifact }) {
+export function ArtifactDownload({ artifact }: { artifact: Artifact }) {
   const [error, setError] = useState("");
   const [downloaded, setDownloaded] = useState<DownloadedFile | null>(null);
   const [webSaved, setWebSaved] = useState(false);

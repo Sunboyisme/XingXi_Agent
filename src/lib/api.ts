@@ -15,6 +15,33 @@ export type MCPServerWrite = Schemas["MCPServerWrite"];
 export type Conversation = Schemas["ConversationRead"];
 export type Message = Schemas["MessageRead"];
 export type Run = Schemas["RunRead"];
+export type ComplexTask = {
+  id: string;
+  conversation_id: string;
+  source_message_id: string;
+  created_at: string;
+  updated_at: string;
+  status: string;
+  revision: number;
+  goal: string;
+  reason: string;
+  pending_messages: number;
+  requirements: { constraints?: string[]; completion_criteria?: string[] };
+  steps: {
+    id: string;
+    title: string;
+    status: string;
+    output: { content?: string };
+  }[];
+  artifacts: (Artifact & { task_revision: number; current: boolean })[];
+  operations: {
+    id: string;
+    tool_id: string;
+    status: string;
+    result: Record<string, unknown>;
+  }[];
+  result: { content?: string };
+};
 export type Goal = Schemas["GoalRead"];
 export type Node = Schemas["NodeRead"];
 export type Lesson = Schemas["LessonRead"];

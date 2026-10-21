@@ -179,16 +179,19 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
     return summary, kept[::-1]
 
 
-def search_history(conversation_id: str, query: str):
+def search_history(conversation_id: str, query: str, role: str = "all"):
     from .retrieval import keyword_score
 
     with Session() as db:
+        statement = select(Message).where(
+            Message.profile_id == PROFILE_ID,
+            Message.conversation_id == conversation_id,
+        )
+        if role in ("user", "assistant"):
+            statement = statement.where(Message.role == role)
         records = list(
             db.scalars(
-                select(Message).where(
-                    Message.profile_id == PROFILE_ID,
-                    Message.conversation_id == conversation_id,
-                )
+                statement.order_by(MESSAGE_ORDER.desc())
             )
         )
     ranked = sorted(
@@ -201,6 +204,8 @@ def search_history(conversation_id: str, query: str):
             "id": r.id,
             "role": r.role,
             "content": r.content[:2400],
+            "created_at": r.created_at,
+            "truncated": len(r.content) > 2400,
             "attachment_ids": r.attachment_ids,
         }
         for score, r in ranked[:5]

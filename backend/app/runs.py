@@ -32,13 +32,17 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
                 db.commit()
             emit(run_id, "done", {"result": result})
         except asyncio.CancelledError:
+            from .complex_tasks import pause_run
+            pause_run(run_id, "已停止，已有成果保留，发送“继续”后恢复。")
             with Session() as db:
                 run = db.get(Run, run_id)
                 run.status = "cancelled"
                 db.commit()
             emit(run_id, "cancelled", {})
         except Exception as error:
-            if isinstance(error, TimeoutError):
+            from .complex_tasks import pause_run
+            is_task = pause_run(run_id, "执行未完成，已有成果保留，发送“继续”后恢复。")
+            if isinstance(error, TimeoutError) and not is_task:
                 from .agent import recover_durable_reply
                 recovered = recover_durable_reply(run_id)
                 if recovered:

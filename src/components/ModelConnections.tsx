@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { Hint } from "./common";
+import { useEffect, useRef, useState } from "react";
 import {
   BrainCircuit,
   Cable,
+  Download,
   Check,
   KeyRound,
   Loader2,
@@ -13,7 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
-import { api, type Settings } from "@/lib/api";
+import { api, fetchApi, type Settings } from "@/lib/api";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
@@ -67,6 +69,14 @@ export function ModelConnections({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [deleting, setDeleting] = useState<Connection | null>(null);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalog, setCatalog] = useState<Connection["models"]>([]);
+  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
+  const [modelQuery, setModelQuery] = useState("");
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
+  const catalogRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => catalogRequest.current?.abort(), []);
   const connections = settings.providers;
   const presets = settings.provider_presets;
   const defaultConnection = connections.find(
@@ -154,6 +164,73 @@ export function ModelConnections({
           : draft.default_model,
     });
   }
+  function closeCatalog() {
+    catalogRequest.current?.abort();
+    catalogRequest.current = null;
+    setCatalogBusy(false);
+    setCatalogOpen(false);
+  }
+  async function fetchModels() {
+    if (!draft) return;
+    catalogRequest.current?.abort();
+    const request = new AbortController();
+    catalogRequest.current = request;
+    setCatalogOpen(true);
+    setCatalogBusy(true);
+    setCatalogError("");
+    setCatalog([]);
+    setModelQuery("");
+    setSelectedModels(new Set());
+    try {
+      const response = await fetchApi("/settings/providers/models", {
+        method: "POST",
+        signal: request.signal,
+        body: JSON.stringify({
+          id: draft.id,
+          provider_type: draft.provider_type,
+          label: draft.label,
+          model_url: draft.model_url,
+          api_key: draft.api_key ?? null,
+          models: [],
+          default_model: "",
+        }),
+      });
+      const models: Connection["models"] = await response.json();
+      if (!request.signal.aborted) setCatalog(models);
+    } catch (error) {
+      if (!request.signal.aborted) setCatalogError((error as Error).message);
+    } finally {
+      if (catalogRequest.current === request) setCatalogBusy(false);
+    }
+  }
+  function addSelectedModels() {
+    if (!draft) return;
+    const existing = draft.models.filter((model) => model.name.trim());
+    const names = new Set(existing.map((model) => model.name.trim()));
+    const added = catalog.filter(
+      (model) => selectedModels.has(model.name) && !names.has(model.name),
+    );
+    if (existing.length + added.length > 50) {
+      setCatalogError("每个连接最多保存 50 个模型，请减少选择后再添加。");
+      return;
+    }
+    const models = [...existing, ...added];
+    setDraft({
+      ...draft,
+      models,
+      default_model: names.has(draft.default_model)
+        ? draft.default_model
+        : models[0]?.name || "",
+    });
+    closeCatalog();
+    setNotice(`已加入 ${added.length} 个模型，保存连接后生效。`);
+  }
+  const existingModelNames = new Set(
+    draft?.models.map((model) => model.name.trim()) || [],
+  );
+  const visibleModels = catalog.filter((model) =>
+    model.name.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+  );
   async function save(test = false) {
     if (!draft) return;
     setBusy(true);
@@ -569,20 +646,31 @@ export function ModelConnections({
                   </div>
                   <div className="models-heading">
                     <span>模型列表</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          models: [...draft.models, blankModel()],
-                        })
-                      }
-                    >
-                      <Plus size={14} />
-                      添加模型
-                    </Button>
+                    <div className="model-list-actions">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => void fetchModels()}
+                      >
+                        <Download size={14} />
+                        拉取模型
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() =>
+                          setDraft({
+                            ...draft,
+                            models: [...draft.models, blankModel()],
+                          })
+                        }
+                      >
+                        <Plus size={14} />
+                        添加模型
+                      </Button>
+                    </div>
                   </div>
                   <div className="model-editor-list">
                     {draft.models.map((model, index) => (
@@ -657,15 +745,14 @@ export function ModelConnections({
                                 options={thinkingOptions}
                               />
                               {model.thinking_mode === "auto" && (
-                                <small
-                                  className="model-thinking-detected"
-                                  title="识别依据是当前服务商接口和完整模型名，不使用默认模型代替。"
-                                >
-                                  {model.thinking_control &&
-                                  model.thinking_control !== "auto"
-                                    ? `自动识别：${thinkingControlLabels[model.thinking_control]}`
-                                    : "保存后按当前模型精确识别"}
-                                </small>
+                                <Hint label="识别依据是当前服务商接口和完整模型名，不使用默认模型代替。">
+                                  <small className="model-thinking-detected">
+                                    {model.thinking_control &&
+                                    model.thinking_control !== "auto"
+                                      ? `自动识别：${thinkingControlLabels[model.thinking_control]}`
+                                      : "保存后按当前模型精确识别"}
+                                  </small>
+                                </Hint>
                               )}
                             </span>
                           </div>
@@ -699,6 +786,154 @@ export function ModelConnections({
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={catalogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeCatalog();
+        }}
+      >
+        <DialogContent className="model-catalog-dialog">
+          <DialogHeader>
+            <DialogTitle>选择要添加的模型</DialogTitle>
+            <DialogDescription>
+              {draft?.label || "当前连接"} ·
+              选择模型并按需勾选图片输入，保存连接后生效。
+            </DialogDescription>
+          </DialogHeader>
+          {catalogBusy ? (
+            <p className="model-catalog-status" role="status">
+              <Loader2 size={18} className="spin" />
+              正在拉取模型…
+            </p>
+          ) : (
+            <>
+              {catalogError && <ErrorNotice message={catalogError} />}
+              {catalog.length > 0 ? (
+                <>
+                  <Input
+                    aria-label="搜索拉取到的模型"
+                    placeholder="搜索模型名称…"
+                    value={modelQuery}
+                    onChange={(event) => setModelQuery(event.target.value)}
+                  />
+                  <div className="model-catalog-toolbar">
+                    <span>
+                      共 {catalog.length} 个模型 · 已选择 {selectedModels.size}{" "}
+                      个
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const available = visibleModels.filter(
+                          (model) => !existingModelNames.has(model.name),
+                        );
+                        const allSelected = available.every((model) =>
+                          selectedModels.has(model.name),
+                        );
+                        setSelectedModels((current) => {
+                          const next = new Set(current);
+                          for (const model of available) {
+                            if (allSelected) next.delete(model.name);
+                            else next.add(model.name);
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      选择 / 取消当前结果
+                    </Button>
+                  </div>
+                  <div className="model-catalog-list">
+                    {visibleModels.map((model) => {
+                      const added = existingModelNames.has(model.name);
+                      return (
+                        <div className="model-catalog-row" key={model.name}>
+                          <label className="model-catalog-name">
+                            <Checkbox
+                              checked={added || selectedModels.has(model.name)}
+                              disabled={added}
+                              onCheckedChange={(checked) =>
+                                setSelectedModels((current) => {
+                                  const next = new Set(current);
+                                  if (checked === true) next.add(model.name);
+                                  else next.delete(model.name);
+                                  return next;
+                                })
+                              }
+                            />
+                            <span>
+                              {model.name}
+                              {added && <small>已添加</small>}
+                            </span>
+                          </label>
+                          <label className="model-catalog-vision">
+                            <Checkbox
+                              disabled={added}
+                              checked={
+                                added
+                                  ? draft?.models.find(
+                                      (item) => item.name.trim() === model.name,
+                                    )?.vision_enabled
+                                  : model.vision_enabled
+                              }
+                              onCheckedChange={(checked) =>
+                                setCatalog((models) =>
+                                  models.map((item) =>
+                                    item.name === model.name
+                                      ? {
+                                          ...item,
+                                          vision_enabled: checked === true,
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            图片输入
+                          </label>
+                        </div>
+                      );
+                    })}
+                    {!visibleModels.length && (
+                      <p className="model-catalog-status">没有匹配的模型。</p>
+                    )}
+                  </div>
+                  <p className="model-catalog-help">
+                    图片输入能力请按服务商说明选择，模型列表未提供的能力不会自动勾选。
+                  </p>
+                </>
+              ) : (
+                !catalogError && (
+                  <p className="model-catalog-status">
+                    接口未返回可用模型，可返回手动添加。
+                  </p>
+                )
+              )}
+            </>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeCatalog}>
+              取消
+            </Button>
+            {catalogError && (
+              <Button
+                variant="outline"
+                disabled={catalogBusy}
+                onClick={() => void fetchModels()}
+              >
+                重新拉取
+              </Button>
+            )}
+            <Button
+              disabled={catalogBusy || !selectedModels.size}
+              onClick={addSelectedModels}
+            >
+              添加所选模型（{selectedModels.size}）
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <ConfirmDelete

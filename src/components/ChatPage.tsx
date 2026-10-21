@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -34,6 +35,7 @@ import {
   type CalendarEvent,
   type Goal,
   type Memory,
+  type ComplexTask,
 } from "@/lib/api";
 import { ErrorNotice, Hint, ImagesInput, Markdown } from "./common";
 import { MessageAttachment } from "./OfficeFiles";
@@ -45,6 +47,7 @@ import { AnswerActions } from "./AnswerActions";
 import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
 import { ChatHome } from "./ChatHome";
+import { TaskCard } from "./TaskCard";
 import {
   MemoryReview,
   MemorySavedNotice,
@@ -278,6 +281,14 @@ export function ChatPage({
   const [attachmentBatch, setAttachmentBatch] = useState(0);
   const [stream, setStream] = useState("");
   const [reasoning, setReasoning] = useState("");
+  const [tasks, setTasks] = useState<ComplexTask[]>([]);
+  const [supplementing, setSupplementing] = useState(false);
+  const updateTask = useCallback((value: ComplexTask) => {
+    setTasks((items) => [
+      value,
+      ...items.filter((item) => item.id !== value.id),
+    ]);
+  }, []);
   const [contextStatus, setContextStatus] = useState("");
   const [tools, setTools] = useState<RunEvent[]>([]);
   const [imageGeneration, setImageGeneration] =
@@ -422,6 +433,14 @@ export function ChatPage({
           value.id,
           (event) => {
             if (watch.signal.aborted) return;
+            if (event.kind === "task") {
+              updateTask(event.data as unknown as ComplexTask);
+              setRun((current) =>
+                current?.id === value.id
+                  ? { ...current, task_id: String(event.data.id) }
+                  : current,
+              );
+            }
             if (event.kind === "delta")
               setStream((text) => text + String(event.data.text || ""));
             if (event.kind === "answer")
@@ -520,7 +539,7 @@ export function ChatPage({
         }
       }
     },
-    [loadMessages, refresh, receiveMemory],
+    [loadMessages, refresh, receiveMemory, updateTask],
   );
   useEffect(() => {
     let live = true;
@@ -539,6 +558,8 @@ export function ChatPage({
     setMemoryNotice(null);
     setError("");
     setRun(null);
+    setTasks([]);
+    setSupplementing(false);
     setBusy(false);
     setEditingMessageId("");
     setEditedText("");
@@ -546,6 +567,19 @@ export function ChatPage({
     followLatest.current = true;
     setAtLatest(true);
     if (conversationId) {
+      api<ComplexTask[]>(`/conversations/${conversationId}/tasks`)
+        .then((items) => {
+          if (live)
+            setTasks((current) => [
+              ...current,
+              ...items.filter(
+                (item) => !current.some((value) => value.id === item.id),
+              ),
+            ]);
+        })
+        .catch((error: Error) => {
+          if (live) setError(error.message);
+        });
       const initialMessages = loadMessages(conversationId);
       void initialMessages.catch((error: Error) => {
         if (live) setError(error.message);
@@ -622,7 +656,7 @@ export function ChatPage({
       container.scrollTop = container.scrollHeight;
       setAtLatest(true);
     }
-  }, [messages, stream, reasoning, busy, conversationId]);
+  }, [messages, stream, reasoning, busy, conversationId, tasks]);
   useEffect(() => {
     const target = thread.current;
     if (!target || typeof ResizeObserver === "undefined") return;
@@ -639,10 +673,17 @@ export function ChatPage({
     const attachmentIds = edited
       ? edited.attachment_ids
       : images.map((x) => x.id);
-    if (busy || uploading || (!text.trim() && !attachmentIds.length))
+    const supplement = busy && Boolean(run?.task_id);
+    if (
+      (busy && !supplement) ||
+      supplementing ||
+      uploading ||
+      (!text.trim() && !attachmentIds.length)
+    )
       return false;
     setError("");
-    setBusy(true);
+    if (supplement) setSupplementing(true);
+    else setBusy(true);
     followLatest.current = true;
     setAtLatest(true);
     try {
@@ -683,13 +724,16 @@ export function ChatPage({
         onConversation(id);
       } else if (currentId.current === id) {
         await loadMessages(id);
-        void track(value, id);
+        if (!supplement || value.id !== run?.id) void track(value, id);
+        else setBuddyNote("已收到，当前步骤结束后处理补充要求。");
       }
       return true;
     } catch (error) {
       setError((error as Error).message);
-      setBusy(false);
+      if (!supplement) setBusy(false);
       return false;
+    } finally {
+      setSupplementing(false);
     }
   }
   async function retry() {
@@ -709,13 +753,20 @@ export function ChatPage({
     .at(-1);
   const incompleteRun =
     !busy && run && ["failed", "cancelled"].includes(run.status) ? run : null;
+  const incompleteAssistant = incompleteRun
+    ? messages.find(
+        (value) =>
+          value.role === "assistant" && value.run_id === incompleteRun.id,
+      )
+    : undefined;
   const orphanReasoning =
+    !busy &&
     Boolean(reasoning) &&
     !messages.some(
-      (value) => value.role === "assistant" && value.reasoning === reasoning,
+      (value) => value.role === "assistant" && value.run_id === run?.id,
     );
   const showIncompleteReply =
-    Boolean(incompleteRun && !lastAssistant) || orphanReasoning;
+    Boolean(incompleteRun && !incompleteAssistant) || orphanReasoning;
   const turns: (Message & { answer: string })[] = [];
   for (const message of messages) {
     if (message.role === "user") turns.push({ ...message, answer: "" });
@@ -728,6 +779,14 @@ export function ChatPage({
     const turn = turns[turns.length - 1];
     turn.answer += (turn.answer ? "\n" : "") + stream;
   }
+  const tasksByMessage = new Map<string, ComplexTask[]>();
+  for (const task of [...tasks].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at),
+  )) {
+    const anchored = tasksByMessage.get(task.source_message_id) || [];
+    anchored.push(task);
+    tasksByMessage.set(task.source_message_id, anchored);
+  }
   return (
     <div className="chat-layout" ref={dropTarget}>
       <div className={`chat-main ${empty ? "is-empty" : ""}`}>
@@ -739,7 +798,7 @@ export function ChatPage({
             const latest =
               element.scrollHeight - element.scrollTop - element.clientHeight <
               36;
-            followLatest.current = latest;
+            if (latest) followLatest.current = true;
             setAtLatest(latest);
             const boundary = element.getBoundingClientRect().top + 80;
             let current = turns[0]?.id || "";
@@ -755,6 +814,21 @@ export function ChatPage({
               followLatest.current = false;
               setAtLatest(false);
             }
+          }}
+          onTouchMove={() => {
+            followLatest.current = false;
+          }}
+          onPointerDown={(event) => {
+            if (
+              event.clientX >=
+              event.currentTarget.getBoundingClientRect().right - 16
+            )
+              followLatest.current = false;
+          }}
+          onKeyDown={(event) => {
+            if (["ArrowUp", "PageUp", "Home"].includes(event.key))
+              followLatest.current = false;
+            if (event.key === "End") followLatest.current = true;
           }}
         >
           {empty ? (
@@ -774,153 +848,170 @@ export function ChatPage({
           ) : (
             <div className="message-list" ref={thread}>
               {messages.map((value) => (
-                <article
-                  className={`message ${value.role}`}
-                  key={value.id}
-                  ref={(element) => {
-                    if (value.role !== "user") return;
-                    if (element) turnElements.current.set(value.id, element);
-                    else turnElements.current.delete(value.id);
-                  }}
-                >
-                  {value.role !== "assistant" && (
-                    <div className="message-avatar">
-                      <span>我</span>
-                    </div>
-                  )}
-                  {value.role === "assistant" && (
-                    <div className="message-avatar assistant-avatar">
-                      <BaiAvatar
-                        interactive
-                        motion="still"
-                        label="和XiaoXi打个招呼，继续聊天"
-                        onClick={() =>
-                          focusComposer("我在呢。想追问什么，直接告诉我就好。")
-                        }
-                      />
-                    </div>
-                  )}
-                  <div className="message-body">
-                    <span className="message-name">
-                      {value.role === "assistant" ? "XiaoXi" : "你"}
-                    </span>
-                    {value.role === "assistant" && (
-                      <Reasoning text={value.reasoning || ""} />
+                <Fragment key={value.id}>
+                  <article
+                    className={`message ${value.role}`}
+                    ref={(element) => {
+                      if (value.role !== "user") return;
+                      if (element) turnElements.current.set(value.id, element);
+                      else turnElements.current.delete(value.id);
+                    }}
+                  >
+                    {value.role !== "assistant" && (
+                      <div className="message-avatar">
+                        <span>我</span>
+                      </div>
                     )}
-                    {value.role === "user" && editingMessageId === value.id ? (
-                      <div className="user-message-editor">
-                        <Textarea
-                          aria-label="修改消息内容"
-                          value={editedText}
-                          disabled={busy}
-                          autoFocus
-                          onChange={(event) =>
-                            setEditedText(event.target.value)
+                    {value.role === "assistant" && (
+                      <div className="message-avatar assistant-avatar">
+                        <BaiAvatar
+                          interactive
+                          motion="still"
+                          label="和XiaoXi打个招呼，继续聊天"
+                          onClick={() =>
+                            focusComposer(
+                              "我在呢。想追问什么，直接告诉我就好。",
+                            )
                           }
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape" && !busy)
-                              setEditingMessageId("");
-                          }}
                         />
-                        <p className="user-message-editor-hint">
-                          保留原消息和附件，修改后作为新消息发送。
-                        </p>
-                        <div className="user-message-editor-actions">
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                      </div>
+                    )}
+                    <div className="message-body">
+                      <span className="message-name">
+                        {value.role === "assistant" ? "XiaoXi" : "你"}
+                      </span>
+                      {value.role === "assistant" && (
+                        <Reasoning text={value.reasoning || ""} />
+                      )}
+                      {value.role === "user" &&
+                      editingMessageId === value.id ? (
+                        <div className="user-message-editor">
+                          <Textarea
+                            aria-label="修改消息内容"
+                            value={editedText}
                             disabled={busy}
-                            onClick={() => setEditingMessageId("")}
-                          >
-                            取消
-                          </Button>
-                          <Button
-                            size="sm"
-                            disabled={
-                              busy ||
-                              uploading ||
-                              !modelReady ||
-                              (!editedText.trim() &&
-                                !value.attachment_ids.length)
+                            autoFocus
+                            onChange={(event) =>
+                              setEditedText(event.target.value)
                             }
-                            onClick={() =>
-                              void send({
-                                content: editedText,
-                                attachment_ids: value.attachment_ids,
-                              })
-                            }
-                          >
-                            发送修改
-                          </Button>
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape" && !busy)
+                                setEditingMessageId("");
+                            }}
+                          />
+                          <p className="user-message-editor-hint">
+                            保留原消息和附件，修改后作为新消息发送。
+                          </p>
+                          <div className="user-message-editor-actions">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={busy}
+                              onClick={() => setEditingMessageId("")}
+                            >
+                              取消
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={
+                                busy ||
+                                uploading ||
+                                !modelReady ||
+                                (!editedText.trim() &&
+                                  !value.attachment_ids.length)
+                              }
+                              onClick={() =>
+                                void send({
+                                  content: editedText,
+                                  attachment_ids: value.attachment_ids,
+                                })
+                              }
+                            >
+                              发送修改
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <Markdown
-                        runId={
-                          value.role === "assistant"
-                            ? value.run_id || undefined
-                            : undefined
-                        }
-                      >
-                        {value.content}
-                      </Markdown>
-                    )}
-                    {value.role === "assistant" && (
-                      <AnswerPresentation
-                        runId={value.run_id || undefined}
-                        status={
-                          value.run_id === run?.id ? run?.status : "completed"
-                        }
-                        content={value.content}
-                      />
-                    )}
-                    {value.role === "assistant" && (
-                      <AnswerActions
-                        content={value.content}
-                        runId={
-                          value.run_id ||
-                          (value === lastAssistant &&
-                          run?.status === "completed"
-                            ? run.id
-                            : undefined)
-                        }
-                        runStatus={
-                          value.run_id === run?.id || value === lastAssistant
-                            ? run?.status
-                            : "completed"
-                        }
-                        tools={
-                          value === lastAssistant && run?.status === "completed"
-                            ? tools
-                            : undefined
-                        }
-                      />
-                    )}
-                    {value === lastAssistant && incompleteRun && (
-                      <IncompleteReplyNotice
-                        cancelled={incompleteRun.status === "cancelled"}
-                      />
-                    )}
+                      ) : (
+                        <Markdown
+                          runId={
+                            value.role === "assistant"
+                              ? value.run_id || undefined
+                              : undefined
+                          }
+                        >
+                          {value.content}
+                        </Markdown>
+                      )}
+                      {value.role === "assistant" && (
+                        <AnswerPresentation
+                          runId={value.run_id || undefined}
+                          status={
+                            value.run_id === run?.id ? run?.status : "completed"
+                          }
+                          content={value.content}
+                        />
+                      )}
+                      {value.role === "assistant" && (
+                        <AnswerActions
+                          content={value.content}
+                          runId={
+                            value.run_id ||
+                            (value === lastAssistant &&
+                            run?.status === "completed"
+                              ? run.id
+                              : undefined)
+                          }
+                          runStatus={
+                            value.run_id === run?.id || value === lastAssistant
+                              ? run?.status
+                              : "completed"
+                          }
+                          tools={
+                            value === lastAssistant &&
+                            run?.status === "completed"
+                              ? tools
+                              : undefined
+                          }
+                        />
+                      )}
+                      {value === incompleteAssistant && incompleteRun && (
+                        <IncompleteReplyNotice
+                          cancelled={incompleteRun.status === "cancelled"}
+                        />
+                      )}
 
-                    {value.attachment_ids.length > 0 && (
-                      <div className="message-pictures">
-                        {value.attachment_ids.map((id) => (
-                          <MessageAttachment id={id} key={id} />
-                        ))}
-                      </div>
-                    )}
-                    {value.role === "user" && editingMessageId !== value.id && (
-                      <UserMessageActions
-                        content={value.content}
-                        disabled={busy || uploading}
-                        onEdit={() => {
-                          setEditingMessageId(value.id);
-                          setEditedText(value.content);
-                        }}
-                      />
-                    )}
-                  </div>
-                </article>
+                      {value.attachment_ids.length > 0 && (
+                        <div className="message-pictures">
+                          {value.attachment_ids.map((id) => (
+                            <MessageAttachment id={id} key={id} />
+                          ))}
+                        </div>
+                      )}
+                      {value.role === "user" &&
+                        editingMessageId !== value.id && (
+                          <UserMessageActions
+                            content={value.content}
+                            disabled={busy || uploading}
+                            onEdit={() => {
+                              setEditingMessageId(value.id);
+                              setEditedText(value.content);
+                            }}
+                          />
+                        )}
+                    </div>
+                  </article>
+                  {(tasksByMessage.get(value.id) || []).map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      busy={busy}
+                      onUpdate={updateTask}
+                      onRun={(value) => {
+                        if (conversationId) void track(value, conversationId);
+                      }}
+                    />
+                  ))}
+                </Fragment>
               ))}
               {busy && (
                 <article className="message assistant">
@@ -1138,9 +1229,15 @@ export function ChatPage({
               aria-label="发送给XiaoXi的消息"
               value={draft}
               onChange={(e) => changeDraft(e.target.value)}
-              placeholder={modelReady ? "输入消息…" : "连接模型后开始对话"}
+              placeholder={
+                busy && run?.task_id
+                  ? "补充当前任务要求…"
+                  : modelReady
+                    ? "输入消息…"
+                    : "连接模型后开始对话"
+              }
               rows={2}
-              disabled={busy}
+              disabled={busy && !run?.task_id}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
@@ -1148,7 +1245,7 @@ export function ChatPage({
                   !e.nativeEvent.isComposing
                 ) {
                   e.preventDefault();
-                  if (modelReady && !busy) void send();
+                  if (modelReady && (!busy || run?.task_id)) void send();
                 }
               }}
             />
@@ -1161,7 +1258,7 @@ export function ChatPage({
                   scopeKey={`${conversationId || "new"}:${attachmentBatch}`}
                   images={images}
                   onChange={changeImages}
-                  disabled={busy || !modelReady}
+                  disabled={(busy && !run?.task_id) || !modelReady}
                   onError={setError}
                   onUploading={setUploading}
                 />
@@ -1274,6 +1371,20 @@ export function ChatPage({
                 </DropdownMenu.Root>
               </div>
               <div className="composer-submit">
+                {busy && run?.task_id && (
+                  <Button
+                    aria-label="补充任务要求"
+                    size="icon"
+                    disabled={
+                      supplementing ||
+                      uploading ||
+                      (!draft.trim() && !images.length)
+                    }
+                    onClick={() => void send()}
+                  >
+                    <ArrowUp size={15} />
+                  </Button>
+                )}
                 {busy ? (
                   <Button
                     aria-label="停止生成"

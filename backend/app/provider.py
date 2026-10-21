@@ -1,8 +1,10 @@
 import base64
 import json
 import re
+import time
+import httpx
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel
 from .db import Session, Settings, Attachment
 from .config import PROFILE_ID, ATTACHMENTS_DIR, secret_get
@@ -11,6 +13,48 @@ from . import model_profiles
 
 class ConfigurationError(Exception):
     pass
+
+
+async def discover_models(profile):
+    """Read the draft connection's model catalog without saving or generating text."""
+    url = str(profile.model_url).rstrip("/")
+    key = profile.api_key
+    if key is None:
+        with Session() as db:
+            settings = db.get(Settings, PROFILE_ID)
+            saved = next((item for item in model_profiles.profiles(settings)
+                          if item["id"] == profile.id), None)
+        if not saved or saved["model_url"].rstrip("/") != url:
+            raise ConfigurationError("请为当前接口填写 API 密钥，再拉取模型。")
+        key = secret_get(model_profiles.secret_ref(profile.id))
+    if not key:
+        raise ConfigurationError("请先填写 API 密钥，再拉取模型。")
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+            async with client.stream("GET", url + "/models", headers={"Authorization": f"Bearer {key}"}) as response:
+                if response.status_code in (401, 403):
+                    raise ConfigurationError("拉取模型未获授权，请检查密钥及模型访问权限。")
+                if response.status_code in (404, 405):
+                    raise ConfigurationError("当前接口未提供模型列表，请检查接口地址，或手动添加模型。")
+                if not response.is_success:
+                    raise ConfigurationError(f"拉取模型失败（HTTP {response.status_code}），请稍后重试。")
+                raw = bytearray()
+                async for chunk in response.aiter_bytes():
+                    raw.extend(chunk)
+                    if len(raw) > 2 * 1024 * 1024:
+                        raise ConfigurationError("模型列表过大，请手动添加所需模型。")
+        body = json.loads(raw)
+    except (httpx.HTTPError, ValueError):
+        raise ConfigurationError("无法读取模型列表，请检查网络和接口地址后重试。") from None
+    rows = body.get("data") if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        raise ConfigurationError("接口没有返回可识别的模型列表，请手动添加模型。")
+    names = {item["id"].strip() for item in rows
+             if isinstance(item, dict) and isinstance(item.get("id"), str)
+             and 0 < len(item["id"].strip()) <= 200}
+    return [{"name": name, "vision_enabled": False, "thinking_mode": "auto",
+             "thinking_control": model_profiles.thinking_control(url, {"name": name}, profile.provider_type)}
+            for name in sorted(names, key=str.casefold)]
 
 
 class CompatibleChatModel(ChatOpenAI):
@@ -42,6 +86,11 @@ class CompatibleChatModel(ChatOpenAI):
 
 
 def model(config=None) -> ChatOpenAI:
+    if config is None:
+        from .task_context import current
+        execution = current.get()
+        if execution:
+            config = execution.model_config or None
     with Session() as db:
         settings = db.get(Settings, PROFILE_ID)
         try:
@@ -74,6 +123,11 @@ def model(config=None) -> ChatOpenAI:
 
 
 def user_content(text: str, attachment_ids: list[str] | None = None, config=None):
+    if config is None:
+        from .task_context import current
+        execution = current.get()
+        if execution:
+            config = execution.model_config or None
     if not attachment_ids:
         return text
     with Session() as db:
@@ -110,24 +164,40 @@ def user_content(text: str, attachment_ids: list[str] | None = None, config=None
 
 
 async def ask_json(
-    schema: type[BaseModel], instructions: str, text: str, attachment_ids=None
+    schema: type[BaseModel], instructions: str, text: str, attachment_ids=None,
+    *, model_config=None, on_partial=None, on_usage=None,
 ) -> BaseModel:
-    llm = model()
+    llm = model(model_config)
     messages = [
         SystemMessage(
             content=instructions
             + "\n只返回符合以下 Schema 的 JSON。不要使用 Markdown 代码块。\n"
             + json.dumps(schema.model_json_schema(), ensure_ascii=False)
         ),
-        HumanMessage(content=user_content(text, attachment_ids)),
+        HumanMessage(content=user_content(text, attachment_ids, model_config)),
     ]
     for attempt in range(2):
-        response = await llm.ainvoke(messages)
-        raw = (
-            response.content
-            if isinstance(response.content, str)
-            else json.dumps(response.content, ensure_ascii=False)
-        )
+        if on_partial:
+            raw, last_update = "", 0.0
+            on_partial({})
+            response = None
+            async for chunk in llm.astream(messages):
+                response = chunk if response is None else response + chunk
+                if isinstance(chunk.content, str):
+                    raw += chunk.content
+                if time.monotonic() - last_update >= 0.15:
+                    on_partial(partial_json_strings(raw, schema.model_fields))
+                    last_update = time.monotonic()
+            on_partial(partial_json_strings(raw, schema.model_fields))
+            if response is None:
+                raise ValueError("模型未返回文字，请重试。")
+            response = AIMessage(content=response.content, additional_kwargs=response.additional_kwargs,
+                                 usage_metadata=getattr(response, "usage_metadata", None))
+        else:
+            response = await llm.ainvoke(messages)
+            raw = response.content if isinstance(response.content, str) else json.dumps(response.content, ensure_ascii=False)
+        if on_usage:
+            on_usage(getattr(response, "usage_metadata", None) or {})
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
         try:
             return schema.model_validate_json(raw)
@@ -138,10 +208,35 @@ async def ask_json(
                 [
                     response,
                     HumanMessage(
-                        content="返回结构校验失败。请修正为符合 Schema 的完整 JSON，特别检查必填字段和前置知识点顺序。"
+                        content="返回结构校验失败。请修正为符合 Schema 的完整 JSON，检查必填字段、类型与约束条件。"
                     ),
                 ]
             )
+
+
+def partial_json_strings(raw, fields):
+    """Expose decoded string fields without JSON syntax or model reasoning."""
+    values = {}
+    for field in fields:
+        match = re.search(r'(?:^|[,{\n])\s*"' + re.escape(field) + r'"\s*:\s*"', raw)
+        if not match:
+            continue
+        start, end = match.end(), match.end()
+        while end < len(raw):
+            if raw[end] == '"':
+                break
+            if raw[end] == "\\":
+                width = 6 if raw[end:end + 2] == "\\u" else 2
+                if end + width > len(raw):
+                    break
+                end += width
+            else:
+                end += 1
+        try:
+            values[field] = json.loads('"' + raw[start:end] + '"').encode("utf-8", errors="ignore").decode("utf-8")
+        except ValueError:
+            continue
+    return values
 
 
 def safe_error(error: Exception, *, model_config=None) -> str:

@@ -401,26 +401,56 @@ async def run_script(key, path, args, run_id):
     with Session() as db:
         row = require(db, key, enabled=True)
         if not row.scripts_allowed:
-            return {"error": "此技能尚未授权脚本执行，请在设置 → 技能中开启"}
+            return {"error": "此技能尚未授权脚本执行，请在设置 → 技能中开启", "not_executed": True}
         path = safe_path(path)
         runtime = EXTENSIONS.get(Path(path).suffix.lower())
         if path not in row.files or not path.startswith("scripts/") or not runtime:
-            return {"error": "只能运行技能包 scripts/ 中支持的脚本"}
+            return {"error": "只能运行技能包 scripts/ 中支持的脚本", "not_executed": True}
         digest = row.digest
     if (
         not isinstance(args, list)
         or len(args) > 100
         or any(not isinstance(x, str) or len(x) > 10000 or "\x00" in x for x in args)
     ):
-        return {"error": "脚本参数必须是字符串数组"}
+        return {"error": "脚本参数必须是字符串数组", "not_executed": True}
     executable = runtime_info()[runtime]["resolved"]
     if not executable:
-        return {"error": f"缺少 {runtime} 运行环境，请安装或在技能设置中指定解释器路径"}
-    work = config.DATA_DIR / "skill-runs" / run_id / key / digest
+        return {"error": f"缺少 {runtime} 运行环境，请安装或在技能设置中指定解释器路径", "not_executed": True}
+    from .task_context import current
+    execution = current.get()
+    work = config.DATA_DIR / "skill-runs" / (execution.task_id if execution else run_id) / key / digest
     if not work.exists():
         shutil.copytree(root() / key, work)
     output = work / "outputs"
     output.mkdir(exist_ok=True)
+    workspace_key = f"{key}:{digest}"
+    marker = work / ".xiaoxi-task-restored"
+    if execution and not marker.exists():
+        from .db import TaskOperation, Run
+        with Session() as db:
+            previous = db.scalars(select(TaskOperation).where(TaskOperation.task_id == execution.task_id,
+                TaskOperation.tool_id == "run_skill_script", TaskOperation.status == "completed")
+                .order_by(TaskOperation.created_at)).all()
+        try:
+            for operation in previous:
+                if operation.result.get("workspace_key") != workspace_key:
+                    continue
+                for item in operation.result.get("workspace_files", []):
+                    target = (output / item["path"]).resolve()
+                    if not target.is_relative_to(output.resolve()):
+                        raise ValueError("任务工作文件路径无效")
+                    source, record = artifacts.file_record(item["artifact_id"])
+                    with Session() as db:
+                        owner = db.get(Run, record.run_id)
+                        if not owner or owner.task_id != execution.task_id:
+                            raise ValueError("任务工作文件不属于当前任务")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+            marker.write_text(workspace_key, encoding="utf-8")
+        except (ValueError, OSError, KeyError, HTTPException):
+            return {"error": "任务工作文件恢复未完成，请核对已有产物；尚未运行脚本。", "not_executed": True}
+    before = {str(file): (file.stat().st_size, file.stat().st_mtime_ns)
+              for file in output.rglob("*") if file.is_file()} if execution else {}
     env = {
         k: v
         for k, v in os.environ.items()
@@ -496,17 +526,24 @@ async def run_script(key, path, args, run_id):
                     pass
             stdout, stderr = await asyncio.gather(*readers)
         files = []
+        workspace_files = []
         for file in sorted(output.rglob("*")):
             if file.is_symlink() or not file.resolve().is_relative_to(output.resolve()):
                 continue
             if file.is_file() and len(files) < 30 and file.stat().st_size <= MAX_BYTES:
-                files.append(artifacts.save_file(run_id, file.name, file.read_bytes()))
+                if execution and before.get(str(file)) == (file.stat().st_size, file.stat().st_mtime_ns):
+                    continue
+                artifact = artifacts.save_file(run_id, file.name, file.read_bytes())
+                files.append(artifact)
+                workspace_files.append({"path": file.relative_to(output).as_posix(), "artifact_id": artifact["id"]})
         result = {
             "exit_code": process.returncode,
             "stdout": stdout,
             "stderr": stderr,
             "artifacts": files,
         }
+        if execution:
+            result.update(workspace_key=workspace_key, workspace_files=workspace_files)
         if process.returncode:
             result["error"] = "技能脚本执行失败，请查看退出码和错误输出；未自动重试"
         return result
@@ -515,7 +552,7 @@ async def run_script(key, path, args, run_id):
     except asyncio.CancelledError:
         raise
     except OSError:
-        return {"error": "无法启动技能脚本，请检查解释器及运行权限"}
+        return {"error": "无法启动技能脚本，请检查解释器及运行权限", "not_executed": process is None}
     finally:
         if release:
             release()

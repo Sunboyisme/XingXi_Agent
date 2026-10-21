@@ -112,7 +112,8 @@ def redact(value, secrets=(), *, limit=True):
         if isinstance(clean, dict) and clean.get("error"):
             result["error"] = str(clean["error"])[:2000]
         if isinstance(clean, dict):
-            for key in ("artifacts", "sources", "media_errors", "image_urls", "exit_code"):
+            for key in ("artifacts", "sources", "media_errors", "image_urls", "exit_code",
+                        "workspace_key", "workspace_files", "not_executed"):
                 if key in clean:
                     result[key] = clean[key]
             for key in ("stdout", "stderr"):

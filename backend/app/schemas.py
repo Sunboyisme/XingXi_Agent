@@ -437,6 +437,7 @@ class ChatInput(BaseModel):
 
 
 class RunRead(RecordRead):
+    task_id: str | None = None
     kind: str
     status: str
     conversation_id: str | None
@@ -444,6 +445,26 @@ class RunRead(RecordRead):
     result: dict
     error: str | None
     usage: dict
+
+
+class TaskRead(RecordRead):
+    conversation_id: str
+    source_message_id: str
+    status: str
+    revision: int
+    goal: str
+    reason: str
+    requirements: dict
+    steps: list[dict]
+    artifacts: list[dict]
+    pending_messages: int
+    result: dict
+    operations: list[dict]
+
+
+class TaskResolution(BaseModel):
+    operation_id: str
+    resolution: Literal["retry", "skip", "completed"]
 
 
 class GoalCreate(BaseModel):

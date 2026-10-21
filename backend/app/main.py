@@ -15,7 +15,7 @@ from langgraph.types import Command
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
-from . import features, skills, office
+from . import features, skills, office, complex_tasks
 from . import (
     agent,
     data_transfer,
@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI):
             pending_file.status, pending_file.error = "failed", "上次解析被中断，请重新上传；原文件已保留"
         db.commit()
     data_transfer.apply_pending()
+    complex_tasks.recover()
     skills.ensure_builtin()
     retrieval.last_error = ""
     retrieval_task = asyncio.create_task(retrieval.worker())
@@ -529,6 +530,16 @@ async def test_connection(value: s.ModelSelection | None = None):
         raise HTTPException(400, provider.safe_error(error))
 
 
+@router.post("/settings/providers/models", response_model=list[s.ModelOptionRead])
+async def discover_connection_models(value: s.ProviderWrite):
+    try:
+        return await provider.discover_models(value)
+    except provider.ConfigurationError as error:
+        raise HTTPException(400, str(error)) from None
+    except Exception:
+        raise HTTPException(400, "拉取模型失败，请检查当前接口和密钥后重试。") from None
+
+
 @router.get("/conversations", response_model=list[s.ConversationRead])
 def conversations(db=Depends(database)):
     return db.scalars(
@@ -559,9 +570,25 @@ def messages(conversation_id: str, db=Depends(database)):
 @router.post("/conversations/{conversation_id}/messages", response_model=s.RunRead)
 async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(database)):
     conversation = item(db, store.Conversation, conversation_id)
-    if db.scalar(select(store.Run.id).where(store.Run.conversation_id == conversation_id,
-        store.Run.status.in_(["queued", "running"]))):
-        raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
+    active = db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id,
+        store.Run.status.in_(["queued", "running"])))
+    if active:
+        if not active.task_id:
+            raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
+        task = complex_tasks.require(db, active.task_id)
+        try:
+            provider.user_content(value.content, value.attachment_ids, task.model_config)
+        except Exception as error:
+            raise HTTPException(400, provider.safe_error(error))
+        office.claim(db, value.attachment_ids, conversation_id)
+        message = store.Message(conversation_id=conversation_id, role="user",
+            content=value.content, attachment_ids=value.attachment_ids)
+        db.add(message)
+        db.flush()
+        complex_tasks.queue_message(db, task, message)
+        db.commit()
+        complex_tasks.publish(active.id, task.id)
+        return active
     try:
         config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), value.model_selection)
         provider.model(config)
@@ -571,14 +598,15 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
     run = create_run(db, "chat", conversation_id=conversation_id)
     office.claim(db,value.attachment_ids,conversation_id)
     run.model_config = config
-    db.add(
-        store.Message(
+    message = store.Message(
             conversation_id=conversation_id,
             role="user",
             content=value.content,
             attachment_ids=value.attachment_ids,
         )
-    )
+    db.add(message)
+    db.flush()
+    run.source_message_id = message.id
     if conversation.title == "新对话":
         conversation.title = value.content[:30]
     conversation.updated_at = store.now()
@@ -604,9 +632,85 @@ async def retry_message(conversation_id: str, db=Depends(database)):
     config = previous.model_config if previous and previous.model_config else model_profiles.resolve(db.get(store.Settings, PROFILE_ID))
     run = create_run(db, "chat", conversation_id=conversation_id)
     run.model_config = config
+    if previous and previous.task_id:
+        run.task_id = previous.task_id
+        run.source_message_id = previous.source_message_id
     db.commit()
     runs.launch(run.id, lambda: agent.chat(run.id, conversation_id))
     return run
+
+
+@router.get("/conversations/{conversation_id}/tasks", response_model=list[s.TaskRead])
+def conversation_tasks(conversation_id: str, db=Depends(database)):
+    item(db, store.Conversation, conversation_id)
+    values = db.scalars(select(store.ComplexTask).where(
+        store.ComplexTask.conversation_id == conversation_id,
+        store.ComplexTask.profile_id == PROFILE_ID,
+    ).order_by(store.ComplexTask.updated_at.desc()).limit(30)).all()
+    return [complex_tasks.detail(value.id) for value in values]
+
+
+@router.get("/tasks/{task_id}", response_model=s.TaskRead)
+def task_detail(task_id: str):
+    return complex_tasks.detail(task_id)
+
+
+@router.post("/tasks/{task_id}/resume", response_model=s.RunRead)
+async def resume_task(task_id: str, db=Depends(database)):
+    task = complex_tasks.require(db, task_id)
+    if task.status in complex_tasks.TERMINAL:
+        raise HTTPException(409, "任务已经结束，请发送新的要求。")
+    run = create_run(db, "chat", conversation_id=task.conversation_id)
+    run.task_id, run.model_config = task.id, task.model_config
+    message = store.Message(conversation_id=task.conversation_id, role="user", content="继续此任务。")
+    db.add(message)
+    db.flush()
+    task.message_ids = [*task.message_ids, message.id]
+    run.source_message_id = message.id
+    db.commit()
+    runs.launch(run.id, lambda: agent.chat(run.id, task.conversation_id))
+    return run
+
+
+@router.post("/tasks/{task_id}/cancel", response_model=s.TaskRead)
+async def end_task(task_id: str, db=Depends(database)):
+    task = complex_tasks.require(db, task_id)
+    active = db.scalar(select(store.Run).where(store.Run.task_id == task_id,
+        store.Run.status.in_(["queued", "running"])))
+    task.status, task.reason = "cancelled", "已结束任务，已有成果保留。"
+    db.commit()
+    if active and active.id in runs.tasks:
+        runs.tasks[active.id].cancel()
+    return complex_tasks.detail(task_id)
+
+
+@router.post("/tasks/{task_id}/resolve", response_model=s.TaskRead)
+def resolve_task_operation(task_id: str, value: s.TaskResolution, db=Depends(database)):
+    task = complex_tasks.require(db, task_id)
+    if task.status in complex_tasks.TERMINAL:
+        raise HTTPException(409, "任务已经结束，已有操作记录保留；重新执行请提出新要求。")
+    if db.scalar(select(store.Run.id).where(store.Run.task_id == task_id,
+        store.Run.status.in_(["queued", "running"]))):
+        raise HTTPException(409, "请先停止任务，再核实操作结果。")
+    operation = db.get(store.TaskOperation, value.operation_id)
+    if not operation or operation.task_id != task_id or operation.status != "unknown":
+        raise HTTPException(409, "该操作不需要核实或状态已经变化。")
+    labels = {"retry": "我已核对结果，明确要求重新提交此操作。", "skip": "请跳过该操作并调整后续任务。",
+              "completed": "我已在外部核实该操作已经完成，请复用此结果，不要再次提交。"}
+    message = store.Message(conversation_id=task.conversation_id, role="user",
+        content=f"针对任务“{task.goal[:100]}”的操作 {operation.tool_id}：{labels[value.resolution]}")
+    db.add(message)
+    db.flush()
+    task.message_ids = [*task.message_ids, message.id]
+    operation.status = {"retry": "failed", "skip": "skipped", "completed": "completed"}[value.resolution]
+    if value.resolution == "completed":
+        operation.result = {**operation.result, "error": None, "user_verified": True,
+            "summary": "用户已在外部核实操作完成；不代表已取得本机文件。"}
+    if value.resolution == "skip":
+        task.pending_message_ids = [message.id]
+    task.status, task.reason = "paused", "核实结果已保存，发送“继续”后恢复。"
+    db.commit()
+    return complex_tasks.detail(task_id)
 
 
 @router.delete("/conversations/{conversation_id}")
@@ -642,7 +746,7 @@ def get_run(run_id: str, db=Depends(database)):
 
 
 @router.post("/runs/{run_id}/cancel", response_model=s.RunRead)
-def cancel_run(run_id: str, db=Depends(database)):
+async def cancel_run(run_id: str, db=Depends(database)):
     value = item(db, store.Run, run_id)
     task = runs.tasks.get(run_id)
     if task:
@@ -754,7 +858,7 @@ async def teach_node(node_id: str, request: Request, db=Depends(database)):
 
     async def operation():
         await request.app.state.tutor.ainvoke(
-            {"node_id": node_id, "lesson_id": lesson_id},
+            {"node_id": node_id, "lesson_id": lesson_id, "run_id": run.id},
             config={"configurable": {"thread_id": lesson_id}},
         )
         return {"lesson_id": lesson_id, "node_id": node_id}
@@ -788,6 +892,7 @@ async def submit(
         # Failed assessment leaves a checkpoint at the assessment node, not a new interrupt.
         config = {"configurable": {"thread_id": lesson.graph_thread_id}}
         state = await request.app.state.tutor.aget_state(config)
+        await request.app.state.tutor.aupdate_state(config, {"run_id": run.id})
         command = (
             Command(resume=value.model_dump())
             if "await_submission" in state.next

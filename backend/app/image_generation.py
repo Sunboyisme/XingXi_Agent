@@ -158,7 +158,8 @@ async def request_image(value, api_key, prompt, progress=None):
         }.get(status, "图片服务请求失败，未自动重试。")
         if stage == "download":
             message = f"图片服务已返回结果，但下载图片失败（HTTP {status}）；未重新生成。"
-        result = {"error": message, "http_status": status}
+        result = {"error": message, "http_status": status,
+                  "not_executed": stage == "generate" and status in {400, 401, 403, 404, 422, 429}}
         if stage == "generate" and isinstance(payload, dict):
             remote = payload.get("error")
             code = remote.get("code") if isinstance(remote, dict) else payload.get("code")
@@ -199,16 +200,20 @@ async def probe(value, api_key):
 async def generate(run_id, prompt, name):
     value = settings()
     if not ready(value):
-        return {"error": "请先在「连接与设置 → 图片生成」配置并启用图片模型。"}
+        return {"error": "请先在「连接与设置 → 图片生成」配置并启用图片模型。", "not_executed": True}
     prompt = prompt.strip()
     if not prompt or len(prompt) > 16000:
-        return {"error": "图片描述需要 1–16000 个字符。"}
+        return {"error": "图片描述需要 1–16000 个字符。", "not_executed": True}
     protocol, url, _ = request_spec(value, prompt)
     fingerprint = hashlib.sha256(json.dumps({
         "prompt": prompt, "model": value["model"], "url": value["url"],
         "size": value["size"], "response_format": value["response_format"],
         "protocol": protocol, "endpoint": url,
     }, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    from .task_context import current
+    execution = current.get()
+    if execution and execution.operation_id:
+        fingerprint = hashlib.sha256((execution.operation_id + fingerprint).encode()).hexdigest()
     with Session() as db:
         previous = list(db.scalars(select(RunEvent).where(
             RunEvent.run_id == run_id, RunEvent.kind == "image_generation"

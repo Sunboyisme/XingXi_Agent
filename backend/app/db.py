@@ -128,6 +128,53 @@ class Run(Record, Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     usage: Mapped[dict] = mapped_column(JSON, default=dict)
     model_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    task_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    source_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class ComplexTask(Record, Base):
+    __tablename__ = "complex_tasks"
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    source_message_id: Mapped[str] = mapped_column(String(36))
+    status: Mapped[str] = mapped_column(String(30), default="planning")
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    goal: Mapped[str] = mapped_column(Text)
+    requirements: Mapped[dict] = mapped_column(JSON, default=dict)
+    model_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    message_ids: Mapped[list] = mapped_column(JSON, default=list)
+    pending_message_ids: Mapped[list] = mapped_column(JSON, default=list)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class TaskStep(Record, Base):
+    __tablename__ = "task_steps"
+    task_id: Mapped[str] = mapped_column(ForeignKey("complex_tasks.id", ondelete="CASCADE"), index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    ordinal: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(200))
+    instruction: Mapped[str] = mapped_column(Text)
+    source_message_id: Mapped[str] = mapped_column(String(36))
+    repeat_operation_ids: Mapped[list] = mapped_column(JSON, default=list)
+    dependencies: Mapped[list] = mapped_column(JSON, default=list)
+    tools: Mapped[list] = mapped_column(JSON, default=list)
+    formats: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    output: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class TaskOperation(Record, Base):
+    __tablename__ = "task_operations"
+    task_id: Mapped[str] = mapped_column(ForeignKey("complex_tasks.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str] = mapped_column(ForeignKey("task_steps.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(String(36))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    tool_id: Mapped[str] = mapped_column(String(100))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(30), default="started")
+    policy: Mapped[str] = mapped_column(String(30), default="external")
+    arguments: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class RunEvent(Base):

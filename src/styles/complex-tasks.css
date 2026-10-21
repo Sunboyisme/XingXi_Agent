@@ -1,0 +1,220 @@
+.complex-task-card {
+  margin: 16px 0 20px 58px;
+  padding: 16px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 18px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  overflow-wrap: anywhere;
+}
+.complex-task-heading {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+}
+.complex-task-heading strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.complex-task-heading > span {
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.complex-task-heading > svg {
+  flex-shrink: 0;
+  color: var(--ui-color-action);
+}
+.complex-task-heading {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px;
+}
+.complex-task-heading:hover,
+.task-files-toggle:hover {
+  background: var(
+    --ui-color-surface-hover,
+    color-mix(in srgb, var(--ui-color-action) 7%, transparent)
+  );
+}
+.complex-task-heading:focus-visible,
+.task-files-toggle:focus-visible {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 3px;
+}
+.task-chevron {
+  transition: transform 160ms ease;
+}
+[aria-expanded="true"] > .task-chevron {
+  transform: rotate(180deg);
+}
+.complex-task-heading[aria-expanded="true"] strong {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+.complex-task-progress {
+  color: var(--ui-color-text-muted);
+  margin: 0 0 10px;
+}
+.complex-task-current,
+.complex-task-reason {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+.complex-task-details {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.complex-task-steps {
+  margin: 12px 0;
+  padding-left: 22px;
+}
+.complex-task-steps li {
+  padding: 5px 0;
+}
+.complex-task-steps small {
+  margin-left: 12px;
+  color: var(--ui-color-text-muted);
+}
+.complex-task-steps [data-status="completed"] {
+  color: var(--ui-color-text-muted);
+}
+.complex-task-steps [data-status="running"] {
+  color: var(--ui-color-action);
+}
+.complex-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.complex-task-operation {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.complex-task-operation p {
+  margin: 5px 0;
+  white-space: pre-wrap;
+}
+.complex-task-files {
+  margin-top: 12px;
+  border-top: 1px solid var(--ui-color-line);
+  padding-top: 10px;
+}
+.complex-task-details summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.task-files-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.task-files-toggle > svg {
+  flex-shrink: 0;
+  color: var(--ui-color-action);
+}
+.task-files-toggle > span {
+  flex: 1;
+  min-width: 0;
+}
+.task-files-toggle strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.task-files-toggle small {
+  display: block;
+  margin-top: 3px;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.task-files-count {
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-action);
+}
+.task-artifact-list {
+  display: grid;
+  gap: 12px;
+  padding: 10px 8px 2px;
+}
+.task-artifact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 12px;
+}
+.task-artifact[data-current="false"] {
+  border-style: dashed;
+}
+.task-artifact-version {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.task-artifact .output-picture {
+  display: block;
+  margin: 0;
+  max-width: 100%;
+}
+.task-artifact .artifact-download {
+  display: block;
+  margin: 0;
+  max-width: 100%;
+}
+.task-artifact .artifact-download button {
+  max-width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.task-artifact .file-card {
+  width: 100%;
+}
+.complex-task-criteria ul {
+  margin-top: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-chevron {
+    transition: none;
+  }
+}
+.complex-task-files .output-picture img {
+  max-height: 220px;
+}
+.lesson-stream {
+  min-width: 0;
+}
+.ui-hint {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .complex-task-card {
+    margin-left: 0;
+    padding: 12px;
+  }
+  .complex-task-heading {
+    flex-wrap: wrap;
+  }
+  .complex-task-heading strong {
+    flex-basis: calc(100% - 60px);
+  }
+}

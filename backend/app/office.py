@@ -360,7 +360,7 @@ async def _generate(run_id, conversation_id, operation, name, format, **kwargs):
     ).hexdigest()
     marker = "xiaoxi-office:" + identity
     for record in existing:
-        if record.source_url == marker:
+        if record.source_url == marker and (artifacts.root() / record.storage_name).is_file():
             return {
                 "artifacts": [artifacts.describe(record)],
                 "summary": "文件已生成（复用本轮相同结果）",

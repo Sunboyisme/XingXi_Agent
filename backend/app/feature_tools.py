@@ -1,3 +1,4 @@
+from . import task_context
 import json
 import re
 import threading
@@ -110,15 +111,7 @@ def build(run_id, conversation_id):
             if not 1 <= len(plans) <= 100:
                 raise ValueError()
             with Session() as db:
-                message = db.scalar(
-                    select(Message)
-                    .where(
-                        Message.conversation_id == conversation_id,
-                        Message.role == "user",
-                    )
-                    .order_by(Message.created_at.desc(), MESSAGE_ORDER.desc())
-                    .limit(1)
-                )
+                message = task_context.user_message(db, run_id, conversation_id)
                 latest_message_id = message.id if message else ""
                 latest_text = (
                     " ".join((message.content or "").split()) if message else ""

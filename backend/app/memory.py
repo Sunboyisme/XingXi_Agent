@@ -1,8 +1,11 @@
 """Long-term memory write policy. Candidate records never enter model background."""
 
+from . import task_context
+
 import re
 from threading import RLock
 
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .config import PROFILE_ID
@@ -61,6 +64,34 @@ class MemoryConflict(ValueError):
     pass
 
 
+class SourceQuote(BaseModel):
+    message_id: str = Field(min_length=1, max_length=64)
+    quote: str = Field(min_length=1, max_length=6000)
+
+
+def history_evidence(db, message, sources):
+    """Keep current authorization separate from verified, earlier user facts."""
+    if not 1 <= len(sources) <= 12:
+        raise ValueError("每条记忆请提供 1–12 段历史用户原文。")
+    boundary = db.scalar(select(MESSAGE_ORDER).select_from(Message).where(Message.id == message.id))
+    references = []
+    for source in sources:
+        value = SourceQuote.model_validate(source)
+        record = db.scalar(select(Message).where(
+            Message.id == value.message_id, Message.profile_id == PROFILE_ID,
+            Message.conversation_id == message.conversation_id, Message.role == "user",
+            MESSAGE_ORDER <= boundary,
+        ))
+        quote = value.quote.strip()
+        if not record or not quote or quote not in record.content:
+            raise ValueError("历史依据必须逐字引用本轮之前、当前会话中的真实用户消息；请先检索原始消息并核对编号。")
+        references.append(f"用户消息 {record.id}：\n{quote}")
+    result = "\n\n".join(references)
+    if len(result) > 12000:
+        raise ValueError("历史依据过长，请只引用与当前记忆相关的片段。")
+    return result
+
+
 def preference_clause(message: str) -> str:
     """A conservative fallback for clear, stable preferences stated by the user.
 
@@ -98,7 +129,7 @@ def snapshot(value: Memory) -> dict:
 
 
 def policy(content, category, message, evidence, risk, explicit_request, mode):
-    """Model classification is advisory; ground every write in the latest user turn."""
+    """Model classification is advisory; authorization comes from the current user turn."""
     if DECLINED.search(message):
         return "skip", "用户未同意保存"
     explicit = explicit_request and bool(EXPLICIT.search(message))
@@ -107,7 +138,7 @@ def policy(content, category, message, evidence, risk, explicit_request, mode):
     if not evidence.strip() or evidence not in message:
         return (
             "error",
-            "请提供当前用户消息中逐字引用的 evidence；网页、助手回答和历史推测不能作为保存依据",
+            "请逐字引用当前用户消息作为 evidence；用户要求整理历史信息时，设 explicit_request=true，并用 source_quotes 提供历史用户消息编号和原文。网页、助手回答和推测不能作为事实依据。",
         )
     if SECRET.search(content + "\n" + evidence):
         return "skip", "密钥和密码不保存为个人记忆"
@@ -143,6 +174,7 @@ def save_from_chat(
     evidence="",
     risk="normal",
     replaces_id="",
+    source_quotes=None,
 ) -> dict:
     content, evidence = content.strip(), evidence.strip()
     if (
@@ -154,19 +186,35 @@ def save_from_chat(
     if risk not in ("normal", "sensitive", "inferred", "temporary"):
         return {"error": "无效的记忆类型"}
     with lock, Session() as db:
-        message = db.scalar(
-            select(Message)
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.role == "user",
-                Message.profile_id == PROFILE_ID,
-            )
-            .order_by(Message.created_at.desc(), MESSAGE_ORDER.desc())
-            .limit(1)
-        )
+        message = task_context.user_message(db, run_id, conversation_id)
         if not message:
             return {"error": "找不到当前用户消息"}
         settings = db.get(Settings, PROFILE_ID)
+        stored_evidence = evidence
+        sources = source_quotes or []
+        authorized = explicit_request and bool(EXPLICIT.search(message.content)) and not DECLINED.search(message.content)
+        # Older tool callers may supply one exact historical quote in evidence.
+        # Find its original user message instead of rejecting a valid current request.
+        if not sources and evidence and evidence not in message.content and authorized:
+            boundary = db.scalar(select(MESSAGE_ORDER).select_from(Message).where(Message.id == message.id))
+            origin = db.scalar(select(Message).where(
+                Message.profile_id == PROFILE_ID, Message.conversation_id == conversation_id,
+                Message.role == "user", MESSAGE_ORDER <= boundary,
+                Message.content.contains(evidence, autoescape=True),
+            ).order_by(MESSAGE_ORDER.desc()).limit(1))
+            if origin:
+                sources = [{"message_id": origin.id, "quote": evidence}]
+        if sources:
+            if not authorized:
+                return {"error": "整理历史记忆需要本轮用户明确要求记住；历史消息不能代替当前保存授权。", "changed": False}
+            try:
+                original = history_evidence(db, message, sources)
+            except (ValueError, TypeError):
+                return {"error": "历史依据无效：请先检索当前会话的用户原文，使用真实消息编号和逐字引用；最多 12 段，总计不超过 12000 字。", "changed": False}
+            if SECRET.search(content + "\n" + original):
+                return {"skipped": "密钥和密码不保存为个人记忆", "changed": False}
+            evidence = message.content
+            stored_evidence = f"保存授权（用户消息 {message.id}）：\n{message.content}\n\n历史事实依据：\n{original}"
         state, reason = policy(
             content,
             category,
@@ -181,7 +229,7 @@ def save_from_chat(
                 "error" if state == "error" else "skipped": reason,
                 "changed": False,
             }
-        evidence = evidence or message.content
+        evidence = stored_evidence or evidence or message.content
         # A retry of the same user turn must respect an earlier Undo / dismissal.
         for change in db.scalars(
             select(MemoryChange).where(
