@@ -83,13 +83,7 @@ export function TaskCard({
   }
   return (
     <section className="complex-task-card" aria-label={`任务：${task.goal}`}>
-      <button
-        type="button"
-        className="complex-task-heading"
-        aria-expanded={open}
-        aria-controls={`task-details-${task.id}`}
-        onClick={() => setOpen((value) => !value)}
-      >
+      <div className="complex-task-heading" data-expanded={open}>
         {active ? (
           <Loader2 size={16} className="spin" />
         ) : task.status === "completed" ? (
@@ -99,8 +93,17 @@ export function TaskCard({
         )}
         <strong>{task.goal}</strong>
         <span>{states[task.status] || task.status}</span>
-        <ChevronDown size={15} className="task-chevron" />
-      </button>
+        <button
+          type="button"
+          className="task-details-toggle"
+          aria-label={open ? "收起任务步骤" : "展开任务步骤"}
+          aria-expanded={open}
+          aria-controls={`task-details-${task.id}`}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ChevronDown size={15} className="task-chevron" aria-hidden="true" />
+        </button>
+      </div>
       {active && current && (
         <p className="complex-task-current">{current.title}</p>
       )}

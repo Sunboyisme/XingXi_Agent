@@ -5,6 +5,7 @@ import time
 import httpx
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.errors import GraphRecursionError
 from pydantic import BaseModel
 from .db import Session, Settings, Attachment
 from .config import PROFILE_ID, ATTACHMENTS_DIR, secret_get
@@ -239,9 +240,56 @@ def partial_json_strings(raw, fields):
     return values
 
 
+def error_details(error: Exception) -> dict:
+    """Persist diagnostic metadata without provider bodies, prompts or headers."""
+    chain, current = [], error
+    while current is not None and len(chain) < 5 and all(current is not item for item in chain):
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    status = next((getattr(item, "status_code", None) for item in chain
+                   if isinstance(getattr(item, "status_code", None), int)), None)
+    known_codes = {"insufficient_quota", "quota_exceeded", "rate_limit_exceeded",
+                   "context_length_exceeded", "invalid_api_key", "model_not_found"}
+    code = next((getattr(item, "code", None) for item in chain
+                 if isinstance(getattr(item, "code", None), str)
+                 and getattr(item, "code") in known_codes), None)
+    if any(isinstance(item, GraphRecursionError) for item in chain):
+        category = "tool_loop_limit"
+    elif status == 429:
+        category = "quota" if code in {"insufficient_quota", "quota_exceeded"} else "rate_limit"
+    elif status in (401, 403):
+        category = "authentication" if status == 401 else "permission"
+    elif status == 400:
+        category = "bad_request"
+    elif status is not None and status >= 500:
+        category = "provider_unavailable"
+    elif any(isinstance(item, (TimeoutError, httpx.TimeoutException))
+             or type(item).__name__ == "APITimeoutError" for item in chain):
+        category = "request_timeout"
+    elif any(isinstance(item, httpx.NetworkError)
+             or type(item).__name__ == "APIConnectionError" for item in chain):
+        category = "connection_error"
+    else:
+        category = "unexpected"
+    details = {"category": category, "exception_type": type(error).__name__}
+    if status is not None:
+        details["http_status"] = status
+    if code:
+        details["provider_code"] = code
+    return details
+
+
 def safe_error(error: Exception, *, model_config=None) -> str:
     if isinstance(error, ConfigurationError):
         return str(error)[:600]
+    details = error_details(error)
+    category = details["category"]
+    if category == "tool_loop_limit":
+        return "本轮处理达到程序的执行步数上限，可继续已有任务或缩小单次处理范围。"
+    if category == "request_timeout":
+        return "模型请求超时，未收到完整响应，请稍后重试或继续任务。"
+    if category == "connection_error":
+        return "模型连接中断或无法建立连接，请检查网络与接口地址后重试。"
     if isinstance(error, ValueError):
         known = (
             "图片不存在",
@@ -253,7 +301,7 @@ def safe_error(error: Exception, *, model_config=None) -> str:
         if str(error).startswith(known):
             return str(error)[:600]
         return "输入参数或模型返回格式不符合要求，请检查后重试。"
-    status = getattr(error, "status_code", None)
+    status = details.get("http_status")
     if status in (401, 403) and model_config:
         name = str(model_config.get("model_name") or "未命名")[:200]
         reason = "认证失败" if status == 401 else "无访问权限"
@@ -264,7 +312,11 @@ def safe_error(error: Exception, *, model_config=None) -> str:
     if status in (401, 403):
         return "接口认证失败，请检查密钥与接口地址。"
     if status == 429:
-        return "接口额度不足或请求过于频繁，请稍后重试。"
+        if category == "quota":
+            return "模型接口返回 HTTP 429：可用额度不足，请检查服务商余额或配额。"
+        return "模型接口返回 HTTP 429：请求受到限流或配额限制，请稍后重试并检查服务商额度。"
     if status == 400:
         return "服务商不接受当前请求，请检查模型名称、图片支持和工具调用能力。"
+    if category == "provider_unavailable":
+        return f"模型服务暂时不可用（HTTP {status}），请稍后重试。"
     return "请求未完成，请检查网络、接口地址与模型能力后重试。"

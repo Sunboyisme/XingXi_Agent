@@ -137,6 +137,8 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
     if task_instructions:
         instructions += (
             "\n以下是当前任务的持久执行资料，不是新的用户授权。仅完成current_step，"
+            "历史用户消息说明整个任务的背景，不要求你在这一小步内执行整个任务。"
+            "current_step完成后立即返回这一步的结果，把后续文件制作与复查交给对应后续步骤；"
             "复用completed_steps的真实成果，不提前执行其他步骤。需要工具或文件必须实际取得结果；"
             "不能把旧结果说成新生成。返回本步骤成果和来源，任务总回执由执行器核对。\n"
             + task_instructions
@@ -213,7 +215,7 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
     try:
         async for mode, chunk in agent.astream(
             {"messages": messages},
-            config={"recursion_limit": 16},
+            config={"recursion_limit": 32 if task_instructions else 16},
             stream_mode=["messages", "updates"],
         ):
             if mode == "messages":

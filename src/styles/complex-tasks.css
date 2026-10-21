@@ -32,19 +32,28 @@
   flex-shrink: 0;
   color: var(--ui-color-action);
 }
-.complex-task-heading {
-  cursor: pointer;
+.task-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
-  padding: 4px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ui-color-action);
+  user-select: none;
 }
-.complex-task-heading:hover,
+.task-details-toggle:hover,
 .task-files-toggle:hover {
   background: var(
     --ui-color-surface-hover,
     color-mix(in srgb, var(--ui-color-action) 7%, transparent)
   );
 }
-.complex-task-heading:focus-visible,
+.task-details-toggle:focus-visible,
 .task-files-toggle:focus-visible {
   outline: 2px solid var(--ui-color-action);
   outline-offset: 3px;
@@ -55,7 +64,7 @@
 [aria-expanded="true"] > .task-chevron {
   transform: rotate(180deg);
 }
-.complex-task-heading[aria-expanded="true"] strong {
+.complex-task-heading[data-expanded="true"] strong {
   display: block;
   -webkit-line-clamp: unset;
 }

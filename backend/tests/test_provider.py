@@ -1,6 +1,7 @@
 import pytest
 import httpx
 from langchain_core.messages import AIMessage
+from langgraph.errors import GraphRecursionError
 from app import provider, search, schemas, db
 
 
@@ -107,3 +108,32 @@ def test_provider_errors_never_expose_arbitrary_exception_text():
     assert "sk-private-test" not in provider.safe_error(
         RuntimeError("request with sk-private-test")
     )
+
+
+def test_graph_limit_is_reported_as_local_limit_not_provider_rate_limit():
+    error = GraphRecursionError("synthetic graph limit")
+    assert provider.error_details(error)["category"] == "tool_loop_limit"
+    message = provider.safe_error(error)
+    assert "步数上限" in message and "限流" not in message
+
+
+def test_wrapped_request_timeout_is_identified_without_exposing_request():
+    error = RuntimeError("private request body")
+    error.__cause__ = httpx.ReadTimeout("private endpoint and headers")
+    assert provider.error_details(error)["category"] == "request_timeout"
+    assert "超时" in provider.safe_error(error)
+    assert "private" not in provider.safe_error(error)
+
+
+@pytest.mark.parametrize("code,category", [("rate_limit_exceeded", "rate_limit"), ("insufficient_quota", "quota")])
+def test_provider_429_preserves_safe_status_and_distinguishes_quota(code, category):
+    class ProviderError(Exception):
+        status_code = 429
+
+    error = ProviderError("private credential and response body")
+    error.code = code
+    details = provider.error_details(error)
+    assert details["category"] == category and details["http_status"] == 429
+    assert details["provider_code"] == code
+    assert "429" in provider.safe_error(error)
+    assert "private" not in str(details) + provider.safe_error(error)
