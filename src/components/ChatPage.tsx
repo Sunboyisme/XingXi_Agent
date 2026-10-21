@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -239,6 +238,50 @@ function resizeMessageInput(input: HTMLTextAreaElement) {
   }
 }
 
+function ReplyActivity({
+  reasoning,
+  stream,
+  imageGeneration,
+  contextStatus,
+  toolCount,
+  runId,
+}: {
+  reasoning: string;
+  stream: string;
+  imageGeneration: ImageGenerationProgress | null;
+  contextStatus: string;
+  toolCount: number;
+  runId?: string;
+}) {
+  return (
+    <>
+      <Reasoning text={reasoning} active />
+      {imageGeneration && <ImageGenerationPreview progress={imageGeneration} />}
+      {stream && <Markdown runId={runId}>{stream}</Markdown>}
+      {!imageGeneration && (
+        <div className="thinking" role="status" aria-live="polite">
+          <span className="thinking-label">
+            {contextStatus === "正在整理上下文…"
+              ? contextStatus
+              : stream
+                ? "正在努力工作"
+                : toolCount
+                  ? "正在整理工具结果"
+                  : reasoning
+                    ? "正在把想法写成回答"
+                    : "正在理清思路"}
+          </span>
+          <span className="thinking-dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ChatPage({
   conversationId,
   onConversation,
@@ -290,7 +333,10 @@ export function ChatPage({
   const [stream, setStream] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [tasks, setTasks] = useState<ComplexTask[]>([]);
-  const [supplementing, setSupplementing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const actionLock = useRef(false);
+  const actionSequence = useRef(0);
   const updateTask = useCallback((value: ComplexTask) => {
     setTasks((items) => [
       value,
@@ -536,7 +582,9 @@ export function ChatPage({
           setError(result.error || "本次回答未完成");
         if (result.status === "cancelled") setError("");
         await loadMessages(id);
+        if (watch.signal.aborted) return;
         await refresh();
+        if (watch.signal.aborted) return;
         setStream("");
         if (result.status === "completed") setReasoning("");
         setBusy(false);
@@ -567,7 +615,10 @@ export function ChatPage({
     setError("");
     setRun(null);
     setTasks([]);
-    setSupplementing(false);
+    setSubmitting(false);
+    setStopping(false);
+    actionLock.current = false;
+    actionSequence.current += 1;
     setBusy(false);
     setEditingMessageId("");
     setEditedText("");
@@ -686,18 +737,32 @@ export function ChatPage({
       : images.map((x) => x.id);
     const supplement = busy && Boolean(run?.task_id);
     if (
-      (busy && !supplement) ||
-      supplementing ||
+      actionLock.current ||
+      (busy && !run) ||
       uploading ||
       (!text.trim() && !attachmentIds.length)
     )
       return false;
+    actionLock.current = true;
+    const sendingTo = conversationId;
+    const sequence = actionSequence.current;
+    const isCurrent = () =>
+      currentId.current === sendingTo && actionSequence.current === sequence;
+    setSubmitting(true);
     setError("");
-    if (supplement) setSupplementing(true);
-    else setBusy(true);
+    if (!supplement) setBusy(true);
     followLatest.current = true;
     setAtLatest(true);
+    let cancelledPrevious = false;
     try {
+      if (busy && run && !supplement) {
+        await api<Run>(`/runs/${run.id}/cancel`, "POST");
+        if (!isCurrent()) return false;
+        cancelledPrevious = true;
+        controller.current?.abort();
+        setRun(null);
+        setBusy(true);
+      }
       let id = conversationId;
       const created = !id;
       if (!id) {
@@ -717,6 +782,11 @@ export function ChatPage({
             }
           : undefined,
       });
+      if (!isCurrent()) {
+        if (!edited) clearChatDraft(sendingTo);
+        await refresh();
+        return true;
+      }
       if (!edited) {
         setDraft("");
         setImages([]);
@@ -730,21 +800,51 @@ export function ChatPage({
         setEditedText("");
       }
       await refresh();
+      if (!isCurrent()) return true;
       if (created) {
         // The conversation effect owns resuming a new conversation's run.
         onConversation(id);
       } else if (currentId.current === id) {
         await loadMessages(id);
+        if (!isCurrent()) return true;
         if (!supplement || value.id !== run?.id) void track(value, id);
         else setBuddyNote("已收到，当前步骤结束后处理补充要求。");
       }
       return true;
     } catch (error) {
-      setError((error as Error).message);
-      if (!supplement) setBusy(false);
+      if (isCurrent()) {
+        setError((error as Error).message);
+        if (!supplement) setBusy(busy && !cancelledPrevious);
+      }
       return false;
     } finally {
-      setSupplementing(false);
+      if (actionSequence.current === sequence) {
+        actionLock.current = false;
+        setSubmitting(false);
+      }
+    }
+  }
+  async function stop() {
+    if (!run || actionLock.current) return;
+    actionLock.current = true;
+    const stoppingIn = conversationId;
+    const sequence = actionSequence.current;
+    const isCurrent = () =>
+      currentId.current === stoppingIn && actionSequence.current === sequence;
+    setStopping(true);
+    try {
+      const stopped = await api<Run>(`/runs/${run.id}/cancel`, "POST");
+      if (isCurrent()) {
+        setRun(stopped);
+        setBusy(false);
+      }
+    } catch (error) {
+      if (isCurrent()) setError((error as Error).message);
+    } finally {
+      if (actionSequence.current === sequence) {
+        actionLock.current = false;
+        setStopping(false);
+      }
     }
   }
   async function retry() {
@@ -774,7 +874,9 @@ export function ChatPage({
     .filter((value) => value.role === "assistant")
     .at(-1);
   const incompleteRun =
-    !busy && run && ["failed", "cancelled"].includes(run.status) ? run : null;
+    !busy && run && !run.task_id && ["failed", "cancelled"].includes(run.status)
+      ? run
+      : null;
   const incompleteAssistant = incompleteRun
     ? messages.find(
         (value) =>
@@ -783,6 +885,7 @@ export function ChatPage({
     : undefined;
   const orphanReasoning =
     !busy &&
+    !run?.task_id &&
     Boolean(reasoning) &&
     !messages.some(
       (value) => value.role === "assistant" && value.run_id === run?.id,
@@ -802,13 +905,49 @@ export function ChatPage({
     turn.answer += (turn.answer ? "\n" : "") + stream;
   }
   const tasksByMessage = new Map<string, ComplexTask[]>();
+  const pendingTasks = new Map<string, ComplexTask[]>();
   for (const task of [...tasks].sort((a, b) =>
     a.created_at.localeCompare(b.created_at),
   )) {
-    const anchored = tasksByMessage.get(task.source_message_id) || [];
+    const reply = messages.find(
+      (message) =>
+        message.role === "assistant" &&
+        Boolean(task.source_run_id) &&
+        message.run_id === task.source_run_id,
+    );
+    const target = reply ? tasksByMessage : pendingTasks;
+    const key = reply?.id || task.source_message_id;
+    const anchored = target.get(key) || [];
     anchored.push(task);
-    tasksByMessage.set(task.source_message_id, anchored);
+    target.set(key, anchored);
   }
+  const entries = messages.flatMap((message) => [
+    { message, cards: tasksByMessage.get(message.id) || [], synthetic: false },
+    ...(pendingTasks.get(message.id) || []).map((task) => ({
+      message: {
+        ...message,
+        id: `task-reply-${task.id}`,
+        role: "assistant",
+        content: "",
+        attachment_ids: [],
+        run_id: task.source_run_id || null,
+        reasoning: "",
+      } as Message,
+      cards: [task],
+      synthetic: true,
+    })),
+  ]);
+  const inlineActivity =
+    busy &&
+    entries.some(
+      (entry) =>
+        entry.synthetic &&
+        entry.cards.some(
+          (task) => task.id === run?.task_id && task.source_run_id === run?.id,
+        ),
+    );
+  const hasDraft = Boolean(draft.trim() || images.length);
+  const showStop = busy && !hasDraft;
   return (
     <div className="chat-layout" ref={dropTarget}>
       <div className={`chat-main ${empty ? "is-empty" : ""}`}>
@@ -869,91 +1008,113 @@ export function ChatPage({
             </div>
           ) : (
             <div className="message-list" ref={thread}>
-              {messages.map((value) => (
-                <Fragment key={value.id}>
-                  <article
-                    className={`message ${value.role}`}
-                    ref={(element) => {
-                      if (value.role !== "user") return;
-                      if (element) turnElements.current.set(value.id, element);
-                      else turnElements.current.delete(value.id);
-                    }}
-                  >
-                    {value.role !== "assistant" && (
-                      <div className="message-avatar">
-                        <span>我</span>
-                      </div>
-                    )}
-                    {value.role === "assistant" && (
-                      <div className="message-avatar assistant-avatar">
-                        <BaiAvatar
-                          interactive
-                          motion="still"
-                          label="和XiaoXi打个招呼，继续聊天"
-                          onClick={() =>
-                            focusComposer(
-                              "我在呢。想追问什么，直接告诉我就好。",
-                            )
-                          }
-                        />
-                      </div>
-                    )}
-                    <div className="message-body">
-                      <span className="message-name">
-                        {value.role === "assistant" ? "XiaoXi" : "你"}
-                      </span>
-                      {value.role === "assistant" && (
+              {entries.map(({ message: value, cards, synthetic }) => (
+                <article
+                  key={cards.length ? `task-reply-${cards[0].id}` : value.id}
+                  className={`message ${value.role}`}
+                  ref={(element) => {
+                    if (value.role !== "user") return;
+                    if (element) turnElements.current.set(value.id, element);
+                    else turnElements.current.delete(value.id);
+                  }}
+                >
+                  {value.role !== "assistant" && (
+                    <div className="message-avatar">
+                      <span>我</span>
+                    </div>
+                  )}
+                  {value.role === "assistant" && (
+                    <div className="message-avatar assistant-avatar">
+                      <BaiAvatar
+                        interactive
+                        motion={
+                          synthetic && busy && value.run_id === run?.id
+                            ? "thinking"
+                            : "still"
+                        }
+                        label="和XiaoXi打个招呼，继续聊天"
+                        onClick={() =>
+                          focusComposer("我在呢。想追问什么，直接告诉我就好。")
+                        }
+                      />
+                    </div>
+                  )}
+                  <div className="message-body">
+                    <span className="message-name">
+                      {value.role === "assistant" ? "XiaoXi" : "你"}
+                    </span>
+                    {synthetic && busy && value.run_id === run?.id ? (
+                      <ReplyActivity
+                        reasoning={reasoning}
+                        stream={stream}
+                        imageGeneration={imageGeneration}
+                        contextStatus={contextStatus}
+                        toolCount={tools.length}
+                        runId={run?.id}
+                      />
+                    ) : (
+                      value.role === "assistant" && (
                         <Reasoning text={value.reasoning || ""} />
-                      )}
-                      {value.role === "user" &&
-                      editingMessageId === value.id ? (
-                        <div className="user-message-editor">
-                          <Textarea
-                            aria-label="修改消息内容"
-                            value={editedText}
+                      )
+                    )}
+                    {cards.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        busy={busy}
+                        running={busy && run?.task_id === task.id}
+                        onUpdate={updateTask}
+                      />
+                    ))}
+                    {value.role === "user" && editingMessageId === value.id ? (
+                      <div className="user-message-editor">
+                        <Textarea
+                          aria-label="修改消息内容"
+                          value={editedText}
+                          disabled={busy}
+                          autoFocus
+                          onChange={(event) =>
+                            setEditedText(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape" && !busy)
+                              setEditingMessageId("");
+                          }}
+                        />
+                        <p className="user-message-editor-hint">
+                          保留原消息和附件，修改后作为新消息发送。
+                        </p>
+                        <div className="user-message-editor-actions">
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             disabled={busy}
-                            autoFocus
-                            onChange={(event) =>
-                              setEditedText(event.target.value)
+                            onClick={() => setEditingMessageId("")}
+                          >
+                            取消
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={
+                              busy ||
+                              uploading ||
+                              !modelReady ||
+                              (!editedText.trim() &&
+                                !value.attachment_ids.length)
                             }
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape" && !busy)
-                                setEditingMessageId("");
-                            }}
-                          />
-                          <p className="user-message-editor-hint">
-                            保留原消息和附件，修改后作为新消息发送。
-                          </p>
-                          <div className="user-message-editor-actions">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={busy}
-                              onClick={() => setEditingMessageId("")}
-                            >
-                              取消
-                            </Button>
-                            <Button
-                              size="sm"
-                              disabled={
-                                busy ||
-                                uploading ||
-                                !modelReady ||
-                                (!editedText.trim() &&
-                                  !value.attachment_ids.length)
-                              }
-                              onClick={() =>
-                                void send({
-                                  content: editedText,
-                                  attachment_ids: value.attachment_ids,
-                                })
-                              }
-                            >
-                              发送修改
-                            </Button>
-                          </div>
+                            onClick={() =>
+                              void send({
+                                content: editedText,
+                                attachment_ids: value.attachment_ids,
+                              })
+                            }
+                          >
+                            发送修改
+                          </Button>
                         </div>
-                      ) : (
+                      </div>
+                    ) : (
+                      !synthetic && (
                         <Markdown
                           runId={
                             value.role === "assistant"
@@ -963,79 +1124,66 @@ export function ChatPage({
                         >
                           {value.content}
                         </Markdown>
-                      )}
-                      {value.role === "assistant" && (
-                        <AnswerPresentation
-                          runId={value.run_id || undefined}
-                          status={
-                            value.run_id === run?.id ? run?.status : "completed"
-                          }
-                          content={value.content}
-                        />
-                      )}
-                      {value.role === "assistant" && (
-                        <AnswerActions
-                          content={value.content}
-                          runId={
-                            value.run_id ||
-                            (value === lastAssistant &&
-                            run?.status === "completed"
-                              ? run.id
-                              : undefined)
-                          }
-                          runStatus={
-                            value.run_id === run?.id || value === lastAssistant
-                              ? run?.status
-                              : "completed"
-                          }
-                          tools={
-                            value === lastAssistant &&
-                            run?.status === "completed"
-                              ? tools
-                              : undefined
-                          }
-                        />
-                      )}
-                      {value === incompleteAssistant && incompleteRun && (
-                        <IncompleteReplyNotice
-                          cancelled={incompleteRun.status === "cancelled"}
-                        />
-                      )}
+                      )
+                    )}
+                    {value.role === "assistant" && !synthetic && (
+                      <AnswerPresentation
+                        runId={value.run_id || undefined}
+                        status={
+                          value.run_id === run?.id ? run?.status : "completed"
+                        }
+                        content={value.content}
+                      />
+                    )}
+                    {value.role === "assistant" && !synthetic && (
+                      <AnswerActions
+                        content={value.content}
+                        runId={
+                          value.run_id ||
+                          (value === lastAssistant &&
+                          run?.status === "completed"
+                            ? run.id
+                            : undefined)
+                        }
+                        runStatus={
+                          value.run_id === run?.id || value === lastAssistant
+                            ? run?.status
+                            : "completed"
+                        }
+                        tools={
+                          value === lastAssistant && run?.status === "completed"
+                            ? tools
+                            : undefined
+                        }
+                      />
+                    )}
+                    {value === incompleteAssistant && incompleteRun && (
+                      <IncompleteReplyNotice
+                        cancelled={incompleteRun.status === "cancelled"}
+                      />
+                    )}
 
-                      {value.attachment_ids.length > 0 && (
-                        <div className="message-pictures">
-                          {value.attachment_ids.map((id) => (
-                            <MessageAttachment id={id} key={id} />
-                          ))}
-                        </div>
-                      )}
-                      {value.role === "user" &&
-                        editingMessageId !== value.id && (
-                          <UserMessageActions
-                            content={value.content}
-                            disabled={busy || uploading}
-                            onEdit={() => {
-                              setEditingMessageId(value.id);
-                              setEditedText(value.content);
-                            }}
-                          />
-                        )}
-                    </div>
-                  </article>
-                  {(tasksByMessage.get(value.id) || []).map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      busy={busy}
-                      onUpdate={updateTask}
-                      onRun={(value) => {
-                        if (conversationId) void track(value, conversationId);
-                      }}
-                    />
-                  ))}
-                </Fragment>
+                    {value.attachment_ids.length > 0 && (
+                      <div className="message-pictures">
+                        {value.attachment_ids.map((id) => (
+                          <MessageAttachment id={id} key={id} />
+                        ))}
+                      </div>
+                    )}
+                    {value.role === "user" && editingMessageId !== value.id && (
+                      <UserMessageActions
+                        content={value.content}
+                        disabled={busy || uploading}
+                        onEdit={() => {
+                          setEditingMessageId(value.id);
+                          setEditedText(value.content);
+                        }}
+                      />
+                    )}
+                  </div>
+                </article>
               ))}
-              {busy && (
+              {busy && !inlineActivity && (
                 <article className="message assistant">
                   <div className="message-avatar assistant-avatar">
                     <BaiAvatar
@@ -1047,35 +1195,14 @@ export function ChatPage({
                   </div>
                   <div className="message-body">
                     <span className="message-name">XiaoXi</span>
-                    <Reasoning text={reasoning} active />
-                    {imageGeneration && (
-                      <ImageGenerationPreview progress={imageGeneration} />
-                    )}
-                    {stream && <Markdown runId={run?.id}>{stream}</Markdown>}
-                    {!imageGeneration && (
-                      <div
-                        className="thinking"
-                        role="status"
-                        aria-live="polite"
-                      >
-                        <span className="thinking-label">
-                          {contextStatus === "正在整理上下文…"
-                            ? contextStatus
-                            : stream
-                              ? "正在努力工作"
-                              : tools.length
-                                ? "正在整理工具结果"
-                                : reasoning
-                                  ? "正在把想法写成回答"
-                                  : "正在理清思路"}
-                        </span>
-                        <span className="thinking-dots" aria-hidden="true">
-                          <i />
-                          <i />
-                          <i />
-                        </span>
-                      </div>
-                    )}
+                    <ReplyActivity
+                      reasoning={reasoning}
+                      stream={stream}
+                      imageGeneration={imageGeneration}
+                      contextStatus={contextStatus}
+                      toolCount={tools.length}
+                      runId={run?.id}
+                    />
                   </div>
                 </article>
               )}
@@ -1260,7 +1387,7 @@ export function ChatPage({
                     : "连接模型后开始对话"
               }
               rows={2}
-              disabled={busy && !run?.task_id}
+              disabled={submitting || stopping}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
@@ -1268,7 +1395,7 @@ export function ChatPage({
                   !e.nativeEvent.isComposing
                 ) {
                   e.preventDefault();
-                  if (modelReady && (!busy || run?.task_id)) void send();
+                  if (modelReady) void send();
                 }
               }}
             />
@@ -1281,7 +1408,7 @@ export function ChatPage({
                   scopeKey={`${conversationId || "new"}:${attachmentBatch}`}
                   images={images}
                   onChange={changeImages}
-                  disabled={(busy && !run?.task_id) || !modelReady}
+                  disabled={submitting || stopping || !modelReady}
                   onError={setError}
                   onUploading={setUploading}
                 />
@@ -1394,44 +1521,21 @@ export function ChatPage({
                 </DropdownMenu.Root>
               </div>
               <div className="composer-submit">
-                {busy && run?.task_id && (
-                  <Button
-                    aria-label="补充任务要求"
-                    size="icon"
-                    disabled={
-                      supplementing ||
-                      uploading ||
-                      (!draft.trim() && !images.length)
-                    }
-                    onClick={() => void send()}
-                  >
-                    <ArrowUp size={15} />
-                  </Button>
-                )}
-                {busy ? (
-                  <Button
-                    aria-label="停止生成"
-                    size="icon"
-                    onClick={() => {
-                      if (run) void api(`/runs/${run.id}/cancel`, "POST");
-                    }}
-                  >
-                    <Square size={15} />
-                  </Button>
-                ) : (
-                  <Button
-                    aria-label="发送消息"
-                    size="icon"
-                    disabled={
-                      uploading ||
-                      !modelReady ||
-                      (!draft.trim() && !images.length)
-                    }
-                    onClick={() => void send()}
-                  >
-                    <ArrowUp size={19} />
-                  </Button>
-                )}
+                <Button
+                  aria-label={showStop ? "停止生成" : "发送消息"}
+                  size="icon"
+                  disabled={
+                    submitting ||
+                    stopping ||
+                    (showStop ? !run : uploading || !modelReady || !hasDraft)
+                  }
+                  onClick={() => {
+                    if (showStop) void stop();
+                    else void send();
+                  }}
+                >
+                  {showStop ? <Square size={15} /> : <ArrowUp size={19} />}
+                </Button>
               </div>
             </div>
           </div>

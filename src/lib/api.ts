@@ -19,6 +19,7 @@ export type ComplexTask = {
   id: string;
   conversation_id: string;
   source_message_id: string;
+  source_run_id?: string | null;
   created_at: string;
   updated_at: string;
   status: string;

@@ -33,6 +33,40 @@ def task_records():
 ENTRY = {"id": "remote_action", "name": "外部操作", "source": "mcp", "source_label": "fixture"}
 
 
+@pytest.mark.parametrize("status", ["completed", "cancelled"])
+@pytest.mark.asyncio
+async def test_continue_terminal_task_keeps_state_without_executing_again(monkeypatch, status):
+    from app import agent
+
+    task_id, _, _, _, conversation_id = task_records()
+    config = {"provider_id": "custom", "model_name": "fixture"}
+    with db.Session() as session:
+        task = session.get(db.ComplexTask, task_id)
+        task.status, task.reason, task.model_config = status, "", config
+        message = db.Message(conversation_id=conversation_id, role="user", content="继续")
+        session.add(message)
+        session.flush()
+        run = db.Run(kind="chat", conversation_id=conversation_id,
+                     source_message_id=message.id, model_config=config)
+        session.add(run)
+        session.commit()
+        run_id = run.id
+
+    async def route(*args, **kwargs):
+        return complex_tasks.Route(decision="continue", task_id=task_id)
+
+    async def unexpected_execution(*args, **kwargs):
+        raise AssertionError("终态任务不能重新执行模型与工具步骤")
+
+    monkeypatch.setattr(provider, "ask_json", route)
+    monkeypatch.setattr(agent, "_chat", unexpected_execution)
+    result = await complex_tasks.dispatch(run_id, conversation_id)
+    with db.Session() as session:
+        assert session.get(db.ComplexTask, task_id).status == status
+    assert "暂停" not in result["content"] and "发送“继续”" not in result["content"]
+    assert ("任务已完成" if status == "completed" else "任务已结束") in result["content"]
+
+
 @pytest.mark.asyncio
 async def test_committed_effect_is_reused_after_a_new_run():
     task_id, step_id, run_id, message_id, conversation_id = task_records()

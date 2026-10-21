@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, ChevronDown, Circle, Files, Loader2 } from "lucide-react";
-import { api, type ComplexTask, type Run } from "@/lib/api";
+import { api, type ComplexTask } from "@/lib/api";
 import { ArtifactDownload, ArtifactPicture } from "./AnswerPresentation";
 import { FileCard } from "./OfficeFiles";
 import { Button } from "./ui/button";
@@ -24,12 +24,12 @@ const states: Record<string, string> = {
 export function TaskCard({
   task,
   busy,
-  onRun,
+  running = false,
   onUpdate,
 }: {
   task: ComplexTask;
   busy: boolean;
-  onRun: (run: Run) => void;
+  running?: boolean;
   onUpdate: (task: ComplexTask) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -48,20 +48,7 @@ export function TaskCard({
       b.task_revision - a.task_revision,
   );
   const currentCount = files.filter((file) => file.current).length;
-  const active = busy && ["running", "planning"].includes(task.status);
-  async function action(kind: "resume" | "cancel") {
-    setSaving(true);
-    setError("");
-    try {
-      if (kind === "resume")
-        onRun(await api<Run>(`/tasks/${task.id}/resume`, "POST"));
-      else onUpdate(await api<ComplexTask>(`/tasks/${task.id}/cancel`, "POST"));
-    } catch (error) {
-      setError((error as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  const active = running && ["running", "planning"].includes(task.status);
   async function resolve(
     operationId: string,
     resolution: "retry" | "skip" | "completed",
@@ -107,12 +94,14 @@ export function TaskCard({
       {active && current && (
         <p className="complex-task-current">{current.title}</p>
       )}
-      {task.reason && <p className="complex-task-reason">{task.reason}</p>}
       {task.pending_messages > 0 && (
         <p role="status">已收到补充要求，当前步骤结束后处理。</p>
       )}
       {open && (
         <div className="complex-task-details" id={`task-details-${task.id}`}>
+          {task.reason && !["completed", "cancelled"].includes(task.status) && (
+            <p className="complex-task-reason">{task.reason}</p>
+          )}
           <p className="complex-task-progress" role="status">
             {task.steps.length
               ? `已完成 ${completed} / ${task.steps.length} 个步骤`
@@ -246,32 +235,6 @@ export function TaskCard({
               ))}
             </div>
           )}
-        </div>
-      )}
-      {!["completed", "cancelled"].includes(task.status) && (
-        <div className="complex-task-actions">
-          {!busy && task.status !== "waiting_input" && (
-            <Button
-              size="sm"
-              disabled={saving}
-              onClick={() => void action("resume")}
-            >
-              继续任务
-            </Button>
-          )}
-          {task.status === "waiting_input" && (
-            <small>
-              请在聊天中补充要求或确认；结果未知时可展开实际操作记录核实。
-            </small>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={saving}
-            onClick={() => void action("cancel")}
-          >
-            结束任务
-          </Button>
         </div>
       )}
       {error && <p role="alert">{error}</p>}

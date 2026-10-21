@@ -2774,6 +2774,8 @@ export interface components {
             conversation_id: string;
             /** Source Message Id */
             source_message_id: string;
+            /** Source Run Id */
+            source_run_id?: string | null;
             /** Status */
             status: string;
             /** Revision */

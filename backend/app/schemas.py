@@ -450,6 +450,7 @@ class RunRead(RecordRead):
 class TaskRead(RecordRead):
     conversation_id: str
     source_message_id: str
+    source_run_id: str | None = None
     status: str
     revision: int
     goal: str

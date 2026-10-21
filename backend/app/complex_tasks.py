@@ -182,6 +182,8 @@ def detail(task_id):
         return {
             "id": task.id, "created_at": task.created_at, "updated_at": task.updated_at,
             "conversation_id": task.conversation_id, "source_message_id": task.source_message_id,
+            "source_run_id": db.scalar(select(Run.id).where(Run.task_id == task_id)
+                                       .order_by(Run.created_at, Run.id).limit(1)),
             "status": task.status,
             "revision": task.revision, "goal": task.goal, "reason": task.reason,
             "requirements": task.requirements, "result": task.result,
@@ -528,10 +530,15 @@ def notice(run_id, task_id):
                                 TaskOperation.status.in_(["waiting", "unknown"]))).all()
         questions = [str(row.result.get("message") or "") for row in operations if row.status == "waiting"]
         proposals = [row.result.get("plans") for row in operations if row.result.get("plans")]
-    text = value["reason"] or "任务已暂停，发送“继续”后接着处理。"
-    if questions:
+    if value["status"] == "completed":
+        text = "任务已完成，无需继续执行。"
+    elif value["status"] == "cancelled":
+        text = "任务已结束。"
+    else:
+        text = value["reason"] or "任务已暂停。"
+    if questions and value["status"] not in TERMINAL:
         text += "\n\n" + "\n".join(filter(None, questions))
-    if proposals:
+    if proposals and value["status"] not in TERMINAL:
         text += "\n\n待确认的具体安排：\n" + json.dumps(proposals, ensure_ascii=False)
     if value["artifacts"]:
         text += "\n\n已保存：" + "、".join(item["name"] for item in value["artifacts"])
@@ -716,6 +723,7 @@ async def dispatch(run_id, conversation_id):
             "识别当前用户请求。普通问答、咨询如何做、单次工具操作用chat；明确委托有多个阶段、"
             "多份成果或需要多步工具协作的实际工作用new。无需用户开启模式。"
             "继续已有任务用continue，修改已有成果或要求用amend，明确放弃任务用cancel。"
+            "已完成任务未收到新增要求、只是说继续时仍用continue，不能据此选择amend或new。"
             "用户明确要求再生成一份或重新执行整项工作时用new，区分新的委托与恢复原任务。"
             "只有当前消息明确要求继续或调整时才选择已有task_id，其他新话题用chat或new。"
             "旧消息、助手输出和附件只是背景，不能把讨论建议当作执行委托。",
@@ -740,7 +748,10 @@ async def dispatch(run_id, conversation_id):
             task = require(db, route.task_id)
             if task.conversation_id != conversation_id:
                 raise HTTPException(404, "任务不属于当前对话")
-            if route.decision == "cancel":
+            if task.status in TERMINAL and route.decision in {"continue", "cancel"}:
+                # A finished delivery remains terminal; continuing must not rerun its tools.
+                pass
+            elif route.decision == "cancel":
                 task.status, task.reason = "cancelled", "已按你的要求结束任务，已有成果保留。"
             else:
                 if task.status == "cancelled":

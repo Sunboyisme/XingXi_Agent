@@ -660,6 +660,11 @@ async def resume_task(task_id: str, db=Depends(database)):
     task = complex_tasks.require(db, task_id)
     if task.status in complex_tasks.TERMINAL:
         raise HTTPException(409, "任务已经结束，请发送新的要求。")
+    if db.scalar(select(store.Run.id).where(
+        store.Run.conversation_id == task.conversation_id,
+        store.Run.status.in_(["queued", "running"]),
+    )):
+        raise HTTPException(409, "当前对话仍在执行，请等待完成或先停止。")
     run = create_run(db, "chat", conversation_id=task.conversation_id)
     run.task_id, run.model_config = task.id, task.model_config
     message = store.Message(conversation_id=task.conversation_id, role="user", content="继续此任务。")
@@ -751,6 +756,12 @@ async def cancel_run(run_id: str, db=Depends(database)):
     task = runs.tasks.get(run_id)
     if task:
         task.cancel()
+        _, pending = await asyncio.wait({task}, timeout=10)
+        if pending:
+            raise HTTPException(409, "正在停止当前回答，请稍候再发送。")
+    db.refresh(value)
+    if value.status in {"queued", "running"}:
+        raise HTTPException(409, "当前回答的停止状态尚未同步，请稍候再试。")
     return value
 
 
