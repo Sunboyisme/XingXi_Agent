@@ -12,7 +12,7 @@ $baiSource = Join-Path $baiRoot ".local-data\cargo-ui-review\release\bundle\nsis
 if (-not (Test-Path -LiteralPath $baiSource)) { throw 'Installer missing.' }
 $baiDelivery = Join-Path $baiRoot "releases\$baiVersion"
 New-Item -ItemType Directory -Path $baiDelivery -Force | Out-Null
-$baiTarget = Join-Path $baiDelivery "${baiProductName}_${baiVersion}_x64-setup.exe"
+$baiTarget = Join-Path $baiDelivery "${baiProductName}_${baiVersion}.exe"
 if (Test-Path -LiteralPath $baiTarget) {
     $baiArchive = Join-Path $baiDelivery (Get-Date -Format 'yyyyMMdd-HHmmss')
     New-Item -ItemType Directory -Path $baiArchive | Out-Null
