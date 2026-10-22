@@ -159,7 +159,7 @@ async def test_qr_binding_stores_credentials_outside_status(monkeypatch, wechat_
     assert status["qr_image"].startswith("data:image/png;base64,")
     await channel.pairing
     status = channel.status()
-    assert status["phase"] == "connected" and status["bound"]
+    assert status["phase"] == "connecting" and status["bound"]
     assert status["qr_image"] == ""
     assert "private-token" not in json.dumps(status)
     assert "private-token" not in json.dumps(wechat.read_state())

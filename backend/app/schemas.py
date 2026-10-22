@@ -246,6 +246,7 @@ class WechatDeliveryRead(BaseModel):
     status: str
     error: str
     created_at: str
+    diagnostics: dict = Field(default_factory=dict)
 
 
 class WechatStatus(BaseModel):
@@ -256,6 +257,23 @@ class WechatStatus(BaseModel):
     qr_image: str
     error: str
     deliveries: list[WechatDeliveryRead]
+    receive_error: str = ""
+    send_error: str = ""
+    send_state: str = "unbound"
+    last_connected_at: str = ""
+    last_received_at: str = ""
+    last_send_at: str = ""
+
+
+class WechatTestMessage(BaseModel):
+    request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+
+
+class MemoryNormalizationRead(BaseModel):
+    id: str
+    revision: int
+    before: str
+    after: str
 
 
 class WechatOptions(BaseModel):

@@ -41,7 +41,7 @@ export function Reasoning({
             ? "XiaoXi 正在想…"
             : incomplete
               ? "这个想法还没说完"
-              : "看看 XiaoXi 的小想法"}
+              : "看看 XiaoXi 的想法"}
         </span>
         <ChevronDown size={15} className={open ? "is-open" : ""} />
       </button>

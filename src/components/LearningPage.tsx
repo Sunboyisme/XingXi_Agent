@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
+  Send,
   Compass,
   FileQuestion,
   GraduationCap,
@@ -92,6 +94,7 @@ export function LearningPage({
     lesson,
   );
   const [hints, setHints] = useState(false);
+  const [answerExpanded, setAnswerExpanded] = useState(false);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(() =>
     typeof window.matchMedia === "function"
@@ -133,6 +136,7 @@ export function LearningPage({
   useEffect(() => {
     let live = true;
     setLesson(null);
+    setAnswerExpanded(false);
     setLearningStream(null);
     setHints(false);
     if (nodeId)
@@ -478,7 +482,10 @@ export function LearningPage({
         </>
       ) : (
         <div className="course-layout">
-          <header className="course-header">
+          <header
+            className="course-header course-header-compact"
+            aria-label={goal.title}
+          >
             <div className="course-heading">
               <button
                 className="back-link"
@@ -492,30 +499,6 @@ export function LearningPage({
                 <ArrowLeft size={15} />
                 所有学习目标
               </button>
-              <div className="course-title">
-                <h2>{goal.title}</h2>
-              </div>
-            </div>
-            <div className="course-header-actions">
-              <div className="course-progress">
-                <span>
-                  <strong>{passedCount}</strong> / {goal.nodes.length} 练习通过
-                </span>
-                <div
-                  className="progress-track"
-                  role="progressbar"
-                  aria-label="课程练习进度"
-                  aria-valuenow={passedCount}
-                  aria-valuemin={0}
-                  aria-valuemax={Math.max(1, goal.nodes.length)}
-                >
-                  <span
-                    style={{
-                      width: `${goal.nodes.length ? (passedCount / goal.nodes.length) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
-              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -532,6 +515,25 @@ export function LearningPage({
                 )}
                 <span>目录</span>
               </Button>
+            </div>
+            <div className="course-progress">
+              <span>
+                <strong>{passedCount}</strong> / {goal.nodes.length} 练习通过
+              </span>
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-label="课程练习进度"
+                aria-valuenow={passedCount}
+                aria-valuemin={0}
+                aria-valuemax={Math.max(1, goal.nodes.length)}
+              >
+                <span
+                  style={{
+                    width: `${goal.nodes.length ? (passedCount / goal.nodes.length) * 100 : 0}%`,
+                  }}
+                />
+              </div>
             </div>
           </header>
           <div
@@ -881,55 +883,83 @@ export function LearningPage({
               </div>
               {node && lesson?.state === "awaiting_submission" && (
                 <section
-                  className="exercise-answer-dock"
+                  className={`exercise-answer-dock ${answerExpanded ? "is-expanded" : "is-collapsed"}`}
                   aria-label="练习作答区"
                 >
-                  <div
-                    ref={answerPreviewTarget}
-                    className="exercise-answer-images"
-                  />
-
-                  <Label
-                    className="exercise-answer-label"
-                    htmlFor="exercise-answer"
+                  <button
+                    type="button"
+                    className="exercise-answer-toggle"
+                    aria-expanded={answerExpanded}
+                    aria-controls="exercise-answer-body"
+                    onClick={() => setAnswerExpanded((value) => !value)}
                   >
-                    练习回答
-                  </Label>
-                  <Textarea
-                    id="exercise-answer"
-                    aria-label="练习回答"
-                    rows={3}
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    placeholder="写下你的理解、操作结果或代码，也可以拖入图片…"
-                    disabled={busy}
-                  />
-                  <div className="exercise-submit">
-                    <ImagesInput
-                      key={lesson.id}
-                      scopeKey={lesson.id}
-                      dropTarget={answerDropTarget}
-                      previewTarget={answerPreviewTarget}
-                      previewMode="names"
-                      images={images}
-                      onChange={setImages}
-                      disabled={busy}
-                      onError={setError}
-                      onUploading={setUploading}
-                    />
-                    <Button
-                      disabled={
-                        busy || uploading || (!answer.trim() && !images.length)
-                      }
-                      onClick={() => void submit()}
-                    >
-                      {busy ? (
-                        <Loader2 size={15} className="spin" />
-                      ) : (
-                        <ArrowRight size={15} />
+                    <span>
+                      作答
+                      {(answer.trim() || images.length > 0) && (
+                        <small>已保留草稿</small>
                       )}
-                      {busy ? "正在检查…" : "提交练习"}
-                    </Button>
+                    </span>
+                    {answerExpanded ? (
+                      <ChevronDown size={15} />
+                    ) : (
+                      <ChevronUp size={15} />
+                    )}
+                  </button>
+                  <div
+                    id="exercise-answer-body"
+                    className="exercise-answer-body"
+                    hidden={!answerExpanded}
+                  >
+                    <div
+                      ref={answerPreviewTarget}
+                      className="exercise-answer-images"
+                    />
+                    <div className="exercise-answer-composer">
+                      <Textarea
+                        id="exercise-answer"
+                        aria-label="练习回答"
+                        rows={2}
+                        value={answer}
+                        onChange={(e) => setAnswer(e.target.value)}
+                        placeholder="写下你的理解、操作结果或代码…"
+                        disabled={busy}
+                      />
+                      <div className="exercise-submit">
+                        <ImagesInput
+                          key={lesson.id}
+                          scopeKey={lesson.id}
+                          dropTarget={answerDropTarget}
+                          previewTarget={answerPreviewTarget}
+                          previewMode="names"
+                          images={images}
+                          onChange={(values) => {
+                            setImages(values);
+                            if (values.length) setAnswerExpanded(true);
+                          }}
+                          disabled={busy}
+                          onError={setError}
+                          onUploading={setUploading}
+                        />
+                        <Hint label={busy ? "正在检查练习" : "提交练习"}>
+                          <Button
+                            size="icon"
+                            aria-label={busy ? "正在检查练习" : "提交练习"}
+                            disabled={
+                              busy ||
+                              uploading ||
+                              (!answer.trim() && !images.length)
+                            }
+                            onClick={() => void submit()}
+                          >
+                            {busy ? (
+                              <Loader2 size={16} className="spin" />
+                            ) : (
+                              <Send size={16} />
+                            )}
+                          </Button>
+                        </Hint>
+                      </div>
+                    </div>
                   </div>
                 </section>
               )}

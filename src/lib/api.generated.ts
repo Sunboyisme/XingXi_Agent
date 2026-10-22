@@ -764,6 +764,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/memories/normalization-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Memory Normalization Preview */
+        get: operations["memory_normalization_preview_api_v1_memories_normalization_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/memories/{memory_id}": {
         parameters: {
             query?: never;
@@ -1083,6 +1100,40 @@ export interface paths {
         put?: never;
         /** Wechat Connect */
         post: operations["wechat_connect_api_v1_wechat_connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wechat/test-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Wechat Test Message */
+        post: operations["wechat_test_message_api_v1_wechat_test_message_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/wechat/deliveries/{delivery_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Wechat Delivery */
+        get: operations["wechat_delivery_api_v1_wechat_deliveries__delivery_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1965,6 +2016,17 @@ export interface components {
             /** Revision */
             revision?: number | null;
         };
+        /** MemoryNormalizationRead */
+        MemoryNormalizationRead: {
+            /** Id */
+            id: string;
+            /** Revision */
+            revision: number;
+            /** Before */
+            before: string;
+            /** After */
+            after: string;
+        };
         /** MemoryRead */
         MemoryRead: {
             /** Id */
@@ -2267,6 +2329,26 @@ export interface components {
              * @default false
              */
             is_exception: boolean;
+            /**
+             * Display Timezone
+             * @default
+             */
+            display_timezone: string;
+            /**
+             * Local Start
+             * @default
+             */
+            local_start: string;
+            /**
+             * Local End
+             * @default
+             */
+            local_end: string;
+            /**
+             * Local Weekday
+             * @default
+             */
+            local_weekday: string;
         };
         /** PlanUpdate */
         PlanUpdate: {
@@ -2881,6 +2963,10 @@ export interface components {
             error: string;
             /** Created At */
             created_at: string;
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
         };
         /** WechatOptions */
         WechatOptions: {
@@ -2908,6 +2994,41 @@ export interface components {
             error: string;
             /** Deliveries */
             deliveries: components["schemas"]["WechatDeliveryRead"][];
+            /**
+             * Receive Error
+             * @default
+             */
+            receive_error: string;
+            /**
+             * Send Error
+             * @default
+             */
+            send_error: string;
+            /**
+             * Send State
+             * @default unbound
+             */
+            send_state: string;
+            /**
+             * Last Connected At
+             * @default
+             */
+            last_connected_at: string;
+            /**
+             * Last Received At
+             * @default
+             */
+            last_received_at: string;
+            /**
+             * Last Send At
+             * @default
+             */
+            last_send_at: string;
+        };
+        /** WechatTestMessage */
+        WechatTestMessage: {
+            /** Request Id */
+            request_id: string;
         };
         /** WechatVerify */
         WechatVerify: {
@@ -4573,6 +4694,26 @@ export interface operations {
             };
         };
     };
+    memory_normalization_preview_api_v1_memories_normalization_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryNormalizationRead"][];
+                };
+            };
+        };
+    };
     edit_memory_api_v1_memories__memory_id__put: {
         parameters: {
             query?: never;
@@ -5224,6 +5365,70 @@ export interface operations {
             };
         };
     };
+    wechat_test_message_api_v1_wechat_test_message_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WechatTestMessage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatDeliveryRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    wechat_delivery_api_v1_wechat_deliveries__delivery_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatDeliveryRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     wechat_options_api_v1_wechat_options_put: {
         parameters: {
             query?: never;
@@ -5315,6 +5520,8 @@ export interface operations {
             query?: {
                 start?: string | null;
                 end?: string | null;
+                timezone?: string | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;

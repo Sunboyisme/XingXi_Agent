@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from . import plans as calendar
+from . import plans as calendar, plan_targets
 from . import skills
 from .db import MESSAGE_ORDER, Message, Session
 
@@ -95,9 +95,9 @@ def build(run_id, conversation_id):
             )
 
     @tool
-    def list_plans(start: str = "", end: str = "") -> str:
-        """查看指定日期范围的日历计划。start/end 为 YYYY-MM-DD，end 不包含当天。规划前先检查现有安排。"""
-        return safe(lambda: calendar.list_events(start or None, end or None))
+    def list_plans(start: str = "", end: str = "", timezone: str = "", include_deleted: bool = False) -> str:
+        """查询实际计划。start/end 为用户本地 YYYY-MM-DD，end 不包含当天；timezone 留空使用用户时区。local_start/local_end 是本地时间，start/end 可能为UTC，不能截取UTC日期。修改前查询目标日，使用真实编号与 occurrence_start；恢复已删除计划时 include_deleted=true。"""
+        return safe(lambda: calendar.list_events(start or None, end or None, timezone or None, include_deleted))
 
     @tool
     def create_plans(
@@ -208,17 +208,33 @@ def build(run_id, conversation_id):
         return safe(create)
 
     @tool
-    def update_plan(plan_id: str, plan: calendar.PlanUpdate) -> str:
+    def update_plan(plan_id: str, plan: calendar.PlanUpdate, target_date: str = "", date_evidence: str = "") -> str:
         """用户明确要求时更新同一计划，先查询编号。scope 为 this（仅本次）、future（本次及以后）、series（整个系列）；前两者必须传查询得到的 occurrence_start，不能猜测修改范围。传入完整计划并同步提醒。repeat_until 为包含当天的截止日期，或 repeat_count 为次数，二选一；calendar_display=summary 汇总日常事项，always 在月历展开。完成、关闭提醒、结束系列用 action_plan。"""
-        return safe(lambda: calendar.update_event(plan_id, plan))
+        def update():
+            with calendar.lock:
+                before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, plan.occurrence_start or "", date_evidence)
+                if before["series_status"] == "deleted":
+                    raise ValueError("计划已经删除，请先按用户要求恢复原记录，再修改。")
+                if before["recurrence"] != "none":
+                    plan_targets.require_scope(run_id, conversation_id, plan.scope)
+                result = calendar.update_event(plan_id, plan)
+                return {**result, "operation": "update", "before": before}
+        return safe(update)
 
     @tool
-    def delete_plan(plan_id: str) -> str:
-        """仅在用户明确要求删除指定日程时调用，同时取消该日程尚未触发的提醒。"""
+    def delete_plan(plan_id: str, target_date: str = "", date_evidence: str = "") -> str:
+        """删除已查询核对的普通计划及提醒。target_date 必须为用户指定的本地日期，多日期要求用 date_evidence 逐字引用当前操作条目。重复计划的某次安排用 action_plan(cancel_occurrence)，不能删除整个系列。"""
 
         def delete():
-            calendar.delete_event(plan_id)
-            return {"deleted": True}
+            with calendar.lock:
+                before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, date_evidence=date_evidence)
+                if before["recurrence"] != "none":
+                    raise ValueError("重复计划请取消本次，或按明确要求结束整个系列。")
+                if before["status"] == "deleted":
+                    return {"deleted": True, "operation": "delete", "plan": before, "unchanged": True}
+                result = calendar.delete_event(plan_id)
+                result["plan"] = before
+                return result
 
         return safe(delete)
 
@@ -244,16 +260,18 @@ def build(run_id, conversation_id):
             return json.dumps({"error": error.detail}, ensure_ascii=False)
 
     @tool
-    def action_plan(plan_id: str, action: str, occurrence_start: str = "") -> str:
+    def action_plan(plan_id: str, action: str, occurrence_start: str = "", target_date: str = "", date_evidence: str = "") -> str:
         """操作同一份计划。完成本次用 complete；仅取消某次重复安排用 cancel_occurrence，不标为完成也不结束系列。重复计划必须传查询得到的本次 occurrence_start。恢复已完成或已取消的本次用 restore；关闭提醒用 disable_reminders，保留计划；结束整个重复系列用 end_series。先查询核对编号与本次时间，按用户明确要求执行。知道了与稍后提醒属于通知，不是计划操作。"""
-        return safe(
-            lambda: calendar.act(
-                plan_id,
-                calendar.PlanAction(
-                    action=action, occurrence_start=occurrence_start or None
-                ),
-            )
-        )
+        def apply():
+            with calendar.lock:
+                before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, occurrence_start, date_evidence)
+                if before["series_status"] == "deleted" and action != "restore":
+                    raise ValueError("计划已经删除，请先按用户要求恢复原记录。")
+                if before["recurrence"] != "none" and action in {"end_series", "disable_reminders"}:
+                    plan_targets.require_scope(run_id, conversation_id, "series")
+                result = calendar.act(plan_id, calendar.PlanAction(action=action, occurrence_start=occurrence_start or None))
+                return {**result, "operation": action, "before": before}
+        return safe(apply)
 
     return [
         action_plan,

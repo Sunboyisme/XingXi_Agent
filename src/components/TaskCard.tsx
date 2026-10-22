@@ -91,7 +91,7 @@ export function TaskCard({
           <ChevronDown size={15} className="task-chevron" aria-hidden="true" />
         </button>
       </div>
-      {active && current && (
+      {active && current && !open && (
         <p className="complex-task-current">{current.title}</p>
       )}
       {task.pending_messages > 0 && (
@@ -102,31 +102,53 @@ export function TaskCard({
           {task.reason && !["completed", "cancelled"].includes(task.status) && (
             <p className="complex-task-reason">{task.reason}</p>
           )}
-          <p className="complex-task-progress" role="status">
+          <div className="complex-task-progress" role="status">
             {task.steps.length
               ? `已完成 ${completed} / ${task.steps.length} 个步骤`
               : task.status === "planning"
                 ? "正在安排执行步骤，步骤生成后会显示在这里。"
                 : "暂无执行步骤，可查看已保存成果与实际操作记录。"}
-          </p>
+            {task.steps.length > 0 && (
+              <progress
+                value={completed}
+                max={task.steps.length}
+                aria-label="任务完成进度"
+              />
+            )}
+          </div>
           {!!task.requirements.constraints?.length && (
-            <ul>
-              {task.requirements.constraints.map((item, i) => (
-                <li key={i}>{item}</li>
-              ))}
-            </ul>
+            <section className="task-detail-section">
+              <h3>需求与约束</h3>
+              <ul className="task-constraint-list">
+                {task.requirements.constraints.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </section>
           )}
-          <ol className="complex-task-steps">
-            {task.steps.map((step) => (
-              <li key={step.id} data-status={step.status}>
-                <span>{step.title}</span>
-                <small>{states[step.status] || step.status}</small>
-              </li>
-            ))}
-          </ol>
+          {!!task.steps.length && (
+            <section className="task-detail-section">
+              <h3>执行步骤</h3>
+              <ol className="complex-task-steps">
+                {task.steps.map((step, index) => (
+                  <li key={step.id} data-status={step.status}>
+                    <span className="task-step-number">
+                      {step.status === "completed" ? (
+                        <Check size={13} />
+                      ) : (
+                        String(index + 1).padStart(2, "0")
+                      )}
+                    </span>
+                    <span>{step.title}</span>
+                    <small>{states[step.status] || step.status}</small>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           {!!task.requirements.completion_criteria?.length && (
             <div className="complex-task-criteria">
-              <strong>完成条件</strong>
+              <h3>完成条件</h3>
               <ul>
                 {task.requirements.completion_criteria.map((item, i) => (
                   <li key={i}>{item}</li>

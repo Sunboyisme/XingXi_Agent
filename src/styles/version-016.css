@@ -1,0 +1,396 @@
+.memory-card-footer {
+  justify-content: flex-end;
+}
+.memory-detail-dialog[data-slot="dialog-content"] {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+.memory-detail-content {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+.memory-detail-dialog .memory-provenance {
+  width: 100%;
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-color-line);
+}
+.memory-normalization-dialog[data-slot="dialog-content"] {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 32px));
+  max-width: 760px;
+  max-height: calc(100dvh - 48px);
+}
+.memory-normalization-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+}
+.memory-normalization-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+}
+.memory-normalization-item > [data-slot="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.memory-normalization-item > span {
+  min-width: 0;
+}
+.memory-normalization-item p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 4px 0 10px;
+}
+.memory-normalization-item p:last-child {
+  margin-bottom: 0;
+}
+.memory-normalization-item small,
+.memory-normalization-notice {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.model-dialog-status:not(:empty) {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 12px 0;
+  border-block: 1px solid var(--ui-color-line);
+}
+.model-dialog-status .connection-notice,
+.model-dialog-status .error-notice {
+  margin: 0;
+}
+.model-dialog-status .connection-notice {
+  align-items: center;
+  min-height: 24px;
+}
+.complex-task-progress {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+.complex-task-progress progress {
+  width: 100%;
+  height: 5px;
+  border: 0;
+  border-radius: 5px;
+  overflow: hidden;
+  accent-color: var(--ui-color-action);
+}
+.complex-task-progress progress::-webkit-progress-bar {
+  background: var(--ui-color-line);
+}
+.complex-task-progress progress::-webkit-progress-value {
+  background: var(--ui-color-action);
+}
+.task-detail-section,
+.complex-task-criteria {
+  margin-top: 18px;
+}
+.task-detail-section h3,
+.complex-task-criteria h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  font-weight: 500;
+}
+.task-constraint-list,
+.complex-task-criteria ul {
+  list-style: disc;
+  padding-left: 18px;
+  margin: 0;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+.complex-task-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.complex-task-steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+.complex-task-steps [data-status="running"] {
+  background: color-mix(in srgb, var(--ui-color-action) 7%, transparent);
+}
+.task-step-number {
+  display: grid;
+  place-items: center;
+  min-height: 20px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-color-text-muted);
+}
+.complex-task-steps small {
+  margin: 2px 0 0;
+  font-size: 11px;
+}
+.course-header.course-header-compact {
+  padding: 10px 20px;
+  min-height: 54px;
+  gap: 14px;
+}
+.course-header-compact .course-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.course-header-compact .back-link {
+  margin: 0;
+  white-space: nowrap;
+}
+.course-header-compact .outline-toggle {
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+.course-header-compact .course-progress {
+  min-width: 120px;
+  max-width: 190px;
+  margin-left: auto;
+}
+.course-header-compact .progress-track {
+  margin-top: 5px;
+  height: 3px;
+}
+.exercise-answer-dock {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  padding: 6px clamp(16px, 3vw, 40px) 10px;
+  overflow: visible;
+}
+.exercise-answer-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 30px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  border-radius: 8px;
+}
+.exercise-answer-toggle > span {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.exercise-answer-toggle small {
+  font-size: 10px;
+  opacity: 0.8;
+}
+.exercise-answer-toggle:focus-visible {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 2px;
+}
+.exercise-answer-body {
+  display: grid;
+  gap: 6px;
+}
+.exercise-answer-body[hidden] {
+  display: none;
+}
+.exercise-answer-images:empty {
+  display: none;
+}
+.exercise-answer-images {
+  max-height: 72px;
+  overflow-y: auto;
+}
+.exercise-answer-images .attachment-drafts {
+  flex-wrap: wrap;
+}
+.exercise-answer-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+}
+.exercise-answer-dock textarea {
+  min-height: 54px;
+  height: 54px;
+  max-height: 120px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.exercise-answer-dock .exercise-submit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.wechat-health {
+  padding: 14px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+}
+.wechat-health dl {
+  margin: 0;
+}
+.wechat-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.wechat-health dt {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.wechat-health dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.wechat-health-times {
+  display: grid;
+  gap: 7px;
+  padding-top: 14px;
+  margin-top: 14px !important;
+  border-top: 1px solid var(--ui-color-line);
+}
+.wechat-health-times > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wechat-health-times dd {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+}
+.wechat-health-error {
+  margin: 10px 0 0;
+  line-height: 1.6;
+  color: var(--ui-color-action);
+  font-size: 12px;
+}
+.wechat-test-message {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.wechat-test-message p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  line-height: 1.6;
+}
+.wechat-test-message .wechat-test-result {
+  color: var(--ui-color-action);
+}
+.wechat-delivery-diagnostic {
+  display: block;
+  margin-top: 6px;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.month-event-slot {
+  min-width: 0;
+  height: 20px;
+}
+.calendar-page .plan-day-events {
+  overflow: visible;
+}
+.calendar-page .month-band {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 20px;
+  min-height: 20px;
+  border-radius: 5px;
+  touch-action: none;
+  user-select: none;
+}
+.month-band[data-movable="true"] {
+  cursor: grab;
+}
+.month-band > svg {
+  flex-shrink: 0;
+}
+.month-band > span {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.calendar-page .month-band[data-join-left="true"] {
+  margin-left: -6px;
+  width: calc(100% + 6px);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.calendar-page .month-band[data-join-right="true"] {
+  width: calc(100% + 6px);
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.calendar-page .month-band[data-join-left="true"][data-join-right="true"] {
+  width: calc(100% + 12px);
+}
+.month-band[data-dragging="true"] {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+.calendar-page .plan-day[data-drop-target="true"] {
+  box-shadow: inset 0 0 0 2px var(--ui-color-action);
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 8%,
+    var(--ui-color-surface)
+  );
+}
+.plan-move-notice {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ui-color-action);
+}
+.plan-agenda-delete {
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
+}
+.plan-agenda-delete:hover {
+  color: var(--ui-color-action);
+}
+@media (max-width: 600px) {
+  .course-header.course-header-compact {
+    padding: 8px 12px;
+  }
+  .course-header-compact .course-heading {
+    gap: 6px;
+  }
+  .course-header-compact .course-progress {
+    min-width: 100px;
+  }
+  .exercise-answer-dock {
+    padding-inline: 12px;
+  }
+  .exercise-answer-composer {
+    gap: 3px;
+    padding: 6px;
+  }
+}

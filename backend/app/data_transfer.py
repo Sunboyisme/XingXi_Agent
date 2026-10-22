@@ -126,6 +126,24 @@ def validate(stage):
         incoming_schema, current_schema = schema(incoming), schema(current)
         incoming_revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
         current_revision = current.execute("SELECT version_num FROM alembic_version").fetchone()
+        # Upgrade only the exact known predecessor in the staging copy. User
+        # databases and channel credentials are never used as migration probes.
+        if current_revision == ("0018",) and incoming_revision in {("0016",), ("0017",)}:
+            expected = dict(current_schema)
+            expected["wechat_deliveries"] = re.sub(r",\s*diagnostics JSON DEFAULT '\{\}' NOT NULL", "", expected["wechat_deliveries"])
+            if incoming_revision == ("0016",):
+                expected.pop("plan_creations", None)
+            same = set(expected) == set(incoming_schema) and all(
+                (re.sub(r"\s+", " ", incoming_schema[name]).strip() == re.sub(r"\s+", " ", sql).strip())
+                if name == "wechat_deliveries" else incoming_schema[name] == sql
+                for name, sql in expected.items()
+            )
+            if same and not incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]:
+                if incoming_revision == ("0016",):
+                    incoming.execute(current_schema["plan_creations"])
+                incoming.execute("ALTER TABLE wechat_deliveries ADD COLUMN diagnostics JSON DEFAULT '{}' NOT NULL")
+                incoming.execute("UPDATE alembic_version SET version_num='0018'")
+                incoming_schema = schema(incoming)
         # This additive migration must not invalidate the preceding 0.1.5 exports.
         # Only the exact known predecessor schema is upgraded, in the staging copy.
         if (incoming_revision == ("0016",) and current_revision == ("0017",)

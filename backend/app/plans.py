@@ -22,6 +22,7 @@ from .db import (
     PlanSegment,
     Reminder,
     Session,
+    Settings,
     now,
 )
 from .plan_schedule import due_for, occurrence, utc
@@ -147,6 +148,10 @@ class PlanRead(PlanWrite):
     occurrence_index: int = 0
     next_reminder_at: str | None = None
     is_exception: bool = False
+    display_timezone: str = ""
+    local_start: str = ""
+    local_end: str = ""
+    local_weekday: str = ""
 
 
 class PlanUpdate(PlanWrite):
@@ -180,7 +185,21 @@ def rules(db, key):
     )
 
 
-def serialize(db, row, start=None, end=None, status=None, *, root=None, occurrence_key=None, index=0, series_title=None):
+def user_timezone(db):
+    settings = db.get(Settings, PROFILE_ID)
+    return settings.timezone if settings else "Asia/Shanghai"
+
+
+def local_fields(value, zone):
+    zone_info = ZoneInfo(zone)
+    start, end = value["start"], value["end"]
+    if not value["all_day"]:
+        start, end = (datetime.fromisoformat(item).astimezone(zone_info).isoformat() for item in (start, end))
+    return {"display_timezone": zone, "local_start": start, "local_end": end,
+            "local_weekday": "星期" + "一二三四五六日"[date.fromisoformat(start[:10]).weekday()]}
+
+
+def serialize(db, row, start=None, end=None, status=None, *, root=None, occurrence_key=None, index=0, series_title=None, display_timezone=None):
     master = root or row
     value = {field: getattr(row, field) for field in PlanWrite.model_fields}
     active = [r.due_at for r in rules(db, master.id) if r.status == "active"]
@@ -196,6 +215,7 @@ def serialize(db, row, start=None, end=None, status=None, *, root=None, occurren
         value.update(start=start, end=end)
     if status:
         value["status"] = status
+    value.update(local_fields(value, display_timezone or user_timezone(db)))
     return value
 
 
@@ -373,9 +393,11 @@ def rebase_occurrences(db, row, value, from_key=None):
             raise HTTPException(422, "新规则会移除已有完成记录或单次调整，请保留其重复范围，或选择本次及以后修改")
         effective, _ = recurrence.effective(db, rule, record.start, finish)
         override = record.override
-        if record.status in {"completed", "cancelled"}:
+        if record.status in {"completed", "cancelled"} and (row.recurrence != "none" or db.scalar(select(PlanSegment.plan_id).where(PlanSegment.plan_id == row.id).limit(1))):
             # Keep the actual time/content of completed or cancelled instances.
             override = {name: getattr(effective, name) for name in PlanWrite.model_fields}
+        elif row.recurrence == "none" and record.status == "completed":
+            override = None
         replacements.append(dict(plan_id=row.id, start=times[0], status=record.status,
                                  completed_at=record.completed_at, override=override))
         mapping[record.start] = times[0]
@@ -468,11 +490,13 @@ def update_event(key, value):
 def delete_event(key):
     with lock, Session() as db:
         row = find(db, key)
+        before = serialize(db, row)
         row.status = "deleted"
         for rule in rules(db, key):
             rule.status = "cancelled"
         cancel_notes(db, key)
         db.commit()
+        return {"deleted": True, "operation": "delete", "plan": before}
 
 
 def act(key, value):
@@ -527,13 +551,17 @@ def act(key, value):
                 db.flush()
                 sync_rules(db, row, row.reminder_offsets)
             else:
+                restoring_deleted = row.status == "deleted" and row.recurrence == "none"
+                keep_completed = restoring_deleted and record and record.status == "completed"
                 if record:
-                    if record.override:
+                    if keep_completed:
+                        pass
+                    elif record.override:
                         record.status = "planned"
                     else:
                         db.delete(record)
                 if row.recurrence == "none":
-                    row.status = "planned"
+                    row.status = "completed" if keep_completed else "planned"
                     sync_rules(db, row, [r.offset_minutes for r in rules(db, key)])
                 elif row.status == "planned":
                     # A future occurrence may have been skipped while completed.
@@ -550,7 +578,7 @@ def act(key, value):
         return serialize(db, row)
 
 
-def list_events(start=None, end=None):
+def list_events(start=None, end=None, timezone=None, include_deleted=False):
     if start:
         date.fromisoformat(start)
     if end:
@@ -560,15 +588,33 @@ def list_events(start=None, end=None):
     if start and (end <= start or (date.fromisoformat(end) - date.fromisoformat(start)).days > 370):
         raise ValueError("日期范围须为 1–370 天")
     with lock, Session() as db:
-        rows = list(db.scalars(select(CalendarEvent).where(CalendarEvent.profile_id == PROFILE_ID, CalendarEvent.status != "deleted").order_by(CalendarEvent.start)))
+        zone = timezone or user_timezone(db)
+        try:
+            ZoneInfo(zone)
+        except (KeyError, ValueError):
+            raise ValueError("无效的展示时区") from None
+        query = select(CalendarEvent).where(CalendarEvent.profile_id == PROFILE_ID)
+        if not include_deleted:
+            query = query.where(CalendarEvent.status != "deleted")
+        rows = list(db.scalars(query.order_by(CalendarEvent.start)))
         if not start:
-            return [serialize(db, row) for row in rows]
+            return [serialize(db, row, display_timezone=zone) for row in rows]
         result = []
+        begin = datetime.fromisoformat(start).replace(tzinfo=ZoneInfo(zone))
+        finish = datetime.fromisoformat(end).replace(tzinfo=ZoneInfo(zone))
+        # Expand a small civil-date margin, then filter by the display timezone.
+        # Recurrence rules retain their own timezone and original occurrence key.
+        expanded_start = (begin.date() - timedelta(days=2)).isoformat()
+        expanded_end = (finish.date() + timedelta(days=2)).isoformat()
         for row in rows:
-            for rule, value, key, record, index in recurrence.instances(db, row, start, end):
+            for rule, value, key, record, index in recurrence.instances(db, row, expanded_start, expanded_end):
+                overlaps = (value.start < end and value.end > start) if value.all_day else (
+                    datetime.fromisoformat(value.start) < finish and datetime.fromisoformat(value.end) > begin)
+                if not overlaps:
+                    continue
                 state = record.status if record and record.status in {"completed", "cancelled"} else row.status
                 if row.status != "ended" or state == "completed":
-                    result.append(serialize(db, value, value.start, value.end, state, root=row, occurrence_key=key, index=index, series_title=rule.title))
+                    result.append(serialize(db, value, value.start, value.end, state, root=row, occurrence_key=key, index=index, series_title=rule.title, display_timezone=zone))
                 if len(result) > 5000:
                     raise ValueError("当前范围计划过多，请缩小范围")
         return sorted(result, key=lambda item: (item["start"], item["id"]))

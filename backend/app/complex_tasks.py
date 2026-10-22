@@ -272,6 +272,34 @@ def valid_artifacts(result):
     return True
 
 
+def calendar_result_current(tool_id, result):
+    """A historical success cannot stand in for a subsequently edited plan."""
+    from . import plans
+    if tool_id not in {"create_plans", "update_plan", "delete_plan", "action_plan"}:
+        return True
+    with plans.lock, Session() as db:
+        if tool_id == "delete_plan":
+            key = result.get("plan", {}).get("id")
+            row = db.get(plans.CalendarEvent, key) if key else None
+            return row is not None and row.status == "deleted"
+        values = result.get("value") if tool_id == "create_plans" else [result]
+        if not isinstance(values, list) or not values:
+            return False
+        for value in values:
+            if not isinstance(value, dict) or not value.get("id"):
+                return False
+            row = db.get(plans.CalendarEvent, value["id"])
+            if row is None:
+                return False
+            try:
+                current = plans.read_occurrence(db, row, value["occurrence_start"]) if value.get("recurrence") != "none" and value.get("occurrence_start") else plans.serialize(db, row)
+            except (HTTPException, ValueError):
+                return False
+            if any(current.get(field) != value.get(field) for field in plans.PlanWrite.model_fields):
+                return False
+        return True
+
+
 async def guarded(entry, run_id, arguments, operation):
     execution = task_context.current.get()
     if execution is None:
@@ -284,7 +312,12 @@ async def guarded(entry, run_id, arguments, operation):
                 raise task_context.Replan()
             if task.status != "running":
                 raise task_context.TaskControl(task.reason)
-        key = hashlib.sha256(json.dumps([entry["id"], arguments], sort_keys=True, ensure_ascii=True).encode()).hexdigest()
+        # A new user request can legitimately repeat a calendar action after the
+        # plan was restored/edited. Only retries of the same authorization reuse it.
+        identity = [entry["id"], arguments]
+        if entry["id"] in {"create_plans", "update_plan", "delete_plan", "action_plan"}:
+            identity.append(execution.message_id)
+        key = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
         policy = "read" if entry["source"] == "builtin" and entry["id"] in READ_TOOLS else (
             "file" if entry["source"] == "builtin" and entry["id"] in FILE_TOOLS else
             "write" if entry["source"] == "builtin" and entry["id"] in WRITE_TOOLS else "external")
@@ -306,6 +339,8 @@ async def guarded(entry, run_id, arguments, operation):
             cached = next((value for value in previous if value.id not in execution.consumed
                            and value.status == "completed" and valid_artifacts(value.result)), None)
             if cached:
+                if entry["source"] == "builtin" and not calendar_result_current(entry["id"], cached.result):
+                    raise task_context.TaskControl("此前日历操作曾完成，但对应记录后来已有变化。请先核对当前日历，再提出调整要求；未复用过期回执或自动重复写入。")
                 execution.consumed.add(cached.id)
                 result = cached.result
                 if cached.step_id != execution.step_id:
@@ -531,7 +566,7 @@ def notice(run_id, task_id):
         questions = [str(row.result.get("message") or "") for row in operations if row.status == "waiting"]
         proposals = [row.result.get("plans") for row in operations if row.result.get("plans")]
     if value["status"] == "completed":
-        text = "任务已完成，无需继续执行。"
+        text = value["result"].get("content") or "任务已完成，已有结果保留在上方。"
     elif value["status"] == "cancelled":
         text = "任务已结束。"
     else:
@@ -658,10 +693,16 @@ async def execute(run_id, task_id, *, repairs=0):
     with Session() as db:
         task = require(db, task_id)
         config = task.model_config
+    from . import plan_execution
+    calendar_facts = plan_execution.task_facts(task_id)
+    value["calendar_operations"] = calendar_facts
     review = await provider.ask_json(Review,
         "核对XiaoXi任务交付。仅依据提供的实际步骤成果和文件，不能编造执行结果。"
         "逐条核对目标、约束与完成条件，缺少任何必需成果时complete=false并列出missing。"
-        "summary为给用户的清楚答复，区分事实、推断与待确认项，不编造下载链接。",
+        "summary是直接给用户的自然中文答复：先交代办好的结果，再概括关键安排或修改。"
+        "calendar_operations来自完整实际操作，是日期、条数与成功情况的依据，不能因界面摘录就假定结果缺失。"
+        "日历任务说明具体安排和日历查看入口；核对过程保留在内部，不输出工具名称、UTC换算、truncated或事实/推断审计报告。"
+        "确实缺少成果时才明确指出缺口，不编造下载链接。",
         payload(value), model_config=config,
         on_usage=lambda usage: add_usage(run_id, usage))
     with Session() as db:
@@ -672,6 +713,9 @@ async def execute(run_id, task_id, *, repairs=0):
             task.status = "completed" if complete else "waiting_input"
             task.reason = "" if complete else "；".join(review.missing + [f"尚缺 {count} 份 {fmt}" for fmt, count in missing.items()]) or "交付核对尚未完成。"
             text = review.summary
+            calendar_receipt = plan_execution.facts_receipt(calendar_facts)
+            if calendar_receipt:
+                text = text + "\n\n" + calendar_receipt
             if not complete:
                 text = "任务尚未全部完成：" + task.reason + "\n\n" + text
             current_files = [item["name"] for item in value["artifacts"] if item["current"]]
@@ -736,6 +780,12 @@ async def dispatch(run_id, conversation_id):
         return await agent._chat(run_id, conversation_id)
     if route.decision == "chat":
         return await agent._chat(run_id, conversation_id)
+    # A classifier's stale task association must never swallow an actual edit.
+    pure_continue = bool(re.fullmatch(r"(?:请)?(?:继续|接着)(?:执行|做)?(?:这个|当前)?(?:任务|工作)?(?:吧|一下)?[。！!\s]*", message.content.strip())) and not message.attachment_ids
+    if route.decision in {"continue", "cancel"} and not pure_continue:
+        selected = next((value for value in candidates if value.id == route.task_id), None)
+        if selected and selected.status in TERMINAL and (route.decision == "continue" or re.search(r"删|去掉|移除|修改|改成|调整|恢复|重新安排|取消.*(?:计划|日程|安排)", message.content)):
+            return await agent._chat(run_id, conversation_id)
     with Session() as db:
         run = db.get(Run, run_id)
         message = db.get(Message, run.source_message_id)
@@ -755,7 +805,10 @@ async def dispatch(run_id, conversation_id):
                 task.status, task.reason = "cancelled", "已按你的要求结束任务，已有成果保留。"
             else:
                 if task.status == "cancelled":
-                    raise ValueError("这个任务已经结束，请提出新的任务要求。")
+                    task = ComplexTask(conversation_id=conversation_id, source_message_id=message.id,
+                        goal=message.content, message_ids=[message.id], model_config=config)
+                    db.add(task)
+                    db.flush()
                 task.message_ids = list(dict.fromkeys([*task.message_ids, message.id]))
                 for operation in db.scalars(select(TaskOperation).where(TaskOperation.task_id == task.id, TaskOperation.status == "waiting")):
                     operation.status = "superseded"

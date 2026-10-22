@@ -14,6 +14,7 @@ import "./styles/chat-polish.css";
 import "./styles/memory-settings.css";
 import "./styles/version-014.css";
 import "./styles/complex-tasks.css";
+import "./styles/version-016.css";
 
 const stopAppearance = initializeAppearance();
 import.meta.hot?.dispose(stopAppearance);

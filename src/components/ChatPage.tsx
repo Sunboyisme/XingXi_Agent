@@ -310,7 +310,7 @@ function ReplyActivity({
                 : toolCount
                   ? "正在整理工具结果"
                   : reasoning
-                    ? "正在把想法写成回答"
+                    ? "正在输出想法"
                     : "正在理清思路"}
           </span>
           <span className="thinking-dots" aria-hidden="true">

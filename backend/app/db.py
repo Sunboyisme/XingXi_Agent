@@ -316,6 +316,7 @@ class WechatDelivery(Record, Base):
     content: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30), default="pending")
     error: Mapped[str] = mapped_column(Text, default="")
+    diagnostics: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class CalendarEvent(Record, Base):

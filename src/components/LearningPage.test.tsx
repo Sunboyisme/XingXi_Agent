@@ -93,6 +93,7 @@ test("the separate answer dock accepts dropped images and submits them without t
   );
   const dock = await screen.findByRole("region", { name: "练习作答区" });
   expect(dock.closest(".lesson-scroll")).toBeNull();
+  expect(screen.queryByRole("textbox", { name: "练习回答" })).toBeNull();
   fireEvent.drop(dock, {
     dataTransfer: {
       types: ["Files"],
@@ -105,6 +106,10 @@ test("the separate answer dock accepts dropped images and submits them without t
     "answer.png",
   );
   expect(dock.querySelector(".attachment-draft img")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /作答/ }));
+  expect(screen.queryByRole("button", { name: "移除 answer.png" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /作答/ }));
+  expect(screen.getByRole("button", { name: "移除 answer.png" })).toBeVisible();
   expect(mocks.fetchApi).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "提交练习" }));
   await waitFor(() =>

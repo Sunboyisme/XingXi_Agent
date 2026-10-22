@@ -9,6 +9,8 @@ import base64
 import contextlib
 import io
 import secrets
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from urllib.parse import urlsplit
 
 import httpx
@@ -31,6 +33,8 @@ from .db import (
 )
 
 BASE_URL = "https://ilinkai.weixin.qq.com"
+CHANNEL_VERSION = "0.1.6"
+CLIENT_VERSION = str(sum(int(part) << shift for part, shift in zip(CHANNEL_VERSION.split("."), (16, 8, 0))))
 DEFAULTS = {
     "enabled": False,
     "reminders_enabled": False,
@@ -41,6 +45,12 @@ DEFAULTS = {
     "conversation_id": "",
     "reminders_since": "",
     "last_error": "",
+    "receive_error": "",
+    "send_error": "",
+    "last_connected_at": "",
+    "last_received_at": "",
+    "last_send_at": "",
+    "needs_interaction": False,
 }
 
 
@@ -79,14 +89,15 @@ def trusted_url(value):
 
 
 class ChannelError(Exception):
-    def __init__(self, code):
+    def __init__(self, code, http_status=None):
         self.code = code
+        self.http_status = http_status
         super().__init__(f"微信接口未接受请求（代码 {code}）")
 
 
 async def request(path, *, body=None, params=None, token="", base=BASE_URL, timeout=15):
     base = trusted_url(base)
-    headers = {"iLink-App-Id": "bot", "iLink-App-ClientVersion": "256"}
+    headers = {"iLink-App-Id": "bot", "iLink-App-ClientVersion": CLIENT_VERSION}
     if body is not None:
         headers |= {
             "Content-Type": "application/json",
@@ -98,7 +109,7 @@ async def request(path, *, body=None, params=None, token="", base=BASE_URL, time
         if token:
             headers["Authorization"] = "Bearer " + token
             body = body | {
-                "base_info": {"channel_version": "0.1.2", "bot_agent": "XiaoXi/0.1.2"}
+                "base_info": {"channel_version": CHANNEL_VERSION, "bot_agent": f"XiaoXi/{CHANNEL_VERSION}"}
             }
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         response = await client.request(
@@ -108,18 +119,18 @@ async def request(path, *, body=None, params=None, token="", base=BASE_URL, time
             json=body,
             params=params,
         )
-        if response.status_code != 200:
-            raise ChannelError(f"HTTP {response.status_code}")
+        if not 200 <= response.status_code < 300:
+            raise ChannelError(f"HTTP {response.status_code}", response.status_code)
         value = response.json()
         if not isinstance(value, dict):
-            raise ChannelError("无效响应")
+            raise ValueError("微信响应格式无效")
         for key in ("ret", "errcode"):
             if value.get(key) not in (None, 0):
                 # Codes are not arbitrary server error strings, which may contain credentials.
                 code = value[key] if isinstance(value[key], int) else "未知"
                 raise ChannelError(code)
-        if path.endswith("/sendmessage") and value.get("ret") != 0:
-            raise ValueError("微信未确认发送结果")
+        # Tencent's sendMessage client accepts a JSON response without ret.
+        # Missing ret is not evidence of a transport timeout or phone receipt.
         return value
 
 
@@ -140,6 +151,7 @@ class WechatChannel:
         with Session() as db:
             recent = db.scalars(
                 select(WechatDelivery)
+                .where(WechatDelivery.account_id == state["account_id"], WechatDelivery.profile_id == PROFILE_ID)
                 .order_by(WechatDelivery.created_at.desc())
                 .limit(5)
             ).all()
@@ -149,19 +161,33 @@ class WechatChannel:
                     "status": row.status,
                     "error": row.error,
                     "created_at": row.created_at,
+                    "diagnostics": row.diagnostics,
                 }
                 for row in recent
             ]
-        phase = self.phase or ("connected" if state["enabled"] else "paused")
+        phase = self.phase or ("connecting" if state["enabled"] else "paused")
         if not state["account_id"] and not self.phase:
             phase = "unbound"
+        send_error = state["send_error"]
+        send_state = ("unbound" if not state["account_id"] else "needs_login" if phase == "needs_login" else
+                      "paused" if not state["enabled"] else "needs_interaction")
+        if send_state == "needs_interaction" and not state["needs_interaction"]:
+            try:
+                if secret_get("wechat_context"):
+                    send_state = "ready"
+            except Exception:  # Credentials never leave the vault in diagnostics.
+                send_state, send_error = "error", "暂时无法读取本机微信凭据，请检查凭据服务后重试。"
         return {
             "enabled": state["enabled"],
             "bound": bool(state["account_id"]),
             "reminders_enabled": state["reminders_enabled"],
             "phase": phase,
             "qr_image": self.qr_image,
-            "error": state["last_error"],
+            "error": state["receive_error"] or send_error or state["last_error"],
+            "receive_error": state["receive_error"], "send_error": send_error,
+            "send_state": send_state,
+            "last_connected_at": state["last_connected_at"],
+            "last_received_at": state["last_received_at"], "last_send_at": state["last_send_at"],
             "deliveries": deliveries,
         }
 
@@ -181,6 +207,7 @@ class WechatChannel:
             ):
                 row.status = "uncertain"
                 row.error = "上次发送被中断，是否送达未知；未自动重发。"
+                row.diagnostics = {**(row.diagnostics or {}), "error_kind": "interrupted"}
             db.commit()
         self.worker = asyncio.create_task(self.loop())
         self.sender = asyncio.create_task(self.send_loop())
@@ -195,7 +222,7 @@ class WechatChannel:
         async with self.control_lock:
             await self.close()
             self.phase, self.qr = "", ""
-            update_state(enabled=False, last_error="")
+            update_state(enabled=False, last_error="", receive_error="", send_error="")
             value = await request(
                 "/ilink/bot/get_bot_qrcode",
                 body={"local_token_list": []},
@@ -265,8 +292,10 @@ class WechatChannel:
                             conversation_id="",
                             reminders_since=now(),
                             last_error="",
+                            receive_error="", send_error="", needs_interaction=True,
+                            last_connected_at="", last_received_at="", last_send_at="",
                         )
-                        self.phase, self.qr_image = "connected", ""
+                        self.phase, self.qr_image = "connecting", ""
                         self.start()
                         return
                     elif status in ("expired", "verify_code_blocked"):
@@ -296,7 +325,7 @@ class WechatChannel:
             ):
                 changes["reminders_since"] = now()
             update_state(**changes)
-            self.phase = "connected" if enabled else "paused"
+            self.phase = "connecting" if enabled else "paused"
             if enabled:
                 self.start()
             return self.status()
@@ -331,6 +360,7 @@ class WechatChannel:
         message_id = value.get("message_id")
         if message_id is None:
             return
+        update_state(last_received_at=now())
         inbox_id = state["account_id"] + ":" + str(message_id)
         with Session() as db:
             if db.get(WechatInbox, inbox_id):
@@ -352,6 +382,7 @@ class WechatChannel:
                 return
         if isinstance(value.get("context_token"), str) and value["context_token"]:
             secret_set("wechat_context", value["context_token"])
+            update_state(needs_interaction=False, send_error="")
             with Session() as db:
                 for row in db.scalars(
                     select(WechatDelivery).where(
@@ -392,7 +423,7 @@ class WechatChannel:
             conversation.updated_at = now()
             run_id, conversation_id = run.id, conversation.id
             db.commit()
-        update_state(conversation_id=conversation_id, last_error="")
+        update_state(conversation_id=conversation_id)
         if text:
             runs.launch(run_id, lambda: agent.chat(run_id, conversation_id))
             await runs.tasks[run_id]
@@ -436,6 +467,20 @@ class WechatChannel:
                 )
                 db.commit()
 
+    async def test_message(self, request_id):
+        async with self.control_lock:
+            state = read_state()
+            if not state["account_id"] or not state["enabled"] or self.phase == "needs_login":
+                raise ValueError("请先连接微信并恢复连接，再发送测试消息。")
+            if state["needs_interaction"] or not secret_get("wechat_context"):
+                raise ValueError("请先在微信里给XiaoXi发一条消息，再点击发送测试消息。")
+            stamp = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
+            source = f"test:{state['account_id']}:{request_id}"
+            self.enqueue(source, f"这是一条 XiaoXi 微信连接测试消息（北京时间 {stamp}）。如果你在微信中看到它，说明本次消息已收到。", state["account_id"])
+            with Session() as db:
+                row = db.scalar(select(WechatDelivery).where(WechatDelivery.source_key == source))
+                return {"id": row.id, "status": row.status, "error": row.error, "created_at": row.created_at, "diagnostics": row.diagnostics}
+
     def queue_reminders(self):
         state = read_state()
         if (
@@ -465,7 +510,9 @@ class WechatChannel:
             return
         context = secret_get("wechat_context")
         if not context:
-            update_state(last_error="请先在微信里给XiaoXi发一条消息，激活回复与提醒。")
+            update_state(send_error="请先在微信里给XiaoXi发一条消息，激活回复与提醒。", needs_interaction=True)
+            return
+        if state["needs_interaction"]:
             return
         with Session() as db:
             rows = db.scalars(
@@ -492,9 +539,14 @@ class WechatChannel:
                         db.commit()
                         continue
             with Session() as db:
-                db.get(WechatDelivery, row.id).status = "sending"
+                item = db.get(WechatDelivery, row.id)
+                item.status = "sending"
+                item.diagnostics = {"attempted_at": now()}
+                attempted_at = item.diagnostics["attempted_at"]
                 db.commit()
+            update_state(last_send_at=attempted_at)
             status, error = "accepted", ""
+            diagnostic = {"attempted_at": attempted_at, "response_received": False}
             try:
                 await request(
                     "/ilink/bot/sendmessage",
@@ -514,7 +566,10 @@ class WechatChannel:
                         }
                     },
                 )
+                diagnostic["response_received"] = True
             except ChannelError as exc:
+                diagnostic.update(error_kind="http" if exc.http_status else "business", http_status=exc.http_status,
+                                  provider_code=exc.code if isinstance(exc.code, int) else None, response_received=True)
                 status = "blocked" if exc.code == -2 else "failed"
                 error = (
                     "微信会话不可用，请在微信里重新发一条消息。"
@@ -525,15 +580,31 @@ class WechatChannel:
                     self.phase = "needs_login"
                     update_state(enabled=False)
                     error = "微信登录已失效，请重新扫码。"
+                if exc.code == -2:
+                    update_state(needs_interaction=True)
             except asyncio.CancelledError:
                 raise  # Persisted 'sending' is recovered as uncertain, never blindly resent.
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                status, error = "failed", "未能建立微信连接，请检查网络后重新发起测试。"
+                diagnostic["error_kind"] = "connection"
+            except httpx.ReadTimeout:
+                status, error = "uncertain", "等待微信响应超时，是否送达尚不确定；未自动重发，请在微信确认。"
+                diagnostic["error_kind"] = "read_timeout"
+            except httpx.WriteTimeout:
+                status, error = "uncertain", "发送途中超时，是否送达尚不确定；未自动重发，请在微信确认。"
+                diagnostic["error_kind"] = "write_timeout"
+            except (ValueError, TypeError):
+                status, error = "uncertain", "收到的微信响应无法确认发送结果；未自动重发，请在微信确认。"
+                diagnostic.update(error_kind="invalid_response", response_received=True)
             except Exception:  # noqa: BLE001 - Unknown network outcomes must not be retried.
                 status, error = "uncertain", "发送结果未知，请到微信确认；未自动重发。"
+                diagnostic["error_kind"] = "network_unknown"
             with Session() as db:
                 item = db.get(WechatDelivery, row.id)
                 item.status, item.error = status, error
+                item.diagnostics = {**diagnostic, "completed_at": now()}
                 db.commit()
-            update_state(last_error=error)
+            update_state(send_error=error)
             if status != "accepted":
                 break
 
@@ -565,7 +636,7 @@ class WechatChannel:
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001 - Keep the channel alive without leaking secrets.
-                update_state(last_error="微信提醒处理失败，请查看连接状态。")
+                update_state(send_error="微信提醒处理失败，请查看连接状态。")
             await asyncio.sleep(2)
 
     async def loop(self):
@@ -593,6 +664,8 @@ class WechatChannel:
                     base=state["base_url"],
                     timeout=40,
                 )
+                self.phase = "connected"
+                update_state(last_connected_at=now(), receive_error="", last_error="")
                 for message in value.get("msgs", []):
                     await self.receive(message)
                 if value.get("get_updates_buf"):
@@ -610,13 +683,13 @@ class WechatChannel:
                     )
                     return
                 self.phase = "reconnecting"
-                update_state(last_error=str(exc))
+                update_state(receive_error=str(exc))
                 failures += 1
                 await asyncio.sleep(min(30, 2 ** min(failures, 5)))
             except httpx.ReadTimeout:
                 pass  # Normal long-poll timeout; do not advance the cursor.
             except Exception:  # noqa: BLE001 - Never log upstream error text containing tokens.
                 self.phase = "reconnecting"
-                update_state(last_error="微信连接暂时中断，正在重连。")
+                update_state(receive_error="微信连接暂时中断，正在重连。")
                 failures += 1
                 await asyncio.sleep(min(30, 2 ** min(failures, 5)))

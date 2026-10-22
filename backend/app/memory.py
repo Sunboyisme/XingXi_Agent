@@ -33,10 +33,10 @@ FIELDS = (
     "replaces_revision",
 )
 EXPLICIT = re.compile(
-    r"记住|记下|记着|保存.{0,8}(偏好|记忆|信息)|remember\b", re.IGNORECASE
+    r"记住|记下|记着|记一下|记录一下|保存.{0,8}(偏好|记忆|信息)|remember\b", re.IGNORECASE
 )
 DECLINED = re.compile(
-    r"(?:不要|别|不用|不必|无需|不想|禁止).{0,8}(?:记住|记下|保存|记录)|(?:do not|don't)\s+(?:remember|save)",
+    r"(?:不要|别|不用|不必|无需|不想|禁止).{0,8}(?:记住|记下|记一下|保存|记录)|(?:do not|don't)\s+(?:remember|save)",
     re.IGNORECASE,
 )
 TEMPORARY = re.compile(
@@ -90,6 +90,24 @@ def history_evidence(db, message, sources):
     if len(result) > 12000:
         raise ValueError("历史依据过长，请只引用与当前记忆相关的片段。")
     return result
+
+
+def normalize_content(content: str) -> str:
+    """Remove known command wrappers, without rewriting facts or evidence."""
+    original = content.strip()
+    value = original
+    for _ in range(3):
+        cleaned = re.sub(r"^(?:请|麻烦)?(?:你)?(?:帮我)?(?:记一下|记住|记下|记着|记录一下|记录下)(?:吧)?[：:，,\s]*", "", value).strip()
+        if cleaned == value:
+            break
+        value = cleaned
+    if not value:
+        return original
+    # Only a leading first-person subject is normalized; quoted text, negation,
+    # dates and qualifications remain byte-for-byte intact.
+    if value.startswith("我") and not value.startswith(("我们", "我方")):
+        value = "用户" + value[1:]
+    return value
 
 
 def preference_clause(message: str) -> str:
@@ -176,7 +194,7 @@ def save_from_chat(
     replaces_id="",
     source_quotes=None,
 ) -> dict:
-    content, evidence = content.strip(), evidence.strip()
+    content, evidence = normalize_content(content), evidence.strip()
     if (
         category not in ("fact", "preference", "project")
         or not content

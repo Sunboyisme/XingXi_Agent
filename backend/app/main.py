@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
         await mcp_service.manager.close()
 
 
-app = FastAPI(title="XiaoXi API", version="0.1.5", lifespan=lifespan)
+app = FastAPI(title="XiaoXi API", version="0.1.6", lifespan=lifespan)
 
 
 # Pydantic's default response includes the rejected input, including credentials.
@@ -202,7 +202,7 @@ def create_run(db, kind, conversation_id=None, goal_id=None, *, commit=True):
 
 @app.get("/api/v1/health")
 def health():
-    return {"service": "bai-agent", "version": "0.1.5"}
+    return {"service": "bai-agent", "version": "0.1.6"}
 
 
 from fastapi import APIRouter
@@ -992,6 +992,16 @@ def add_memory(value: s.MemoryCreate, db=Depends(database)):
     return record
 
 
+@router.get("/memories/normalization-preview", response_model=list[s.MemoryNormalizationRead])
+def memory_normalization_preview(db=Depends(database)):
+    result = []
+    for record in db.scalars(select(store.Memory).where(store.Memory.profile_id == PROFILE_ID, store.Memory.state == "confirmed").order_by(store.Memory.updated_at.desc())):
+        normalized = memory.normalize_content(record.content)
+        if normalized != record.content:
+            result.append({"id": record.id, "revision": record.revision, "before": record.content, "after": normalized})
+    return result
+
+
 @router.put("/memories/{memory_id}", response_model=s.MemoryRead)
 def edit_memory(memory_id: str, value: s.MemoryCreate, db=Depends(database)):
     try:
@@ -1238,6 +1248,22 @@ async def wechat_connect(request: Request):
         request.app.state.wechat.phase = "error"
         wechat.update_state(last_error="暂时无法获取微信二维码，请检查网络后重试。")
         raise HTTPException(400, "暂时无法获取微信二维码，请检查网络后重试。")
+
+
+@router.post("/wechat/test-message", response_model=s.WechatDeliveryRead)
+async def wechat_test_message(value: s.WechatTestMessage, request: Request):
+    try:
+        return await request.app.state.wechat.test_message(value.request_id)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+
+
+@router.get("/wechat/deliveries/{delivery_id}", response_model=s.WechatDeliveryRead)
+def wechat_delivery(delivery_id: str, db=Depends(database)):
+    row = item(db, store.WechatDelivery, delivery_id)
+    if row.account_id != wechat.read_state()["account_id"]:
+        raise HTTPException(404, "投递记录不存在")
+    return {"id": row.id, "status": row.status, "error": row.error, "created_at": row.created_at, "diagnostics": row.diagnostics}
 
 
 @router.put("/wechat/options", response_model=s.WechatStatus)

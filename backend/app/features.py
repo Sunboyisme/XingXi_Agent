@@ -16,9 +16,9 @@ router = APIRouter()
 
 
 @router.get("/plans", response_model=list[plans.PlanRead])
-def plan_list(start: str | None = None, end: str | None = None):
+def plan_list(start: str | None = None, end: str | None = None, timezone: str | None = None, include_deleted: bool = False):
     try:
-        return plans.list_events(start, end)
+        return plans.list_events(start, end, timezone, include_deleted)
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
 

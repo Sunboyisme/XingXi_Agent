@@ -2,13 +2,15 @@ import { SoftSelect } from "./ui/soft-select";
 import { useEffect, useState } from "react";
 import {
   Bookmark,
-  ChevronDown,
+  ArrowUpRight,
+  WandSparkles,
   Pencil,
   Plus,
   Search,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -20,9 +22,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { dateTime } from "@/lib/utils";
 import { api, type Memory, type Settings } from "@/lib/api";
 import { ConfirmDelete, EmptyState, ErrorNotice } from "./common";
-import { MemoryReview, MemorySource } from "./MemoryFeedback";
+import { MemoryReview } from "./MemoryFeedback";
 import { RetrievalDebugger } from "./RetrievalDebugger";
 
 const categories: Record<string, string> = {
@@ -55,7 +58,75 @@ export function MemoryPage({
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Memory | null>(null);
   const [changingMode, setChangingMode] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState("");
+  const detail = memories.find((value) => value.id === detailId);
+  type Normalization = {
+    id: string;
+    revision: number;
+    before: string;
+    after: string;
+  };
+  const [normalizationOpen, setNormalizationOpen] = useState(false);
+  const [proposals, setProposals] = useState<Normalization[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [memoryNotice, setMemoryNotice] = useState("");
+  async function previewNormalization() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const values = await api<Normalization[]>(
+        "/memories/normalization-preview",
+      );
+      setProposals(values);
+      setSelected(new Set(values.map((value) => value.id)));
+      setNormalizationOpen(true);
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function applyNormalization() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    const failed: Normalization[] = [];
+    const errors: string[] = [];
+    let saved = 0;
+    for (const proposal of proposals.filter((value) =>
+      selected.has(value.id),
+    )) {
+      const original = memories.find((value) => value.id === proposal.id);
+      try {
+        if (!original) throw new Error("这条记忆已不存在，请刷新后重试。");
+        await api(`/memories/${proposal.id}`, "PUT", {
+          content: proposal.after,
+          category: original.category,
+          source: original.source,
+          state: "confirmed",
+          revision: proposal.revision,
+        });
+        saved++;
+      } catch (cause) {
+        failed.push(proposal);
+        errors.push((cause as Error).message);
+      }
+    }
+    setProposals(failed);
+    setSelected(new Set(failed.map((value) => value.id)));
+    setMemoryNotice(
+      `已整理 ${saved} 条记忆${failed.length ? `，${failed.length} 条未保存，请刷新后重新预览` : ""}。`,
+    );
+    if (!failed.length) setNormalizationOpen(false);
+    try {
+      await refresh();
+    } catch {
+      errors.push("列表暂未刷新，已保存的修改仍然有效。");
+    }
+    setError([...new Set(errors)].join("；"));
+    setBusy(false);
+  }
   async function changeMode(mode: Settings["memory_mode"]) {
     if (changingMode) return;
     setChangingMode(true);
@@ -134,6 +205,11 @@ export function MemoryPage({
         </Button>
       </div>
       {error && <ErrorNotice message={error} />}
+      {memoryNotice && (
+        <p className="memory-normalization-notice" role="status">
+          {memoryNotice}
+        </p>
+      )}
       {candidates.length > 0 && (
         <section className="candidate-section">
           <h2>
@@ -155,6 +231,15 @@ export function MemoryPage({
           />
         </div>
         <div className="memory-toolbar-actions">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => void previewNormalization()}
+          >
+            <WandSparkles size={15} />
+            一键整理表述
+          </Button>
           <RetrievalDebugger />
           <label className="memory-mode-control">
             <span>保存方式</span>
@@ -200,27 +285,15 @@ export function MemoryPage({
                   </Button>
                 </div>
               </div>
-              <p
-                className={
-                  expanded === value.id
-                    ? "memory-content is-expanded"
-                    : "memory-content"
-                }
-              >
-                {value.content}
-              </p>
+              <p className="memory-content">{value.content}</p>
               <div className="memory-card-footer">
-                <MemorySource memory={value} />
                 <button
                   type="button"
                   className="memory-detail-toggle"
-                  aria-expanded={expanded === value.id}
-                  onClick={() =>
-                    setExpanded(expanded === value.id ? null : value.id)
-                  }
+                  onClick={() => setDetailId(value.id)}
                 >
-                  {expanded === value.id ? "收起详情" : "查看详情"}
-                  <ChevronDown size={13} aria-hidden="true" />
+                  查看详情
+                  <ArrowUpRight size={13} aria-hidden="true" />
                 </button>
               </div>
             </article>
@@ -244,6 +317,116 @@ export function MemoryPage({
             : "你的偏好、正在做的项目、最近的目标，都可以放在这里。"}
         </EmptyState>
       )}
+      <Dialog
+        open={Boolean(detail)}
+        onOpenChange={(value) => {
+          if (!value) setDetailId("");
+        }}
+      >
+        <DialogContent className="memory-detail-dialog">
+          <DialogHeader>
+            <DialogTitle>记忆详情</DialogTitle>
+            <DialogDescription>
+              {detail ? categories[detail.category] : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {detail && (
+            <>
+              <p className="memory-detail-content">{detail.content}</p>
+              <p className="muted">最近更新：{dateTime(detail.updated_at)}</p>
+              <section className="memory-provenance" aria-label="记忆来源">
+                <h3>来源</h3>
+                <p>{detail.source || "来源未记录"}</p>
+                {detail.evidence ? (
+                  <blockquote>{detail.evidence}</blockquote>
+                ) : (
+                  <p className="muted">这条记忆没有保留来源原话。</p>
+                )}
+              </section>
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setDetailId("");
+                    setDeleting(detail);
+                  }}
+                >
+                  <Trash2 size={15} />
+                  删除
+                </Button>
+                <Button
+                  onClick={() => {
+                    setDetailId("");
+                    edit(detail);
+                  }}
+                >
+                  <Pencil size={15} />
+                  编辑记忆
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={normalizationOpen}
+        onOpenChange={(value) => {
+          if (!busy) setNormalizationOpen(value);
+        }}
+      >
+        <DialogContent className="memory-normalization-dialog">
+          <DialogHeader>
+            <DialogTitle>整理记忆表述</DialogTitle>
+            <DialogDescription>
+              清理命令语，保留事实、原话和来源。勾选要保存的修改，不会调用模型。
+            </DialogDescription>
+          </DialogHeader>
+          {error && <ErrorNotice message={error} />}
+          <div className="memory-normalization-list">
+            {proposals.length ? (
+              proposals.map((proposal) => (
+                <label className="memory-normalization-item" key={proposal.id}>
+                  <Checkbox
+                    checked={selected.has(proposal.id)}
+                    disabled={busy}
+                    onCheckedChange={(checked) =>
+                      setSelected((previous) => {
+                        const next = new Set(previous);
+                        if (checked === true) next.add(proposal.id);
+                        else next.delete(proposal.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <span>
+                    <small>整理前</small>
+                    <p>{proposal.before}</p>
+                    <small>整理后</small>
+                    <p>{proposal.after}</p>
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="muted">当前没有需要整理的表述。</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setNormalizationOpen(false)}
+            >
+              关闭
+            </Button>
+            <Button
+              disabled={busy || !selected.size}
+              onClick={() => void applyNormalization()}
+            >
+              {busy ? "正在保存…" : `保存所选 ${selected.size} 条`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>

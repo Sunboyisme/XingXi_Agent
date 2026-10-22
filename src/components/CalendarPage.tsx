@@ -1,5 +1,12 @@
 import { Hint } from "./common";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
 import {
   CalendarPlus,
   Check,
@@ -34,36 +41,16 @@ import { holidayOn } from "@/lib/holidays";
 import { lunarDate } from "@/lib/lunarCalendar";
 import { isRepeating, isRoutine } from "@/lib/planPresentation";
 
-export function dateMove(key: string, days: number) {
-  const date = new Date(`${key}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-export function zonedInput(value: string, zone: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: zone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(value));
-  const part = (type: string) => parts.find((p) => p.type === type)?.value;
-  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
-}
-export function zonedISO(input: string, zone: string) {
-  const wanted = Date.parse(`${input}:00Z`);
-  let guess = wanted;
-  for (let i = 0; i < 3; i++)
-    guess +=
-      wanted -
-      Date.parse(`${zonedInput(new Date(guess).toISOString(), zone)}:00Z`);
-  const result = new Date(guess).toISOString();
-  if (zonedInput(result, zone) !== input)
-    throw new Error("此时区不存在这个时间，请调整时间");
-  return result;
-}
+import {
+  dateMove,
+  zonedInput,
+  zonedISO,
+  shiftedPlan,
+  monthSegments,
+  type MonthSegment,
+} from "@/lib/calendarMonth";
+export { dateMove, zonedInput, zonedISO } from "@/lib/calendarMonth";
+
 export function nextPlanEnd(start: string, end: string, allDay: boolean) {
   const startDay = start.slice(0, 10);
   if (allDay) return end.slice(0, 10) < startDay ? startDay : end.slice(0, 10);
@@ -137,6 +124,18 @@ export function CalendarPage({
   const [deleting, setDeleting] = useState<CalendarEvent | null>(null);
   const [cancelling, setCancelling] = useState<CalendarEvent | null>(null);
   const [busy, setBusy] = useState(false);
+  const drag = useRef<{
+    event: CalendarEvent;
+    sourceDay: string;
+    x: number;
+    y: number;
+    active: boolean;
+  } | null>(null);
+  const suppressClickUntil = useRef(0);
+  const [dropDay, setDropDay] = useState("");
+  const [draggingId, setDraggingId] = useState("");
+  const moveLock = useRef(false);
+  const [moveNotice, setMoveNotice] = useState("");
   const [form, setForm] = useState({
     title: "",
     notes: "",
@@ -203,7 +202,7 @@ export function CalendarPage({
     setLoading(true);
     try {
       const values = await api<CalendarEvent[]>(
-        `/plans?start=${view === "week" ? weekStart : begin}&end=${view === "week" ? dateMove(weekStart, 7) : dateMove(begin, count)}`,
+        `/plans?start=${view === "week" ? weekStart : begin}&end=${view === "week" ? dateMove(weekStart, 7) : dateMove(begin, count)}&timezone=${encodeURIComponent(timezone)}`,
       );
       if (sequence === requestSequence.current) {
         setEvents(values);
@@ -214,7 +213,7 @@ export function CalendarPage({
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
     }
-  }, [begin, count, view, weekStart]);
+  }, [begin, count, view, weekStart, timezone]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -530,6 +529,149 @@ export function CalendarPage({
       };
     });
   }
+  const monthValues = useMemo(
+    () =>
+      new Map(
+        days.map((day) => [
+          day,
+          eventsOnDay(events, day, timezone).filter(
+            (event) => !isRoutine(event),
+          ),
+        ]),
+      ),
+    [days, events, timezone],
+  );
+  const monthLayout = useMemo(
+    () => monthSegments(days, monthValues, timezone),
+    [days, monthValues, timezone],
+  );
+  function startDrag(
+    pointer: PointerEvent<HTMLButtonElement>,
+    event: CalendarEvent,
+    day: string,
+  ) {
+    if (
+      pointer.button !== 0 ||
+      busy ||
+      loading ||
+      moveLock.current ||
+      isRepeating(event) ||
+      event.status === "cancelled" ||
+      event.status === "ended"
+    )
+      return;
+    drag.current = {
+      event,
+      sourceDay: day,
+      x: pointer.clientX,
+      y: pointer.clientY,
+      active: false,
+    };
+    pointer.currentTarget.setPointerCapture(pointer.pointerId);
+  }
+  function updateDrag(pointer: PointerEvent<HTMLButtonElement>) {
+    const current = drag.current;
+    if (!current) return;
+    if (
+      !current.active &&
+      Math.hypot(pointer.clientX - current.x, pointer.clientY - current.y) < 7
+    )
+      return;
+    current.active = true;
+    pointer.preventDefault();
+    setDraggingId(current.event.id);
+    setDropDay(
+      document
+        .elementFromPoint(pointer.clientX, pointer.clientY)
+        ?.closest<HTMLElement>("[data-calendar-day]")?.dataset.calendarDay ||
+        "",
+    );
+  }
+  async function finishDrag(pointer: PointerEvent<HTMLButtonElement>) {
+    const current = drag.current;
+    drag.current = null;
+    setDropDay("");
+    setDraggingId("");
+    if (!current?.active) return;
+    suppressClickUntil.current = Date.now() + 500;
+    const target = document
+      .elementFromPoint(pointer.clientX, pointer.clientY)
+      ?.closest<HTMLElement>("[data-calendar-day]")?.dataset.calendarDay;
+    if (!target || target === current.sourceDay || moveLock.current) return;
+    moveLock.current = true;
+    setBusy(true);
+    setError("");
+    setMoveNotice("");
+    try {
+      const saved = await api<CalendarEvent>(
+        `/plans/${current.event.id}`,
+        "PUT",
+        {
+          ...shiftedPlan(current.event, current.sourceDay, target),
+          scope: "series",
+        },
+      );
+      setEvents((previous) =>
+        previous.map((event) => (event.id === saved.id ? saved : event)),
+      );
+      setMoveNotice(`已将「${current.event.title}」移到 ${target}。`);
+      await load();
+      await refresh().catch(() => setError("改期已保存，部分列表暂未刷新。"));
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      moveLock.current = false;
+      setBusy(false);
+    }
+  }
+  function cancelDrag() {
+    drag.current = null;
+    setDropDay("");
+    setDraggingId("");
+  }
+  function monthEvent(segment: MonthSegment, day: string) {
+    const event = segment.event;
+    return (
+      <Hint
+        key={`${event.id}:${event.occurrence_start || event.start}`}
+        label={`${event.title}\n${day}${isRepeating(event) ? " · 重复计划请从编辑页调整" : " · 可拖动改期"}`}
+      >
+        <button
+          type="button"
+          className={`day-event month-band ${event.status === "completed" ? "is-completed" : ""} ${event.status === "cancelled" ? "is-cancelled" : ""}`}
+          data-join-left={segment.joinLeft}
+          data-join-right={segment.joinRight}
+          data-dragging={draggingId === event.id}
+          data-movable={
+            !isRepeating(event) &&
+            !["cancelled", "ended", "deleted"].includes(event.status)
+          }
+          aria-label={`${day} ${event.title}${event.all_day ? " 全天" : ` ${timeLabel(event)}`}`}
+          onPointerDown={(pointer) => startDrag(pointer, event, day)}
+          onPointerMove={updateDrag}
+          onPointerUp={(pointer) => void finishDrag(pointer)}
+          onPointerCancel={cancelDrag}
+          onClick={() => {
+            if (Date.now() >= suppressClickUntil.current)
+              openAgenda(day, isRepeating(event) ? "repeat" : "todo");
+          }}
+        >
+          {segment.continuesBefore && (
+            <ChevronLeft size={11} aria-hidden="true" />
+          )}
+          <span>
+            {!segment.joinLeft
+              ? `${event.all_day ? "" : timeLabel(event) + " "}${event.title}`
+              : "\u00a0"}
+          </span>
+          {event.status === "completed" && <Check size={11} />}
+          {segment.continuesAfter && (
+            <ChevronRight size={11} aria-hidden="true" />
+          )}
+        </button>
+      </Hint>
+    );
+  }
   const timeLabel = (e: CalendarEvent) =>
     e.all_day ? "全天" : zonedInput(e.start, timezone).slice(11);
   const eventButton = (e: CalendarEvent, day?: string) => (
@@ -607,6 +749,11 @@ export function CalendarPage({
     <div className="calendar-page page-content">
       {error && !editor && (
         <ErrorNotice message={error} retry={() => void load()} />
+      )}
+      {moveNotice && (
+        <p className="plan-move-notice" role="status">
+          {moveNotice}
+        </p>
       )}
       <div className="plan-calendar" data-view={view}>
         <div className="plan-toolbar">
@@ -842,10 +989,16 @@ export function CalendarPage({
               const values = eventsOnDay(events, day, timezone);
               const visibleValues = values.filter((event) => !isRoutine(event));
               const repeatedValues = values.filter(isRoutine);
+              const segments = monthLayout.get(day) || [];
+              const displayed = segments.filter(
+                (segment) => segment.lane < visibleEvents,
+              );
               return (
                 <section
                   key={day}
                   className="plan-day"
+                  data-calendar-day={day}
+                  data-drop-target={dropDay === day}
                   data-outside={day.slice(0, 7) !== anchor.slice(0, 7)}
                   data-today={day === today}
                   data-holiday={holidayOn(day)?.kind}
@@ -888,13 +1041,19 @@ export function CalendarPage({
                   </div>
                   <div className="plan-day-events">
                     <div className="plan-day-event-list">
-                      {[...visibleValues]
-                        .sort((a, b) => a.start.localeCompare(b.start))
-                        .slice(0, visibleEvents)
-                        .map((event) => eventButton(event, day))}
+                      {Array.from({ length: visibleEvents }, (_, lane) => {
+                        const segment = displayed.find(
+                          (value) => value.lane === lane,
+                        );
+                        return (
+                          <div className="month-event-slot" key={lane}>
+                            {segment ? monthEvent(segment, day) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                     <div className="plan-day-summary">
-                      {visibleValues.length > visibleEvents && (
+                      {visibleValues.length > displayed.length && (
                         <button
                           className="plan-more plan-more-ellipsis"
                           aria-label={`查看 ${day} 的全部计划`}
@@ -1001,6 +1160,23 @@ export function CalendarPage({
                 <div className="plan-occurrence-content">
                   {eventButton(event, dayList)}
                 </div>
+                <Hint label={isRepeating(event) ? "取消本次安排" : "删除计划"}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={busy}
+                    className="plan-agenda-delete"
+                    aria-label={`${isRepeating(event) ? "取消本次" : "删除"} ${event.title}`}
+                    onClick={() =>
+                      isRepeating(event)
+                        ? setCancelling(event)
+                        : setDeleting(event)
+                    }
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </Hint>
                 <Button
                   type="button"
                   variant="ghost"
