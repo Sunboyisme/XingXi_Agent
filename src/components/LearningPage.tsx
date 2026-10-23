@@ -77,6 +77,7 @@ export function LearningPage({
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
   const [foundation, setFoundation] = useState("");
+  const [useBeginnerDefaults, setUseBeginnerDefaults] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -285,6 +286,7 @@ export function LearningPage({
         title,
         objective,
         foundation,
+        use_beginner_defaults: useBeginnerDefaults,
       });
       await refresh();
       selectGoal(value);
@@ -292,6 +294,7 @@ export function LearningPage({
       setTitle("");
       setObjective("");
       setFoundation("");
+      setUseBeginnerDefaults(false);
       const next = await api<Run>(`/learning/goals/${value.id}/plan`, "POST");
       void track(next);
     } catch (error) {
@@ -982,9 +985,7 @@ export function LearningPage({
             />
           </div>
           <div className="form-field">
-            <Label htmlFor="goal-foundation">
-              目前的基础 <span className="muted">选填</span>
-            </Label>
+            <Label htmlFor="goal-foundation">目前的基础与相关背景</Label>
             <Textarea
               id="goal-foundation"
               value={foundation}
@@ -993,12 +994,25 @@ export function LearningPage({
               placeholder="已经会什么，在哪些地方容易卡住？"
             />
           </div>
+          <label className="learning-beginner-choice">
+            <input
+              type="checkbox"
+              checked={useBeginnerDefaults}
+              onChange={(event) => setUseBeginnerDefaults(event.target.checked)}
+            />
+            不确定怎么填写，按零基础入门安排未填写的部分
+          </label>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               取消
             </Button>
             <Button
-              disabled={!title.trim() || busy}
+              disabled={
+                !title.trim() ||
+                busy ||
+                (!useBeginnerDefaults &&
+                  (!objective.trim() || !foundation.trim()))
+              }
               onClick={() => void create()}
             >
               <Sparkles size={15} />

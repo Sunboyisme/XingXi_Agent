@@ -781,7 +781,7 @@ export function CalendarPage({
         keys,
       });
       setDayOrders((orders) => ({ ...orders, [day]: result.keys }));
-      setAgendaNotice(keys.length ? "顺序已保存。" : "已恢复时间排序。");
+      setAgendaNotice(keys.length ? "顺序已保存。" : "已恢复默认排序。");
       return true;
     } catch (cause) {
       setError((cause as Error).message);
@@ -1212,15 +1212,19 @@ export function CalendarPage({
                 重复 {repeatCount} 项
               </button>
             </div>
+            <Button
+              className="plan-order-reset"
+              size="sm"
+              variant="outline"
+              disabled={
+                busy || loading || orderSaving || !dayOrders[dayList]?.length
+              }
+              onClick={() => void saveOrder([])}
+            >
+              <RotateCcw size={14} />
+              恢复默认排序
+            </Button>
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy || orderSaving || !dayOrders[dayList]?.length}
-            onClick={() => void saveOrder([])}
-          >
-            恢复时间排序
-          </Button>
           {error && <p role="alert">{error}</p>}
           {agendaNotice && (
             <p

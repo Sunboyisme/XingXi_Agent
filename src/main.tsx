@@ -16,6 +16,7 @@ import "./styles/version-014.css";
 import "./styles/complex-tasks.css";
 import "./styles/version-016.css";
 import "./styles/feedback-016.css";
+import "./styles/version-017.css";
 
 const stopAppearance = initializeAppearance();
 import.meta.hot?.dispose(stopAppearance);

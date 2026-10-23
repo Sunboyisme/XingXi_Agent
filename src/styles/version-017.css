@@ -1,0 +1,284 @@
+/* 0.1.7: visible project context, consistent navigation and compact controls. */
+.plan-agenda-sticky-tabs {
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plan-order-reset[data-slot="button"] {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+  border-radius: 9px;
+}
+.exercise-answer-dock .exercise-submit [data-slot="button"] {
+  box-sizing: border-box;
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  flex: 0 0 32px;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
+}
+.learning-beginner-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.learning-beginner-choice input {
+  margin-top: 4px;
+  accent-color: var(--ui-color-action);
+}
+.complex-task-heading strong {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.chat-sidebar {
+  padding-right: 0;
+}
+.chat-sidebar-heading,
+.chat-sidebar > .new-chat-button[data-slot="button"] {
+  margin-right: 14px;
+}
+.chat-sidebar > .new-chat-button[data-slot="button"] {
+  width: calc(100% - 14px);
+}
+.chat-sidebar .project-conversations {
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+.sidebar-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 42px;
+  padding: 7px 1px 7px 8px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.sidebar-section-heading .sidebar-group-toggle {
+  justify-content: flex-start;
+  padding: 0;
+  gap: 7px;
+}
+.sidebar-group-toggle > small,
+.project-chat-count {
+  font-size: 10px;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+  opacity: 0;
+  pointer-events: none;
+}
+.sidebar-section-actions [data-slot="button"],
+.sidebar-section-actions .project-running-state {
+  width: 24px;
+  min-width: 24px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+.sidebar-section-heading:hover .sidebar-section-actions,
+.sidebar-section-heading:focus-within .sidebar-section-actions,
+.sidebar-section-actions:has([data-state="open"]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.project-heading > button[aria-label^="管理项目"] {
+  opacity: 0;
+}
+.project-heading:hover > button[aria-label^="管理项目"],
+.project-heading:focus-within > button[aria-label^="管理项目"],
+.project-heading > button[data-state="open"] {
+  opacity: 1;
+}
+.project-name > span {
+  flex: 1;
+}
+.project-chat-count {
+  margin-left: auto;
+  padding-right: 4px;
+}
+.chat-project-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 4px 9px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.chat-project-context button,
+.chat-project-picker,
+.chat-project-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.chat-project-context button:hover {
+  color: var(--ui-color-action);
+}
+.chat-project-picker select {
+  max-width: min(240px, 45vw);
+  color: var(--ui-color-text);
+  border: 1px solid var(--ui-color-line);
+  border-radius: 8px;
+  padding: 5px 7px;
+  background: var(--ui-color-bg);
+}
+.chat-project-context button:focus-visible,
+.chat-project-picker select:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
+.project-overview {
+  height: 100%;
+  overflow: auto;
+  padding: clamp(24px, 4vw, 56px);
+}
+.project-overview-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 36px;
+}
+.project-overview-header > div:first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.project-overview h1 {
+  font-size: 30px;
+  margin: 10px 0;
+  color: var(--ui-color-heading);
+  overflow-wrap: anywhere;
+}
+.project-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+}
+.project-overview-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 760px;
+  color: var(--ui-color-text-muted);
+  line-height: 1.8;
+}
+.project-overview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-overview-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr);
+  gap: 36px;
+}
+.project-overview h2 {
+  font-size: 17px;
+  margin: 0 0 15px;
+  color: var(--ui-color-heading);
+}
+.project-overview h2 small {
+  margin-left: 7px;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.project-overview-chat {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 17px 7px;
+  border-top: 1px solid var(--ui-color-line);
+}
+.project-overview-chat:hover {
+  background: var(--ui-color-surface);
+}
+.project-overview-chat:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+}
+.project-overview-chat strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+}
+.project-overview-chat svg {
+  color: var(--ui-color-text-muted);
+  flex-shrink: 0;
+}
+.project-overview-chat time {
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+  flex-shrink: 0;
+}
+.project-overview-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.project-overview-materials > article {
+  padding: 12px 0;
+  border-top: 1px solid var(--ui-color-line);
+}
+.project-overview-materials > article > small {
+  display: block;
+  margin-top: 5px;
+  color: var(--ui-color-text-muted);
+}
+.project-overview-image {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.project-overview-image img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 9px;
+}
+.project-overview-empty {
+  padding: 20px 0;
+  color: var(--ui-color-text-muted);
+}
+.project-overview-empty p,
+.project-overview-materials > .muted {
+  margin-bottom: 14px;
+}
+@media (max-width: 1050px) {
+  .project-overview-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (hover: none) {
+  .sidebar-section-actions,
+  .project-heading > button[aria-label^="管理项目"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

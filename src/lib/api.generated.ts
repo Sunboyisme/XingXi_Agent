@@ -1575,6 +1575,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conversation Activity */
+        get: operations["conversation_activity_api_v1_conversations_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}": {
         parameters: {
             query?: never;
@@ -1780,6 +1797,11 @@ export interface components {
             title: string;
             /** Project Id */
             project_id?: string | null;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned: boolean;
         };
         /** ConversationRead */
         ConversationRead: {
@@ -1941,6 +1963,11 @@ export interface components {
              * @default
              */
             foundation: string;
+            /**
+             * Use Beginner Defaults
+             * @default false
+             */
+            use_beginner_defaults: boolean;
         };
         /** GoalRead */
         GoalRead: {
@@ -3144,6 +3171,11 @@ export interface components {
             revision: number;
             /** Goal */
             goal: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
             /** Reason */
             reason: string;
             /** Requirements */
@@ -6778,6 +6810,28 @@ export interface operations {
         };
     };
     project_activity_api_v1_projects_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    conversation_activity_api_v1_conversations_activity_get: {
         parameters: {
             query?: never;
             header?: never;

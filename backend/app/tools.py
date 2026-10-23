@@ -56,7 +56,7 @@ TOOL_INFO = {
     "learning_goals": ("查询学习进度", "查看已保存的学习主题与进度", False),
     "create_learning_goal": (
         "创建学习路线",
-        "用户明确要求时直接创建，否则先提出方案并询问确认",
+        "先了解学习目标与基础，信息齐全且用户要求创建时建立路线",
         False,
     ),
 }
@@ -239,14 +239,15 @@ def builtin_tools(run_id: str, conversation_id: str):
         foundation: str = "",
         explicit_request: bool = False,
         confirm: bool = False,
+        use_beginner_defaults: bool = False,
     ) -> str:
-        """用户明确要求创建学习路线且主题清楚时，设 explicit_request=true 直接创建。其他情况先询问：首次调用不要传 confirm（或传 false），只登记待确认方案，返回 needs_confirmation，不保存任何学习目标；请把主题、目标和基础告诉用户并明确询问是否创建。只有用户在下一条消息明确同意后，才能再次调用并传 confirm=true；同一轮提出并创建会被拒绝。用户修改内容时重新提出方案。没有提供的目标和基础留空，不编造用户经历。"""
+        """创建学习路线前先从当前对话提取真实的学习目标、基础与相关背景，已有信息不重复问。没有提供的目标和基础留空，不从主题、岗位或旧助手输出推断用户经历；缺关键信息会返回needs_details，不保存目标，请集中询问缺项。只有用户明确说从零开始、直接安排或不想补充时才能设use_beginner_defaults=true。信息齐全且用户明确要求创建时explicit_request=true直接创建，不能用它跳过信息检查。用户只是咨询时，不传confirm先登记方案并询问是否创建；下一条用户同意后confirm=true，同轮提出并创建会被拒绝。修改方案需重新确认。"""
         from .schemas import GoalCreate
 
         async def save(values: dict) -> str:
             value = GoalCreate(**values)
             with Session() as db:
-                goal = Goal(**value.model_dump())
+                goal = Goal(**value.model_dump(exclude={"use_beginner_defaults"}))
                 db.add(goal)
                 db.flush()
                 planning = Run(kind="course", goal_id=goal.id)
@@ -282,15 +283,15 @@ def builtin_tools(run_id: str, conversation_id: str):
                 }
             return json.dumps(result, ensure_ascii=False)
 
-        proposal = {
-            "title": " ".join(title.split()),
-            "objective": " ".join(objective.split()),
-            "foundation": " ".join(foundation.split()),
-        }
+        proposal, missing = learning.goal_intake(title, objective, foundation, use_beginner_defaults)
         if not proposal["title"]:
             return json.dumps({"error": "学习主题不能为空"}, ensure_ascii=False)
         if len(proposal["title"]) > 200:
             return json.dumps({"error": "学习主题不能超过 200 个字符"}, ensure_ascii=False)
+        if missing:
+            return json.dumps({"status": "needs_details", **proposal, "missing": missing,
+                "message": "尚未保存学习目标。请结合当前对话一次询问缺少的" + "、".join(missing)
+                + "；已明确的信息不要重复问。用户明确让直接安排时才可按零基础默认方案创建。"}, ensure_ascii=False)
         with Session() as db:
             latest = task_context.user_message(db, run_id, conversation_id)
             latest_message_id = latest.id if latest else ""
@@ -379,7 +380,7 @@ def builtin_tools(run_id: str, conversation_id: str):
 
     @tool
     def learning_goals() -> str:
-        """查询用户的学习主题和当前进度。开始新学习时先用 create_learning_goal 提出方案并询问用户，确认后才能创建。"""
+        """查询用户的学习主题和当前进度。开始新学习前了解目标与相关基础；同主题已有目标时先询问是否继续，避免重复创建。"""
         with Session() as db:
             result = [
                 {
@@ -628,7 +629,7 @@ def build_tools(run_id: str, conversation_id: str):
                 coroutine=execute,
                 name=entry["id"],
                 description=originals[entry["id"]].description
-                if entry["source"] == "builtin" and entry["id"] in {"read_local_file", "scan_local_folder"}
+                if entry["source"] == "builtin" and entry["id"] in {"read_local_file", "scan_local_folder", "create_learning_goal"}
                 else f"{entry['source_label']} · {entry['description'] or entry['name']}",
                 args_schema=originals[entry["id"]].args_schema
                 if entry["source"] == "builtin"

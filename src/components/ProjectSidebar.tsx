@@ -46,26 +46,115 @@ type SearchHit = {
   project_name: string;
 };
 
+export type ProjectPanelRequest = {
+  id: string;
+  action: "library" | "settings";
+  key: number;
+};
+
+function GroupHeading({
+  label,
+  count,
+  collapsed,
+  controls,
+  onToggle,
+  onExpand,
+  onCollapse,
+  onNew,
+  newLabel,
+  running,
+}: {
+  label: string;
+  count: number;
+  collapsed: boolean;
+  controls: string;
+  onToggle: () => void;
+  onExpand: () => void;
+  onCollapse: () => void;
+  onNew: () => void;
+  newLabel: string;
+  running: number;
+}) {
+  return (
+    <div className="sidebar-section-heading">
+      <button
+        className="sidebar-group-toggle"
+        aria-expanded={!collapsed}
+        aria-controls={controls}
+        onClick={onToggle}
+      >
+        <ChevronDown size={13} data-collapsed={collapsed} />
+        <span>{label}</span>
+        <small>{count}</small>
+      </button>
+      <div className="sidebar-section-actions">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <Button size="icon" variant="ghost" aria-label={`${label}显示选项`}>
+              <MoreHorizontal size={15} />
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="project-menu">
+              <DropdownMenu.Item onSelect={onExpand}>
+                展开{label === "项目" ? "全部项目" : "列表"}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={onCollapse}>
+                收起{label === "项目" ? "全部项目" : "列表"}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={newLabel}
+          onClick={onNew}
+        >
+          <Plus size={15} />
+        </Button>
+        {running > 0 && (
+          <span
+            className="project-running-state"
+            data-active="true"
+            role="img"
+            aria-label={`${label}中有 ${running} 个任务正在运行`}
+            title={`${running} 个任务进行中`}
+          >
+            <CircleDot size={15} />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ProjectSidebar({
   conversations,
   projects,
   currentId,
   projectId,
   onNew,
+  onProject,
   onOpen,
   onDelete,
   refresh,
   visible = true,
+  request,
+  onLibraryChange,
 }: {
   conversations: Conversation[];
   projects: Project[];
   currentId: string | null;
   projectId: string | null;
-  onNew: (id: string | null) => void;
+  onNew: (id: string | null, pinned?: boolean) => void;
+  onProject: (id: string) => void;
   onOpen: (conversation: Conversation, messageId?: string | null) => void;
   onDelete: (conversation: Conversation) => void;
   refresh: () => Promise<void>;
   visible?: boolean;
+  request?: ProjectPanelRequest | null;
+  onLibraryChange?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState<string[]>(() => {
     try {
@@ -93,14 +182,15 @@ export function ProjectSidebar({
   }
   const [activity, setActivity] = useState<Record<string, number>>({});
   useEffect(() => {
-    if (!visible || !projects.length) return;
+    if (!visible || !conversations.length) return;
     let live = true;
     let timer = 0;
     async function poll() {
       if (!document.hidden) {
         try {
-          const values =
-            await api<Record<string, number>>("/projects/activity");
+          const values = await api<Record<string, number>>(
+            "/conversations/activity",
+          );
           if (live)
             setActivity((current) =>
               JSON.stringify(current) === JSON.stringify(values)
@@ -118,7 +208,7 @@ export function ProjectSidebar({
       live = false;
       clearTimeout(timer);
     };
-  }, [visible, projects.length]);
+  }, [visible, conversations.length]);
   const [editing, setEditing] = useState<Project | null | undefined>();
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -140,6 +230,21 @@ export function ProjectSidebar({
   const mutationLock = useRef(false);
   const current = conversations.find((item) => item.id === currentId);
 
+  useEffect(() => {
+    if (!request) return;
+    const project = projects.find((item) => item.id === request.id);
+    if (!project) return;
+    setError("");
+    if (request.action === "library") setLibrary(project);
+    else {
+      setName(project.name);
+      setInstructions(project.instructions);
+      setEditing(project);
+    }
+    // A request is an explicit open action; refreshing project data must not reopen a closed dialog.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request]);
+
   function edit(project: Project | null) {
     setError("");
     setName(project?.name || "");
@@ -155,6 +260,7 @@ export function ProjectSidebar({
     try {
       await operation();
       applied = true;
+      if (library) onLibraryChange?.();
       await refresh();
     } catch (cause) {
       setError(
@@ -293,12 +399,14 @@ export function ProjectSidebar({
                 <DropdownMenu.SubTrigger>移到项目</DropdownMenu.SubTrigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.SubContent className="project-menu">
-                    {[{ id: "", name: "普通聊天" }, ...projects].map(
+                    {[{ id: "", name: "未加入项目" }, ...projects].map(
                       (project) => (
                         <DropdownMenu.Item
                           key={project.id}
                           disabled={
-                            busy || (value.project_id || "") === project.id
+                            busy ||
+                            Boolean(activity[value.id]) ||
+                            (value.project_id || "") === project.id
                           }
                           onSelect={() =>
                             void mutate(async () => {
@@ -336,7 +444,6 @@ export function ProjectSidebar({
       .sort((a, b) => a.pinned_at!.localeCompare(b.pinned_at!));
     const byProject = new Map<string, Conversation[]>();
     for (const item of conversations) {
-      if (item.pinned_at) continue;
       const key = item.project_id || "";
       const values = byProject.get(key) || [];
       values.push(item);
@@ -345,9 +452,10 @@ export function ProjectSidebar({
     return { pinned, byProject, ordinary: byProject.get("") || [] };
   }, [conversations]);
   const pinned = grouped.pinned;
-  const runningCount = Object.values(activity).reduce(
-    (total, count) => total + count,
-    0,
+  const runningIn = (items: Conversation[]) =>
+    items.reduce((total, item) => total + (activity[item.id] || 0), 0);
+  const runningCount = runningIn(
+    conversations.filter((item) => item.project_id),
   );
   return (
     <>
@@ -378,102 +486,55 @@ export function ProjectSidebar({
             {error}
           </p>
         )}
-        {pinned.length > 0 && (
-          <section>
-            <button
-              className="sidebar-label sidebar-group-toggle"
-              aria-expanded={!collapsed.includes("group:pinned")}
-              aria-controls="sidebar-pinned-list"
-              onClick={() => toggleSection("group:pinned")}
-            >
-              <ChevronDown
-                size={13}
-                data-collapsed={collapsed.includes("group:pinned")}
-              />
-              置顶 <span>{pinned.length}</span>
-            </button>
-            {!collapsed.includes("group:pinned") && (
-              <div id="sidebar-pinned-list">{pinned.map(row)}</div>
-            )}
-          </section>
-        )}
-        <div className="project-section-heading">
-          <button
-            className="sidebar-group-toggle"
-            aria-expanded={!collapsed.includes("group:projects")}
-            aria-controls="sidebar-projects-list"
-            onClick={() => toggleSection("group:projects")}
+        <section>
+          <GroupHeading
+            label="置顶"
+            count={pinned.length}
+            collapsed={collapsed.includes("group:pinned")}
+            controls="sidebar-pinned-list"
+            onToggle={() => toggleSection("group:pinned")}
+            onExpand={() =>
+              setCollapsed((ids) => ids.filter((id) => id !== "group:pinned"))
+            }
+            onCollapse={() =>
+              setCollapsed((ids) => [...new Set([...ids, "group:pinned"])])
+            }
+            onNew={() => onNew(null, true)}
+            newLabel="新建置顶对话"
+            running={runningIn(pinned)}
+          />
+          <div
+            id="sidebar-pinned-list"
+            hidden={collapsed.includes("group:pinned")}
           >
-            <ChevronDown
-              size={13}
-              data-collapsed={collapsed.includes("group:projects")}
-            />
-            项目
-          </button>
-          <div className="project-section-actions">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <Button size="icon" variant="ghost" aria-label="项目显示选项">
-                  <MoreHorizontal size={15} />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content className="project-menu">
-                  <DropdownMenu.Item
-                    onSelect={() =>
-                      setCollapsed((ids) =>
-                        ids.filter(
-                          (id) =>
-                            id !== "group:projects" &&
-                            !projects.some((project) => project.id === id),
-                        ),
-                      )
-                    }
-                  >
-                    展开全部项目
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    onSelect={() =>
-                      setCollapsed((ids) => [
-                        ...new Set([
-                          ...ids,
-                          ...projects.map((project) => project.id),
-                        ]),
-                      ])
-                    }
-                  >
-                    收起全部项目
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label="新建项目"
-              onClick={() => edit(null)}
-            >
-              <Plus size={15} />
-            </Button>
-            <span
-              className="project-running-state"
-              data-active={runningCount > 0}
-              role="img"
-              aria-label={
-                runningCount
-                  ? `项目中有 ${runningCount} 个任务正在运行`
-                  : "项目当前没有运行任务"
-              }
-              title={
-                runningCount
-                  ? `${runningCount} 个任务进行中`
-                  : "暂无进行中的项目任务"
-              }
-            >
-              <CircleDot size={15} />
-            </span>
+            {pinned.map(row)}
+            {!pinned.length && <p className="sidebar-empty">暂无置顶对话</p>}
           </div>
-        </div>
+        </section>
+        <GroupHeading
+          label="项目"
+          count={projects.length}
+          collapsed={collapsed.includes("group:projects")}
+          controls="sidebar-projects-list"
+          onToggle={() => toggleSection("group:projects")}
+          onExpand={() =>
+            setCollapsed((ids) =>
+              ids.filter(
+                (id) =>
+                  id !== "group:projects" &&
+                  !projects.some((project) => project.id === id),
+              ),
+            )
+          }
+          onCollapse={() =>
+            setCollapsed((ids) => [
+              ...new Set([...ids, ...projects.map((project) => project.id)]),
+            ])
+          }
+          onNew={() => edit(null)}
+          newLabel="新建项目"
+          running={runningCount}
+        />
         {!collapsed.includes("group:projects") && (
           <div id="sidebar-projects-list">
             {projects.map((project) => (
@@ -506,10 +567,13 @@ export function ProjectSidebar({
                   </button>
                   <button
                     className="project-name"
-                    onClick={() => onNew(project.id)}
+                    onClick={() => onProject(project.id)}
                   >
                     <Folder size={14} />
                     <span>{project.name}</span>
+                    <small className="project-chat-count">
+                      {(grouped.byProject.get(project.id) || []).length}
+                    </small>
                   </button>
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
@@ -558,18 +622,22 @@ export function ProjectSidebar({
             ))}
           </div>
         )}
-        <button
-          className="sidebar-label sidebar-unfiled sidebar-group-toggle"
-          aria-expanded={!collapsed.includes("group:ordinary")}
-          aria-controls="sidebar-ordinary-list"
-          onClick={() => toggleSection("group:ordinary")}
-        >
-          <ChevronDown
-            size={13}
-            data-collapsed={collapsed.includes("group:ordinary")}
-          />
-          普通聊天 <span>{grouped.ordinary.length}</span>
-        </button>
+        <GroupHeading
+          label="对话"
+          count={grouped.ordinary.length}
+          collapsed={collapsed.includes("group:ordinary")}
+          controls="sidebar-ordinary-list"
+          onToggle={() => toggleSection("group:ordinary")}
+          onExpand={() =>
+            setCollapsed((ids) => ids.filter((id) => id !== "group:ordinary"))
+          }
+          onCollapse={() =>
+            setCollapsed((ids) => [...new Set([...ids, "group:ordinary"])])
+          }
+          onNew={() => onNew(null)}
+          newLabel="新建对话"
+          running={runningIn(grouped.ordinary)}
+        />
         {!collapsed.includes("group:ordinary") && (
           <div id="sidebar-ordinary-list">{grouped.ordinary.map(row)}</div>
         )}
@@ -625,7 +693,7 @@ export function ProjectSidebar({
                     { name: name.trim(), instructions },
                   );
                   setEditing(undefined);
-                  if (!editing) onNew(saved.id);
+                  if (!editing) onProject(saved.id);
                 })
               }
             >
@@ -637,7 +705,7 @@ export function ProjectSidebar({
       <ConfirmDelete
         open={Boolean(deleting)}
         title="删除这个项目？"
-        description="聊天会移回普通聊天；项目专属资料副本和项目记忆会删除，原聊天附件和成果保留。"
+        description="聊天会移回未加入项目的对话列表；项目专属资料副本和项目记忆会删除，原聊天附件和成果保留。"
         label="删除项目"
         error={error}
         onClose={() => setDeleting(null)}
@@ -807,7 +875,7 @@ export function ProjectSidebar({
               onChange={(event) => setScope(event.target.value)}
             >
               <option value="all">全部聊天</option>
-              <option value="unfiled">普通聊天</option>
+              <option value="unfiled">未加入项目</option>
               {projects.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}

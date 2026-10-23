@@ -78,7 +78,10 @@ export function TaskCard({
     }
   }
   return (
-    <section className="complex-task-card" aria-label={`任务：${task.goal}`}>
+    <section
+      className="complex-task-card"
+      aria-label={`任务：${task.title || "历史任务"}`}
+    >
       <div className="complex-task-heading" data-expanded={open}>
         {active ? (
           <Loader2 size={16} className="spin" />
@@ -87,7 +90,9 @@ export function TaskCard({
         ) : (
           <Circle size={16} />
         )}
-        <strong>{task.goal}</strong>
+        <strong title={task.title || "历史任务"}>
+          {task.title || "历史任务"}
+        </strong>
         <span>{states[task.status] || task.status}</span>
         <button
           type="button"
@@ -108,6 +113,10 @@ export function TaskCard({
       )}
       {open && (
         <div className="complex-task-details" id={`task-details-${task.id}`}>
+          <section className="task-detail-section">
+            <h3>任务目标</h3>
+            <p>{task.goal}</p>
+          </section>
           {task.reason && !["completed", "cancelled"].includes(task.status) && (
             <p className="complex-task-reason">{task.reason}</p>
           )}

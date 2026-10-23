@@ -15,6 +15,9 @@ import {
   Check,
   ChevronDown,
   Image as ImageIcon,
+  Folder,
+  Library,
+  Pin,
   LoaderCircle,
   Settings2,
   Square,
@@ -27,6 +30,7 @@ import {
   api,
   readEvents,
   type Conversation,
+  type Project,
   type Message,
   type Run,
   type RunEvent,
@@ -326,10 +330,20 @@ export function ChatPage({
   onAction,
   onPlan,
   projectId = null,
+  projects = [],
+  pinNew = false,
+  onProjectChange,
+  onProjectOpen,
+  onLibrary,
   focusMessageId,
   onMessageFocused,
 }: {
   projectId?: string | null;
+  projects?: Project[];
+  pinNew?: boolean;
+  onProjectChange?: (id: string | null, conversation?: Conversation) => void;
+  onProjectOpen?: (id: string) => void;
+  onLibrary?: (id: string) => void;
   focusMessageId?: string | null;
   onMessageFocused?: () => void;
   conversationId: string | null;
@@ -439,6 +453,8 @@ export function ChatPage({
   const [composerMenu, setComposerMenu] = useState<"mcp" | "skills" | null>(
     null,
   );
+  const [movingProject, setMovingProject] = useState(false);
+  const moveProjectLock = useRef(false);
   function changeComposerMenu(next: "mcp" | "skills", open: boolean) {
     if (open) {
       setComposerMenu(next);
@@ -878,6 +894,7 @@ export function ChatPage({
     const supplement = busy && Boolean(run?.task_id);
     if (
       actionLock.current ||
+      moveProjectLock.current ||
       (busy && !run) ||
       uploading ||
       (!text.trim() && !attachmentIds.length)
@@ -911,6 +928,7 @@ export function ChatPage({
         const value = await api<Conversation>("/conversations", "POST", {
           title: "新对话",
           project_id: projectId,
+          pinned: pinNew,
         });
         id = value.id;
       }
@@ -1170,6 +1188,44 @@ export function ChatPage({
     );
   const hasDraft = Boolean(draft.trim() || images.length);
   const showStop = busy && !hasDraft;
+  async function changeProject(nextId: string | null) {
+    if (
+      moveProjectLock.current ||
+      actionLock.current ||
+      busy ||
+      uploading ||
+      nextId === projectId
+    )
+      return;
+    if (!conversationId) {
+      onProjectChange?.(nextId);
+      return;
+    }
+    const id = conversationId;
+    moveProjectLock.current = true;
+    setMovingProject(true);
+    setError("");
+    let saved = false;
+    try {
+      const moved = await api<Conversation>(`/conversations/${id}`, "PATCH", {
+        project_id: nextId,
+      });
+      saved = true;
+      if (mounted.current && currentId.current === id)
+        onProjectChange?.(moved.project_id || null, moved);
+      await refresh();
+    } catch (cause) {
+      if (mounted.current && currentId.current === id)
+        setError(
+          saved
+            ? "归属已保存，列表暂未刷新，请稍后重试。"
+            : (cause as Error).message,
+        );
+    } finally {
+      moveProjectLock.current = false;
+      if (mounted.current) setMovingProject(false);
+    }
+  }
   return (
     <div className="chat-layout" ref={dropTarget}>
       <div className={`chat-main ${empty ? "is-empty" : ""}`}>
@@ -1569,6 +1625,53 @@ export function ChatPage({
           </Tooltip.Provider>
         )}
         <div className="composer-area">
+          {onProjectChange && (
+            <div className="chat-project-context">
+              <label className="chat-project-picker">
+                <Folder size={15} />
+                <span className="sr-only">
+                  {conversationId ? "移动当前对话到项目" : "新对话所属项目"}
+                </span>
+                <select
+                  value={projectId || ""}
+                  disabled={busy || submitting || uploading || movingProject}
+                  onChange={(event) =>
+                    void changeProject(event.target.value || null)
+                  }
+                  title={
+                    conversationId
+                      ? "选择项目会移动当前对话"
+                      : "选择新对话所属项目"
+                  }
+                >
+                  <option value="">未加入项目</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {projectId && (
+                <>
+                  <button onClick={() => onProjectOpen?.(projectId)}>
+                    项目概览
+                  </button>
+                  <button onClick={() => onLibrary?.(projectId)}>
+                    <Library size={14} />
+                    资料库
+                  </button>
+                </>
+              )}
+              {!conversationId && pinNew && (
+                <span className="chat-project-pin">
+                  <Pin size={13} />
+                  发送后置顶
+                </span>
+              )}
+              {movingProject && <span role="status">正在移动…</span>}
+            </div>
+          )}
           {!empty && !atLatest && (
             <button
               className="chat-jump-latest"
@@ -1813,6 +1916,7 @@ export function ChatPage({
                   size="icon"
                   disabled={
                     submitting ||
+                    movingProject ||
                     stopping ||
                     (showStop ? !run : uploading || !modelReady || !hasDraft)
                   }

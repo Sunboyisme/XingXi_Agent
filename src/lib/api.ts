@@ -27,6 +27,7 @@ export type ComplexTask = {
   status: string;
   revision: number;
   goal: string;
+  title?: string;
   reason: string;
   pending_messages: number;
   requirements: { constraints?: string[]; completion_criteria?: string[] };

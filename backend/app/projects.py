@@ -87,6 +87,16 @@ def project_activity():
             .group_by(Conversation.project_id)).all())
 
 
+@router.get("/conversations/activity", response_model=dict[str, int])
+def conversation_activity():
+    with Session() as db:
+        return dict(db.execute(select(Conversation.id, func.count(Run.id))
+            .join(Run, Run.conversation_id == Conversation.id)
+            .where(Conversation.profile_id == config.PROFILE_ID,
+                   Run.profile_id == config.PROFILE_ID, Run.status.in_(["queued", "running"]))
+            .group_by(Conversation.id)).all())
+
+
 @router.post("/projects", response_model=s.ProjectRead)
 def create_project(value: s.ProjectWrite):
     if not value.name.strip():
@@ -187,7 +197,7 @@ def search_conversations(q: str = Query(min_length=1, max_length=200), project_i
             project = db.get(Project, conversation.project_id) if conversation.project_id else None
             results.append({"conversation_id": conversation.id, "title": conversation.title,
                 "message_id": message.id if message else None, "snippet": text[point:point + 240],
-                "project_id": conversation.project_id, "project_name": project.name if project else "普通聊天"})
+                "project_id": conversation.project_id, "project_name": project.name if project else "未加入项目"})
         return {"items": results, "next_offset": offset + 20 if len(rows) > 20 else None}
 
 

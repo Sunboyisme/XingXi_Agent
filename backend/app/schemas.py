@@ -330,6 +330,7 @@ class MemorySettingsUpdate(BaseModel):
 class ConversationCreate(BaseModel):
     title: str = Field(default="新对话", max_length=200)
     project_id: str | None = None
+    pinned: bool = False
 
 
 class ConversationUpdate(BaseModel):
@@ -505,6 +506,7 @@ class TaskRead(RecordRead):
     status: str
     revision: int
     goal: str
+    title: str = ""
     reason: str
     requirements: dict
     steps: list[dict]
@@ -523,6 +525,7 @@ class GoalCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     objective: str = Field(default="", max_length=4000)
     foundation: str = Field(default="", max_length=4000)
+    use_beginner_defaults: bool = False
 
 
 class NodeRead(RecordRead):

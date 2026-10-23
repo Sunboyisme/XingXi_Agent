@@ -113,7 +113,7 @@ wheels = [
 
 [[package]]
 name = "bai-agent-backend"
-version = "0.1.6"
+version = "0.1.7"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },

@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
         await mcp_service.manager.close()
 
 
-app = FastAPI(title="XiaoXi API", version="0.1.6", lifespan=lifespan)
+app = FastAPI(title="XiaoXi API", version="0.1.7", lifespan=lifespan)
 
 
 # Pydantic's default response includes the rejected input, including credentials.
@@ -203,7 +203,7 @@ def create_run(db, kind, conversation_id=None, goal_id=None, *, commit=True):
 
 @app.get("/api/v1/health")
 def health():
-    return {"service": "bai-agent", "version": "0.1.6"}
+    return {"service": "bai-agent", "version": "0.1.7"}
 
 
 from fastapi import APIRouter
@@ -552,7 +552,8 @@ def conversations(db=Depends(database)):
 def new_conversation(value: s.ConversationCreate, db=Depends(database)):
     if value.project_id:
         projects.require(db, value.project_id)
-    record = store.Conversation(title=value.title, project_id=value.project_id)
+    record = store.Conversation(title=value.title, project_id=value.project_id,
+                                pinned_at=store.now() if value.pinned else None)
     db.add(record)
     db.commit()
     return record
@@ -865,7 +866,10 @@ def goals(db=Depends(database)):
 
 @router.post("/learning/goals", response_model=s.GoalRead)
 def create_goal(value: s.GoalCreate, db=Depends(database)):
-    goal = store.Goal(**value.model_dump())
+    details, missing = learning.goal_intake(value.title, value.objective, value.foundation, value.use_beginner_defaults)
+    if missing:
+        raise HTTPException(422, "请先补充" + "、".join(missing) + "，或明确选择按零基础入门安排。")
+    goal = store.Goal(**details)
     db.add(goal)
     db.commit()
     return goal_read(db, goal)

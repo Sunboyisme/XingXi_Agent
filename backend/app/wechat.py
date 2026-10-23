@@ -33,7 +33,7 @@ from .db import (
 )
 
 BASE_URL = "https://ilinkai.weixin.qq.com"
-CHANNEL_VERSION = "0.1.6"
+CHANNEL_VERSION = "0.1.7"
 CLIENT_VERSION = str(sum(int(part) << shift for part, shift in zip(CHANNEL_VERSION.split("."), (16, 8, 0))))
 DEFAULTS = {
     "enabled": False,

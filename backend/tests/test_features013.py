@@ -344,11 +344,11 @@ def test_learning_goal_tool_requires_a_later_user_confirmation(client):
         if x.name == "create_learning_goal"
     )
     direct = json.loads(
-        tool.invoke({"title": "学习做饭", "confirm": True})
+        tool.invoke({"title": "学习做饭", "confirm": True, "objective": "能独立做晚餐", "foundation": "零基础"})
     )
     assert "待确认" in direct["error"]
     proposal = json.loads(
-        tool.invoke({"title": "学习做饭", "objective": "能独立做晚餐"})
+        tool.invoke({"title": "学习做饭", "objective": "能独立做晚餐", "foundation": "零基础"})
     )
     assert proposal["status"] == "needs_confirmation"
     same_turn = json.loads(
@@ -357,6 +357,7 @@ def test_learning_goal_tool_requires_a_later_user_confirmation(client):
                 "title": "学习做饭",
                 "objective": "能独立做晚餐",
                 "confirm": True,
+                "foundation": "零基础",
             }
         )
     )

@@ -1,6 +1,6 @@
 [package]
 name = "bai-agent"
-version = "0.1.6"
+version = "0.1.7"
 description = "XiaoXi personal learning and action assistant"
 edition = "2021"
 

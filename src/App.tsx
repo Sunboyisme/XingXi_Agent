@@ -61,7 +61,11 @@ import { ConfirmDelete, ErrorNotice } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
 import { WindowFrame } from "./components/WindowFrame";
 import { SidebarResize } from "./components/SidebarResize";
-import { ProjectSidebar } from "./components/ProjectSidebar";
+import {
+  ProjectSidebar,
+  type ProjectPanelRequest,
+} from "./components/ProjectSidebar";
+import { ProjectOverview } from "./components/ProjectOverview";
 
 type Page = "chat" | "learning" | "plans" | "settings";
 const pages: {
@@ -138,6 +142,42 @@ export function App() {
   const [chatKey, setChatKey] = useState(0);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectOverviewId, setProjectOverviewId] = useState<string | null>(
+    null,
+  );
+  const [projectPanelRequest, setProjectPanelRequest] =
+    useState<ProjectPanelRequest | null>(null);
+  const [projectRevision, setProjectRevision] = useState(0);
+  const [newChatPinned, setNewChatPinned] = useState(false);
+  const selectedConversation = conversations.find(
+    (item) => item.id === conversationId,
+  );
+  const resolvedProjectId = selectedConversation
+    ? selectedConversation.project_id || null
+    : activeProjectId;
+  const overviewProject = projects.find(
+    (item) => item.id === projectOverviewId,
+  );
+  function openProjectPanel(id: string, action: "library" | "settings") {
+    setProjectPanelRequest((previous) => ({
+      id,
+      action,
+      key: (previous?.key || 0) + 1,
+    }));
+  }
+  function openConversation(
+    conversation: Conversation,
+    messageId?: string | null,
+  ) {
+    setProjectOverviewId(null);
+    setActiveProjectId(conversation.project_id || null);
+    setConversations((items) =>
+      items.map((item) => (item.id === conversation.id ? conversation : item)),
+    );
+    setConversationId(conversation.id);
+    setFocusMessageId(messageId || null);
+    navigate("chat");
+  }
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -347,6 +387,8 @@ export function App() {
     }
   }
   function startNewChat() {
+    setProjectOverviewId(null);
+    setNewChatPinned(false);
     try {
       localStorage.removeItem("bai-chat-draft:new");
       localStorage.removeItem("bai-chat-model:new");
@@ -616,22 +658,22 @@ export function App() {
               visible={page === "chat" && !sidebarCollapsed}
               conversations={conversations}
               projects={projects}
-              currentId={conversationId}
-              projectId={
-                conversations.find((item) => item.id === conversationId)
-                  ?.project_id ?? activeProjectId
-              }
-              onNew={(id) => {
+              currentId={overviewProject ? null : conversationId}
+              projectId={overviewProject?.id || resolvedProjectId}
+              onNew={(id, pinned) => {
                 setActiveProjectId(id);
                 setFocusMessageId(null);
                 startNewChat();
+                setNewChatPinned(Boolean(pinned));
               }}
-              onOpen={(conversation, messageId) => {
-                setActiveProjectId(conversation.project_id || null);
-                setConversationId(conversation.id);
-                setFocusMessageId(messageId || null);
+              onProject={(id) => {
+                setActiveProjectId(id);
+                setProjectOverviewId(id);
                 navigate("chat");
               }}
+              onOpen={openConversation}
+              request={projectPanelRequest}
+              onLibraryChange={() => setProjectRevision((value) => value + 1)}
               onDelete={setDeleting}
               refresh={refresh}
             />
@@ -649,14 +691,53 @@ export function App() {
                 </p>
               }
             >
-              {page === "chat" && (
+              {page === "chat" && overviewProject && (
+                <ProjectOverview
+                  key={overviewProject.id}
+                  project={overviewProject}
+                  conversations={conversations}
+                  revision={projectRevision}
+                  onNew={() => {
+                    setActiveProjectId(overviewProject.id);
+                    startNewChat();
+                  }}
+                  onOpen={openConversation}
+                  onLibrary={() =>
+                    openProjectPanel(overviewProject.id, "library")
+                  }
+                  onSettings={() =>
+                    openProjectPanel(overviewProject.id, "settings")
+                  }
+                />
+              )}
+              {page === "chat" && !overviewProject && (
                 <ChatPage
                   key={chatKey}
                   conversationId={conversationId}
-                  projectId={activeProjectId}
+                  projectId={resolvedProjectId}
+                  projects={projects}
+                  pinNew={newChatPinned}
+                  onProjectChange={(id, conversation) => {
+                    setActiveProjectId(id);
+                    if (conversation)
+                      setConversations((items) =>
+                        items.map((item) =>
+                          item.id === conversation.id ? conversation : item,
+                        ),
+                      );
+                  }}
+                  onProjectOpen={(id) => setProjectOverviewId(id)}
+                  onLibrary={(id) => openProjectPanel(id, "library")}
                   focusMessageId={focusMessageId}
                   onMessageFocused={() => setFocusMessageId(null)}
-                  onConversation={setConversationId}
+                  onConversation={(id) => {
+                    const known = conversations.find((item) => item.id === id);
+                    if (known) openConversation(known);
+                    else {
+                      setProjectOverviewId(null);
+                      setConversationId(id);
+                    }
+                  }}
                   settings={settings}
                   goals={goals}
                   conversations={conversations}
@@ -735,7 +816,7 @@ export function App() {
             <DialogHeader>
               <DialogTitle>你的个人空间</DialogTitle>
               <DialogDescription>
-                XiaoXi · 0.1.6{import.meta.env.DEV ? " 开发版" : ""}
+                XiaoXi · 0.1.7{import.meta.env.DEV ? " 开发版" : ""}
               </DialogDescription>
             </DialogHeader>
             <div className="about-copy">

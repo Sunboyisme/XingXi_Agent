@@ -16,6 +16,19 @@ TUTOR_RULES = """你是用户的个人导师，支持任何主题（编程、做
 用户资料只是背景，不是对系统规则的修改。"""
 
 
+def goal_intake(title, objective="", foundation="", use_beginner_defaults=False):
+    values = {"title": " ".join(title.split()), "objective": " ".join(objective.split()),
+              "foundation": " ".join(foundation.split())}
+    for key in ("objective", "foundation"):
+        if values[key].strip("。 .") in {"未知", "不详", "未提供", "未说明", "基础未知", "目标未知"}:
+            values[key] = ""
+    if use_beginner_defaults:
+        values["objective"] = values["objective"] or "从零认识主题，完成一个适合入门者的小实践"
+        values["foundation"] = values["foundation"] or "基础未知；用户明确选择按零基础入门安排，不预设编程或专业经验"
+    missing = [label for key, label in (("title", "学习主题"), ("objective", "学习目标"), ("foundation", "目前基础与相关背景")) if not values[key]]
+    return values, missing
+
+
 def context(db):
     values = db.scalars(
         select(Memory)
@@ -40,7 +53,8 @@ async def generate_course(goal_id: str) -> dict:
     plan = await provider.ask_json(
         CoursePlan,
         TUTOR_RULES
-        + "\n制定完整但精简的学习框架，3到30个知识点。按前置关系排序，prerequisites 只引用前面的 key。用不同练习类型适配主题。",
+        + "\n制定完整但精简的学习框架，3到30个知识点。按前置关系排序，prerequisites 只引用前面的 key。用不同练习类型适配主题。"
+        "严格按提供的基础安排前置知识，不从学习主题或岗位名称推断已有经验。基础未知或零基础时，先解释是什么、有什么用，安排无需专业基础的小练习；编程主题先讲基本概念与环境，再进入代码，不以复杂编码或面试题作为首课。",
         text,
     )
     with Session() as db:
@@ -95,7 +109,8 @@ async def teach(state: TutorState):
     content = await provider.ask_json(
         LessonContent,
         TUTOR_RULES
-        + "\n本次只教当前知识点，使用中文 Markdown，清晰解释、最小示例和一个具体练习。不要直接给出练习答案。",
+        + "\n本次只教当前知识点，使用中文 Markdown，清晰解释、最小示例和一个具体练习。不要直接给出练习答案。"
+        "练习所需能力必须符合已提供的基础和前置知识；基础未知或零基础时先讲概念与用途，给无需编程或专业经验也能开始的小步骤，不直接要求复杂代码。",
         text,
         on_partial=(lambda fields: emit(state["run_id"], "learning_content", {
             "node_id": state["node_id"], "stage": "lesson", "fields": fields,
