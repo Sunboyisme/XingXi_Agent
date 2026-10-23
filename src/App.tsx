@@ -618,7 +618,8 @@ export function App() {
                       aria-label={value.label}
                       onClick={() => navigate(value.id)}
                     >
-                      <value.icon size={20} />
+                      <value.icon size={24} />
+                      <span className="rail-label">{value.label}</span>
                     </button>
                   </NavigationTooltip>
                 ))}
@@ -632,6 +633,7 @@ export function App() {
                     onClick={() => navigate("settings")}
                   >
                     <Settings2 size={20} />
+                    <span className="rail-label">设置</span>
                     {(memories.some((x) => x.state === "candidate") ||
                       !settings.model_configured) && (
                       <span className="setup-dot" />

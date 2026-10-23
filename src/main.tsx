@@ -9,7 +9,6 @@ import "./styles/version-013.css";
 import "./styles/improvements-013.css";
 import "./styles/plans.css";
 import "./styles/appearance.css";
-import "./styles/chat-home.css";
 import "./styles/chat-polish.css";
 import "./styles/memory-settings.css";
 import "./styles/version-014.css";
@@ -17,6 +16,7 @@ import "./styles/complex-tasks.css";
 import "./styles/version-016.css";
 import "./styles/feedback-016.css";
 import "./styles/version-017.css";
+import "./styles/chat-home.css";
 
 const stopAppearance = initializeAppearance();
 import.meta.hot?.dispose(stopAppearance);
