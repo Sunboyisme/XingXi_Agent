@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   ChevronDown,
   CircleDot,
@@ -6,8 +7,8 @@ import {
   FolderOpen,
   MessageCircle,
   MoreHorizontal,
-  Pencil,
   Pin,
+  PinOff,
   Plus,
   Search,
   Trash2,
@@ -59,8 +60,6 @@ function GroupHeading({
   collapsed,
   controls,
   onToggle,
-  onExpand,
-  onCollapse,
   onNew,
   newLabel,
   running,
@@ -70,8 +69,6 @@ function GroupHeading({
   collapsed: boolean;
   controls: string;
   onToggle: () => void;
-  onExpand: () => void;
-  onCollapse: () => void;
   onNew: () => void;
   newLabel: string;
   running: number;
@@ -89,23 +86,6 @@ function GroupHeading({
         <small>{count}</small>
       </button>
       <div className="sidebar-section-actions">
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <Button size="icon" variant="ghost" aria-label={`${label}显示选项`}>
-              <MoreHorizontal size={15} />
-            </Button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content className="project-menu">
-              <DropdownMenu.Item onSelect={onExpand}>
-                展开{label === "项目" ? "全部项目" : "列表"}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onCollapse}>
-                收起{label === "项目" ? "全部项目" : "列表"}
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
         <Button
           size="icon"
           variant="ghost"
@@ -214,6 +194,7 @@ export function ProjectSidebar({
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
   const [workspacePath, setWorkspacePath] = useState("");
+  const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const [renaming, setRenaming] = useState<Conversation | null>(null);
   const [conversationName, setConversationName] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -234,9 +215,20 @@ export function ProjectSidebar({
   const librarySequence = useRef(0);
   const searchSequence = useRef(0);
   const mutationLock = useRef(false);
+  const workspacePicker = useRef<symbol | null>(null);
+  const editorSequence = useRef(0);
+  const native = isTauri();
   const current = conversations.find((item) => item.id === currentId);
   const selectedConversation = useRef(currentId);
   selectedConversation.current = currentId;
+
+  useEffect(
+    () => () => {
+      editorSequence.current += 1;
+      workspacePicker.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!request) return;
@@ -244,22 +236,53 @@ export function ProjectSidebar({
     if (!project) return;
     setError("");
     if (request.action === "library") setLibrary(project);
-    else {
-      setName(project.name);
-      setInstructions(project.instructions);
-      setWorkspacePath(project.workspace_path || "");
-      setEditing(project);
-    }
+    else edit(project);
     // A request is an explicit open action; refreshing project data must not reopen a closed dialog.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
   function edit(project: Project | null) {
+    editorSequence.current += 1;
     setError("");
     setName(project?.name || "");
     setInstructions(project?.instructions || "");
     setWorkspacePath(project?.workspace_path || "");
     setEditing(project);
+  }
+  function closeEditor() {
+    editorSequence.current += 1;
+    setEditing(undefined);
+  }
+  async function chooseWorkspace() {
+    if (
+      !native ||
+      editing === undefined ||
+      mutationLock.current ||
+      workspacePicker.current
+    )
+      return;
+    const sequence = editorSequence.current;
+    const picker = Symbol();
+    workspacePicker.current = picker;
+    setPickingWorkspace(true);
+    setError("");
+    try {
+      const path = await invoke<string | null>("pick_project_workspace", {
+        initialPath: workspacePath || null,
+      });
+      if (sequence === editorSequence.current && path !== null)
+        setWorkspacePath(path);
+    } catch (cause) {
+      if (sequence === editorSequence.current)
+        setError(
+          `无法选择文件夹：${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+    } finally {
+      if (workspacePicker.current === picker) {
+        workspacePicker.current = null;
+        setPickingWorkspace(false);
+      }
+    }
   }
   async function mutate(operation: () => Promise<unknown>) {
     if (mutationLock.current) return;
@@ -372,28 +395,30 @@ export function ProjectSidebar({
       <div
         className={`conversation-link ${currentId === value.id ? "selected" : ""}`}
         key={value.id}
-        draggable={!busy && !activity[value.id]}
-        onDragStart={(event) => {
-          if (busy || activity[value.id]) {
-            event.preventDefault();
-            return;
-          }
-          event.dataTransfer.setData(
-            "application/x-xiaoxi-conversation",
-            value.id,
-          );
-          event.dataTransfer.effectAllowed = "move";
-          setDraggingId(value.id);
-        }}
-        onDragEnd={() => {
-          setDraggingId(null);
-          setDropProject(null);
-        }}
         data-dragging={draggingId === value.id}
       >
         <button
+          type="button"
           aria-label={`打开对话 ${value.title}`}
           aria-current={currentId === value.id ? "page" : undefined}
+          title={`${value.title}（双击重命名）`}
+          draggable={!busy && !activity[value.id]}
+          onDragStart={(event) => {
+            if (busy || activity[value.id]) {
+              event.preventDefault();
+              return;
+            }
+            event.dataTransfer.setData(
+              "application/x-xiaoxi-conversation",
+              value.id,
+            );
+            event.dataTransfer.effectAllowed = "move";
+            setDraggingId(value.id);
+          }}
+          onDragEnd={() => {
+            setDraggingId(null);
+            setDropProject(null);
+          }}
           onClick={() => onOpen(value)}
           onDoubleClick={() => {
             setConversationName(value.title);
@@ -403,81 +428,37 @@ export function ProjectSidebar({
           {value.pinned_at ? <Pin size={13} /> : <MessageCircle size={14} />}
           <span>{value.title}</span>
         </button>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button aria-label={`管理对话 ${value.title}`}>
-              <MoreHorizontal size={15} />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              className="project-menu"
-              side="right"
-              align="start"
-            >
-              <DropdownMenu.Item
-                disabled={busy}
-                onSelect={() => {
-                  setConversationName(value.title);
-                  setRenaming(value);
-                }}
-              >
-                <Pencil size={14} />
-                重命名
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                disabled={busy}
-                onSelect={() =>
-                  void mutate(() =>
-                    api(`/conversations/${value.id}`, "PATCH", {
-                      pinned: !value.pinned_at,
-                    }),
-                  )
-                }
-              >
-                {value.pinned_at ? "取消置顶" : "置顶聊天"}
-              </DropdownMenu.Item>
-              <DropdownMenu.Sub>
-                <DropdownMenu.SubTrigger>移到项目</DropdownMenu.SubTrigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.SubContent className="project-menu">
-                    {[{ id: "", name: "未加入项目" }, ...projects].map(
-                      (project) => (
-                        <DropdownMenu.Item
-                          key={project.id}
-                          disabled={
-                            busy ||
-                            Boolean(activity[value.id]) ||
-                            (value.project_id || "") === project.id
-                          }
-                          onSelect={() =>
-                            void mutate(async () => {
-                              const moved = await api<Conversation>(
-                                `/conversations/${value.id}`,
-                                "PATCH",
-                                { project_id: project.id || null },
-                              );
-                              if (selectedConversation.current === value.id)
-                                onOpen(moved);
-                            })
-                          }
-                        >
-                          {project.name}
-                        </DropdownMenu.Item>
-                      ),
-                    )}
-                  </DropdownMenu.SubContent>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Sub>
-              <DropdownMenu.Item
-                className="danger"
-                onSelect={() => onDelete(value)}
-              >
-                删除聊天
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <div className="conversation-row-actions">
+          <button
+            type="button"
+            className="conversation-pin"
+            aria-label={`${value.pinned_at ? "取消置顶对话" : "置顶对话"} ${value.title}`}
+            aria-pressed={Boolean(value.pinned_at)}
+            title={value.pinned_at ? "取消置顶" : "置顶对话"}
+            disabled={busy}
+            onClick={() =>
+              void mutate(() =>
+                api(`/conversations/${value.id}`, "PATCH", {
+                  pinned: !value.pinned_at,
+                }),
+              )
+            }
+          >
+            {value.pinned_at ? <PinOff size={14} /> : <Pin size={14} />}
+          </button>
+          <button
+            type="button"
+            className="conversation-delete"
+            aria-label={`删除对话 ${value.title}`}
+            title="删除对话"
+            disabled={busy}
+            onClick={() => {
+              if (!mutationLock.current) onDelete(value);
+            }}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
     );
   }
@@ -540,12 +521,6 @@ export function ProjectSidebar({
             collapsed={collapsed.includes("group:pinned")}
             controls="sidebar-pinned-list"
             onToggle={() => toggleSection("group:pinned")}
-            onExpand={() =>
-              setCollapsed((ids) => ids.filter((id) => id !== "group:pinned"))
-            }
-            onCollapse={() =>
-              setCollapsed((ids) => [...new Set([...ids, "group:pinned"])])
-            }
             onNew={() => onNew(null, true)}
             newLabel="新建置顶对话"
             running={runningIn(pinned)}
@@ -564,20 +539,6 @@ export function ProjectSidebar({
           collapsed={collapsed.includes("group:projects")}
           controls="sidebar-projects-list"
           onToggle={() => toggleSection("group:projects")}
-          onExpand={() =>
-            setCollapsed((ids) =>
-              ids.filter(
-                (id) =>
-                  id !== "group:projects" &&
-                  !projects.some((project) => project.id === id),
-              ),
-            )
-          }
-          onCollapse={() =>
-            setCollapsed((ids) => [
-              ...new Set([...ids, ...projects.map((project) => project.id)]),
-            ])
-          }
           onNew={() => edit(null)}
           newLabel="新建项目"
           running={runningCount}
@@ -730,12 +691,6 @@ export function ProjectSidebar({
           collapsed={collapsed.includes("group:ordinary")}
           controls="sidebar-ordinary-list"
           onToggle={() => toggleSection("group:ordinary")}
-          onExpand={() =>
-            setCollapsed((ids) => ids.filter((id) => id !== "group:ordinary"))
-          }
-          onCollapse={() =>
-            setCollapsed((ids) => [...new Set([...ids, "group:ordinary"])])
-          }
           onNew={() => onNew(null)}
           newLabel="新建对话"
           running={runningIn(grouped.ordinary)}
@@ -748,7 +703,7 @@ export function ProjectSidebar({
       <Dialog
         open={editing !== undefined}
         onOpenChange={(open) => {
-          if (!open && !busy) setEditing(undefined);
+          if (!open && !busy) closeEditor();
         }}
       >
         <DialogContent className="project-editor">
@@ -776,31 +731,62 @@ export function ProjectSidebar({
               onChange={(event) => setInstructions(event.target.value)}
             />
           </label>
-          <label>
-            本地工作路径
+          <div className="project-workspace-field" aria-busy={pickingWorkspace}>
+            <label htmlFor="project-workspace">本地工作路径</label>
             <Input
+              id="project-workspace"
               value={workspacePath}
-              aria-label="本地工作路径"
-              maxLength={4096}
-              placeholder="例如 D:\\工作资料\\学习"
-              onChange={(event) => setWorkspacePath(event.target.value)}
+              readOnly
+              title={workspacePath || "尚未选择文件夹"}
+              placeholder="尚未选择文件夹"
+              aria-describedby="project-workspace-hint"
             />
-            <small className="project-workspace-hint">
-              可选。此项目内的对话可以只读扫描、读取该文件夹；留空取消访问。
+            <div className="project-workspace-actions">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!native || busy || pickingWorkspace}
+                onClick={() => void chooseWorkspace()}
+              >
+                <FolderOpen size={14} />
+                {pickingWorkspace
+                  ? "正在选择…"
+                  : workspacePath
+                    ? "更换文件夹"
+                    : "选择文件夹"}
+              </Button>
+              {workspacePath && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy || pickingWorkspace}
+                  onClick={() => setWorkspacePath("")}
+                >
+                  清除
+                </Button>
+              )}
+            </div>
+            <small id="project-workspace-hint" className="project-workspace-hint">
+              {native
+                ? "可选。此项目内的对话可以只读扫描、读取该文件夹；清除后保存可取消访问。"
+                : "请在桌面端选择本地文件夹；此项目内的对话可以只读扫描、读取，清除后保存可取消访问。"}
             </small>
-          </label>
+          </div>
           {error && <p role="alert">{error}</p>}
           <DialogFooter>
             <Button
               variant="ghost"
               disabled={busy}
-              onClick={() => setEditing(undefined)}
+              onClick={closeEditor}
             >
               取消
             </Button>
             <Button
-              disabled={busy || !name.trim()}
-              onClick={() =>
+              disabled={busy || pickingWorkspace || !name.trim()}
+              onClick={() => {
+                if (workspacePicker.current) return;
                 void mutate(async () => {
                   const saved = await api<Project>(
                     editing ? `/projects/${editing.id}` : "/projects",
@@ -811,10 +797,10 @@ export function ProjectSidebar({
                       workspace_path: workspacePath.trim(),
                     },
                   );
-                  setEditing(undefined);
+                  closeEditor();
                   if (!editing) onProject(saved.id);
-                })
-              }
+                });
+              }}
             >
               {busy ? "保存中…" : "保存"}
             </Button>

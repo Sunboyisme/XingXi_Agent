@@ -49,6 +49,24 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+async fn pick_project_workspace(initial_path: Option<String>) -> Result<Option<String>, String> {
+    let mut dialog = rfd::AsyncFileDialog::new().set_title("选择项目本地工作文件夹");
+    if let Some(path) = initial_path.filter(|value| !value.is_empty()) {
+        let path = PathBuf::from(path);
+        if path.is_absolute() && path.is_dir() {
+            dialog = dialog.set_directory(path);
+        }
+    }
+    let Some(folder) = dialog.pick_folder().await else {
+        return Ok(None);
+    };
+    if !folder.path().is_dir() {
+        return Err("所选文件夹已失效，请重新选择".into());
+    }
+    Ok(Some(folder.path().to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
 async fn save_data_export(
     app: tauri::AppHandle,
     state: tauri::State<'_, Backend>,
@@ -426,6 +444,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             backend_config,
             quit_app,
+            pick_project_workspace,
             save_data_export,
             save_office_file,
             download_office_file,
