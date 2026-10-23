@@ -78,7 +78,7 @@ test("chat home has no character artwork and retains the editable composer", () 
     />,
   );
   expect(
-    screen.getByRole("heading", { name: "今天想做点什么？" }),
+    screen.getByRole("heading", { name: "今天想做些什么？" }),
   ).toBeTruthy();
   expect(screen.queryByRole("region", { name: "学习与提醒" })).toBeNull();
   const input = screen.getByLabelText("发送给XiaoXi的消息");
@@ -86,30 +86,6 @@ test("chat home has no character artwork and retains the editable composer", () 
   expect(screen.queryByRole("button", { name: "和XiaoXi打个招呼" })).toBeNull();
   expect(document.querySelector(".chat-main .bai-avatar")).toBeNull();
   expect((input as HTMLTextAreaElement).value).toBe("还没写完的消息");
-});
-
-test("home shortcuts preserve the existing draft without sending it", async () => {
-  apiMock.mockResolvedValue([]);
-  render(
-    <ChatPage
-      conversationId={null}
-      onConversation={vi.fn()}
-      goals={[]}
-      settings={settings}
-      refresh={vi.fn().mockResolvedValue(undefined)}
-      onAction={vi.fn()}
-      onPlan={vi.fn()}
-    />,
-  );
-  const input = screen.getByLabelText(
-    "发送给XiaoXi的消息",
-  ) as HTMLTextAreaElement;
-  fireEvent.change(input, { target: { value: "我已经写了一段" } });
-  fireEvent.click(screen.getByRole("button", { name: "添加安排" }));
-  expect(input.value).toBe(
-    "帮我安排今天的时间。先问问我今天最想完成什么，再给出一个轻松可行的安排。\n\n我已经写了一段",
-  );
-  expect(apiMock.mock.calls.every((call) => call.length === 1)).toBe(true);
 });
 
 test("an accepted first message enters its conversation even if list refresh fails", async () => {

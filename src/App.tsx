@@ -129,9 +129,7 @@ export function App() {
     setSidebarWidth(value);
     localStorage.setItem("bai-sidebar-width", String(value));
   }
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () => localStorage.getItem("bai-sidebar-collapsed") === "true",
-  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [page, setPage] = useState<Page>("chat");
   const [calendarEventId, setCalendarEventId] = useState<string>();
   const [planAgenda, setPlanAgenda] = useState<PendingAgenda>();
@@ -362,9 +360,7 @@ export function App() {
     ["pending", "presented"].includes(x.status),
   ).length;
   function toggleSidebar() {
-    const collapsed = !sidebarCollapsed;
-    setSidebarCollapsed(collapsed);
-    localStorage.setItem("bai-sidebar-collapsed", String(collapsed));
+    setSidebarCollapsed((collapsed) => !collapsed);
   }
   async function acknowledgeReminders() {
     if (reminderAction.current) return;
@@ -387,6 +383,7 @@ export function App() {
     }
   }
   function startNewChat() {
+    setSidebarCollapsed(true);
     setProjectOverviewId(null);
     setNewChatPinned(false);
     try {

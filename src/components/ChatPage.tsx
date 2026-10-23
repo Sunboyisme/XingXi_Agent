@@ -51,7 +51,7 @@ import { AnswerPresentation } from "./AnswerPresentation";
 import { AnswerActions } from "./AnswerActions";
 import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
-import { ChatHome } from "./ChatHome";
+import { NewChatWelcome } from "./NewChatWelcome";
 import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
 import {
@@ -328,12 +328,9 @@ export function ChatPage({
   conversationId,
   onConversation,
   settings,
-  goals,
-  conversations = [],
   memories,
   refresh,
   onAction,
-  onPlan,
   projectId = null,
   projects = [],
   pinNew = false,
@@ -1261,25 +1258,16 @@ export function ChatPage({
   }
   return (
     <div className="chat-layout" ref={dropTarget}>
-      <div className={`chat-main ${empty ? "is-empty" : ""}`} ref={chatSurface}>
+      <div
+        className={`chat-main ${empty ? "is-empty new-chat-screen" : ""}`}
+        ref={chatSurface}
+      >
         <div
           className={`chat-scroll ${empty ? "is-empty" : ""}`}
           ref={scroller}
         >
           {empty ? (
-            <div className="welcome">
-              <div>
-                <p className="welcome-date">
-                  {new Intl.DateTimeFormat("zh-CN", {
-                    month: "long",
-                    day: "numeric",
-                    weekday: "long",
-                    timeZone: "Asia/Shanghai",
-                  }).format(new Date())}
-                </p>
-                <h1>今天想做点什么？</h1>
-              </div>
-            </div>
+            <NewChatWelcome timezone={settings.timezone} />
           ) : (
             <div className="message-list" ref={thread}>
               {entries.map(({ message: value, cards, synthetic }) => (
@@ -1931,31 +1919,6 @@ export function ChatPage({
             </div>
           </div>
         </div>
-        {empty && !conversationId && (
-          <ChatHome
-            conversations={conversations}
-            goals={goals}
-            timezone={settings.timezone}
-            onConversation={onConversation}
-            onAction={onAction}
-            onPlan={onPlan}
-            onPrompt={(text) => {
-              changeDraft(
-                draftRef.current.trim()
-                  ? `${text.trimEnd()}\n\n${draftRef.current}`
-                  : text,
-              );
-              requestAnimationFrame(() => {
-                const input = composer.current;
-                input?.focus();
-                input?.setSelectionRange(
-                  input.value.length,
-                  input.value.length,
-                );
-              });
-            }}
-          />
-        )}
       </div>
     </div>
   );

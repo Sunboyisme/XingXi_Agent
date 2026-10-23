@@ -1,0 +1,95 @@
+/* Empty conversations share the usual workspace and bottom composer. */
+.chat-main.new-chat-screen {
+  overflow: hidden;
+}
+.new-chat-screen .chat-scroll.is-empty {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 32px;
+  overflow: auto;
+}
+.chat-main.new-chat-screen .composer-area {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 948px;
+  max-height: 45%;
+  margin: 0 auto;
+  padding: 8px 32px 12px;
+  overflow-y: auto;
+}
+.new-chat-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: clamp(28px, 4vw, 64px);
+  max-width: 100%;
+  margin: auto;
+}
+.new-chat-date {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 17px;
+}
+.new-chat-day {
+  color: var(--bai-avatar-light, var(--ui-color-brand));
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 88px;
+  font-weight: 400;
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+}
+.new-chat-date-details {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  white-space: nowrap;
+}
+.new-chat-date-details > span {
+  color: var(--ui-color-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.new-chat-date-details > strong {
+  color: var(--ui-color-heading);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.new-chat-welcome > h1 {
+  min-width: 0;
+  margin: 0;
+  color: var(--ui-color-heading);
+  font-size: clamp(24px, 2.6vw, 36px);
+  font-weight: 500;
+  line-height: 1.5;
+}
+@media (max-width: 1000px) {
+  .new-chat-welcome {
+    flex-wrap: wrap;
+    gap: 22px 32px;
+  }
+  .new-chat-day {
+    font-size: 76px;
+  }
+}
+@media (max-width: 700px) {
+  .new-chat-screen .chat-scroll.is-empty {
+    padding: 24px 20px;
+  }
+  .chat-main.new-chat-screen .composer-area {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+  .new-chat-welcome {
+    flex-direction: column;
+    gap: 24px;
+  }
+  .new-chat-welcome > h1 {
+    font-size: 24px;
+    text-align: center;
+  }
+}
