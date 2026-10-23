@@ -38,7 +38,7 @@ export function Reasoning({
         <Sparkles size={15} aria-hidden="true" />
         <span>
           {active
-            ? "XiaoXi 正在想…"
+            ? "XiaoXi 正在思考"
             : incomplete
               ? "这个想法还没说完"
               : "看看 XiaoXi 的想法"}

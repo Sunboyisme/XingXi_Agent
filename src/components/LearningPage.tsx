@@ -96,6 +96,10 @@ export function LearningPage({
   const [hints, setHints] = useState(false);
   const [answerExpanded, setAnswerExpanded] = useState(false);
   const [deleting, setDeleting] = useState<Goal | null>(null);
+  const [removedGoalIds, setRemovedGoalIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const availableGoals = goals.filter((item) => !removedGoalIds.has(item.id));
   const [outlineOpen, setOutlineOpen] = useState(() =>
     typeof window.matchMedia === "function"
       ? window.matchMedia("(min-width: 1100px)").matches
@@ -113,7 +117,7 @@ export function LearningPage({
   const watch = useRef<AbortController | null>(null);
   const activeNode = useRef(nodeId);
   activeNode.current = nodeId;
-  const selectedGoal = goals.find((x) => x.id === goalId);
+  const selectedGoal = availableGoals.find((x) => x.id === goalId);
   const goal = selectedGoal || null;
   const node = goal?.nodes.find((x) => x.id === nodeId);
   function selectGoal(value: Goal) {
@@ -392,52 +396,76 @@ export function LearningPage({
               新的学习目标
             </Button>
           </div>
-          {goals.length ? (
-            <div className="goal-grid">
-              {goals.map((value) => {
+          {availableGoals.length ? (
+            <div className="goal-list">
+              {availableGoals.map((value) => {
                 const passed = value.nodes.filter(
                   (x) => x.status === "passed",
                 ).length;
                 return (
-                  <button
-                    className="goal-card"
-                    key={value.id}
-                    onClick={() => selectGoal(value)}
-                  >
-                    <div className="goal-card-top">
-                      <div className="topic-icon">
+                  <article className="goal-card-row" key={value.id}>
+                    <button
+                      className="goal-card-main"
+                      onClick={() => selectGoal(value)}
+                    >
+                      <span className="goal-row-icon">
                         <BookOpen size={22} />
-                      </div>
+                      </span>
+                      <span className="goal-row-content">
+                        <strong>{value.title}</strong>
+                        <span>
+                          {value.objective || "从基础入门，逐步完成实际练习。"}
+                        </span>
+                        <small>
+                          {value.nodes.find(
+                            (node) => node.id === value.current_node_id,
+                          )?.title || "建立你的知识框架"}
+                        </small>
+                      </span>
+                    </button>
+                    <div className="goal-row-progress">
                       <span>
                         {value.nodes.length
                           ? `${passed} / ${value.nodes.length} 练习通过`
                           : "等待规划"}
                       </span>
+                      <div
+                        className="progress-track"
+                        role="progressbar"
+                        aria-label={`${value.title} 的练习进度`}
+                        aria-valuenow={passed}
+                        aria-valuemin={0}
+                        aria-valuemax={Math.max(1, value.nodes.length)}
+                      >
+                        <span
+                          style={{
+                            width: `${value.nodes.length ? (passed / value.nodes.length) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                    <h2>{value.title}</h2>
-                    <p>{value.objective || "从基础入门，逐步完成实际练习。"}</p>
-                    <div
-                      className="progress-track"
-                      role="progressbar"
-                      aria-label={`${value.title} 的练习进度`}
-                      aria-valuenow={passed}
-                      aria-valuemin={0}
-                      aria-valuemax={Math.max(1, value.nodes.length)}
-                    >
-                      <span
-                        style={{
-                          width: `${value.nodes.length ? (passed / value.nodes.length) * 100 : 0}%`,
+                    <div className="goal-row-actions">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => selectGoal(value)}
+                      >
+                        继续学习
+                        <ArrowRight size={15} />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`删除学习目标 ${value.title}`}
+                        onClick={() => {
+                          setError("");
+                          setDeleting(value);
                         }}
-                      />
+                      >
+                        <Trash2 size={15} />
+                      </Button>
                     </div>
-                    <div className="goal-card-footer">
-                      <span>
-                        {value.nodes.find((x) => x.id === value.current_node_id)
-                          ?.title || "建立你的知识框架"}
-                      </span>
-                      <ArrowRight size={17} />
-                    </div>
-                  </button>
+                  </article>
                 );
               })}
             </div>
@@ -1024,21 +1052,44 @@ export function LearningPage({
       <ConfirmDelete
         open={Boolean(deleting)}
         title="删除这个学习目标？"
-        description="课程、练习和进度会一起删除。"
-        label="删除目标"
+        description={
+          deleting?.active_run_id
+            ? "将先停止正在执行的学习任务，再删除课程、练习和进度。"
+            : "课程、练习和进度会一起删除。"
+        }
+        label={deleting?.active_run_id ? "停止任务并删除" : "删除目标"}
         error={error}
         onClose={() => setDeleting(null)}
         onConfirm={async () => {
           if (!deleting) return;
           try {
-            await api(`/learning/goals/${deleting.id}`, "DELETE");
+            const result = await api<{ cleanup_pending?: number }>(
+              `/learning/goals/${deleting.id}?stop=${Boolean(deleting.active_run_id)}`,
+              "DELETE",
+            );
+            if (goalId === deleting.id) watch.current?.abort();
+            setError("");
             deleting.nodes.forEach((node) => clearLearningDraft(node.id));
-            await refresh();
+            setRemovedGoalIds((ids) => new Set([...ids, deleting.id]));
             setDeleting(null);
-            setGoalId("");
-            setNodeId("");
+            if (goalId === deleting.id) {
+              setGoalId("");
+              setNodeId("");
+              setLesson(null);
+              setRun(null);
+              setBusy(false);
+            }
+            if (result.cleanup_pending)
+              setNotice("学习目标已删除，部分本机文件或执行缓存清理未完成。");
+            await refresh().catch(() =>
+              setNotice("学习目标已删除，部分列表暂未刷新，请稍后刷新查看。"),
+            );
           } catch (error) {
             setError((error as Error).message);
+            void api<Goal>(`/learning/goals/${deleting.id}`)
+              .then(setDeleting)
+              .catch(() => {});
+            void refresh();
           }
         }}
       />

@@ -71,9 +71,11 @@ function IncompleteReplyNotice({
       <div>
         <strong>{cancelled ? "回答停在这里" : "这次回答没有完成"}</strong>
         <p>
-          {cancelled
-            ? "已经完成的工具操作仍会保留，可以继续追问或重新生成。"
-            : "可以重新生成，或者换个说法继续。"}
+          {!onRetry
+            ? "已有内容保留，可以发送新要求继续。"
+            : cancelled
+              ? "已经完成的工具操作仍会保留，可以继续追问或重新生成。"
+              : "可以重新生成，或者换个说法继续。"}
         </p>
       </div>
       {onRetry && (
@@ -284,8 +286,6 @@ function ReplyActivity({
   reasoning,
   stream,
   imageGeneration,
-  contextStatus,
-  toolCount,
   runId,
 }: {
   reasoning: string;
@@ -300,19 +300,9 @@ function ReplyActivity({
       <Reasoning text={reasoning} active />
       {imageGeneration && <ImageGenerationPreview progress={imageGeneration} />}
       {stream && <Markdown runId={runId}>{stream}</Markdown>}
-      {!imageGeneration && (
+      {!imageGeneration && !reasoning && (
         <div className="thinking" role="status" aria-live="polite">
-          <span className="thinking-label">
-            {contextStatus === "正在整理上下文…"
-              ? contextStatus
-              : stream
-                ? "正在努力工作"
-                : toolCount
-                  ? "正在整理工具结果"
-                  : reasoning
-                    ? "正在输出想法"
-                    : "正在理清思路"}
-          </span>
+          <span className="thinking-label">XiaoXi 正在思考</span>
           <span className="thinking-dots" aria-hidden="true">
             <i />
             <i />
@@ -334,7 +324,13 @@ export function ChatPage({
   refresh,
   onAction,
   onPlan,
+  projectId = null,
+  focusMessageId,
+  onMessageFocused,
 }: {
+  projectId?: string | null;
+  focusMessageId?: string | null;
+  onMessageFocused?: () => void;
   conversationId: string | null;
   onConversation: (id: string) => void;
   settings: Settings;
@@ -384,6 +380,24 @@ export function ChatPage({
   const [stream, setStream] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [tasks, setTasks] = useState<ComplexTask[]>([]);
+  useEffect(() => {
+    if (
+      !focusMessageId ||
+      !messages.some((message) => message.id === focusMessageId)
+    )
+      return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`chat-message-${focusMessageId}`);
+      if (target) {
+        followLatest.current = false;
+        target.scrollIntoView({ block: "center" });
+        target.focus({ preventScroll: true });
+        setAtLatest(false);
+        onMessageFocused?.();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusMessageId, messages, onMessageFocused]);
   const [submitting, setSubmitting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const actionLock = useRef(false);
@@ -883,6 +897,7 @@ export function ChatPage({
       if (!id) {
         const value = await api<Conversation>("/conversations", "POST", {
           title: "新对话",
+          project_id: projectId,
         });
         id = value.id;
       }
@@ -976,7 +991,7 @@ export function ChatPage({
       }
     }
   }
-  async function retry() {
+  async function retry(sourceRunId = run?.id, taskId?: string) {
     if (!conversationId || actionLock.current || busy || !modelReady) return;
     const id = conversationId;
     const sequence = actionSequence.current;
@@ -988,19 +1003,25 @@ export function ChatPage({
     setSubmitting(true);
     setError("");
     try {
-      const value = await api<Run>(`/conversations/${id}/retry`, "POST", {
-        model_selection: selected
-          ? {
-              provider_id: selected.profile.id,
-              model_name: selected.model.name,
-              thinking_enabled: thinkingEnabled,
-            }
-          : undefined,
-      });
+      const value = await api<Run>(
+        taskId ? `/tasks/${taskId}/resume` : `/conversations/${id}/retry`,
+        "POST",
+        {
+          source_run_id: sourceRunId,
+          model_selection: selected
+            ? {
+                provider_id: selected.profile.id,
+                model_name: selected.model.name,
+                thinking_enabled: thinkingEnabled,
+              }
+            : undefined,
+        },
+      );
       if (!isCurrent()) return;
       void track(value, id);
     } catch (error) {
       if (isCurrent()) setError((error as Error).message);
+      if (isCurrent()) void refreshChatView();
     } finally {
       if (isCurrent()) {
         actionLock.current = false;
@@ -1184,6 +1205,8 @@ export function ChatPage({
               {entries.map(({ message: value, cards, synthetic }) => (
                 <article
                   key={cards.length ? `task-reply-${cards[0].id}` : value.id}
+                  id={`chat-message-${value.id}`}
+                  tabIndex={-1}
                   className={`message ${value.role}`}
                   ref={(element) => {
                     if (value.role !== "user") return;
@@ -1237,6 +1260,7 @@ export function ChatPage({
                         busy={busy}
                         running={busy && run?.task_id === task.id}
                         onUpdate={updateTask}
+                        onResume={(taskId) => void retry(undefined, taskId)}
                       />
                     ))}
                     {value.role === "user" && editingMessageId === value.id ? (
@@ -1346,8 +1370,10 @@ export function ChatPage({
                             (value.run_status || run?.status) === "cancelled"
                           }
                           onRetry={
-                            value === lastAssistant && value.run_id === run?.id
-                              ? () => void retry()
+                            value === lastAssistant &&
+                            value.run_id === run?.id &&
+                            run?.retry_action !== "none"
+                              ? () => void retry(value.run_id || undefined)
                               : undefined
                           }
                           disabled={busy || submitting || !modelReady}
@@ -1419,7 +1445,11 @@ export function ChatPage({
                     {incompleteRun && (
                       <IncompleteReplyNotice
                         cancelled={incompleteRun.status === "cancelled"}
-                        onRetry={() => void retry()}
+                        onRetry={
+                          run?.retry_action === "none"
+                            ? undefined
+                            : () => void retry()
+                        }
                         disabled={submitting || !modelReady}
                       />
                     )}
@@ -1542,7 +1572,11 @@ export function ChatPage({
                   ? "聊天模型认证或权限检查失败，请在「模型连接」检查密钥与接口地址。"
                   : error
               }
-              retry={run?.status === "failed" ? () => void retry() : undefined}
+              retry={
+                run?.status === "failed" && run?.retry_action !== "none"
+                  ? () => void retry()
+                  : undefined
+              }
               onClose={closeError}
               action={
                 /密钥|接口|认证|模型|连接|配置|401|403|unauthorized/i.test(

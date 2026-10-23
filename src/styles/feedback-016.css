@@ -1,0 +1,497 @@
+/* 0.1.6 follow-up: restrained surfaces, fixed agenda controls and project navigation. */
+.plan-week-column {
+  isolation: isolate;
+}
+.tool-result-title {
+  justify-content: flex-start;
+  align-items: center;
+}
+.tool-result-title > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tool-result-meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.task-operation-records {
+  margin-top: 18px;
+}
+.task-operation-records > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--ui-color-bg);
+  color: var(--ui-color-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.task-operation-records > summary::-webkit-details-marker {
+  display: none;
+}
+.task-operation-records > summary small {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.task-operation-records[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.task-operation-title small[data-status="failed"],
+.task-operation-title small[data-status="unknown"] {
+  color: var(--ui-color-danger);
+}
+.complex-task-operation {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.task-operation-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.task-operation-title strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.task-operation-title small {
+  margin-left: auto;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.complex-task-operation p {
+  margin: 5px 0;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.task-operation-data summary {
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+  cursor: pointer;
+}
+.task-operation-data pre {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.plan-agenda-dialog[data-slot="dialog-content"] {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+.plan-agenda-dialog > :not(.plan-agenda-list) {
+  flex-shrink: 0;
+}
+.plan-agenda-list {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.plan-agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.plan-occurrence-content {
+  flex: 1;
+  min-width: 0;
+}
+.plan-agenda-sticky-tabs {
+  display: flex;
+  align-items: center;
+}
+.plan-order-handle {
+  width: 18px;
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.plan-order-handle:active {
+  cursor: grabbing;
+}
+.plan-order-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.plan-order-buttons button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--ui-color-text-muted);
+  border-radius: 4px;
+}
+.plan-order-buttons button:disabled {
+  opacity: 0.25;
+}
+.plan-agenda-create {
+  padding-top: 8px;
+  margin-top: 0;
+}
+.plan-agenda-list .complete-circle {
+  flex-shrink: 0;
+}
+.plan-move-notice {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  max-width: calc(100% - 32px);
+  padding: 9px 15px;
+  border-radius: 12px;
+  background: var(--ui-color-surface);
+  box-shadow: 0 4px 20px #0002;
+}
+.exercise-answer-composer {
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ui-color-bg) 40%, transparent);
+  padding: 5px 8px;
+  align-items: end;
+}
+.exercise-answer-dock textarea {
+  min-height: 40px;
+  height: 40px;
+  max-height: 120px;
+  padding: 8px 4px;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none;
+  border-radius: 6px;
+}
+.exercise-answer-composer:focus-within {
+  outline: 1px solid color-mix(in srgb, var(--ui-color-action) 55%, transparent);
+  outline-offset: 2px;
+}
+.exercise-answer-dock .exercise-submit {
+  align-items: center;
+  gap: 5px;
+  padding-bottom: 3px;
+}
+.exercise-answer-dock .exercise-submit [data-slot="button"] {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 10px;
+}
+.exercise-answer-dock .exercise-submit svg {
+  width: 16px;
+  height: 16px;
+}
+.goal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.goal-card-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 20px;
+  background: var(--ui-color-surface);
+  border: 1px solid var(--ui-color-line);
+  border-radius: 18px;
+}
+.goal-card-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+}
+.goal-row-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  background: var(--ui-color-bg);
+  color: var(--ui-color-action);
+  border-radius: 13px;
+}
+.goal-row-content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.goal-row-content strong {
+  color: var(--ui-color-heading);
+  font-size: 17px;
+}
+.goal-row-content > span {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.goal-row-content small {
+  font-size: 12px;
+  color: var(--ui-color-action);
+}
+.goal-row-progress {
+  width: 135px;
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.goal-row-progress .progress-track {
+  margin-top: 9px;
+  height: 3px;
+}
+.goal-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.project-conversations {
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+.chat-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.project-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 8px 4px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.project-heading {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 36px;
+  padding: 0 5px;
+  border-radius: 9px;
+}
+.sidebar-project[data-selected="true"] > .project-heading {
+  background: var(--ui-color-surface);
+}
+.project-heading > button,
+.project-heading > [data-state] {
+  color: var(--ui-color-text-muted);
+}
+.project-name {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 13px;
+}
+.project-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-collapse {
+  flex-shrink: 0;
+  padding: 4px 0;
+}
+.project-chat-list {
+  margin-left: 12px;
+}
+.sidebar-unfiled {
+  width: 100%;
+  text-align: left;
+}
+.project-menu {
+  z-index: 80;
+  min-width: 165px;
+  max-width: 260px;
+  padding: 5px;
+  border-radius: 12px;
+  border: 1px solid var(--ui-color-line);
+  background: var(--ui-color-surface);
+  box-shadow: 0 8px 28px #0003;
+  color: var(--ui-color-text);
+  font-size: 12px;
+}
+.project-menu [role="menuitem"] {
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 7px;
+  outline: none;
+}
+.project-menu [data-highlighted] {
+  background: var(--ui-color-bg);
+}
+.project-menu [data-disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+.project-menu .danger {
+  color: var(--ui-color-danger);
+}
+.project-editor label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+}
+.project-library[data-slot="dialog-content"],
+.chat-search-dialog[data-slot="dialog-content"] {
+  display: flex;
+  flex-direction: column;
+  max-height: min(800px, calc(100vh - 40px));
+  overflow: hidden;
+  width: min(700px, calc(100vw - 32px));
+}
+.project-library-list,
+.chat-search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.project-library-list > article {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.project-material-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.project-image-material {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+}
+.project-image-material img {
+  max-width: 100px;
+  max-height: 75px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.project-source-files {
+  flex-shrink: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.project-source-files summary {
+  cursor: pointer;
+  color: var(--ui-color-text-muted);
+}
+.project-source-files summary svg {
+  display: inline;
+  margin-right: 5px;
+}
+.project-source-files > div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+.project-source-files > div > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chat-search-fields {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.chat-search-fields select {
+  max-width: 175px;
+  background: var(--ui-color-bg);
+  color: var(--ui-color-text);
+  border: 1px solid var(--ui-color-line);
+  border-radius: 9px;
+  padding: 9px;
+  font-size: 12px;
+}
+.chat-search-results > button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 15px 8px;
+  border-bottom: 1px solid var(--ui-color-line);
+  border-radius: 8px;
+}
+.chat-search-results > button:hover {
+  background: var(--ui-color-bg);
+}
+.chat-search-results strong {
+  font-size: 14px;
+}
+.chat-search-results small {
+  display: block;
+  color: var(--ui-color-action);
+  margin-top: 4px;
+}
+.chat-search-results p {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  overflow-wrap: anywhere;
+}
+.message:focus {
+  outline: 1px solid var(--ui-color-action);
+  outline-offset: 8px;
+  border-radius: 10px;
+}
+.sidebar-error {
+  color: var(--ui-color-danger);
+  padding: 8px;
+  font-size: 12px;
+}
+.project-heading button:focus-visible,
+.plan-order-buttons button:focus-visible,
+.plan-order-handle:focus-visible,
+.goal-card-main:focus-visible {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 3px;
+}
+@media (max-width: 850px) {
+  .goal-card-row {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px;
+  }
+  .goal-card-main {
+    flex-basis: 100%;
+  }
+  .goal-row-progress {
+    margin-left: 58px;
+    flex: 1;
+  }
+  .plan-agenda-row {
+    gap: 6px;
+  }
+  .plan-agenda-edit {
+    padding: 4px;
+  }
+}

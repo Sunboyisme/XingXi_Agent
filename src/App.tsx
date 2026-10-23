@@ -14,9 +14,7 @@ import {
   CircleHelp,
   Loader2,
   MessageCircle,
-  Plus,
   Settings2,
-  Trash2,
   X,
 } from "lucide-react";
 import { isTauri } from "@tauri-apps/api/core";
@@ -36,6 +34,7 @@ import {
   api,
   type Settings,
   type Conversation,
+  type Project,
   type Goal,
   type Memory,
   type Notification,
@@ -53,6 +52,7 @@ import { ConfirmDelete, ErrorNotice } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
 import { WindowFrame } from "./components/WindowFrame";
 import { SidebarResize } from "./components/SidebarResize";
+import { ProjectSidebar } from "./components/ProjectSidebar";
 
 type Page = "chat" | "learning" | "plans" | "settings";
 const pages: {
@@ -127,6 +127,9 @@ export function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -151,6 +154,7 @@ export function App() {
       api<Goal[]>("/learning/goals"),
       api<Memory[]>("/memories"),
       api<Notification[]>("/notifications?unread_only=true"),
+      api<Project[]>("/projects"),
     ]);
     // Slow earlier snapshots must not overwrite a newer tool/memory update.
     if (version !== refreshVersion.current) return;
@@ -159,6 +163,7 @@ export function App() {
     setGoals(values[2]);
     setMemories(values[3]);
     setNotifications(values[4]);
+    setProjects(values[5]);
   }, []);
   const boot = useCallback(async () => {
     setLoading(true);
@@ -557,60 +562,28 @@ export function App() {
             id="chat-sidebar"
             hidden={sidebarCollapsed || page !== "chat"}
           >
-            <div className="chat-sidebar-heading">
-              <button
-                className="brand-home"
-                aria-label="返回对话"
-                onClick={startNewChat}
-              >
-                <strong>XiaoXi</strong>
-              </button>
-            </div>
-            <Button
-              className="new-chat-button"
-              aria-label="开启新对话"
-              onClick={startNewChat}
-            >
-              <Plus size={16} aria-hidden="true" />
-              <span>新聊天</span>
-            </Button>
-            <div className="conversation-sidebar">
-              <p className="sidebar-label">
-                最近聊天 <span>{conversations.length}</span>
-              </p>
-              {conversations.length ? (
-                conversations.map((value) => (
-                  <div
-                    className={`conversation-link ${page === "chat" && conversationId === value.id ? "selected" : ""}`}
-                    key={value.id}
-                  >
-                    <button
-                      aria-label={`打开对话 ${value.title}`}
-                      aria-current={
-                        page === "chat" && conversationId === value.id
-                          ? "page"
-                          : undefined
-                      }
-                      onClick={() => {
-                        setConversationId(value.id);
-                        navigate("chat");
-                      }}
-                    >
-                      <MessageCircle size={14} />
-                      <span>{value.title}</span>
-                    </button>
-                    <button
-                      aria-label={`删除对话 ${value.title}`}
-                      onClick={() => setDeleting(value)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="sidebar-empty">暂无聊天</p>
-              )}
-            </div>
+            <ProjectSidebar
+              conversations={conversations}
+              projects={projects}
+              currentId={conversationId}
+              projectId={
+                conversations.find((item) => item.id === conversationId)
+                  ?.project_id ?? activeProjectId
+              }
+              onNew={(id) => {
+                setActiveProjectId(id);
+                setFocusMessageId(null);
+                startNewChat();
+              }}
+              onOpen={(conversation, messageId) => {
+                setActiveProjectId(conversation.project_id || null);
+                setConversationId(conversation.id);
+                setFocusMessageId(messageId || null);
+                navigate("chat");
+              }}
+              onDelete={setDeleting}
+              refresh={refresh}
+            />
           </div>
           {page === "chat" && !sidebarCollapsed && (
             <SidebarResize width={sidebarWidth} onChange={resizeSidebar} />
@@ -622,6 +595,9 @@ export function App() {
               <ChatPage
                 key={chatKey}
                 conversationId={conversationId}
+                projectId={activeProjectId}
+                focusMessageId={focusMessageId}
+                onMessageFocused={() => setFocusMessageId(null)}
                 onConversation={setConversationId}
                 settings={settings}
                 goals={goals}

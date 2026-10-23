@@ -9,6 +9,9 @@ import {
 } from "react";
 import {
   CalendarPlus,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +50,8 @@ import {
   zonedISO,
   shiftedPlan,
   monthSegments,
+  orderDayEvents,
+  occurrenceOrderKey,
   type MonthSegment,
 } from "@/lib/calendarMonth";
 export { dateMove, zonedInput, zonedISO } from "@/lib/calendarMonth";
@@ -106,6 +111,18 @@ export function CalendarPage({
   const [anchor, setAnchor] = useState(today);
   const [view, setView] = useState<"month" | "week">("month");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [dayOrders, setDayOrders] = useState<Record<string, string[]>>({});
+  const [orderSaving, setOrderSaving] = useState(false);
+  const orderLock = useRef(false);
+  const [orderDragging, setOrderDragging] = useState("");
+  function orderedDay(day: string) {
+    return orderDayEvents(
+      eventsOnDay(events, day, timezone),
+      timezone,
+      dayOrders[day],
+    );
+  }
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const monthGrid = useRef<HTMLDivElement>(null);
@@ -201,11 +218,17 @@ export function CalendarPage({
     const sequence = ++requestSequence.current;
     setLoading(true);
     try {
-      const values = await api<CalendarEvent[]>(
-        `/plans?start=${view === "week" ? weekStart : begin}&end=${view === "week" ? dateMove(weekStart, 7) : dateMove(begin, count)}&timezone=${encodeURIComponent(timezone)}`,
-      );
+      const start = view === "week" ? weekStart : begin;
+      const end =
+        view === "week" ? dateMove(weekStart, 7) : dateMove(begin, count);
+      const query = `start=${start}&end=${end}&timezone=${encodeURIComponent(timezone)}`;
+      const [values, orders] = await Promise.all([
+        api<CalendarEvent[]>(`/plans?${query}`),
+        api<Record<string, string[]>>(`/plans/order?${query}`),
+      ]);
       if (sequence === requestSequence.current) {
         setEvents(values);
+        setDayOrders(orders);
         setError("");
       }
     } catch (e) {
@@ -346,7 +369,7 @@ export function CalendarPage({
     }));
   }
   function openAgenda(day: string, tab?: "todo" | "repeat") {
-    const values = eventsOnDay(events, day, timezone);
+    const values = orderedDay(day);
     const hasTodo = values.some((event) => !isRepeating(event));
     const hasRepeat = values.some(isRepeating);
     setAgendaTab(tab || (hasTodo ? "todo" : hasRepeat ? "repeat" : "todo"));
@@ -542,8 +565,8 @@ export function CalendarPage({
     [days, events, timezone],
   );
   const monthLayout = useMemo(
-    () => monthSegments(days, monthValues, timezone),
-    [days, monthValues, timezone],
+    () => monthSegments(days, monthValues, timezone, dayOrders),
+    [days, monthValues, timezone, dayOrders],
   );
   function startDrag(
     pointer: PointerEvent<HTMLButtonElement>,
@@ -711,14 +734,17 @@ export function CalendarPage({
       height: Math.max(24, ((end - start) / 3600000) * 48),
     };
   }
-  const weekEventButton = (event: CalendarEvent, day: string) => (
+  const weekEventButton = (event: CalendarEvent, day: string, index = 0) => (
     <Hint
       key={`${event.id}:${event.occurrence_start || event.start}:${day}`}
       label={event.title}
     >
       <button
         className={`week-event ${event.status === "completed" ? "is-completed" : event.status === "cancelled" ? "is-cancelled" : ""}`}
-        style={weekEventPosition(event, day)}
+        style={{
+          ...weekEventPosition(event, day),
+          zIndex: events.length - index + 1,
+        }}
         onClick={() => openAgenda(day, isRepeating(event) ? "repeat" : "todo")}
       >
         <strong>
@@ -728,7 +754,41 @@ export function CalendarPage({
       </button>
     </Hint>
   );
-  const dayValues = dayList ? eventsOnDay(events, dayList, timezone) : [];
+  useEffect(() => {
+    if (!moveNotice) return;
+    const timer = window.setTimeout(() => setMoveNotice(""), 3000);
+    return () => clearTimeout(timer);
+  }, [moveNotice]);
+  async function saveOrder(keys: string[]) {
+    if (!dayList || orderLock.current || busy || loading) return;
+    const day = dayList;
+    orderLock.current = true;
+    setOrderSaving(true);
+    setError("");
+    try {
+      const result = await api<{ keys: string[] }>("/plans/order", "PUT", {
+        day,
+        timezone,
+        keys,
+      });
+      setDayOrders((orders) => ({ ...orders, [day]: result.keys }));
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      orderLock.current = false;
+      setOrderSaving(false);
+      setOrderDragging("");
+    }
+  }
+  function reorder(source: string, target: string) {
+    const keys = orderedDay(dayList).map(occurrenceOrderKey);
+    const from = keys.indexOf(source),
+      to = keys.indexOf(target);
+    if (from < 0 || to < 0 || from === to) return;
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    void saveOrder(keys);
+  }
+  const dayValues = dayList ? orderedDay(dayList) : [];
   const todoCount = dayValues.filter((event) => !isRepeating(event)).length;
   const repeatCount = dayValues.filter(isRepeating).length;
   const selectedOccurrences = dayList
@@ -737,10 +797,7 @@ export function CalendarPage({
       )
     : [];
   const weekRepeats = new Map(
-    weekDays.map((day) => [
-      day,
-      eventsOnDay(events, day, timezone).filter(isRoutine),
-    ]),
+    weekDays.map((day) => [day, orderedDay(day).filter(isRoutine)]),
   );
   const hasWeekRepeats = [...weekRepeats.values()].some(
     (values) => values.length,
@@ -931,7 +988,7 @@ export function CalendarPage({
                         edit(day);
                     }}
                   >
-                    {eventsOnDay(events, day, timezone)
+                    {orderedDay(day)
                       .filter((event) => event.all_day && !isRoutine(event))
                       .map((event) => (
                         <button
@@ -971,9 +1028,11 @@ export function CalendarPage({
                         edit(day);
                     }}
                   >
-                    {eventsOnDay(events, day, timezone)
+                    {orderedDay(day)
                       .filter((event) => !event.all_day && !isRoutine(event))
-                      .map((event) => weekEventButton(event, day))}
+                      .map((event, index) =>
+                        weekEventButton(event, day, index),
+                      )}
                   </div>
                 ))}
               </div>
@@ -986,7 +1045,7 @@ export function CalendarPage({
             style={{ gridTemplateRows: `repeat(${count / 7}, minmax(0, 1fr))` }}
           >
             {days.map((day) => {
-              const values = eventsOnDay(events, day, timezone);
+              const values = orderedDay(day);
               const visibleValues = values.filter((event) => !isRoutine(event));
               const repeatedValues = values.filter(isRoutine);
               const segments = monthLayout.get(day) || [];
@@ -1113,24 +1172,35 @@ export function CalendarPage({
               {dayList} 的{agendaTab === "repeat" ? "重复事项" : "待办事项"}
             </DialogTitle>
           </DialogHeader>
-          <div className="plan-agenda-tabs segmented" role="tablist">
-            <button
-              role="tab"
-              aria-selected={agendaTab === "todo"}
-              className={agendaTab === "todo" ? "selected" : ""}
-              onClick={() => setAgendaTab("todo")}
-            >
-              待办事项 <span>{todoCount}</span>
-            </button>
-            <button
-              role="tab"
-              aria-selected={agendaTab === "repeat"}
-              className={agendaTab === "repeat" ? "selected" : ""}
-              onClick={() => setAgendaTab("repeat")}
-            >
-              重复 {repeatCount} 项
-            </button>
+          <div className="plan-agenda-sticky-tabs">
+            <div className="plan-agenda-tabs segmented" role="tablist">
+              <button
+                role="tab"
+                aria-selected={agendaTab === "todo"}
+                className={agendaTab === "todo" ? "selected" : ""}
+                onClick={() => setAgendaTab("todo")}
+              >
+                待办事项 <span>{todoCount}</span>
+              </button>
+              <button
+                role="tab"
+                aria-selected={agendaTab === "repeat"}
+                className={agendaTab === "repeat" ? "selected" : ""}
+                onClick={() => setAgendaTab("repeat")}
+              >
+                重复 {repeatCount} 项
+              </button>
+            </div>
           </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy || orderSaving || !dayOrders[dayList]?.length}
+            onClick={() => void saveOrder([])}
+          >
+            恢复时间排序
+          </Button>
+          {error && <p role="alert">{error}</p>}
           {agendaNotice && (
             <p
               className="plan-agenda-feedback"
@@ -1142,12 +1212,66 @@ export function CalendarPage({
             </p>
           )}
           <div className="plan-agenda-list">
-            {selectedOccurrences.map((event) => (
+            {selectedOccurrences.map((event, index) => (
               <div
                 className="plan-agenda-row"
                 key={`${event.id}:${event.occurrence_start || event.start}`}
                 data-occurrence={event.occurrence_start || event.start}
+                onDragOver={(pointer) => {
+                  if (orderDragging) pointer.preventDefault();
+                }}
+                onDrop={(pointer) => {
+                  pointer.preventDefault();
+                  if (orderDragging)
+                    reorder(orderDragging, occurrenceOrderKey(event));
+                }}
               >
+                <button
+                  className="plan-order-handle"
+                  aria-label={`拖动排序 ${event.title}`}
+                  draggable={!busy && !orderSaving}
+                  onDragStart={(pointer) => {
+                    pointer.dataTransfer.setData(
+                      "text/plain",
+                      occurrenceOrderKey(event),
+                    );
+                    pointer.dataTransfer.effectAllowed = "move";
+                    setOrderDragging(occurrenceOrderKey(event));
+                  }}
+                  onDragEnd={() => setOrderDragging("")}
+                >
+                  <GripVertical size={14} />
+                </button>
+                <div className="plan-order-buttons">
+                  <button
+                    aria-label={`上移 ${event.title}`}
+                    disabled={busy || orderSaving || index === 0}
+                    onClick={() =>
+                      reorder(
+                        occurrenceOrderKey(event),
+                        occurrenceOrderKey(selectedOccurrences[index - 1]),
+                      )
+                    }
+                  >
+                    <ArrowUp size={12} />
+                  </button>
+                  <button
+                    aria-label={`下移 ${event.title}`}
+                    disabled={
+                      busy ||
+                      orderSaving ||
+                      index === selectedOccurrences.length - 1
+                    }
+                    onClick={() =>
+                      reorder(
+                        occurrenceOrderKey(event),
+                        occurrenceOrderKey(selectedOccurrences[index + 1]),
+                      )
+                    }
+                  >
+                    <ArrowDown size={12} />
+                  </button>
+                </div>
                 <button
                   className="complete-circle"
                   aria-label={`${["completed", "cancelled"].includes(event.status) ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}

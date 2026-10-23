@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Check, ChevronDown, Circle, Files, Loader2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Circle,
+  ClipboardList,
+  Files,
+  Loader2,
+} from "lucide-react";
 import { api, type ComplexTask } from "@/lib/api";
 import { ArtifactDownload, ArtifactPicture } from "./AnswerPresentation";
 import { FileCard } from "./OfficeFiles";
@@ -26,14 +33,16 @@ export function TaskCard({
   busy,
   running = false,
   onUpdate,
+  onResume,
 }: {
   task: ComplexTask;
   busy: boolean;
   running?: boolean;
   onUpdate: (task: ComplexTask) => void;
+  onResume?: (runId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(true);
+  const [filesOpen, setFilesOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const current =
@@ -106,7 +115,7 @@ export function TaskCard({
             {task.steps.length
               ? `已完成 ${completed} / ${task.steps.length} 个步骤`
               : task.status === "planning"
-                ? "正在安排执行步骤，步骤生成后会显示在这里。"
+                ? "正在安排执行步骤。"
                 : "暂无执行步骤，可查看已保存成果与实际操作记录。"}
             {task.steps.length > 0 && (
               <progress
@@ -157,12 +166,21 @@ export function TaskCard({
             </div>
           )}
           {task.operations.length > 0 && (
-            <details>
-              <summary>实际操作记录</summary>
+            <details className="task-operation-records">
+              <summary>
+                <ClipboardList size={15} />
+                <span>实际操作记录</span>
+                <small>{task.operations.length}</small>
+                <ChevronDown size={14} />
+              </summary>
               {task.operations.map((operation) => (
                 <div className="complex-task-operation" key={operation.id}>
-                  <strong>{operation.tool_id}</strong> ·{" "}
-                  {states[operation.status] || operation.status}
+                  <div className="task-operation-title">
+                    <strong>{operation.name || operation.tool_id}</strong>
+                    <small data-status={operation.status}>
+                      {states[operation.status] || operation.status}
+                    </small>
+                  </div>
                   {Boolean(
                     operation.result.error || operation.result.summary,
                   ) && (
@@ -172,6 +190,10 @@ export function TaskCard({
                       )}
                     </p>
                   )}
+                  <details className="task-operation-data">
+                    <summary>查看详情</summary>
+                    <pre>{JSON.stringify(operation.result, null, 2)}</pre>
+                  </details>
                   {operation.status === "unknown" &&
                     task.status !== "cancelled" && (
                       <div className="complex-task-actions">
@@ -260,6 +282,16 @@ export function TaskCard({
         </div>
       )}
       {error && <p role="alert">{error}</p>}
+      {task.status === "paused" && onResume && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy || saving}
+          onClick={() => onResume(task.id)}
+        >
+          继续任务
+        </Button>
+      )}
     </section>
   );
 }

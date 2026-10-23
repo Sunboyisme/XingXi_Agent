@@ -198,26 +198,30 @@ export function AnswerActions({
                         {event.data.source === "mcp" && (
                           <small>{String(event.data.source_label)}</small>
                         )}
-                        {typeof event.data.duration_ms === "number" && (
-                          <small>
-                            {(event.data.duration_ms / 1000).toFixed(1)}s
-                          </small>
-                        )}
-                        <span className="tool-result-state">
-                          {event.data.status === "cancelled"
-                            ? "已取消"
-                            : failed
-                              ? "调用失败"
-                              : clarify
-                                ? "待确认"
-                                : "已返回"}
+                        <span className="tool-result-meta">
+                          {typeof event.data.duration_ms === "number" && (
+                            <small>
+                              {(event.data.duration_ms / 1000).toFixed(1)}s
+                            </small>
+                          )}
+                          <span className="tool-result-state">
+                            {event.data.status === "cancelled"
+                              ? "已取消"
+                              : failed
+                                ? "调用失败"
+                                : clarify
+                                  ? "待确认"
+                                  : "已返回"}
+                          </span>
                         </span>
                       </div>
                       <p>{toolSummary(event)}</p>
                       {result &&
-                        Boolean(result.exit_code !== undefined ||
+                        Boolean(
+                          result.exit_code !== undefined ||
                           result.stdout ||
-                          result.stderr) && (
+                          result.stderr,
+                        ) && (
                           <details className="script-execution-details">
                             <summary>脚本执行详情</summary>
                             <p>退出码：{String(result.exit_code ?? "未知")}</p>

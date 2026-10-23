@@ -96,80 +96,59 @@ function bandKey(event: CalendarEvent, zone: string) {
   ]);
 }
 
-/** Allocate shared lanes across each week while every segment keeps its record. */
+export const occurrenceOrderKey = (event: CalendarEvent) =>
+  `${event.id}:${event.occurrence_start || event.start}`;
+
+export function orderDayEvents(
+  events: CalendarEvent[],
+  zone: string,
+  keys: string[] = [],
+) {
+  const positions = new Map(keys.map((key, index) => [key, index]));
+  return [...events].sort((a, b) => {
+    const left =
+      positions.get(occurrenceOrderKey(a)) ?? Number.MAX_SAFE_INTEGER;
+    const right =
+      positions.get(occurrenceOrderKey(b)) ?? Number.MAX_SAFE_INTEGER;
+    const local = (event: CalendarEvent) =>
+      event.all_day ? event.start : zonedInput(event.start, zone);
+    return (
+      left - right ||
+      Number(b.all_day) - Number(a.all_day) ||
+      local(a).localeCompare(local(b)) ||
+      a.id.localeCompare(b.id)
+    );
+  });
+}
+
+/** Keep each day's true order. Join only segments whose lanes also agree. */
 export function monthSegments(
   days: string[],
   eventsByDay: Map<string, CalendarEvent[]>,
   zone: string,
+  orders: Record<string, string[]> = {},
 ) {
-  type Chain = {
-    key: string;
-    entries: { index: number; event: CalendarEvent }[];
-    lane?: number;
-  };
-  const chains: Chain[] = [];
-  const active = new Map<string, Chain[]>();
-  days.forEach((day, index) => {
-    const values = [...(eventsByDay.get(day) || [])].sort(
-      (a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id),
-    );
-    for (const event of values) {
-      const key = bandKey(event, zone);
-      const candidates = (active.get(key) || []).filter(
-        (chain) => chain.entries.at(-1)!.index === index - 1,
-      );
-      const chain =
-        candidates.find((item) => item.entries.at(-1)!.event.id === event.id) ||
-        candidates[0];
-      if (chain) chain.entries.push({ index, event });
-      else {
-        const created = { key, entries: [{ index, event }] };
-        chains.push(created);
-        active.set(key, [...(active.get(key) || []), created]);
-      }
-    }
-  });
-  const result = new Map<string, MonthSegment[]>(days.map((day) => [day, []]));
-  for (let week = 0; week < days.length; week += 7) {
-    const occupied: number[] = [];
-    const portions = chains
-      .map((chain) => ({
-        chain,
-        entries: chain.entries.filter(
-          (entry) => entry.index >= week && entry.index < week + 7,
-        ),
-      }))
-      .filter((portion) => portion.entries.length)
-      .sort(
-        (a, b) =>
-          a.entries[0].index - b.entries[0].index ||
-          b.entries.length - a.entries.length ||
-          a.chain.key.localeCompare(b.chain.key),
-      );
-    for (const { chain, entries } of portions) {
-      const mask = entries.reduce(
-        (value, entry) => value | (1 << (entry.index - week)),
-        0,
-      );
-      let lane = 0;
-      while ((occupied[lane] || 0) & mask) lane++;
-      chain.lane = lane;
-      occupied[lane] = (occupied[lane] || 0) | mask;
-      for (const entry of entries) {
-        const previous = entry.index > chain.entries[0].index;
-        const next = entry.index < chain.entries.at(-1)!.index;
-        result
-          .get(days[entry.index])!
-          .push({
-            event: entry.event,
-            lane,
-            joinLeft: previous && entry.index % 7 !== 0,
-            joinRight: next && entry.index % 7 !== 6,
-            continuesBefore: previous && entry.index % 7 === 0,
-            continuesAfter: next && entry.index % 7 === 6,
-          });
-      }
-    }
-  }
-  return result;
+  const values = days.map((day) =>
+    orderDayEvents(eventsByDay.get(day) || [], zone, orders[day]),
+  );
+  return new Map(
+    days.map((day, index) => [
+      day,
+      values[index].map((event, lane): MonthSegment => {
+        const key = bandKey(event, zone);
+        const previous = values[index - 1]?.[lane];
+        const next = values[index + 1]?.[lane];
+        const before = Boolean(previous && bandKey(previous, zone) === key);
+        const after = Boolean(next && bandKey(next, zone) === key);
+        return {
+          event,
+          lane,
+          joinLeft: before && index % 7 !== 0,
+          joinRight: after && index % 7 !== 6,
+          continuesBefore: before && index % 7 === 0,
+          continuesAfter: after && index % 7 === 6,
+        };
+      }),
+    ]),
+  );
 }

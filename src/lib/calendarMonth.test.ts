@@ -1,6 +1,12 @@
 import { expect, test } from "vitest";
 import type { CalendarEvent } from "./api";
-import { dateMove, monthSegments, shiftedPlan } from "./calendarMonth";
+import {
+  dateMove,
+  monthSegments,
+  orderDayEvents,
+  occurrenceOrderKey,
+  shiftedPlan,
+} from "./calendarMonth";
 
 function event(
   id: string,
@@ -94,4 +100,53 @@ test("dragging keeps local clock, sub-minute precision and reminder offsets", ()
       "2026-10-27",
     ),
   ).toThrow("不支持拖动");
+});
+
+test("local morning comes before afternoon regardless of title, and saved order overrides display only", () => {
+  const morning = event("morning", "2026-10-25", {
+    all_day: false,
+    title: "z",
+    start: "2026-10-25T00:00:00Z",
+    end: "2026-10-25T01:00:00Z",
+  });
+  const afternoon = event("afternoon", "2026-10-25", {
+    all_day: false,
+    title: "a",
+    start: "2026-10-25T05:00:00Z",
+    end: "2026-10-25T06:00:00Z",
+  });
+  expect(
+    orderDayEvents([afternoon, morning], "Asia/Shanghai").map(
+      (item) => item.id,
+    ),
+  ).toEqual(["morning", "afternoon"]);
+  const ordered = orderDayEvents([morning, afternoon], "Asia/Shanghai", [
+    occurrenceOrderKey(afternoon),
+    occurrenceOrderKey(morning),
+  ]);
+  expect(ordered.map((item) => item.id)).toEqual(["afternoon", "morning"]);
+  expect(morning.start).toBe("2026-10-25T00:00:00Z");
+});
+
+test("day-specific custom order breaks a band instead of overriding the requested order", () => {
+  const days = ["2026-10-19", "2026-10-20"];
+  const first = event("first", days[0]);
+  const second = event("second", days[1]);
+  const other = event("other", days[1], { title: "其他计划" });
+  const layout = monthSegments(
+    days,
+    new Map([
+      [days[0], [first]],
+      [days[1], [second, other]],
+    ]),
+    "Asia/Shanghai",
+    {
+      [days[1]]: [occurrenceOrderKey(other), occurrenceOrderKey(second)],
+    },
+  );
+  expect(layout.get(days[1])!.map((item) => item.event.id)).toEqual([
+    "other",
+    "second",
+  ]);
+  expect(layout.get(days[1])![1].joinLeft).toBe(false);
 });

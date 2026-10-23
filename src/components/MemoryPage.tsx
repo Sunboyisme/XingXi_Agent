@@ -265,6 +265,7 @@ export function MemoryPage({
               <div className="memory-card-top">
                 <span className="small-label">
                   {categories[value.category]}
+                  {value.project_id && " · 项目记忆"}
                 </span>
                 <div>
                   <Button
