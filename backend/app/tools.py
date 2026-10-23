@@ -576,7 +576,7 @@ def _guard_tool(entry, originals, run_id):
                 "error",
                 {"error": message, "category": "invalid_arguments" if local_input else details["category"],
                  "exception_type": details["exception_type"], "stage": entry["id"],
-                 "not_executed": local_input, "retryable": entry["source"] == "builtin" and entry["id"] in {"read_file", "read_url", "web_search", "get_weather"} and details["category"] in {"connection_error", "provider_unavailable", "request_timeout"}},
+                 "not_executed": local_input, "retryable": entry["source"] == "builtin" and entry["id"] in {"read_file", "read_local_file", "read_url", "web_search", "get_weather"} and details["category"] in {"connection_error", "provider_unavailable", "request_timeout"}},
             )
             return json.dumps(value, ensure_ascii=False)
         finally:
@@ -627,7 +627,9 @@ def build_tools(run_id: str, conversation_id: str):
                 func=_sync_tool(execute) if entry["source"] == "builtin" else None,
                 coroutine=execute,
                 name=entry["id"],
-                description=f"{entry['source_label']} · {entry['description'] or entry['name']}",
+                description=originals[entry["id"]].description
+                if entry["source"] == "builtin" and entry["id"] in {"read_local_file", "scan_local_folder"}
+                else f"{entry['source_label']} · {entry['description'] or entry['name']}",
                 args_schema=originals[entry["id"]].args_schema
                 if entry["source"] == "builtin"
                 else entry["parameters"],

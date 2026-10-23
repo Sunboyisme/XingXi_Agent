@@ -23,6 +23,7 @@ READ_TOOLS = {
     "get_weather", "web_search", "read_url", "calculate", "date_time", "convert_units",
     "search_memories", "search_conversation_history", "learning_goals", "list_plans",
     "list_files", "read_file", "load_skill", "read_skill_file", "read_task_result",
+    "read_local_file", "scan_local_folder",
 }
 FILE_TOOLS = {"create_document", "create_spreadsheet", "create_text_file"}
 WRITE_TOOLS = {"remember", "create_plans", "update_plan", "delete_plan", "action_plan", "create_learning_goal"}
@@ -519,6 +520,7 @@ async def make_plan(run_id, task_id, *, repair=False):
         "每步明确instruction、需要的真实工具id和应保存的文件formats。支持所有已启用工具，遵守既有权限。"
         "expected_outputs与formats只列真实文件格式：md/txt/csv/json/docx/pdf/xlsx/image，一份写一次。纯文字回答与分析步骤formats=[]，不能写text或markdown。"
         "输入文件清单区分图片和文档；当前图片可由视觉模型直接读取，不需要强制read_file。只在需要读取历史或项目图片时使用read_file。"
+        "用户提供本机绝对路径时可用read_local_file读取、scan_local_folder扫描目录，无需要求上传。只在用户提供的路径范围内只读访问，不安排本地路径写入。"
         "保留用户约束和来源要求；缺少影响执行的关键信息时填写question。不要要求用户逐步批准已有授权。"
         "conversation_context保留确认前的原始对话。简短同意指向前面已展示的具体方案，结合原方案执行，不能把‘确认用户想做什么’设为任务目标。"
         "只有同意但没有可确定的方案时才询问；已经明确的岗位、输出格式等要求不要重复追问，不影响交付的行业偏好可采用通用范围。"
