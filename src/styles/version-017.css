@@ -207,8 +207,12 @@
   pointer-events: auto;
 }
 .chat-main:not(.is-empty) .chat-jump-latest {
-  position: static;
-  transform: none;
+  position: absolute;
+  bottom: calc(var(--chat-composer-height, 200px) + 8px);
+  left: 50%;
+  z-index: 21;
+  margin: 0;
+  transform: translateX(-50%);
 }
 .chat-main .composer,
 .chat-main:not(.is-empty) .composer {

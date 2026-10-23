@@ -8,7 +8,6 @@ import {
 } from "react";
 import {
   AlertCircle,
-  ArrowDown,
   ArrowRight,
   ArrowUp,
   Cable,
@@ -25,7 +24,7 @@ import {
   Square,
   Sparkles,
 } from "lucide-react";
-import { DropdownMenu, Tooltip } from "radix-ui";
+import { DropdownMenu } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -53,6 +52,7 @@ import { AnswerActions } from "./AnswerActions";
 import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
 import { ChatHome } from "./ChatHome";
+import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
 import {
   MemoryReview,
@@ -416,7 +416,6 @@ export function ChatPage({
         followLatest.current = false;
         target.scrollIntoView({ block: "center" });
         target.focus({ preventScroll: true });
-        setAtLatest(false);
         onMessageFocused?.();
       }
     });
@@ -442,17 +441,7 @@ export function ChatPage({
   const [busy, setBusy] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editedText, setEditedText] = useState("");
-  const [atLatest, setAtLatest] = useState(true);
-  const [activeTurn, setActiveTurn] = useState("");
   const turnElements = useRef(new Map<string, HTMLElement>());
-  const scrollFrame = useRef(0);
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(scrollFrame.current);
-      scrollFrame.current = 0;
-    },
-    [conversationId],
-  );
   const [uploading, setUploading] = useState(false);
   const [buddyNote, setBuddyNote] = useState("");
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
@@ -503,6 +492,28 @@ export function ChatPage({
   const previewTarget = useRef<HTMLDivElement>(null);
   const attachmentPicker = useRef<HTMLInputElement>(null);
   const followLatest = useRef(true);
+  const followFrame = useRef(0);
+  const scheduleFollowLatest = useCallback(() => {
+    if (!followLatest.current || followFrame.current) return;
+    followFrame.current = requestAnimationFrame(() => {
+      followFrame.current = 0;
+      const container = scroller.current;
+      if (!container || !followLatest.current) return;
+      const bottom = Math.max(
+        0,
+        container.scrollHeight - container.clientHeight,
+      );
+      if (Math.abs(container.scrollTop - bottom) > 1)
+        container.scrollTop = bottom;
+    });
+  }, []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(followFrame.current);
+      followFrame.current = 0;
+    },
+    [conversationId],
+  );
   const composer = useRef<HTMLTextAreaElement>(null);
   const draftRef = useRef(draft);
   const imagesRef = useRef(images);
@@ -765,9 +776,7 @@ export function ChatPage({
     setBusy(false);
     setEditingMessageId("");
     setEditedText("");
-    setActiveTurn("");
     followLatest.current = true;
-    setAtLatest(true);
     if (conversationId) {
       api<ComplexTask[]>(`/conversations/${conversationId}/tasks`)
         .then((items) => {
@@ -878,9 +887,7 @@ export function ChatPage({
       if (nextHeight === height) return;
       height = nextHeight;
       surface.style.setProperty("--chat-composer-height", `${height}px`);
-      const container = scroller.current;
-      if (container && followLatest.current)
-        container.scrollTop = container.scrollHeight;
+      scheduleFollowLatest();
     }
     measure();
     const observer =
@@ -894,25 +901,25 @@ export function ChatPage({
       window.removeEventListener("resize", measure);
       surface.style.removeProperty("--chat-composer-height");
     };
-  }, [empty]);
+  }, [empty, scheduleFollowLatest]);
   useLayoutEffect(() => {
-    const container = scroller.current;
-    if (container && followLatest.current) {
-      container.scrollTop = container.scrollHeight;
-      setAtLatest(true);
-    }
-  }, [messages, stream, reasoning, busy, conversationId, tasks]);
+    scheduleFollowLatest();
+  }, [
+    messages,
+    stream,
+    reasoning,
+    busy,
+    conversationId,
+    tasks,
+    scheduleFollowLatest,
+  ]);
   useEffect(() => {
     const target = thread.current;
     if (!target || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      const container = scroller.current;
-      if (container && followLatest.current)
-        container.scrollTop = container.scrollHeight;
-    });
+    const observer = new ResizeObserver(scheduleFollowLatest);
     observer.observe(target);
     return () => observer.disconnect();
-  }, [conversationId, empty]);
+  }, [conversationId, empty, scheduleFollowLatest]);
   async function send(edited?: Pick<Message, "content" | "attachment_ids">) {
     const text = edited ? edited.content : draft;
     const attachmentIds = edited
@@ -938,7 +945,6 @@ export function ChatPage({
     setError("");
     if (!supplement) setBusy(true);
     followLatest.current = true;
-    setAtLatest(true);
     let cancelledPrevious = false;
     try {
       if (busy && run && !supplement) {
@@ -1259,52 +1265,6 @@ export function ChatPage({
         <div
           className={`chat-scroll ${empty ? "is-empty" : ""}`}
           ref={scroller}
-          onScroll={(event) => {
-            const element = event.currentTarget;
-            if (scrollFrame.current) return;
-            scrollFrame.current = requestAnimationFrame(() => {
-              scrollFrame.current = 0;
-              if (!element.isConnected) return;
-              const latest =
-                element.scrollHeight -
-                  element.scrollTop -
-                  element.clientHeight <
-                36;
-              if (latest) followLatest.current = true;
-              setAtLatest(latest);
-              const boundary = element.getBoundingClientRect().top + 80;
-              let current = turns[0]?.id || "";
-              for (let index = turns.length - 1; index >= 0; index--) {
-                const target = turnElements.current.get(turns[index].id);
-                if (target && target.getBoundingClientRect().top <= boundary) {
-                  current = turns[index].id;
-                  break;
-                }
-              }
-              setActiveTurn(current);
-            });
-          }}
-          onWheel={(event) => {
-            if (event.deltaY < 0) {
-              followLatest.current = false;
-              setAtLatest(false);
-            }
-          }}
-          onTouchMove={() => {
-            followLatest.current = false;
-          }}
-          onPointerDown={(event) => {
-            if (
-              event.clientX >=
-              event.currentTarget.getBoundingClientRect().right - 16
-            )
-              followLatest.current = false;
-          }}
-          onKeyDown={(event) => {
-            if (["ArrowUp", "PageUp", "Home"].includes(event.key))
-              followLatest.current = false;
-            if (event.key === "End") followLatest.current = true;
-          }}
         >
           {empty ? (
             <div className="welcome">
@@ -1598,76 +1558,17 @@ export function ChatPage({
             </section>
           )}
         </div>
-        {turns.length > 0 && (
-          <Tooltip.Provider
-            delayDuration={120}
-            skipDelayDuration={100}
-            disableHoverableContent
-          >
-            <nav className="chat-turn-nav" aria-label="对话定位">
-              {turns.map((turn, index) => {
-                const label = `第 ${index + 1} 轮：${turn.content.trim() || "图片消息"}`;
-                return (
-                  <Tooltip.Root key={turn.id}>
-                    <Tooltip.Trigger asChild>
-                      <button
-                        type="button"
-                        aria-label={label}
-                        aria-current={
-                          activeTurn === turn.id ? "step" : undefined
-                        }
-                        onClick={() => {
-                          const container = scroller.current;
-                          const target = turnElements.current.get(turn.id);
-                          if (!container || !target) return;
-                          followLatest.current = false;
-                          setAtLatest(false);
-                          setActiveTurn(turn.id);
-                          container.scrollTo({
-                            top:
-                              container.scrollTop +
-                              target.getBoundingClientRect().top -
-                              container.getBoundingClientRect().top -
-                              24,
-                            behavior: "instant",
-                          });
-                        }}
-                      />
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal>
-                      <Tooltip.Content
-                        className="chat-turn-preview"
-                        side="left"
-                        sideOffset={12}
-                        collisionPadding={16}
-                      >
-                        <strong>{turn.content.trim() || "图片消息"}</strong>
-                        <p>{turn.answer.trim() || "尚无回答"}</p>
-                      </Tooltip.Content>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
-                );
-              })}
-            </nav>
-          </Tooltip.Provider>
+        {!empty && (
+          <ChatScrollNavigation
+            key={conversationId || "new"}
+            turns={turns}
+            scroller={scroller}
+            thread={thread}
+            turnElements={turnElements}
+            followLatest={followLatest}
+          />
         )}
         <div className="composer-area" ref={composerArea}>
-          {!empty && !atLatest && (
-            <button
-              className="chat-jump-latest"
-              onClick={() => {
-                followLatest.current = true;
-                setAtLatest(true);
-                scroller.current?.scrollTo({
-                  top: scroller.current.scrollHeight,
-                  behavior: "smooth",
-                });
-              }}
-            >
-              <ArrowDown size={14} />
-              回到最新
-            </button>
-          )}
           {buddyNote && (
             <div className="chat-buddy-note" role="status" aria-live="polite">
               <span className="chat-buddy-note-avatar">
