@@ -571,6 +571,20 @@ def output_formats(values):
                    else Path(value.get("name", "")).suffix.lstrip(".").lower() for value in values)
 
 
+def reuse_step_files(db, step):
+    """A saved file already satisfies its original step, even if old code paused."""
+    formats = normalize_formats(step.formats)
+    if not formats or any(tool_id not in FILE_TOOLS for tool_id in step.tools):
+        return False
+    operations = db.scalars(select(TaskOperation).where(TaskOperation.step_id == step.id, TaskOperation.status == "completed")).all()
+    files = list({item["id"]: item for operation in operations for item in operation.result.get("artifacts", [])}.values())
+    if Counter(formats) - output_formats(files) or not valid_artifacts({"artifacts": files}):
+        return False
+    step.status = "completed"
+    step.output = {"content": step.output.get("content") or "已复用保存成果：" + "、".join(item["name"] for item in files), "artifacts": files}
+    return True
+
+
 async def verify_files(run_id, task_id):
     """Validate persisted outputs during the user's task, not a QA/test run."""
     value = detail(task_id)
@@ -690,6 +704,12 @@ async def execute(run_id, task_id, *, repairs=0):
         if step is None:
             break
         with Session() as db:
+            reused = reuse_step_files(db, db.get(TaskStep, step.id))
+            db.commit()
+        if reused:
+            publish(run_id, task_id)
+            continue
+        with Session() as db:
             task = require(db, task_id)
             saved_step = db.get(TaskStep, step.id)
             saved_step.status = "running"
@@ -736,7 +756,8 @@ async def execute(run_id, task_id, *, repairs=0):
                 and all(db.get(OfficeFile, key) is None for key in source.attachment_ids)
                 and set(step.tools) <= {"read_file", "list_files"})
             tool_match = any(value.tool_id in step.tools or (value.tool_id == "delete_plans" and "delete_plan" in step.tools) for value in operations)
-            if (step.tools and not tool_match and not direct_images and not (step.formats and not missing)) or missing:
+            file_delivery = step.formats and not missing and set(step.tools) <= FILE_TOOLS
+            if (step.tools and not tool_match and not direct_images and not file_delivery) or missing:
                 row.status = "pending"
                 attempts = row.output.get("repair_attempts", 0) if row.output.get("repair_run_id") == run_id else 0
                 reason = "尚缺文件：" + "、".join(f"{count}份{fmt}" for fmt, count in missing.items()) if missing else "尚未取得当前步骤要求的实际操作结果"

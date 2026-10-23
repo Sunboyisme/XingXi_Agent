@@ -10,8 +10,9 @@ from fastapi import HTTPException
 from PIL import Image
 from sqlalchemy import select
 
-from app import complex_tasks, config, conversation_cleanup, db, feature_tools, features, main, office, plans, projects, provider, retrieval, schemas
+from app import artifacts, complex_tasks, config, conversation_cleanup, db, feature_tools, features, main, office, plans, projects, provider, retrieval, schemas
 from .test_v016 import query_proof, request_context, timed
+from .test_complex_tasks import task_records
 
 
 def image_bytes():
@@ -47,6 +48,20 @@ def test_prose_and_format_aliases_never_block_existing_markdown():
     assert plan.steps[1].formats == ["md", "docx"]
     with pytest.raises(ValueError):
         complex_tasks.normalize_formats(["unknown-file"])
+
+
+def test_legacy_paused_step_reuses_existing_markdown_before_calling_model():
+    task_id, step_id, run_id, _, _ = task_records()
+    saved = artifacts.save_file(run_id, "已有成果.md", b"# saved")
+    with db.Session() as session:
+        step = session.get(db.TaskStep, step_id)
+        step.formats, step.status = ["markdown"], "pending"
+        session.add(db.TaskOperation(task_id=task_id, step_id=step_id, run_id=run_id, revision=1,
+                    tool_id="create_text_file", fingerprint="saved-md", policy="file", status="completed", result={"artifacts": [saved]}))
+        session.flush()
+        assert complex_tasks.reuse_step_files(session, step)
+        assert step.status == "completed" and step.output["artifacts"][0]["id"] == saved["id"]
+        assert len(list(session.scalars(select(db.Artifact).where(db.Artifact.run_id == run_id)))) == 1
 
 
 def test_uploaded_image_uses_selected_vision_model_and_reports_uncertainty(monkeypatch):
