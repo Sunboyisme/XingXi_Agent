@@ -49,6 +49,7 @@ export type ComplexTask = {
 export type Goal = Schemas["GoalRead"];
 export type Node = Schemas["NodeRead"];
 export type Lesson = Schemas["LessonRead"];
+export type LearningTurn = Schemas["LearningTurnRead"];
 export type Memory = Schemas["MemoryRead"];
 export type Notification = Schemas["NotificationRead"];
 export type Attachment = Schemas["AttachmentRead"];

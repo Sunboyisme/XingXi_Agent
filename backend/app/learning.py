@@ -129,6 +129,34 @@ def await_submission(state: TutorState):
     return {"submission": submission}
 
 
+def node_turns(db, node_id, limit=40):
+    """Persisted exchanges stay with their knowledge point across lesson retries."""
+    return list(reversed(db.scalars(select(Attempt).join(Lesson, Attempt.lesson_id == Lesson.id)
+        .where(Lesson.node_id == node_id, Attempt.profile_id == PROFILE_ID)
+        .order_by(Attempt.created_at.desc(), Attempt.id.desc()).limit(limit)).all()))
+
+
+def assessment_context(db, lesson, submission):
+    node = db.get(KnowledgeNode, lesson.node_id)
+    goal = db.get(Goal, node.goal_id)
+    history, remaining = [], 18000
+    for turn in reversed(node_turns(db, node.id, limit=20)):
+        feedback = turn.feedback or {}
+        value = {"id": turn.id, "answer": turn.answer[:6000], "attachment_ids": turn.attachment_ids,
+            "feedback": {"response_type": feedback.get("response_type", "feedback"), "passed": feedback.get("passed"),
+                         "explanation": str(feedback.get("explanation", ""))[:2400],
+                         "next_step": str(feedback.get("next_step", ""))[:1200]}}
+        size = len(json.dumps(value, ensure_ascii=False))
+        if size > remaining:
+            break
+        history.append(value)
+        remaining -= size
+    history.reverse()
+    return json.dumps({"goal": goal.title, "objective": goal.objective, "foundation": goal.foundation,
+        "knowledge_point": node.title, "lesson": lesson.content, "exercise": lesson.exercise,
+        "criteria": lesson.criteria, "previous_turns": history, "current_answer": submission["answer"]}, ensure_ascii=False)
+
+
 async def assess(state: TutorState):
     from .runs import emit
     submission = state["submission"]
@@ -141,11 +169,14 @@ async def assess(state: TutorState):
                 raise ValueError("提交编号已被其他练习使用")
             return {"feedback": previous.feedback}
         lesson = db.get(Lesson, state["lesson_id"])
-        text = f"本次教学：{lesson.content}\n练习：{lesson.exercise}\n标准：{lesson.criteria}\n用户提交：{submission['answer']}"
+        text = assessment_context(db, lesson, submission)
     feedback = await provider.ask_json(
         Feedback,
         TUTOR_RULES
-        + "\n检查练习，解释具体问题、优点、缺口和下一步。如果证据不足，passed=false，提出补充问题。evidence 说明你实际看到的材料，不声称运行代码或现场观察。",
+        + "\n这是同一知识点中的持续多轮教学，previous_turns包含用户此前回答和你的反馈。接续前面的信息，不要求用户反复重填已说过的内容，也不必重新讲整课。"
+        "用户提问、求助、说不会做或需要解释时，response_type=discussion：先直接解答，给一个能开始的小步骤，必要时只追问一个关键问题；gaps=[]，不逐条批评用户未完成整套练习，不要求重开教学。"
+        "用户提交实际练习成果时response_type=feedback，结合本知识点的历次回答累计检查，解释优点、具体缺口和下一步。"
+        "passed只表示有充分证据完成练习；讨论不代表通过。evidence说明实际看到的材料，不声称运行代码、计算或现场观察。历史附件只有编号时不能假装看到了图片内容。",
         text,
         submission.get("attachment_ids", []),
         on_partial=(lambda fields: emit(state["run_id"], "learning_content", {
@@ -153,6 +184,8 @@ async def assess(state: TutorState):
         })) if state.get("run_id") else None,
     )
     result = feedback.model_dump()
+    if feedback.response_type == "discussion":
+        result["passed"] = False
     with Session() as db:
         lesson = db.get(Lesson, state["lesson_id"])
         lesson.feedback = result
@@ -167,10 +200,11 @@ async def assess(state: TutorState):
             )
         )
         node = db.get(KnowledgeNode, lesson.node_id)
-        node.status = "passed" if feedback.passed else "needs_practice"
-        node.review_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(
-            timespec="microseconds"
-        )
+        if feedback.response_type == "feedback":
+            node.status = "passed" if feedback.passed else "needs_practice"
+            node.review_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(timespec="microseconds")
+        elif node.status == "not_started":
+            node.status = "in_progress"
         goal = db.get(Goal, node.goal_id)
         nodes = db.scalars(
             select(KnowledgeNode)

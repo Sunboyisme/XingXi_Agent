@@ -559,6 +559,14 @@ class LessonRead(RecordRead):
     state: str
 
 
+class LearningTurnRead(RecordRead):
+    lesson_id: str
+    submission_id: str
+    answer: str
+    attachment_ids: list[str]
+    feedback: dict
+
+
 class Submission(BaseModel):
     submission_id: str = Field(min_length=1, max_length=100)
     answer: str = Field(max_length=30000)
@@ -692,6 +700,7 @@ class LessonContent(BaseModel):
 
 
 class Feedback(BaseModel):
+    response_type: Literal["feedback", "discussion"] = "feedback"
     passed: bool
     explanation: str
     strengths: list[str]

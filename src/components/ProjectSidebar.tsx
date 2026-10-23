@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
+  CircleDot,
   Folder,
   FolderOpen,
   MessageCircle,
@@ -54,6 +55,7 @@ export function ProjectSidebar({
   onOpen,
   onDelete,
   refresh,
+  visible = true,
 }: {
   conversations: Conversation[];
   projects: Project[];
@@ -63,8 +65,60 @@ export function ProjectSidebar({
   onOpen: (conversation: Conversation, messageId?: string | null) => void;
   onDelete: (conversation: Conversation) => void;
   refresh: () => Promise<void>;
+  visible?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState<string[]>(() => {
+    try {
+      const value = JSON.parse(
+        localStorage.getItem("bai-sidebar-folds") || "[]",
+      );
+      return Array.isArray(value)
+        ? value.filter((id): id is string => typeof id === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("bai-sidebar-folds", JSON.stringify(collapsed));
+    } catch {
+      /* Storage must not block navigation. */
+    }
+  }, [collapsed]);
+  function toggleSection(key: string) {
+    setCollapsed((ids) =>
+      ids.includes(key) ? ids.filter((id) => id !== key) : [...ids, key],
+    );
+  }
+  const [activity, setActivity] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!visible || !projects.length) return;
+    let live = true;
+    let timer = 0;
+    async function poll() {
+      if (!document.hidden) {
+        try {
+          const values =
+            await api<Record<string, number>>("/projects/activity");
+          if (live)
+            setActivity((current) =>
+              JSON.stringify(current) === JSON.stringify(values)
+                ? current
+                : values,
+            );
+        } catch {
+          /* Keep the last known state during a transient connection failure. */
+        }
+      }
+      if (live) timer = window.setTimeout(() => void poll(), 5000);
+    }
+    void poll();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [visible, projects.length]);
   const [editing, setEditing] = useState<Project | null | undefined>();
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -276,9 +330,25 @@ export function ProjectSidebar({
       </div>
     );
   }
-  const pinned = conversations
-    .filter((item) => item.pinned_at)
-    .sort((a, b) => a.pinned_at!.localeCompare(b.pinned_at!));
+  const grouped = useMemo(() => {
+    const pinned = conversations
+      .filter((item) => item.pinned_at)
+      .sort((a, b) => a.pinned_at!.localeCompare(b.pinned_at!));
+    const byProject = new Map<string, Conversation[]>();
+    for (const item of conversations) {
+      if (item.pinned_at) continue;
+      const key = item.project_id || "";
+      const values = byProject.get(key) || [];
+      values.push(item);
+      byProject.set(key, values);
+    }
+    return { pinned, byProject, ordinary: byProject.get("") || [] };
+  }, [conversations]);
+  const pinned = grouped.pinned;
+  const runningCount = Object.values(activity).reduce(
+    (total, count) => total + count,
+    0,
+  );
   return (
     <>
       <div className="chat-sidebar-heading">
@@ -310,114 +380,199 @@ export function ProjectSidebar({
         )}
         {pinned.length > 0 && (
           <section>
-            <p className="sidebar-label">
+            <button
+              className="sidebar-label sidebar-group-toggle"
+              aria-expanded={!collapsed.includes("group:pinned")}
+              aria-controls="sidebar-pinned-list"
+              onClick={() => toggleSection("group:pinned")}
+            >
+              <ChevronDown
+                size={13}
+                data-collapsed={collapsed.includes("group:pinned")}
+              />
               置顶 <span>{pinned.length}</span>
-            </p>
-            {pinned.map(row)}
+            </button>
+            {!collapsed.includes("group:pinned") && (
+              <div id="sidebar-pinned-list">{pinned.map(row)}</div>
+            )}
           </section>
         )}
         <div className="project-section-heading">
-          <span>项目</span>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="新建项目"
-            onClick={() => edit(null)}
+          <button
+            className="sidebar-group-toggle"
+            aria-expanded={!collapsed.includes("group:projects")}
+            aria-controls="sidebar-projects-list"
+            onClick={() => toggleSection("group:projects")}
           >
-            <Plus size={15} />
-          </Button>
+            <ChevronDown
+              size={13}
+              data-collapsed={collapsed.includes("group:projects")}
+            />
+            项目
+          </button>
+          <div className="project-section-actions">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <Button size="icon" variant="ghost" aria-label="项目显示选项">
+                  <MoreHorizontal size={15} />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content className="project-menu">
+                  <DropdownMenu.Item
+                    onSelect={() =>
+                      setCollapsed((ids) =>
+                        ids.filter(
+                          (id) =>
+                            id !== "group:projects" &&
+                            !projects.some((project) => project.id === id),
+                        ),
+                      )
+                    }
+                  >
+                    展开全部项目
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    onSelect={() =>
+                      setCollapsed((ids) => [
+                        ...new Set([
+                          ...ids,
+                          ...projects.map((project) => project.id),
+                        ]),
+                      ])
+                    }
+                  >
+                    收起全部项目
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="新建项目"
+              onClick={() => edit(null)}
+            >
+              <Plus size={15} />
+            </Button>
+            <span
+              className="project-running-state"
+              data-active={runningCount > 0}
+              role="img"
+              aria-label={
+                runningCount
+                  ? `项目中有 ${runningCount} 个任务正在运行`
+                  : "项目当前没有运行任务"
+              }
+              title={
+                runningCount
+                  ? `${runningCount} 个任务进行中`
+                  : "暂无进行中的项目任务"
+              }
+            >
+              <CircleDot size={15} />
+            </span>
+          </div>
         </div>
-        {projects.map((project) => (
-          <section
-            key={project.id}
-            className="sidebar-project"
-            data-selected={projectId === project.id}
-          >
-            <div className="project-heading">
-              <button
-                className="project-collapse"
-                aria-label={`${collapsed.includes(project.id) ? "展开" : "收起"}项目 ${project.name}`}
-                aria-expanded={!collapsed.includes(project.id)}
-                onClick={() =>
-                  setCollapsed((ids) =>
-                    ids.includes(project.id)
-                      ? ids.filter((id) => id !== project.id)
-                      : [...ids, project.id],
-                  )
-                }
+        {!collapsed.includes("group:projects") && (
+          <div id="sidebar-projects-list">
+            {projects.map((project) => (
+              <section
+                key={project.id}
+                className="sidebar-project"
+                data-selected={projectId === project.id}
               >
-                <ChevronDown
-                  size={13}
-                  style={{
-                    transform: collapsed.includes(project.id)
-                      ? "rotate(-90deg)"
-                      : undefined,
-                  }}
-                />
-              </button>
-              <button
-                className="project-name"
-                onClick={() => onNew(project.id)}
-              >
-                <Folder size={14} />
-                <span>{project.name}</span>
-              </button>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button aria-label={`管理项目 ${project.name}`}>
-                    <MoreHorizontal size={15} />
+                <div className="project-heading">
+                  <button
+                    className="project-collapse"
+                    aria-label={`${collapsed.includes(project.id) ? "展开" : "收起"}项目 ${project.name}`}
+                    aria-expanded={!collapsed.includes(project.id)}
+                    onClick={() =>
+                      setCollapsed((ids) =>
+                        ids.includes(project.id)
+                          ? ids.filter((id) => id !== project.id)
+                          : [...ids, project.id],
+                      )
+                    }
+                  >
+                    <ChevronDown
+                      size={13}
+                      style={{
+                        transform: collapsed.includes(project.id)
+                          ? "rotate(-90deg)"
+                          : undefined,
+                      }}
+                    />
                   </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content className="project-menu" side="right">
-                    <DropdownMenu.Item onSelect={() => onNew(project.id)}>
-                      新建项目聊天
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onSelect={() => edit(project)}>
-                      项目名称与说明
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      onSelect={() => {
-                        setError("");
-                        setLibrary(project);
-                      }}
-                    >
-                      项目资料库
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      className="danger"
-                      onSelect={() => {
-                        setError("");
-                        setDeleting(project);
-                      }}
-                    >
-                      删除项目
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
-            </div>
-            {!collapsed.includes(project.id) && (
-              <div className="project-chat-list">
-                {conversations
-                  .filter(
-                    (item) => item.project_id === project.id && !item.pinned_at,
-                  )
-                  .map(row)}
-              </div>
-            )}
-          </section>
-        ))}
+                  <button
+                    className="project-name"
+                    onClick={() => onNew(project.id)}
+                  >
+                    <Folder size={14} />
+                    <span>{project.name}</span>
+                  </button>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <button aria-label={`管理项目 ${project.name}`}>
+                        <MoreHorizontal size={15} />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        className="project-menu"
+                        side="right"
+                      >
+                        <DropdownMenu.Item onSelect={() => onNew(project.id)}>
+                          新建项目聊天
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => edit(project)}>
+                          项目名称与说明
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          onSelect={() => {
+                            setError("");
+                            setLibrary(project);
+                          }}
+                        >
+                          项目资料库
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          className="danger"
+                          onSelect={() => {
+                            setError("");
+                            setDeleting(project);
+                          }}
+                        >
+                          删除项目
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                </div>
+                {!collapsed.includes(project.id) && (
+                  <div className="project-chat-list">
+                    {(grouped.byProject.get(project.id) || []).map(row)}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        )}
         <button
-          className="sidebar-label sidebar-unfiled"
-          onClick={() => onNew(null)}
+          className="sidebar-label sidebar-unfiled sidebar-group-toggle"
+          aria-expanded={!collapsed.includes("group:ordinary")}
+          aria-controls="sidebar-ordinary-list"
+          onClick={() => toggleSection("group:ordinary")}
         >
-          普通聊天{" "}
-          <span>{conversations.filter((item) => !item.project_id).length}</span>
+          <ChevronDown
+            size={13}
+            data-collapsed={collapsed.includes("group:ordinary")}
+          />
+          普通聊天 <span>{grouped.ordinary.length}</span>
         </button>
-        {conversations
-          .filter((item) => !item.project_id && !item.pinned_at)
-          .map(row)}
+        {!collapsed.includes("group:ordinary") && (
+          <div id="sidebar-ordinary-list">{grouped.ordinary.map(row)}</div>
+        )}
         {!conversations.length && <p className="sidebar-empty">暂无聊天</p>}
       </div>
       <Dialog

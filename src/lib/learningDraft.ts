@@ -19,7 +19,10 @@ export function useLearningDraft(nodeId: string, lesson: Lesson | null) {
     images: [] as Attachment[],
   });
   const lessonId = lesson?.node_id === nodeId ? lesson.id : "";
-  const awaiting = Boolean(lessonId && lesson?.state === "awaiting_submission");
+  const awaiting = Boolean(
+    lessonId &&
+    ["awaiting_submission", "reviewed"].includes(lesson?.state || ""),
+  );
   useLayoutEffect(() => {
     let answer = "",
       images: Attachment[] = [];

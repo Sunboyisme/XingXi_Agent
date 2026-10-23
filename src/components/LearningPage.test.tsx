@@ -111,7 +111,7 @@ test("the separate answer dock accepts dropped images and submits them without t
   fireEvent.click(screen.getByRole("button", { name: /作答/ }));
   expect(screen.getByRole("button", { name: "移除 answer.png" })).toBeVisible();
   expect(mocks.fetchApi).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "提交练习" }));
+  fireEvent.click(screen.getByRole("button", { name: "发送回答" }));
   await waitFor(() =>
     expect(mocks.api).toHaveBeenCalledWith(
       "/learning/lessons/l1/submit",
@@ -119,8 +119,12 @@ test("the separate answer dock accepts dropped images and submits them without t
       expect.objectContaining({ answer: "", attachment_ids: ["image1"] }),
     ),
   );
-  await screen.findByRole("button", { name: "提交练习" });
-  fireEvent.click(screen.getByRole("button", { name: "下一个知识点" }));
+  await screen.findByRole("button", { name: "发送回答" });
+  expect(screen.queryByRole("button", { name: "下一个知识点" })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "跳过，保留未验证状态" }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /第二节/ }));
   await waitFor(() =>
     expect(
       screen.queryByRole("button", { name: "移除 answer.png" }),

@@ -730,6 +730,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/learning/nodes/{node_id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Learning Turns */
+        get: operations["learning_turns_api_v1_learning_nodes__node_id__turns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/learning/nodes/{node_id}/skip": {
         parameters: {
             query?: never;
@@ -1541,6 +1558,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Project Activity */
+        get: operations["project_activity_api_v1_projects_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}": {
         parameters: {
             query?: never;
@@ -2034,6 +2068,27 @@ export interface components {
             preview_id: string;
             /** Replace Id */
             replace_id?: string | null;
+        };
+        /** LearningTurnRead */
+        LearningTurnRead: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Lesson Id */
+            lesson_id: string;
+            /** Submission Id */
+            submission_id: string;
+            /** Answer */
+            answer: string;
+            /** Attachment Ids */
+            attachment_ids: string[];
+            /** Feedback */
+            feedback: {
+                [key: string]: unknown;
+            };
         };
         /** LessonRead */
         LessonRead: {
@@ -4868,6 +4923,37 @@ export interface operations {
             };
         };
     };
+    learning_turns_api_v1_learning_nodes__node_id__turns_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningTurnRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     skip_node_api_v1_learning_nodes__node_id__skip_post: {
         parameters: {
             query?: never;
@@ -6687,6 +6773,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_activity_api_v1_projects_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
         };

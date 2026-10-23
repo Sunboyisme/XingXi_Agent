@@ -988,16 +988,21 @@ async def submit(
     )
     if previous:
         raise HTTPException(409, "这份练习已经提交，请查看保存的反馈")
-    if lesson.state != "awaiting_submission":
-        raise HTTPException(409, "这次练习已有反馈，请开始一次新练习")
+    if lesson.state not in {"awaiting_submission", "reviewed"}:
+        raise HTTPException(409, "这次教学已结束，请从当前知识点继续")
     try:
         provider.user_content(value.answer, value.attachment_ids)
     except Exception as error:
         raise HTTPException(400, provider.safe_error(error))
     node = item(db, store.KnowledgeNode, lesson.node_id)
     run = create_run(db, "assessment", goal_id=node.goal_id)
+    followup = lesson.state == "reviewed"
 
     async def operation():
+        if followup:
+            result = await learning.assess({"run_id": run.id, "node_id": node.id,
+                "lesson_id": lesson_id, "submission": value.model_dump()})
+            return {"lesson_id": lesson_id, "node_id": node.id, **result}
         # Failed assessment leaves a checkpoint at the assessment node, not a new interrupt.
         config = {"configurable": {"thread_id": lesson.graph_thread_id}}
         state = await request.app.state.tutor.aget_state(config)
@@ -1016,6 +1021,12 @@ async def submit(
 
     runs.launch(run.id, operation)
     return run
+
+
+@router.get("/learning/nodes/{node_id}/turns", response_model=list[s.LearningTurnRead])
+def learning_turns(node_id: str, db=Depends(database)):
+    item(db, store.KnowledgeNode, node_id)
+    return learning.node_turns(db, node_id)
 
 
 @router.post("/learning/nodes/{node_id}/skip", response_model=s.NodeRead)

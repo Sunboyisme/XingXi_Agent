@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from PIL import Image, ImageOps
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 
 from . import artifacts, config, office, schemas as s
 from .db import (Attachment, Conversation, ConversationSummary, Memory, MemoryChange, OfficeFile,
@@ -75,6 +75,16 @@ def instructions(conversation_id):
 def list_projects():
     with Session() as db:
         return list(db.scalars(select(Project).where(Project.profile_id == config.PROFILE_ID).order_by(Project.created_at)))
+
+
+@router.get("/projects/activity", response_model=dict[str, int])
+def project_activity():
+    with Session() as db:
+        return dict(db.execute(select(Conversation.project_id, func.count(Run.id))
+            .join(Run, Run.conversation_id == Conversation.id)
+            .where(Conversation.profile_id == config.PROFILE_ID, Conversation.project_id.is_not(None),
+                   Run.profile_id == config.PROFILE_ID, Run.status.in_(["queued", "running"]))
+            .group_by(Conversation.project_id)).all())
 
 
 @router.post("/projects", response_model=s.ProjectRead)

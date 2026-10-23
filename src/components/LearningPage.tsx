@@ -4,11 +4,10 @@ import {
   ArrowRight,
   BookOpen,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Send,
+  ArrowUp,
   Compass,
   FileQuestion,
   GraduationCap,
@@ -40,6 +39,7 @@ import {
   type Goal,
   type Node,
   type Lesson,
+  type LearningTurn,
   type Run,
 } from "@/lib/api";
 import { clearLearningDraft, useLearningDraft } from "@/lib/learningDraft";
@@ -54,6 +54,7 @@ import {
   Hint,
 } from "./common";
 import { BaiAvatar } from "./BaiAvatar";
+import { LearningConversation } from "./LearningConversation";
 
 export function LearningPage({
   goals,
@@ -67,10 +68,11 @@ export function LearningPage({
   createRequested?: number;
 }) {
   const [goalId, setGoalId] = useState(
-    localStorage.getItem("bai-current-goal") || "",
+    () => localStorage.getItem("bai-current-goal") || "",
   );
   const [nodeId, setNodeId] = useState("");
   const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [turns, setTurns] = useState<LearningTurn[]>([]);
   const [open, setOpen] = useState(Boolean(createRequested));
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
@@ -140,13 +142,20 @@ export function LearningPage({
   useEffect(() => {
     let live = true;
     setLesson(null);
+    setTurns([]);
     setAnswerExpanded(false);
     setLearningStream(null);
     setHints(false);
     if (nodeId)
-      api<Lesson | null>(`/learning/nodes/${nodeId}/lesson`)
-        .then((value) => {
-          if (live) setLesson(value);
+      Promise.all([
+        api<Lesson | null>(`/learning/nodes/${nodeId}/lesson`),
+        api<LearningTurn[]>(`/learning/nodes/${nodeId}/turns`),
+      ])
+        .then(([value, history]) => {
+          if (live) {
+            setLesson(value);
+            setTurns(history);
+          }
         })
         .catch((error) => {
           if (live) setError(error.message);
@@ -166,11 +175,21 @@ export function LearningPage({
     const target =
       targetNode || String(value.result?.node_id || activeNode.current || "");
     if (target) {
-      const latest = await api<Lesson | null>(
-        `/learning/nodes/${target}/lesson`,
-      );
+      const [latest, history] = await Promise.all([
+        api<Lesson | null>(`/learning/nodes/${target}/lesson`),
+        api<LearningTurn[]>(`/learning/nodes/${target}/turns`),
+      ]);
       if (signal.aborted) return;
-      if (activeNode.current === target) setLesson(latest);
+      if (activeNode.current === target) {
+        setLesson(latest);
+        setTurns(history);
+        if (value.status === "completed" && value.kind === "assessment") {
+          setAnswer("");
+          setImages([]);
+          clearLearningDraft(target);
+          setAnswerExpanded(true);
+        }
+      }
     }
     setRun(value);
     setBusy(false);
@@ -326,22 +345,6 @@ export function LearningPage({
       setBusy(false);
     }
   }
-  async function skip() {
-    if (!node) return;
-    setError("");
-    try {
-      await api(`/learning/nodes/${node.id}/skip`, "POST");
-      await refresh();
-      const next = goal?.nodes.find(
-        (x) =>
-          x.ordinal > node.ordinal && !["passed", "skipped"].includes(x.status),
-      );
-      if (next) setNodeId(next.id);
-      else setLesson(null);
-    } catch (error) {
-      setError((error as Error).message);
-    }
-  }
   async function reviewReminder() {
     if (!node) return;
     try {
@@ -355,8 +358,8 @@ export function LearningPage({
       await refresh();
       setError("");
       setNotice("已创建明天同一时间的复习提醒，可在提醒页调整。");
-    } catch (error) {
-      setError((error as Error).message);
+    } catch (cause) {
+      setError((cause as Error).message);
     }
   }
   const feedback = lesson?.feedback as
@@ -369,14 +372,6 @@ export function LearningPage({
         evidence?: string;
       }
     | undefined;
-  const next = goal?.nodes.find(
-    (x) =>
-      !["passed", "skipped"].includes(x.status) &&
-      x.ordinal > (node?.ordinal ?? -1),
-  );
-  const currentIndex =
-    goal?.nodes.findIndex((value) => value.id === nodeId) ?? -1;
-  const previous = currentIndex > 0 ? goal?.nodes[currentIndex - 1] : undefined;
   const passedCount =
     goal?.nodes.filter((value) => value.status === "passed").length ?? 0;
   return (
@@ -642,7 +637,7 @@ export function LearningPage({
                         {run?.kind === "course"
                           ? "正在建立知识框架"
                           : run?.kind === "assessment"
-                            ? "正在检查练习"
+                            ? "XiaoXi 正在思考"
                             : "正在准备教学"}
                         <button
                           disabled={!run || stopping}
@@ -690,6 +685,7 @@ export function LearningPage({
                         </div>
                       )}
                       {learningStream?.nodeId === nodeId &&
+                        learningStream.stage === "lesson" &&
                         (busy ||
                           run?.status === "failed" ||
                           run?.status === "cancelled") && (
@@ -698,9 +694,6 @@ export function LearningPage({
                             aria-label="学习内容生成进度"
                             aria-busy={busy}
                           >
-                            {learningStream.stage === "assessment" && (
-                              <h3>练习反馈</h3>
-                            )}
                             <Markdown>
                               {learningStream.fields.content ||
                                 learningStream.fields.explanation ||
@@ -772,61 +765,35 @@ export function LearningPage({
                                 )}
                               </>
                             )}
-                            {lesson.state ===
-                            "awaiting_submission" ? null : feedback?.explanation ? (
-                              <div
-                                className={`feedback-box ${feedback.passed ? "passed" : "needs-practice"}`}
+                            <LearningConversation
+                              turns={turns}
+                              fallback={feedback}
+                            />
+                            {(turns.length > 0 || feedback?.explanation) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={() => void reviewReminder()}
                               >
-                                <h3>
-                                  {feedback.passed ? (
-                                    <CheckCircle2 size={19} />
-                                  ) : (
-                                    <RotateCcw size={19} />
-                                  )}{" "}
-                                  {feedback.passed
-                                    ? "这次练习通过了"
-                                    : "这里还需要再练一练"}
-                                </h3>
-                                <Markdown>{feedback.explanation}</Markdown>
-                                {feedback.gaps?.length ? (
-                                  <ul>
-                                    {feedback.gaps.map((gap, i) => (
-                                      <li key={i}>{gap}</li>
-                                    ))}
-                                  </ul>
-                                ) : null}
-                                <p>
-                                  <strong>下一步：</strong>
-                                  {feedback.next_step}
-                                </p>
-                                <p className="feedback-evidence">
-                                  反馈依据：{feedback.evidence}
-                                </p>
-                                <div className="feedback-actions">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={busy}
-                                    onClick={() => void teach(node)}
-                                  >
-                                    <RotateCcw size={14} />
-                                    {feedback.passed
-                                      ? "再练一次"
-                                      : "补讲并重新练习"}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => void reviewReminder()}
-                                  >
-                                    安排复习提醒
-                                  </Button>
-                                </div>
+                                安排复习提醒
+                              </Button>
+                            )}
+                            {busy && learningStream?.stage === "assessment" && (
+                              <div
+                                className="learning-live-reply"
+                                aria-live="polite"
+                              >
+                                <span className="message-name">XiaoXi</span>
+                                <Markdown>
+                                  {learningStream.fields.explanation || ""}
+                                </Markdown>
+                                {learningStream.fields.next_step && (
+                                  <Markdown>
+                                    {learningStream.fields.next_step}
+                                  </Markdown>
+                                )}
                               </div>
-                            ) : (
-                              <p className="muted">
-                                本次练习已跳过，尚未验证。
-                              </p>
                             )}
                           </section>
                         </>
@@ -863,134 +830,125 @@ export function LearningPage({
                           )}
                         </div>
                       )}
-                      <div className="lesson-footer">
-                        <Hint label="保留未验证状态">
-                          <Button
-                            variant="ghost"
-                            aria-label="跳过，保留未验证状态"
-                            disabled={busy}
-                            onClick={() => void skip()}
-                          >
-                            <SkipForward size={15} />
-                            跳过
-                          </Button>
-                        </Hint>
-                        <nav
-                          className="lesson-navigation"
-                          aria-label="知识点切换"
-                        >
-                          {previous && (
-                            <Button
-                              variant="ghost"
-                              disabled={busy}
-                              onClick={() => {
-                                setNodeId(previous.id);
-                              }}
-                            >
-                              <ArrowLeft size={15} />
-                              上一个知识点
-                            </Button>
-                          )}
-                          {next && (
-                            <Button
-                              variant="outline"
-                              disabled={busy}
-                              onClick={() => {
-                                setNodeId(next.id);
-                              }}
-                            >
-                              下一个知识点
-                              <ArrowRight size={15} />
-                            </Button>
-                          )}
-                        </nav>
-                      </div>
                     </>
                   ) : null}
                 </div>
               </div>
-              {node && lesson?.state === "awaiting_submission" && (
-                <section
-                  className={`exercise-answer-dock ${answerExpanded ? "is-expanded" : "is-collapsed"}`}
-                  aria-label="练习作答区"
-                >
-                  <button
-                    type="button"
-                    className="exercise-answer-toggle"
-                    aria-expanded={answerExpanded}
-                    aria-controls="exercise-answer-body"
-                    onClick={() => setAnswerExpanded((value) => !value)}
+              {node &&
+                lesson &&
+                ["awaiting_submission", "reviewed"].includes(lesson.state) && (
+                  <section
+                    className={`exercise-answer-dock ${answerExpanded ? "is-expanded" : "is-collapsed"}`}
+                    aria-label="练习作答区"
                   >
-                    <span>
-                      作答
-                      {(answer.trim() || images.length > 0) && (
-                        <small>已保留草稿</small>
+                    <button
+                      type="button"
+                      className="exercise-answer-toggle"
+                      aria-expanded={answerExpanded}
+                      aria-controls="exercise-answer-body"
+                      onClick={() => setAnswerExpanded((value) => !value)}
+                    >
+                      <span>
+                        {lesson.state === "reviewed" ? "继续对话" : "作答"}
+                        {(answer.trim() || images.length > 0) && (
+                          <small>已保留草稿</small>
+                        )}
+                      </span>
+                      {answerExpanded ? (
+                        <ChevronDown size={15} />
+                      ) : (
+                        <ChevronUp size={15} />
                       )}
-                    </span>
-                    {answerExpanded ? (
-                      <ChevronDown size={15} />
-                    ) : (
-                      <ChevronUp size={15} />
-                    )}
-                  </button>
-                  <div
-                    id="exercise-answer-body"
-                    className="exercise-answer-body"
-                    hidden={!answerExpanded}
-                  >
+                    </button>
                     <div
-                      ref={answerPreviewTarget}
-                      className="exercise-answer-images"
-                    />
-                    <div className="exercise-answer-composer">
-                      <Textarea
-                        id="exercise-answer"
-                        aria-label="练习回答"
-                        rows={2}
-                        value={answer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                        placeholder="写下你的理解、操作结果或代码…"
-                        disabled={busy}
+                      id="exercise-answer-body"
+                      className="exercise-answer-body"
+                      hidden={!answerExpanded}
+                    >
+                      <div
+                        ref={answerPreviewTarget}
+                        className="exercise-answer-images"
                       />
-                      <div className="exercise-submit">
-                        <ImagesInput
-                          key={lesson.id}
-                          scopeKey={lesson.id}
-                          dropTarget={answerDropTarget}
-                          previewTarget={answerPreviewTarget}
-                          previewMode="names"
-                          images={images}
-                          onChange={(values) => {
-                            setImages(values);
-                            if (values.length) setAnswerExpanded(true);
+                      <div className="exercise-answer-composer">
+                        <Textarea
+                          id="exercise-answer"
+                          aria-label="练习回答"
+                          rows={2}
+                          value={answer}
+                          onChange={(e) => setAnswer(e.target.value)}
+                          onKeyDown={(event) => {
+                            if (
+                              event.key !== "Enter" ||
+                              event.nativeEvent.isComposing ||
+                              event.keyCode === 229
+                            )
+                              return;
+                            event.preventDefault();
+                            if (event.ctrlKey || event.metaKey) {
+                              const input = event.currentTarget;
+                              const start = input.selectionStart,
+                                end = input.selectionEnd;
+                              setAnswer(
+                                answer.slice(0, start) +
+                                  "\n" +
+                                  answer.slice(end),
+                              );
+                              requestAnimationFrame(() => {
+                                input.setSelectionRange(start + 1, start + 1);
+                              });
+                            } else if (
+                              !busy &&
+                              !uploading &&
+                              (answer.trim() || images.length)
+                            )
+                              void submit();
                           }}
+                          placeholder={
+                            lesson.state === "reviewed"
+                              ? "继续提问，或补充你的理解和练习结果…"
+                              : "写下你的理解、操作结果或代码…"
+                          }
                           disabled={busy}
-                          onError={setError}
-                          onUploading={setUploading}
                         />
-                        <Hint label={busy ? "正在检查练习" : "提交练习"}>
-                          <Button
-                            size="icon"
-                            aria-label={busy ? "正在检查练习" : "提交练习"}
-                            disabled={
-                              busy ||
-                              uploading ||
-                              (!answer.trim() && !images.length)
-                            }
-                            onClick={() => void submit()}
-                          >
-                            {busy ? (
-                              <Loader2 size={16} className="spin" />
-                            ) : (
-                              <Send size={16} />
-                            )}
-                          </Button>
-                        </Hint>
+                        <div className="exercise-submit">
+                          <ImagesInput
+                            key={lesson.id}
+                            scopeKey={lesson.id}
+                            dropTarget={answerDropTarget}
+                            previewTarget={answerPreviewTarget}
+                            previewMode="names"
+                            images={images}
+                            onChange={(values) => {
+                              setImages(values);
+                              if (values.length) setAnswerExpanded(true);
+                            }}
+                            disabled={busy}
+                            onError={setError}
+                            onUploading={setUploading}
+                          />
+                          <Hint label={busy ? "XiaoXi 正在思考" : "发送回答"}>
+                            <Button
+                              size="icon"
+                              aria-label={busy ? "XiaoXi 正在思考" : "发送回答"}
+                              disabled={
+                                busy ||
+                                uploading ||
+                                (!answer.trim() && !images.length)
+                              }
+                              onClick={() => void submit()}
+                            >
+                              {busy ? (
+                                <Loader2 size={16} className="spin" />
+                              ) : (
+                                <ArrowUp size={18} />
+                              )}
+                            </Button>
+                          </Hint>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </section>
-              )}
+                  </section>
+                )}
             </div>
           </div>
         </div>
