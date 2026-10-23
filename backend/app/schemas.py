@@ -329,10 +329,33 @@ class MemorySettingsUpdate(BaseModel):
 
 class ConversationCreate(BaseModel):
     title: str = Field(default="新对话", max_length=200)
+    project_id: str | None = None
+
+
+class ConversationUpdate(BaseModel):
+    project_id: str | None = None
+    pinned: bool | None = None
 
 
 class ConversationRead(RecordRead):
     title: str
+    project_id: str | None = None
+    pinned_at: str | None = None
+
+
+class ProjectWrite(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    instructions: str = Field(default="", max_length=12000)
+
+
+class ProjectRead(RecordRead):
+    name: str
+    instructions: str
+
+
+class ProjectMaterialCreate(BaseModel):
+    file_id: str
+    conversation_id: str
 
 
 class MessageRead(RecordRead):
@@ -458,9 +481,12 @@ class ChatInput(BaseModel):
 
 class ChatRetry(BaseModel):
     model_selection: ModelSelection | None = None
+    source_run_id: str | None = None
 
 
 class RunRead(RecordRead):
+    retry_action: Literal["none", "retry", "continue"] = "none"
+    task_status: str | None = None
     task_id: str | None = None
     kind: str
     status: str
@@ -472,6 +498,7 @@ class RunRead(RecordRead):
 
 
 class TaskRead(RecordRead):
+    resume_run_id: str | None = None
     conversation_id: str
     source_message_id: str
     source_run_id: str | None = None
@@ -512,6 +539,7 @@ class NodeRead(RecordRead):
 
 
 class GoalRead(RecordRead):
+    active_run_id: str | None = None
     title: str
     objective: str
     foundation: str
@@ -546,6 +574,7 @@ class MemoryCreate(BaseModel):
 
 
 class MemoryRead(RecordRead):
+    project_id: str | None = None
     content: str
     category: str
     source: str

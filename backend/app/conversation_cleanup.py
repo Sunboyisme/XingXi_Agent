@@ -6,7 +6,7 @@ import shutil
 from sqlalchemy import delete, select
 
 from . import config
-from .db import Attachment, Artifact, Attempt, CalendarBatch, ComplexTask, Message, OfficeFile, PlanCreation, Run, WechatDelivery, WechatInbox
+from .db import Attachment, Artifact, Attempt, CalendarBatch, ComplexTask, Message, OfficeFile, PlanCreation, ProjectMaterial, Run, WechatDelivery, WechatInbox
 
 
 def remove(db, conversation):
@@ -27,6 +27,7 @@ def remove(db, conversation):
     db.delete(conversation)
     db.flush()
     referenced = set()
+    referenced.update(db.scalars(select(ProjectMaterial.file_id)))
     for ids in db.scalars(select(Message.attachment_ids)):
         referenced.update(ids)
     for ids in db.scalars(select(Attempt.attachment_ids)):

@@ -188,7 +188,7 @@ async def worker():
         await asyncio.sleep(15 if last_error else 3)
 
 
-async def retrieve_detailed(query: str, purpose="preview"):
+async def retrieve_detailed(query: str, purpose="preview", project_id=None):
     global last_error
     started = time.monotonic()
     value = settings()
@@ -196,7 +196,8 @@ async def retrieve_detailed(query: str, purpose="preview"):
         memories = list(
             db.scalars(
                 select(Memory).where(
-                    Memory.profile_id == config.PROFILE_ID, Memory.state == "confirmed"
+                    Memory.profile_id == config.PROFILE_ID, Memory.state == "confirmed",
+                    ((Memory.project_id == project_id) | (Memory.project_id.is_(None) & (Memory.category == "preference"))) if project_id else Memory.project_id.is_(None),
                 )
             )
         )
@@ -260,6 +261,7 @@ async def retrieve_detailed(query: str, purpose="preview"):
                 or record.state != "confirmed"
                 or record.revision != original.revision
                 or record.content != original.content
+                or record.project_id != original.project_id
             ):
                 reasons[key] = "记忆已变更或删除"
                 continue
@@ -311,7 +313,12 @@ async def retrieve_detailed(query: str, purpose="preview"):
 async def retrieve(query: str, run_id=None, purpose="context"):
     if not query.strip():
         return []
-    result, trace = await retrieve_detailed(query, purpose)
+    from .db import Run, Conversation
+    with Session() as db:
+        run = db.get(Run, run_id) if run_id else None
+        conversation = db.get(Conversation, run.conversation_id) if run and run.conversation_id else None
+        project_id = conversation.project_id if conversation else None
+    result, trace = await retrieve_detailed(query, purpose, project_id=project_id)
     if run_id:
         from .runs import emit
 

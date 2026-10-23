@@ -3,10 +3,11 @@ import json
 import re
 import threading
 import time
+from datetime import date
 
 from fastapi import HTTPException
 from langchain_core.tools import tool
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 
 from . import plans as calendar, plan_targets
@@ -16,6 +17,11 @@ from .db import MESSAGE_ORDER, Message, Session
 _PENDING_PLAN_PROPOSALS: dict[str, dict] = {}
 _PENDING_PLAN_PROPOSALS_LOCK = threading.Lock()
 _PLAN_PROPOSAL_TTL = 24 * 60 * 60
+
+
+class RemovalTarget(BaseModel):
+    plan_id: str
+    occurrence_start: str = ""
 _CONFIRMATION = re.compile(
     r"^(?:确认|确定|可以|好的|好|行|对|是的|没问题|就这样|写入|创建|保存|安排|按这个方案|就按这个方案|创建吧|写入吧|保存吧|ok|okay|yes)"
     r"(?:创建|安排|保存|写入)?$",
@@ -78,26 +84,76 @@ def build(run_id, conversation_id):
         try:
             return json.dumps(operation(), ensure_ascii=False)
         except HTTPException as error:
-            return json.dumps({"error": error.detail}, ensure_ascii=False)
+            return json.dumps({"error": error.detail, "category": "conflict" if error.status_code == 409 else "invalid_arguments", "not_executed": error.status_code < 500, "retryable": False}, ensure_ascii=False)
         except ValidationError as error:
             detail = "；".join(
                 str(item.get("msg", "")).replace("Value error, ", "")
                 for item in error.errors()[:3]
             )
             return json.dumps(
-                {"error": f"计划参数格式不正确：{detail or '请检查日期与时间'}"},
+                {"error": f"计划参数格式不正确：{detail or '请检查日期与时间'}", "category": "invalid_arguments", "not_executed": True, "retryable": False},
                 ensure_ascii=False,
             )
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError) as error:
             return json.dumps(
-                {"error": "参数无效，请核对日期、时间、技能或文件路径"},
+                {"error": str(error)[:400] or "参数无效，请核对日期、时间、技能或文件路径", "category": "invalid_arguments", "not_executed": True, "retryable": False},
                 ensure_ascii=False,
             )
 
     @tool
-    def list_plans(start: str = "", end: str = "", timezone: str = "", include_deleted: bool = False) -> str:
+    def list_plans(start: date | None = None, end: date | None = None, timezone: str = "", include_deleted: bool = False) -> str:
         """查询实际计划。start/end 为用户本地 YYYY-MM-DD，end 不包含当天；timezone 留空使用用户时区。local_start/local_end 是本地时间，start/end 可能为UTC，不能截取UTC日期。修改前查询目标日，使用真实编号与 occurrence_start；恢复已删除计划时 include_deleted=true。"""
-        return safe(lambda: calendar.list_events(start or None, end or None, timezone or None, include_deleted))
+        return safe(lambda: calendar.list_events(start.isoformat() if start else None, end.isoformat() if end else None, timezone or None, include_deleted))
+
+    @tool
+    def delete_plans(target_date: date, targets: list[RemovalTarget], date_evidence: str = "") -> str:
+        """批量移除用户指定本地日期的实际计划。先list_plans(start=目标日,end=次日)，targets逐项使用真实plan_id及原样occurrence_start。普通计划删除，重复计划仅取消本次，不结束系列。1–100项，全部核对通过才一起写入。"""
+        def remove():
+            from .db import Run, RunEvent, PlanOccurrence, now
+            if not 1 <= len(targets) <= 100:
+                raise ValueError("请选择1–100项实际计划")
+            identities = [(target.plan_id, target.occurrence_start) for target in targets]
+            if len(set(identities)) != len(identities):
+                raise ValueError("批量移除不能包含重复的计划实例")
+            day = target_date.isoformat()
+            with calendar.lock:
+                with Session() as db:
+                    source = task_context.user_message(db, run_id, conversation_id)
+                    previous_runs = select(Run.id).where(Run.source_message_id == source.id, Run.conversation_id == conversation_id)
+                    for event in db.scalars(select(RunEvent).where(RunEvent.run_id.in_(previous_runs), RunEvent.kind == "tool")):
+                        args = event.data.get("arguments", {})
+                        if event.data.get("tool_id") == "delete_plans" and event.data.get("status") == "completed" and args.get("target_date") == day and args.get("targets") == [target.model_dump() for target in targets]:
+                            from .complex_tasks import calendar_result_current
+                            if not calendar_result_current("delete_plans", event.data["result"]):
+                                raise HTTPException(409, "此前移除的计划后来已有变化，请核对当前日历并提出新的调整要求；未重复写入")
+                            return event.data["result"]
+                selected = [plan_targets.validate(run_id, conversation_id, target.plan_id, day, target.occurrence_start, date_evidence) for target in targets]
+                with Session() as db:
+                    result = []
+                    for before in selected:
+                        row = calendar.find(db, before["id"])
+                        if before["recurrence"] == "none":
+                            row.status = "deleted"
+                            for rule in calendar.rules(db, row.id):
+                                rule.status = "cancelled"
+                            calendar.cancel_notes(db, row.id)
+                            result.append({"operation": "delete", "plan": before})
+                        else:
+                            if before["status"] not in {"planned", "cancelled"} or row.status != "planned":
+                                raise HTTPException(409, "只能取消尚未完成的重复安排，本批次未写入")
+                            key = before["occurrence_start"]
+                            record = db.get(PlanOccurrence, (row.id, key))
+                            if record is None:
+                                db.add(PlanOccurrence(plan_id=row.id, start=key, status="cancelled"))
+                            else:
+                                record.status, record.completed_at = "cancelled", now()
+                            calendar.cancel_notes(db, row.id, key)
+                            db.flush()
+                            calendar.sync_rules(db, row, row.reminder_offsets)
+                            result.append({"operation": "cancel_occurrence", "plan": before})
+                    db.commit()
+                return {"removed": len(result), "operations": result, "target_date": day}
+        return safe(remove)
 
     @tool
     def create_plans(
@@ -208,7 +264,7 @@ def build(run_id, conversation_id):
         return safe(create)
 
     @tool
-    def update_plan(plan_id: str, plan: calendar.PlanUpdate, target_date: str = "", date_evidence: str = "") -> str:
+    def update_plan(plan_id: str, plan: calendar.PlanUpdate, target_date: date | None = None, date_evidence: str = "") -> str:
         """用户明确要求时更新同一计划，先查询编号。scope 为 this（仅本次）、future（本次及以后）、series（整个系列）；前两者必须传查询得到的 occurrence_start，不能猜测修改范围。传入完整计划并同步提醒。repeat_until 为包含当天的截止日期，或 repeat_count 为次数，二选一；calendar_display=summary 汇总日常事项，always 在月历展开。完成、关闭提醒、结束系列用 action_plan。"""
         def update():
             with calendar.lock:
@@ -222,7 +278,7 @@ def build(run_id, conversation_id):
         return safe(update)
 
     @tool
-    def delete_plan(plan_id: str, target_date: str = "", date_evidence: str = "") -> str:
+    def delete_plan(plan_id: str, target_date: date | None = None, date_evidence: str = "") -> str:
         """删除已查询核对的普通计划及提醒。target_date 必须为用户指定的本地日期，多日期要求用 date_evidence 逐字引用当前操作条目。重复计划的某次安排用 action_plan(cancel_occurrence)，不能删除整个系列。"""
 
         def delete():
@@ -260,7 +316,7 @@ def build(run_id, conversation_id):
             return json.dumps({"error": error.detail}, ensure_ascii=False)
 
     @tool
-    def action_plan(plan_id: str, action: str, occurrence_start: str = "", target_date: str = "", date_evidence: str = "") -> str:
+    def action_plan(plan_id: str, action: str, occurrence_start: str = "", target_date: date | None = None, date_evidence: str = "") -> str:
         """操作同一份计划。完成本次用 complete；仅取消某次重复安排用 cancel_occurrence，不标为完成也不结束系列。重复计划必须传查询得到的本次 occurrence_start。恢复已完成或已取消的本次用 restore；关闭提醒用 disable_reminders，保留计划；结束整个重复系列用 end_series。先查询核对编号与本次时间，按用户明确要求执行。知道了与稍后提醒属于通知，不是计划操作。"""
         def apply():
             with calendar.lock:
@@ -279,6 +335,7 @@ def build(run_id, conversation_id):
         create_plans,
         update_plan,
         delete_plan,
+        delete_plans,
         load_skill,
         read_skill_file,
         run_skill_script,
@@ -286,6 +343,7 @@ def build(run_id, conversation_id):
 
 
 INFO = {
+    "delete_plans": ("批量移除当天计划", "核对后删除普通计划、取消重复事项本次，保留其他日期", False),
     "action_plan": ("操作计划", "完成、取消或恢复本次，关闭提醒或结束整个系列", False),
     "list_plans": ("查询计划", "查看日期范围内的计划", False),
     "create_plans": (

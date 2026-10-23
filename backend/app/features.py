@@ -1,6 +1,7 @@
 """0.1.3 endpoints, included under the existing authenticated API router."""
 
 from typing import Annotated
+from datetime import date, timedelta
 
 import httpx
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -10,7 +11,8 @@ from sqlalchemy import select
 
 from . import artifacts, plans, skills, office
 from . import calendar_service as calendar
-from .db import Run, Session, Skill, SkillRuntime
+from .db import Run, Session, Skill, SkillRuntime, PlanDayOrder
+from .config import PROFILE_ID
 
 router = APIRouter()
 
@@ -31,6 +33,47 @@ def plan_create(value: plans.PlanWrite):
 @router.post("/plans/batch", response_model=list[plans.PlanRead])
 def plan_batch(value: plans.PlanBatch):
     return plans.create_events(value.events)
+
+
+class DayOrderWrite(BaseModel):
+    day: date
+    timezone: str
+    keys: list[str] = Field(default_factory=list, max_length=5000)
+
+
+@router.get("/plans/order")
+def day_orders(start: date, end: date, timezone: str):
+    from zoneinfo import ZoneInfo
+    try:
+        ZoneInfo(timezone)
+    except (KeyError, ValueError):
+        raise HTTPException(422, "无效时区") from None
+    if not 0 < (end - start).days <= 370:
+        raise HTTPException(422, "日期范围须为1–370天")
+    with Session() as db:
+        return {row.day: row.keys for row in db.scalars(select(PlanDayOrder).where(
+            PlanDayOrder.profile_id == PROFILE_ID, PlanDayOrder.timezone == timezone,
+            PlanDayOrder.day >= start.isoformat(), PlanDayOrder.day < end.isoformat()))}
+
+
+@router.put("/plans/order")
+def save_day_order(value: DayOrderWrite):
+    with plans.lock, Session() as db:
+        events = plans.list_events(value.day.isoformat(), (value.day + timedelta(days=1)).isoformat(), value.timezone)
+        valid = {event["id"] + ":" + event["occurrence_start"] for event in events}
+        if len(set(value.keys)) != len(value.keys) or not set(value.keys) <= valid:
+            raise HTTPException(409, "当天计划已经变化，请刷新后重新排序")
+        row = db.scalar(select(PlanDayOrder).where(PlanDayOrder.profile_id == PROFILE_ID,
+             PlanDayOrder.day == value.day.isoformat(), PlanDayOrder.timezone == value.timezone))
+        if row and not value.keys:
+            db.delete(row)
+        elif value.keys:
+            if row is None:
+                row = PlanDayOrder(day=value.day.isoformat(), timezone=value.timezone)
+                db.add(row)
+            row.keys = value.keys
+        db.commit()
+        return {"day": value.day.isoformat(), "keys": value.keys}
 
 
 @router.put("/plans/{plan_id}", response_model=plans.PlanRead)

@@ -570,7 +570,8 @@ export interface paths {
         delete: operations["delete_conversation_api_v1_conversations__conversation_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Conversation */
+        patch: operations["update_conversation_api_v1_conversations__conversation_id__patch"];
         trace?: never;
     };
     "/api/v1/runs": {
@@ -1226,6 +1227,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plans/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Day Orders */
+        get: operations["day_orders_api_v1_plans_order_get"];
+        /** Save Day Order */
+        put: operations["save_day_order_api_v1_plans_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plans/{plan_id}": {
         parameters: {
             query?: never;
@@ -1504,6 +1523,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Projects */
+        get: operations["list_projects_api_v1_projects_get"];
+        put?: never;
+        /** Create Project */
+        post: operations["create_project_api_v1_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Project */
+        put: operations["update_project_api_v1_projects__project_id__put"];
+        post?: never;
+        /** Delete Project */
+        delete: operations["delete_project_api_v1_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Conversations */
+        get: operations["search_conversations_api_v1_conversations_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conversation Files */
+        get: operations["conversation_files_api_v1_conversations__conversation_id__files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Materials */
+        get: operations["list_materials_api_v1_projects__project_id__materials_get"];
+        put?: never;
+        /** Add Material */
+        post: operations["add_material_api_v1_projects__project_id__materials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/materials/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Material */
+        post: operations["upload_material_api_v1_projects__project_id__materials_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/materials/{material_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Material */
+        delete: operations["remove_material_api_v1_projects__project_id__materials__material_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1572,6 +1713,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_material_api_v1_projects__project_id__materials_upload_post */
+        Body_upload_material_api_v1_projects__project_id__materials_upload_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_office_file_api_v1_files_post */
         Body_upload_office_file_api_v1_files_post: {
             /** File */
@@ -1588,6 +1734,8 @@ export interface components {
         /** ChatRetry */
         ChatRetry: {
             model_selection?: components["schemas"]["ModelSelection"] | null;
+            /** Source Run Id */
+            source_run_id?: string | null;
         };
         /** ConversationCreate */
         ConversationCreate: {
@@ -1596,6 +1744,8 @@ export interface components {
              * @default 新对话
              */
             title: string;
+            /** Project Id */
+            project_id?: string | null;
         };
         /** ConversationRead */
         ConversationRead: {
@@ -1607,6 +1757,17 @@ export interface components {
             updated_at: string;
             /** Title */
             title: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Pinned At */
+            pinned_at?: string | null;
+        };
+        /** ConversationUpdate */
+        ConversationUpdate: {
+            /** Project Id */
+            project_id?: string | null;
+            /** Pinned */
+            pinned?: boolean | null;
         };
         /** DataExportRead */
         DataExportRead: {
@@ -1655,6 +1816,18 @@ export interface components {
             last_import?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** DayOrderWrite */
+        DayOrderWrite: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Timezone */
+            timezone: string;
+            /** Keys */
+            keys?: string[];
         };
         /** EmbeddingRead */
         EmbeddingRead: {
@@ -1743,6 +1916,8 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Active Run Id */
+            active_run_id?: string | null;
             /** Title */
             title: string;
             /** Objective */
@@ -2035,6 +2210,8 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Project Id */
+            project_id?: string | null;
             /** Content */
             content: string;
             /** Category */
@@ -2505,6 +2682,36 @@ export interface components {
             /** Image Urls */
             image_urls?: string[];
         };
+        /** ProjectMaterialCreate */
+        ProjectMaterialCreate: {
+            /** File Id */
+            file_id: string;
+            /** Conversation Id */
+            conversation_id: string;
+        };
+        /** ProjectRead */
+        ProjectRead: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Name */
+            name: string;
+            /** Instructions */
+            instructions: string;
+        };
+        /** ProjectWrite */
+        ProjectWrite: {
+            /** Name */
+            name: string;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
+        };
         /** ProviderPresetRead */
         ProviderPresetRead: {
             /**
@@ -2710,6 +2917,14 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /**
+             * Retry Action
+             * @default none
+             * @enum {string}
+             */
+            retry_action: "none" | "retry" | "continue";
+            /** Task Status */
+            task_status?: string | null;
             /** Task Id */
             task_id?: string | null;
             /** Kind */
@@ -2860,6 +3075,8 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Resume Run Id */
+            resume_run_id?: string | null;
             /** Conversation Id */
             conversation_id: string;
             /** Source Message Id */
@@ -4121,7 +4338,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChatRetry"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -4227,6 +4448,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_conversation_api_v1_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationRead"];
                 };
             };
             /** @description Validation Error */
@@ -4453,7 +4709,9 @@ export interface operations {
     };
     delete_goal_api_v1_learning_goals__goal_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                stop?: boolean;
+            };
             header?: never;
             path: {
                 goal_id: string;
@@ -5615,6 +5873,72 @@ export interface operations {
             };
         };
     };
+    day_orders_api_v1_plans_order_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+                timezone: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_day_order_api_v1_plans_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DayOrderWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     plan_read_api_v1_plans__plan_id__get: {
         parameters: {
             query?: {
@@ -6289,6 +6613,322 @@ export interface operations {
             header?: never;
             path: {
                 artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_projects_api_v1_projects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"][];
+                };
+            };
+        };
+    };
+    create_project_api_v1_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_api_v1_projects__project_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_api_v1_projects__project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_conversations_api_v1_conversations_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                project_id?: string | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversation_files_api_v1_conversations__conversation_id__files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_materials_api_v1_projects__project_id__materials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_material_api_v1_projects__project_id__materials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectMaterialCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_material_api_v1_projects__project_id__materials_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_material_api_v1_projects__project_id__materials_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_material_api_v1_projects__project_id__materials__material_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                material_id: string;
             };
             cookie?: never;
         };

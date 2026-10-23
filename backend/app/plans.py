@@ -586,7 +586,7 @@ def list_events(start=None, end=None, timezone=None, include_deleted=False):
     if bool(start) != bool(end):
         raise ValueError("请同时指定日期范围")
     if start and (end <= start or (date.fromisoformat(end) - date.fromisoformat(start)).days > 370):
-        raise ValueError("日期范围须为 1–370 天")
+        raise ValueError("日期范围须为1–370天，end不包含当天。查询2026-10-25请传start=2026-10-25、end=2026-10-26。")
     with lock, Session() as db:
         zone = timezone or user_timezone(db)
         try:

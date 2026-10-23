@@ -19,7 +19,7 @@ TUTOR_RULES = """你是用户的个人导师，支持任何主题（编程、做
 def context(db):
     values = db.scalars(
         select(Memory)
-        .where(Memory.profile_id == PROFILE_ID, Memory.state == "confirmed")
+        .where(Memory.profile_id == PROFILE_ID, Memory.state == "confirmed", Memory.project_id.is_(None))
         .order_by(Memory.updated_at.desc())
         .limit(15)
     ).all()

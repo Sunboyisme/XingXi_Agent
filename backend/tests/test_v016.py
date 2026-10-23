@@ -111,7 +111,8 @@ def test_memory_preview_is_read_only_and_selected_edit_checks_revision(client):
         assert session.get(db.Memory, key).evidence == "记一下我喜欢打羽毛球"
 
 
-def test_known_0017_export_upgrades_only_in_import_staging(client, tmp_path):
+@pytest.mark.parametrize("revision", ["0016", "0017", "0018"])
+def test_known_export_upgrades_only_in_import_staging(client, tmp_path, revision):
     import io
     import sqlite3
     import zipfile
@@ -125,19 +126,11 @@ def test_known_0017_export_upgrades_only_in_import_staging(client, tmp_path):
     migration = Config(str(root / "alembic.ini"))
     migration.set_main_option("script_location", str(root / "migrations"))
     migration.set_main_option("sqlalchemy.url", f"sqlite:///{legacy.as_posix()}")
-    command.upgrade(migration, "0017")
-    with sqlite3.connect(legacy) as connection:
-        old_table = connection.execute("SELECT sql FROM sqlite_master WHERE name='wechat_deliveries'").fetchone()[0]
+    command.upgrade(migration, revision)
     exported = client.post("/api/v1/settings/data/export").json()
     with zipfile.ZipFile(exported["path"]) as archive:
         files = {name: archive.read(name) for name in archive.namelist()}
-    staged = tmp_path / "archive.sqlite"
-    staged.write_bytes(files["bai.sqlite"])
-    with sqlite3.connect(staged) as connection:
-        connection.execute("DROP TABLE wechat_deliveries")
-        connection.execute(old_table)
-        connection.execute("UPDATE alembic_version SET version_num='0017'")
-    files["bai.sqlite"] = staged.read_bytes()
+    files["bai.sqlite"] = legacy.read_bytes()
     raw = io.BytesIO()
     with zipfile.ZipFile(raw, "w") as archive:
         for name, content in files.items():
@@ -145,7 +138,9 @@ def test_known_0017_export_upgrades_only_in_import_staging(client, tmp_path):
     response = client.post("/api/v1/settings/data/inspect", files={"file": ("legacy.zip", raw.getvalue())})
     assert response.status_code == 200
     with sqlite3.connect(config.DATA_DIR / "bai.sqlite") as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0018"
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0019"
+    with sqlite3.connect(legacy) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == revision
 
 
 @pytest.mark.asyncio

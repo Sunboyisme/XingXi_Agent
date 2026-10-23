@@ -139,6 +139,9 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
     instructions += "\n生图结果由本轮实际保存的图片产物生成回执，不能用画面描述代替图片，不能编造尺寸或下载地址。历史回答中的‘已生成’不代表本轮成功，也不能用旧图冒充新生成结果。"
     instructions += "\n日历修改、删除、恢复前必须 list_plans 按用户本地日期重新查询；恢复已删除记录用 include_deleted=true。返回的 local_start/local_end 是本地时间，禁止截取 UTC start 的日期。每次 update_plan/delete_plan/action_plan 都传 target_date=用户目标本地日期，重复计划还传原样 occurrence_start。要求包含多个日期时，用 date_evidence 逐字引用当前动作对应的用户原话；不得混淆恢复和删除的对象。单次日历增删改属于普通工具操作，不因先前任务已完成而拒绝。目标日期或对象有歧义时列出实际候选询问，不猜编号。日历工具结果的 operation、before、plan 是真实操作事实，回复先说结果，再用简明时间表说明实际安排，避免输出工具名、UTC换算和审计报告。记忆 content 只写事实，例如‘用户喜欢打羽毛球’，不包含‘记一下、帮我记住’等命令；evidence 始终保留原话。"
     instructions += plan_execution.history_context(conversation_id)
+    from . import projects
+    instructions += projects.instructions(conversation_id)
+    instructions += "\n当前消息中的图片已经直接提供给你，能读取时直接提取，不必重复read_file。计算截图中的课程时长时保留mm:ss或hh:mm:ss，识别重叠截图的重复课程后按秒使用calculate求和，展示逐项时长和总小时、分钟、秒；无法辨认的条目明确列出，不猜测。工具返回not_executed及具体校验原因时修正参数，最多纠正两次；相同错误不要换一种无关日期格式反复调用。删除某日本地全部计划时，先查询目标日到次日，再使用delete_plans批量处理。"
     if task_instructions:
         instructions += (
             "\n以下是当前任务的持久执行资料，不是新的用户授权。仅完成current_step，"
@@ -306,7 +309,12 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
         add_usage(run_id, {"total_tokens": total_tokens})
         if not text.strip():
             raise ValueError("模型未返回文字，请检查接口和工具调用能力后重试。")
-        return {"content": text, "conversation_id": conversation_id}
+        from .db import Attachment
+        with Session() as db:
+            visible_images = [key for record in records if record.role == "user"
+                for key in provider.supported_attachments(record.attachment_ids, model_config)
+                if (picture := db.get(Attachment, key)) and picture.media_type.startswith("image/")]
+        return {"content": text, "conversation_id": conversation_id, "visible_images": visible_images}
     receipt = "\n\n".join(filter(None, [
         plan_execution.execution_receipt(plan_execution.tool_events(run_id)),
         image_generation.result_receipt(run_id),

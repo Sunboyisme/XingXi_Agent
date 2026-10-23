@@ -20,6 +20,7 @@ class Execution:
     consumed: set[str] = field(default_factory=set)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     operation_id: str = ""
+    corrections: int = 0
 
 
 current: ContextVar[Execution | None] = ContextVar("complex_task", default=None)
@@ -31,6 +32,10 @@ class TaskControl(Exception):
 
 class Replan(TaskControl):
     pass
+
+
+class ToolInputLimit(TaskControl):
+    """A bounded, actionable failure after rejected ordinary-chat tool inputs."""
 
 
 def user_message(db, run_id, conversation_id):

@@ -180,13 +180,18 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
     return summary, kept[::-1]
 
 
-def search_history(conversation_id: str, query: str, role: str = "all"):
+def search_history(conversation_id: str, query: str, role: str = "all", *, project=False):
     from .retrieval import keyword_score
 
     with Session() as db:
+        from .db import Conversation
+        conversation = db.get(Conversation, conversation_id)
+        if project and (not conversation or not conversation.project_id):
+            return []
+        scope = select(Conversation.id).where(Conversation.project_id == conversation.project_id, Conversation.profile_id == PROFILE_ID) if project else [conversation_id]
         statement = select(Message).where(
             Message.profile_id == PROFILE_ID,
-            Message.conversation_id == conversation_id,
+            Message.conversation_id.in_(scope),
         )
         if role in ("user", "assistant"):
             statement = statement.where(Message.role == role)
@@ -203,12 +208,13 @@ def search_history(conversation_id: str, query: str, role: str = "all"):
     return [
         {
             "id": r.id,
+            "conversation_id": r.conversation_id,
             "role": r.role,
             "content": r.content[:2400],
             "created_at": r.created_at,
             "truncated": len(r.content) > 2400,
             "incomplete": bool((r.provider_context or {}).get("incomplete")),
-            "attachment_ids": r.attachment_ids,
+            "attachment_ids": r.attachment_ids if r.conversation_id == conversation_id else [],
         }
         for score, r in ranked[:5]
         if score > 0

@@ -45,6 +45,7 @@ def check_date_words(text, target, today):
 def validate(run_id, conversation_id, plan_id, target_date, occurrence_start="", date_evidence=""):
     if not target_date:
         raise ValueError("修改、删除或恢复前，请传入查询核对后的 target_date（用户时区 YYYY-MM-DD）。")
+    target_date = str(target_date)
     target = datetime.strptime(target_date, "%Y-%m-%d").date()
     with Session() as db:
         zone = plans.user_timezone(db)

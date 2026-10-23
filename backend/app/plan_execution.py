@@ -64,6 +64,8 @@ def operation_facts(events):
             values = [(result.get("operation", "update"), result)]
         elif tool == "delete_plan" and isinstance(result, dict) and result.get("deleted") and result.get("plan"):
             values = [("delete", result["plan"])]
+        elif tool == "delete_plans" and isinstance(result, dict):
+            values = [(item["operation"], item["plan"]) for item in result.get("operations", [])]
         else:
             continue
         for action, item in values:

@@ -19,6 +19,7 @@ LIMIT = 512 * 1024 * 1024
 LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
                 "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes"}
 COUNTS = {"conversations": "对话", "messages": "消息", "memories": "记忆",
+          "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
           "memory_vectors": "向量", "reminders": "提醒时间", "goals": "学习目标",
           "attachments": "附件", "office_files": "办公资料", "calendar_events": "计划", "plan_occurrences": "单次状态记录", "plan_segments": "重复规则调整", "artifacts": "工具产物", "complex_tasks": "复杂任务"}
 
@@ -126,6 +127,32 @@ def validate(stage):
         incoming_schema, current_schema = schema(incoming), schema(current)
         incoming_revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
         current_revision = current.execute("SELECT version_num FROM alembic_version").fetchone()
+        if current_revision == ("0019",) and incoming_revision in {("0016",), ("0017",), ("0018",)}:
+            additions = {"projects", "project_materials", "plan_day_orders"}
+            expected = {name: sql for name, sql in current_schema.items() if name not in additions}
+            for name in ("conversations", "memories"):
+                expected[name] = re.sub(r",\s*project_id VARCHAR\(36\)", "", expected[name])
+            expected["conversations"] = re.sub(r",\s*pinned_at VARCHAR\(40\)", "", expected["conversations"])
+            if incoming_revision in {("0016",), ("0017",)}:
+                expected["wechat_deliveries"] = re.sub(r",\s*diagnostics JSON DEFAULT '\{\}' NOT NULL", "", expected["wechat_deliveries"])
+            if incoming_revision == ("0016",):
+                expected.pop("plan_creations", None)
+            normalized = lambda value: re.sub(r"\s+", " ", value).strip()
+            if set(expected) == set(incoming_schema) and all(normalized(expected[name]) == normalized(incoming_schema[name]) for name in expected) and not incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]:
+                if incoming_revision == ("0016",):
+                    incoming.execute(current_schema["plan_creations"])
+                if incoming_revision != ("0018",):
+                    incoming.execute("ALTER TABLE wechat_deliveries ADD COLUMN diagnostics JSON DEFAULT '{}' NOT NULL")
+                incoming.execute("ALTER TABLE conversations ADD COLUMN project_id VARCHAR(36)")
+                incoming.execute("ALTER TABLE conversations ADD COLUMN pinned_at VARCHAR(40)")
+                incoming.execute("ALTER TABLE memories ADD COLUMN project_id VARCHAR(36)")
+                for name in ("projects", "project_materials", "plan_day_orders"):
+                    incoming.execute(current_schema[name])
+                for name, sql in current.execute("SELECT name,sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL"):
+                    if name.startswith(("ix_projects_", "ix_project_materials_", "ix_plan_day_orders_", "ix_conversations_project_id", "ix_memories_project_id")):
+                        incoming.execute(sql)
+                incoming.execute("UPDATE alembic_version SET version_num='0019'")
+                incoming_schema = schema(incoming)
         # Upgrade only the exact known predecessor in the staging copy. User
         # databases and channel credentials are never used as migration probes.
         if current_revision == ("0018",) and incoming_revision in {("0016",), ("0017",)}:

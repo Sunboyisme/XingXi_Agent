@@ -148,13 +148,17 @@ def test_previous_export_schema_can_be_upgraded_in_staging(client, tmp_path):
     stage = tmp_path / "previous-export"
     stage.mkdir()
     (stage / "manifest.json").write_text('{"format":"xiaoxi-data","version":1,"schema":"0016"}', encoding="utf-8")
-    data_transfer.snapshot(config.DATA_DIR / "bai.sqlite", stage / "bai.sqlite")
-    with data_transfer.connect(stage / "bai.sqlite") as connection:
-        connection.execute("DROP TABLE plan_creations")
-        connection.execute("UPDATE alembic_version SET version_num='0016'")
+    from pathlib import Path
+    from alembic import command
+    from alembic.config import Config
+    root = Path(__file__).resolve().parents[1]
+    migration = Config(str(root / "alembic.ini"))
+    migration.set_main_option("script_location", str(root / "migrations"))
+    migration.set_main_option("sqlalchemy.url", "sqlite:///" + (stage / "bai.sqlite").as_posix())
+    command.upgrade(migration, "0016")
     assert data_transfer.validate(stage)["counts"]["conversations"] == 0
     with data_transfer.connect(stage / "bai.sqlite") as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0017",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0019",)
 
 
 @pytest.mark.asyncio

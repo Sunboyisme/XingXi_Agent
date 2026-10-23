@@ -175,7 +175,7 @@ def user_content(text: str, attachment_ids: list[str] | None = None, config=None
 
 async def ask_json(
     schema: type[BaseModel], instructions: str, text: str, attachment_ids=None,
-    *, model_config=None, on_partial=None, on_usage=None,
+    *, model_config=None, on_partial=None, on_usage=None, image_data=None,
 ) -> BaseModel:
     llm = model(model_config)
     messages = [
@@ -184,7 +184,7 @@ async def ask_json(
             + "\n只返回符合以下 Schema 的 JSON。不要使用 Markdown 代码块。\n"
             + json.dumps(schema.model_json_schema(), ensure_ascii=False)
         ),
-        HumanMessage(content=user_content(text, attachment_ids, model_config)),
+        HumanMessage(content=[{"type": "text", "text": text}, {"type": "image_url", "image_url": {"url": "data:" + image_data[1] + ";base64," + base64.b64encode(image_data[0]).decode()}}] if image_data else user_content(text, attachment_ids, model_config)),
     ]
     for attempt in range(2):
         if on_partial:
@@ -264,6 +264,8 @@ def error_details(error: Exception) -> dict:
                  and getattr(item, "code") in known_codes), None)
     if any(isinstance(item, GraphRecursionError) for item in chain):
         category = "tool_loop_limit"
+    elif type(error).__name__ == "ToolInputLimit":
+        category = "invalid_arguments"
     elif status == 429:
         category = "quota" if code in {"insufficient_quota", "quota_exceeded"} else "rate_limit"
     elif status in (401, 403):
@@ -289,6 +291,9 @@ def error_details(error: Exception) -> dict:
 
 
 def safe_error(error: Exception, *, model_config=None) -> str:
+    from .task_context import ToolInputLimit
+    if isinstance(error, ToolInputLimit):
+        return str(error)[:600]
     if isinstance(error, ConfigurationError):
         return str(error)[:600]
     details = error_details(error)

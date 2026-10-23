@@ -21,6 +21,7 @@ from .db import (
 
 lock = RLock()
 FIELDS = (
+    "project_id",
     "content",
     "category",
     "source",
@@ -74,17 +75,19 @@ def history_evidence(db, message, sources):
     if not 1 <= len(sources) <= 12:
         raise ValueError("每条记忆请提供 1–12 段历史用户原文。")
     boundary = db.scalar(select(MESSAGE_ORDER).select_from(Message).where(Message.id == message.id))
+    conversation = db.get(Conversation, message.conversation_id)
+    scope = select(Conversation.id).where(Conversation.project_id == conversation.project_id, Conversation.profile_id == PROFILE_ID) if conversation and conversation.project_id else [message.conversation_id]
     references = []
     for source in sources:
         value = SourceQuote.model_validate(source)
         record = db.scalar(select(Message).where(
             Message.id == value.message_id, Message.profile_id == PROFILE_ID,
-            Message.conversation_id == message.conversation_id, Message.role == "user",
+            Message.conversation_id.in_(scope), Message.role == "user",
             MESSAGE_ORDER <= boundary,
         ))
         quote = value.quote.strip()
         if not record or not quote or quote not in record.content:
-            raise ValueError("历史依据必须逐字引用本轮之前、当前会话中的真实用户消息；请先检索原始消息并核对编号。")
+            raise ValueError("历史依据必须逐字引用本轮之前、当前会话或同项目中的真实用户消息；请先检索原文并核对编号。")
         references.append(f"用户消息 {record.id}：\n{quote}")
     result = "\n\n".join(references)
     if len(result) > 12000:
@@ -208,6 +211,8 @@ def save_from_chat(
         if not message:
             return {"error": "找不到当前用户消息"}
         settings = db.get(Settings, PROFILE_ID)
+        conversation = db.get(Conversation, conversation_id)
+        project_id = conversation.project_id if conversation else None
         stored_evidence = evidence
         sources = source_quotes or []
         authorized = explicit_request and bool(EXPLICIT.search(message.content)) and not DECLINED.search(message.content)
@@ -262,6 +267,7 @@ def save_from_chat(
             select(Memory).where(
                 Memory.profile_id == PROFILE_ID,
                 Memory.content == content,
+                Memory.project_id == project_id,
             )
         )
         if existing and (existing.state == "confirmed" or state == "candidate"):
@@ -275,6 +281,8 @@ def save_from_chat(
                 return {"error": "要替换的记忆不存在，请先查询记忆"}
             if target.state != "confirmed":
                 return {"error": "只能替换已保存的记忆"}
+            if target.project_id != project_id:
+                return {"error": "这条记忆不属于当前项目，请在记忆页管理，不能跨项目覆盖"}
             if (
                 existing
                 and existing.replaces_id
@@ -291,6 +299,7 @@ def save_from_chat(
             record = Memory()
             db.add(record)
         values = {
+            "project_id": project_id,
             "content": content,
             "category": category,
             "state": state,
@@ -340,6 +349,8 @@ def edit(memory_id, values, expected_revision=None):
             and record.replaces_id
         ):
             target = get_memory(db, record.replaces_id)
+            if target.project_id != record.project_id:
+                raise MemoryConflict("记忆来源的项目已变化，请删除旧提议后重新整理")
             if target.revision != record.replaces_revision:
                 raise MemoryConflict("原记忆已修改，请删除这条旧提议后重新整理")
             for field in FIELDS:
@@ -393,7 +404,7 @@ def undo(change_id):
             db.delete(record)
         else:
             for field in FIELDS:
-                setattr(record, field, change.before[field])
+                setattr(record, field, change.before.get(field))
             record.revision += 1
         change.undone = True
         db.commit()

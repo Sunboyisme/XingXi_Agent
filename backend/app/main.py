@@ -15,7 +15,7 @@ from langgraph.types import Command
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
-from . import features, skills, office, complex_tasks, conversation_cleanup
+from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts
 from . import (
     agent,
     data_transfer,
@@ -150,7 +150,7 @@ def item(db, model, item_id):
 
 def goal_read(db, goal):
     values = {
-        key: getattr(goal, key) for key in s.GoalRead.model_fields if key != "nodes"
+        key: getattr(goal, key) for key in s.GoalRead.model_fields if key not in {"nodes", "active_run_id"}
     }
     nodes = [
         s.NodeRead.model_validate(n)
@@ -160,7 +160,8 @@ def goal_read(db, goal):
             .order_by(store.KnowledgeNode.ordinal)
         )
     ]
-    return s.GoalRead(**values, nodes=nodes)
+    active = db.scalar(select(store.Run.id).where(store.Run.goal_id == goal.id, store.Run.status.in_(["queued", "running"])))
+    return s.GoalRead(**values, nodes=nodes, active_run_id=active)
 
 
 def settings_read(db):
@@ -549,7 +550,9 @@ def conversations(db=Depends(database)):
 
 @router.post("/conversations", response_model=s.ConversationRead)
 def new_conversation(value: s.ConversationCreate, db=Depends(database)):
-    record = store.Conversation(title=value.title)
+    if value.project_id:
+        projects.require(db, value.project_id)
+    record = store.Conversation(title=value.title, project_id=value.project_id)
     db.add(record)
     db.commit()
     return record
@@ -633,11 +636,9 @@ async def retry_message(conversation_id: str, value: s.ChatRetry | None = None, 
         .where(store.Message.conversation_id == conversation_id)
         .order_by(store.Message.created_at.desc(), store.MESSAGE_ORDER.desc())
     )
-    previous = db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id).order_by(store.Run.created_at.desc()))
-    if not latest or not previous or previous.status not in {"failed", "cancelled"}:
-        raise HTTPException(409, "没有需要重试的消息")
-    if latest.role != "user" and (latest.role != "assistant" or latest.run_id != previous.id):
-        raise HTTPException(409, "没有需要重试的消息")
+    previous = db.get(store.Run, value.source_run_id) if value and value.source_run_id else db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id).order_by(store.Run.created_at.desc()))
+    if not previous or previous.conversation_id != conversation_id or retry_action(db, previous) == "none":
+        raise HTTPException(409, "这条回答的状态已变化，请刷新后继续当前任务或发送新的要求。")
     source = db.get(store.Message, previous.source_message_id) if previous.source_message_id else None
     if source is None:
         source = db.scalar(select(store.Message).where(
@@ -665,6 +666,7 @@ async def retry_message(conversation_id: str, value: s.ChatRetry | None = None, 
         run.task_id = previous.task_id
         task = complex_tasks.require(db, previous.task_id)
         task.model_config = config
+        task.status, task.reason = "running", ""
     db.commit()
     runs.launch(run.id, lambda: agent.chat(run.id, conversation_id))
     return run
@@ -686,16 +688,27 @@ def task_detail(task_id: str):
 
 
 @router.post("/tasks/{task_id}/resume", response_model=s.RunRead)
-async def resume_task(task_id: str, db=Depends(database)):
+async def resume_task(task_id: str, value: s.ChatRetry | None = None, db=Depends(database)):
     task = complex_tasks.require(db, task_id)
     if task.status in complex_tasks.TERMINAL:
         raise HTTPException(409, "任务已经结束，请发送新的要求。")
+    if task.status == "waiting_input":
+        raise HTTPException(409, "请先补充任务要求或核实未知操作结果，再继续任务。")
     if db.scalar(select(store.Run.id).where(
         store.Run.conversation_id == task.conversation_id,
         store.Run.status.in_(["queued", "running"]),
     )):
         raise HTTPException(409, "当前对话仍在执行，请等待完成或先停止。")
-    run = create_run(db, "chat", conversation_id=task.conversation_id)
+    selection = value.model_selection if value else None
+    if selection is None and task.model_config:
+        selection = s.ModelSelection(provider_id=task.model_config["provider_id"], model_name=task.model_config["model_name"], thinking_enabled=task.model_config.get("thinking_enabled", False))
+    try:
+        task.model_config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), selection)
+        provider.model(task.model_config)
+    except Exception as error:
+        raise HTTPException(400, provider.safe_error(error)) from None
+    task.status, task.reason = "running", ""
+    run = create_run(db, "chat", conversation_id=task.conversation_id, commit=False)
     run.task_id, run.model_config = task.id, task.model_config
     message = store.Message(conversation_id=task.conversation_id, role="user", content="继续此任务。")
     db.add(message)
@@ -770,12 +783,29 @@ def list_runs(
         query = query.where(store.Run.conversation_id == conversation_id)
     if goal_id:
         query = query.where(store.Run.goal_id == goal_id)
-    return db.scalars(query).all()
+    return [run_read(db, value) for value in db.scalars(query)]
+
+
+def retry_action(db, run):
+    if not run.conversation_id or run.status in {"queued", "running"}:
+        return "none"
+    latest_user = db.scalar(select(store.Message).where(store.Message.conversation_id == run.conversation_id, store.Message.role == "user").order_by(store.Message.created_at.desc(), store.MESSAGE_ORDER.desc()))
+    if run.task_id:
+        task = db.get(store.ComplexTask, run.task_id)
+        if task and task.status == "paused" and latest_user and latest_user.id in [*task.message_ids, *task.pending_message_ids]:
+            return "continue"
+        return "none"
+    return "retry" if run.status in {"failed", "cancelled"} and latest_user and latest_user.id == run.source_message_id else "none"
+
+
+def run_read(db, run):
+    task = db.get(store.ComplexTask, run.task_id) if run.task_id else None
+    return s.RunRead.model_validate(run).model_copy(update={"retry_action": retry_action(db, run), "task_status": task.status if task else None})
 
 
 @router.get("/runs/{run_id}", response_model=s.RunRead)
 def get_run(run_id: str, db=Depends(database)):
-    return item(db, store.Run, run_id)
+    return run_read(db, item(db, store.Run, run_id))
 
 
 @router.post("/runs/{run_id}/cancel", response_model=s.RunRead)
@@ -790,7 +820,7 @@ async def cancel_run(run_id: str, db=Depends(database)):
     db.refresh(value)
     if value.status in {"queued", "running"}:
         raise HTTPException(409, "当前回答的停止状态尚未同步，请稍候再试。")
-    return value
+    return run_read(db, value)
 
 
 @router.get("/runs/{run_id}/events")
@@ -859,17 +889,57 @@ async def plan_course(goal_id: str, db=Depends(database)):
 
 
 @router.delete("/learning/goals/{goal_id}")
-def delete_goal(goal_id: str, db=Depends(database)):
+async def delete_goal(goal_id: str, request: Request, stop: bool = False, db=Depends(database)):
+    from sqlalchemy import delete
     goal = item(db, store.Goal, goal_id)
-    if db.scalar(
-        select(store.Run).where(
-            store.Run.goal_id == goal_id, store.Run.status.in_(["queued", "running"])
-        )
-    ):
-        raise HTTPException(409, "请先停止当前学习任务")
+    active = list(db.scalars(select(store.Run).where(store.Run.goal_id == goal_id, store.Run.status.in_(["queued", "running"]))))
+    if active and not stop:
+        raise HTTPException(409, "学习任务正在运行，请选择停止任务并删除")
+    pending = []
+    for run in active:
+        if run.id in runs.tasks:
+            task = runs.tasks[run.id]
+            task.cancel()
+            pending.append(task)
+        else:
+            run.status = "cancelled"
+    if pending:
+        try:
+            await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), 15)
+        except TimeoutError:
+            raise HTTPException(409, "学习任务仍在停止中，请稍后再删除") from None
+    lesson_ids = select(store.Lesson.id).join(store.KnowledgeNode, store.KnowledgeNode.id == store.Lesson.node_id).where(store.KnowledgeNode.goal_id == goal_id)
+    threads = list(db.scalars(select(store.Lesson.graph_thread_id).where(store.Lesson.id.in_(lesson_ids))))
+    image_ids = set()
+    for ids in db.scalars(select(store.Attempt.attachment_ids).where(store.Attempt.lesson_id.in_(lesson_ids))):
+        image_ids.update(ids)
+    run_ids = select(store.Run.id).where(store.Run.goal_id == goal_id)
+    outputs = list(db.scalars(select(store.Artifact.storage_name).where(store.Artifact.run_id.in_(run_ids))))
+    db.execute(delete(store.Run).where(store.Run.goal_id == goal_id))
     db.delete(goal)
+    db.flush()
+    referenced = set(db.scalars(select(store.ProjectMaterial.file_id)))
+    for ids in db.scalars(select(store.Message.attachment_ids)):
+        referenced.update(ids)
+    for ids in db.scalars(select(store.Attempt.attachment_ids)):
+        referenced.update(ids)
+    image_ids.difference_update(referenced)
+    db.execute(delete(store.Attachment).where(store.Attachment.id.in_(image_ids)))
     db.commit()
-    return {"deleted": True}
+    failures = projects.unlink_files(image_ids)
+    for name in outputs:
+        path = artifacts.root() / name
+        if path.resolve().is_relative_to(artifacts.root().resolve()):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                failures += 1
+    for thread_id in threads:
+        try:
+            await request.app.state.tutor.checkpointer.adelete_thread(thread_id)
+        except Exception:
+            failures += 1
+    return {"deleted": True, "cleanup_pending": failures}
 
 
 @router.get("/learning/nodes/{node_id}/lesson", response_model=s.LessonRead | None)
@@ -1294,4 +1364,5 @@ async def wechat_disconnect(request: Request):
 
 
 router.include_router(features.router)
+router.include_router(projects.router)
 app.include_router(router)

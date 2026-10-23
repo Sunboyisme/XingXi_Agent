@@ -13,9 +13,11 @@ export type Tool = Schemas["ToolRead"];
 export type MCPServer = Schemas["MCPServerRead"];
 export type MCPServerWrite = Schemas["MCPServerWrite"];
 export type Conversation = Schemas["ConversationRead"];
+export type Project = Schemas["ProjectRead"];
 export type Message = Schemas["MessageRead"];
 export type Run = Schemas["RunRead"];
 export type ComplexTask = {
+  resume_run_id?: string | null;
   id: string;
   conversation_id: string;
   source_message_id: string;
@@ -38,6 +40,7 @@ export type ComplexTask = {
   operations: {
     id: string;
     tool_id: string;
+    name?: string;
     status: string;
     result: Record<string, unknown>;
   }[];

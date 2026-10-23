@@ -51,9 +51,17 @@ class Settings(Base):
     image_generation_config: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class Project(Record, Base):
+    __tablename__ = "projects"
+    name: Mapped[str] = mapped_column(String(200))
+    instructions: Mapped[str] = mapped_column(Text, default="")
+
+
 class Conversation(Record, Base):
     __tablename__ = "conversations"
     title: Mapped[str] = mapped_column(String(200), default="新对话")
+    project_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    pinned_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class MCPServer(Record, Base):
@@ -240,6 +248,7 @@ class Attempt(Record, Base):
 
 class Memory(Record, Base):
     __tablename__ = "memories"
+    project_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     content: Mapped[str] = mapped_column(Text)
     category: Mapped[str] = mapped_column(String(30), default="fact")
     source: Mapped[str] = mapped_column(Text, default="用户手动记录")
@@ -403,6 +412,21 @@ class Attachment(Record, Base):
     media_type: Mapped[str] = mapped_column(String(60))
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
+
+
+class ProjectMaterial(Record, Base):
+    __tablename__ = "project_materials"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    file_id: Mapped[str] = mapped_column(ForeignKey("attachments.id", ondelete="CASCADE"), unique=True)
+    source_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class PlanDayOrder(Record, Base):
+    __tablename__ = "plan_day_orders"
+    __table_args__ = (UniqueConstraint("profile_id", "timezone", "day"),)
+    timezone: Mapped[str] = mapped_column(String(100))
+    day: Mapped[str] = mapped_column(String(10))
+    keys: Mapped[list] = mapped_column(JSON, default=list)
 
 
 class OfficeFile(Base):
