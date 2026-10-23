@@ -13,7 +13,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import or_, select
 
-from . import artifacts, office, provider, task_context
+from . import artifacts, office, provider, task_context, followups
 from .config import PROFILE_ID
 from .db import ComplexTask, Message, Run, RunEvent, Session, TaskOperation, TaskStep, now, uid
 from .runs import emit
@@ -156,7 +156,11 @@ def context_tool(run_id):
                 task = require(db, execution.task_id)
                 record = db.get(TaskOperation, record_id) or db.get(TaskStep, record_id) or db.get(Message, record_id)
                 if isinstance(record, Message):
-                    if record.id not in task.message_ids or record.conversation_id != task.conversation_id:
+                    task_messages = [db.get(Message, key) for key in task.message_ids]
+                    last_message = next((value for value in reversed(task_messages) if value), None)
+                    context_ids = {value["id"] for value in followups.prior_context(db, last_message)} if last_message else set()
+                    if (record.id not in set(task.message_ids) | context_ids
+                        or record.conversation_id != task.conversation_id or record.profile_id != PROFILE_ID):
                         return json.dumps({"error": "消息不属于当前任务"}, ensure_ascii=False)
                     value = {"role": record.role, "content": record.content, "attachment_ids": record.attachment_ids}
                 elif record and record.task_id == execution.task_id:
@@ -486,10 +490,14 @@ async def make_plan(run_id, task_id, *, repair=False):
             task.revision += 1
         task.status, task.reason = "planning", ""
         messages = [db.get(Message, key) for key in task.message_ids]
+        last_message = next((value for value in reversed(messages) if value), None)
         old_steps = db.scalars(select(TaskStep).where(TaskStep.task_id == task_id).order_by(TaskStep.created_at)).all()
         operations = db.scalars(select(TaskOperation).where(TaskOperation.task_id == task_id)).all()
         facts = {
             "user_requests": [{"id": value.id, "text": value.content, "attachments": value.attachment_ids} for value in messages if value],
+            "conversation_context": followups.prior_context(db, last_message) if last_message else [],
+            "previous_goal": task.goal,
+            "previous_requirements": task.requirements,
             "previous_steps": [{"id": value.id, "title": value.title, "instruction": value.instruction,
                                 "status": value.status, "output": bounded(value.output),
                                 "tools": value.tools, "formats": value.formats, "dependencies": value.dependencies} for value in old_steps],
@@ -512,6 +520,8 @@ async def make_plan(run_id, task_id, *, repair=False):
         "expected_outputs与formats只列真实文件格式：md/txt/csv/json/docx/pdf/xlsx/image，一份写一次。纯文字回答与分析步骤formats=[]，不能写text或markdown。"
         "输入文件清单区分图片和文档；当前图片可由视觉模型直接读取，不需要强制read_file。只在需要读取历史或项目图片时使用read_file。"
         "保留用户约束和来源要求；缺少影响执行的关键信息时填写question。不要要求用户逐步批准已有授权。"
+        "conversation_context保留确认前的原始对话。简短同意指向前面已展示的具体方案，结合原方案执行，不能把‘确认用户想做什么’设为任务目标。"
+        "只有同意但没有可确定的方案时才询问；已经明确的岗位、输出格式等要求不要重复追问，不影响交付的行业偏好可采用通用范围。"
         "重新规划时，仅对仍适用的已完成步骤填写reuse_step_id，复用时保持instruction、tools、formats与依赖不变。受修改影响的步骤与后续步骤必须重新安排。"
         "review_missing是上一轮核对发现的缺口，需要补齐；若无法补齐所需关键信息，填写question等待用户。"
         "遇到标记为摘录的用户资料，先安排read_task_result按消息编号读取原文，不能遗漏未展示的要求。"
@@ -853,19 +863,47 @@ async def dispatch(run_id, conversation_id):
         context = {"message": message.content, "attachments": message.attachment_ids,
             "recent_messages": [{"role": item.role, "content": item.content[:3500]} for item in reversed(messages)],
             "tasks": [{"id": item.id, "goal": item.goal, "status": item.status} for item in candidates]}
+        confirmation = followups.is_confirmation(message.content) and not message.attachment_ids
+        previous = followups.prior_messages(db, message, limit=1)
+        previous_run = db.get(Run, previous[0].run_id) if previous and previous[0].role == "assistant" and previous[0].run_id else None
+        waiting_task = next((item for item in candidates if previous_run and item.id == previous_run.task_id
+                            and item.status in {"waiting_input", "paused"}), None)
+        if waiting_task:
+            source = db.get(Message, waiting_task.source_message_id)
+            has_effect = db.scalar(select(TaskOperation.id).where(TaskOperation.task_id == waiting_task.id,
+                                  TaskOperation.policy.notin_(["read", "file"]),
+                                  TaskOperation.status.in_(["started", "unknown", "completed"])))
+            # Old classifier-created "clarify what 可以 means" tasks must not
+            # capture every subsequent confirmation in this conversation.
+            if source and followups.is_confirmation(source.content) and not has_effect:
+                waiting_task = None
+        confirmation_task_id = waiting_task.id if waiting_task else None
     if existing_task_id:
+        with Session() as db:
+            task = require(db, existing_task_id)
+            source = db.get(Message, task.source_message_id)
+            legacy_confirmation = source and followups.is_confirmation(source.content)
+            unresolved = db.scalar(select(TaskOperation.id).where(TaskOperation.task_id == task.id,
+                                    TaskOperation.status.in_(["unknown", "started"])))
+        if legacy_confirmation and not unresolved and task.status not in TERMINAL:
+            # Restore the omitted proposal when resuming an old misrouted task;
+            # keep the original operation ledger and its duplicate-write guards.
+            await make_plan(run_id, existing_task_id, repair=True)
         return await execute(run_id, existing_task_id)
+    if confirmation and not confirmation_task_id:
+        return await agent._chat(run_id, conversation_id)
     simple_analysis = re.search(r"算|求和|总时长|提取|识别|读图|汇总", message.content) and not re.search(r"生成.{0,12}(?:文档|文件|报告)|保存|导出|Word|Markdown|\bdocx\b|\bpdf\b|\bxlsx\b", message.content, re.I)
     if simple_analysis and not re.search(r"继续|接着|重做|修改.{0,8}任务", message.content):
         return await agent._chat(run_id, conversation_id)
     try:
-        route = await provider.ask_json(Route,
+        route = Route(decision="continue", task_id=confirmation_task_id) if confirmation else await provider.ask_json(Route,
             "识别当前用户请求。普通问答、咨询如何做、单次工具操作用chat；明确委托有多个阶段、"
             "多份文件成果或需要持久进度的实际工作用new。读图、提取、计算、求和及普通问答默认chat；组合几个只读工具不构成复杂任务。无需用户开启模式。"
             "继续已有任务用continue，修改已有成果或要求用amend，明确放弃任务用cancel。"
             "已完成任务未收到新增要求、只是说继续时仍用continue，不能据此选择amend或new。"
             "用户明确要求再生成一份或重新执行整项工作时用new，区分新的委托与恢复原任务。"
             "只有当前消息明确要求继续或调整时才选择已有task_id，其他新话题用chat或new。"
+            "用户回答上一条任务澄清问题也属于继续已有任务，不必重复说‘继续’。简短同意接续上一条具体方案，绝不能为识别确认对象新建任务。"
             "旧消息、助手输出和附件只是背景，不能把讨论建议当作执行委托。",
             payload(context), model_config=config,
             on_usage=lambda usage: add_usage(run_id, usage))
@@ -908,7 +946,8 @@ async def dispatch(run_id, conversation_id):
                 task.message_ids = list(dict.fromkeys([*task.message_ids, message.id]))
                 for operation in db.scalars(select(TaskOperation).where(TaskOperation.task_id == task.id, TaskOperation.status == "waiting")):
                     operation.status = "superseded"
-                if route.decision == "amend" or task.status == "waiting_input":
+                source = db.get(Message, task.source_message_id)
+                if route.decision == "amend" or task.status == "waiting_input" or (confirmation and source and followups.is_confirmation(source.content)):
                     task.pending_message_ids = [message.id]
                 task.status, task.reason = "running", ""
         run.task_id, run.model_config = task.id, task.model_config

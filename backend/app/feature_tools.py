@@ -1,6 +1,5 @@
-from . import task_context
+from . import task_context, followups
 import json
-import re
 import threading
 import time
 from datetime import date
@@ -22,11 +21,6 @@ _PLAN_PROPOSAL_TTL = 24 * 60 * 60
 class RemovalTarget(BaseModel):
     plan_id: str
     occurrence_start: str = ""
-_CONFIRMATION = re.compile(
-    r"^(?:确认|确定|可以|好的|好|行|对|是的|没问题|就这样|写入|创建|保存|安排|按这个方案|就按这个方案|创建吧|写入吧|保存吧|ok|okay|yes)"
-    r"(?:创建|安排|保存|写入)?$",
-    re.IGNORECASE,
-)
 
 
 def _plan_signature(value: dict) -> tuple:
@@ -45,12 +39,7 @@ def _plan_signature(value: dict) -> tuple:
 
 
 def _short_confirmation(text: str) -> bool:
-    compact = "".join(
-        character
-        for character in (text or "").strip()
-        if character not in " \t\r\n，,。.!！~～"
-    )
-    return bool(compact) and bool(_CONFIRMATION.fullmatch(compact))
+    return followups.is_confirmation(text)
 
 
 def _confirmed_plans(proposal, pending, latest_text):

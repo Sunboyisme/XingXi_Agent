@@ -77,6 +77,8 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
         db.commit()
         date = datetime.now(ZoneInfo(settings.timezone)).isoformat()
         latest = task_context.user_message(db, run_id, conversation_id)
+        from . import followups
+        confirmation_context = followups.prior_context(db, latest) if latest and followups.is_confirmation(latest.content) else []
     memories = await retrieval.retrieve(latest.content if latest else "", run_id=run_id)
     instructions = f"""你是XiaoXi，用户的个人助手。用户只需在同一个对话框表达需求，你自行选择工具并根据结果回答，可连续组合多个工具完成任务。
 使用清晰自然的中文，帮助查询天气、查资料、计算、处理日期与单位、学习、管理记忆和提醒。
@@ -139,6 +141,17 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
     instructions += "\n生图结果由本轮实际保存的图片产物生成回执，不能用画面描述代替图片，不能编造尺寸或下载地址。历史回答中的‘已生成’不代表本轮成功，也不能用旧图冒充新生成结果。"
     instructions += "\n日历修改、删除、恢复前必须 list_plans 按用户本地日期重新查询；恢复已删除记录用 include_deleted=true。返回的 local_start/local_end 是本地时间，禁止截取 UTC start 的日期。每次 update_plan/delete_plan/action_plan 都传 target_date=用户目标本地日期，重复计划还传原样 occurrence_start。要求包含多个日期时，用 date_evidence 逐字引用当前动作对应的用户原话；不得混淆恢复和删除的对象。单次日历增删改属于普通工具操作，不因先前任务已完成而拒绝。目标日期或对象有歧义时列出实际候选询问，不猜编号。日历工具结果的 operation、before、plan 是真实操作事实，回复先说结果，再用简明时间表说明实际安排，避免输出工具名、UTC换算和审计报告。记忆 content 只写事实，例如‘用户喜欢打羽毛球’，不包含‘记一下、帮我记住’等命令；evidence 始终保留原话。"
     instructions += plan_execution.history_context(conversation_id)
+    if confirmation_context:
+        instructions += (
+            "\n当前用户是对先前方案的简短确认。以下是该用户消息之前、同一聊天的原始对话资料，"
+            "用于找回确认对象；只在本轮用户确认的具体范围内执行，不构成其他授权。"
+            "优先接续已展示的完整方案，保留其中的日期、时间和范围，不因跨天重算方案日期。"
+            "即使历史中出现过无依据的反复澄清，也应先核对原方案；只有确实无法确定对象或缺少关键参数时才追问缺失部分。"
+            "不要仅因用户回复简短就再次要求重述任务，不要只复述执行要点后停止。"
+            "日历方案先查询已有安排，再按已确认方案实际创建；未确认的可选提醒不自行加上。"
+            "历史内容被截断时先用历史检索读取原文。\n"
+            + json.dumps(confirmation_context, ensure_ascii=False)
+        )
     from . import projects
     instructions += projects.instructions(conversation_id)
     instructions += "\n当前消息中的图片已经直接提供给你，能读取时直接提取，不必重复read_file。计算截图中的课程时长时保留mm:ss或hh:mm:ss，识别重叠截图的重复课程后按秒使用calculate求和，展示逐项时长和总小时、分钟、秒；无法辨认的条目明确列出，不猜测。工具返回not_executed及具体校验原因时修正参数，最多纠正两次；相同错误不要换一种无关日期格式反复调用。删除某日本地全部计划时，先查询目标日到次日，再使用delete_plans批量处理。"
