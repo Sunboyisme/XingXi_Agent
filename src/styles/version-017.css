@@ -213,8 +213,8 @@
 .chat-main .composer,
 .chat-main:not(.is-empty) .composer {
   padding: 12px 18px 10px;
-  background: transparent;
-  backdrop-filter: none;
+  background: color-mix(in srgb, var(--bai-lift) 84%, transparent);
+  backdrop-filter: blur(18px) saturate(1.08);
   box-shadow: none;
 }
 .chat-main .composer:has(textarea:focus-visible) {
