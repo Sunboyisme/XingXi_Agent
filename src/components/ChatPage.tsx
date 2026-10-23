@@ -1261,27 +1261,23 @@ export function ChatPage({
   }
   return (
     <div className="chat-layout" ref={dropTarget}>
-      <div
-        className={`chat-main ${empty ? "is-empty companion-home" : ""}`}
-        ref={chatSurface}
-      >
+      <div className={`chat-main ${empty ? "is-empty" : ""}`} ref={chatSurface}>
         <div
           className={`chat-scroll ${empty ? "is-empty" : ""}`}
           ref={scroller}
         >
           {empty ? (
-            <div className="welcome companion-welcome">
-              <BaiAvatar
-                interactive
-                className="companion-avatar"
-                label="和XiaoXi打个招呼，开始聊天"
-                onClick={() => focusComposer()}
-              />
+            <div className="welcome">
               <div>
-                <h1>我在，想聊点什么？</h1>
-                <p className="welcome-description">
-                  无论是想法、问题，还是一个新计划，我都在这里陪着你。
+                <p className="welcome-date">
+                  {new Intl.DateTimeFormat("zh-CN", {
+                    month: "long",
+                    day: "numeric",
+                    weekday: "long",
+                    timeZone: "Asia/Shanghai",
+                  }).format(new Date())}
                 </p>
+                <h1>今天想做点什么？</h1>
               </div>
             </div>
           ) : (
@@ -1939,12 +1935,10 @@ export function ChatPage({
           <ChatHome
             conversations={conversations}
             goals={goals}
-            projects={projects}
             timezone={settings.timezone}
             onConversation={onConversation}
             onAction={onAction}
             onPlan={onPlan}
-            onProjectOpen={onProjectOpen}
             onPrompt={(text) => {
               changeDraft(
                 draftRef.current.trim()

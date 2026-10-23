@@ -486,26 +486,24 @@ export function ProjectSidebar({
       <div className="chat-sidebar-heading">
         <button className="brand-home" onClick={() => onNew(null)}>
           <strong>XiaoXi</strong>
-          <span>你的个人 AI 助手</span>
         </button>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label="搜索聊天"
+          onClick={() => {
+            setScope(projectId || "all");
+            setError("");
+            setSearchOpen(true);
+          }}
+        >
+          <Search size={17} />
+        </Button>
       </div>
       <Button className="new-chat-button" onClick={() => onNew(projectId)}>
         <Plus size={16} />
         新聊天
       </Button>
-      <button
-        type="button"
-        className="sidebar-search-trigger"
-        aria-label="搜索聊天"
-        onClick={() => {
-          setScope(projectId || "all");
-          setError("");
-          setSearchOpen(true);
-        }}
-      >
-        <Search size={16} aria-hidden="true" />
-        <span>搜索对话…</span>
-      </button>
       <div className="conversation-sidebar project-conversations">
         {error &&
           editing === undefined &&
