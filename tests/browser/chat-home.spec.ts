@@ -47,7 +47,7 @@ test("chat home keeps its single layout in both themes without creating plans or
       theme === "cream" ? "rgb(255, 252, 248)" : "rgb(45, 41, 37)",
     );
     await expect(
-      page.getByRole("heading", { name: "今天想做些什么？", exact: true }),
+      page.getByRole("region", { name: "新对话欢迎", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".new-chat-date")).toBeVisible();
     await expect(page.locator(".chat-home")).toHaveCount(0);
@@ -62,7 +62,7 @@ test("chat home keeps its single layout in both themes without creating plans or
   await page.reload();
   await expect(input).toHaveValue("保留我的草稿");
   await expect(
-    page.getByRole("heading", { name: "今天想做些什么？", exact: true }),
+    page.getByRole("region", { name: "新对话欢迎", exact: true }),
   ).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 710 });
   const home = await page.locator(".new-chat-welcome").boundingBox();

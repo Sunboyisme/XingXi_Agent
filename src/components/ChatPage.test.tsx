@@ -64,7 +64,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-test("chat home has no character artwork and retains the editable composer", () => {
+test("chat home shows its welcome and retains the editable composer", () => {
   apiMock.mockResolvedValue([]);
   render(
     <ChatPage
@@ -78,13 +78,13 @@ test("chat home has no character artwork and retains the editable composer", () 
     />,
   );
   expect(
-    screen.getByRole("heading", { name: "今天想做些什么？" }),
+    screen.getByRole("heading", { name: "今天，想从哪里开始？" }),
   ).toBeTruthy();
   expect(screen.queryByRole("region", { name: "学习与提醒" })).toBeNull();
   const input = screen.getByLabelText("发送给XiaoXi的消息");
   fireEvent.change(input, { target: { value: "还没写完的消息" } });
   expect(screen.queryByRole("button", { name: "和XiaoXi打个招呼" })).toBeNull();
-  expect(document.querySelector(".chat-main .bai-avatar")).toBeNull();
+  expect(document.querySelector(".new-chat-welcome .bai-avatar")).toBeTruthy();
   expect((input as HTMLTextAreaElement).value).toBe("还没写完的消息");
 });
 

@@ -51,7 +51,7 @@ import { AnswerPresentation } from "./AnswerPresentation";
 import { AnswerActions } from "./AnswerActions";
 import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
-import { NewChatWelcome } from "./NewChatWelcome";
+import { NewChatStarters, NewChatWelcome } from "./NewChatWelcome";
 import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
 import {
@@ -554,6 +554,19 @@ export function ChatPage({
     imagesRef.current = values;
     setImages(values);
     persistDraft(draftRef.current, values);
+  }
+  function chooseStarter(prompt: string) {
+    if (submitting || stopping || movingProject) return;
+    const current = draftRef.current;
+    if (current !== prompt && !current.startsWith(`${prompt}\n\n`)) {
+      changeDraft(current.trim() ? `${prompt}\n\n${current}` : prompt);
+    }
+    requestAnimationFrame(() => {
+      const input = composer.current;
+      if (!input || input.disabled) return;
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
   }
   function focusComposer(note = "我在，想到什么就继续说吧。") {
     setBuddyNote(note);
@@ -1714,7 +1727,9 @@ export function ChatPage({
                 busy && run?.task_id
                   ? "补充当前任务要求…"
                   : modelReady
-                    ? "输入消息…"
+                    ? empty
+                      ? "和小希说说你的想法…"
+                      : "输入消息…"
                     : "连接模型后开始对话"
               }
               rows={2}
@@ -1919,6 +1934,12 @@ export function ChatPage({
             </div>
           </div>
         </div>
+        {empty && (
+          <NewChatStarters
+            onPrompt={chooseStarter}
+            disabled={submitting || stopping || movingProject}
+          />
+        )}
       </div>
     </div>
   );
