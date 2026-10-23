@@ -15,9 +15,11 @@ import {
   Check,
   ChevronDown,
   Image as ImageIcon,
+  ImagePlus,
   Folder,
   Library,
   Pin,
+  Plus,
   LoaderCircle,
   Settings2,
   Square,
@@ -453,18 +455,9 @@ export function ChatPage({
   );
   const [uploading, setUploading] = useState(false);
   const [buddyNote, setBuddyNote] = useState("");
-  const [composerMenu, setComposerMenu] = useState<"mcp" | "skills" | null>(
-    null,
-  );
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [movingProject, setMovingProject] = useState(false);
   const moveProjectLock = useRef(false);
-  function changeComposerMenu(next: "mcp" | "skills", open: boolean) {
-    if (open) {
-      setComposerMenu(next);
-      return;
-    }
-    setComposerMenu((current) => (current === next ? null : current));
-  }
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
   const closeMemoryNotice = useCallback(() => setMemoryNotice(null), []);
   const receiveMemory = useCallback((event: RunEvent) => {
@@ -506,6 +499,7 @@ export function ChatPage({
   const thread = useRef<HTMLDivElement>(null);
   const dropTarget = useRef<HTMLDivElement>(null);
   const previewTarget = useRef<HTMLDivElement>(null);
+  const attachmentPicker = useRef<HTMLInputElement>(null);
   const followLatest = useRef(true);
   const composer = useRef<HTMLTextAreaElement>(null);
   const draftRef = useRef(draft);
@@ -1821,6 +1815,8 @@ export function ChatPage({
               <div className="composer-tools">
                 <ImagesInput
                   allowFiles
+                  hideTrigger
+                  pickerRef={attachmentPicker}
                   dropTarget={dropTarget}
                   previewTarget={previewTarget}
                   scopeKey={`${conversationId || "new"}:${attachmentBatch}`}
@@ -1830,24 +1826,55 @@ export function ChatPage({
                   onError={setError}
                   onUploading={setUploading}
                 />
-                <ToolboxMenu
-                  open={composerMenu === "mcp"}
-                  restoreFocus={composerMenu !== "skills"}
-                  onOpenChange={(open) => changeComposerMenu("mcp", open)}
-                  onSettings={() => {
-                    setComposerMenu(null);
-                    onAction("tools");
-                  }}
-                />
-                <SkillsMenu
-                  open={composerMenu === "skills"}
-                  restoreFocus={composerMenu !== "mcp"}
-                  onOpenChange={(open) => changeComposerMenu("skills", open)}
-                  onSettings={() => {
-                    setComposerMenu(null);
-                    onAction("skills");
-                  }}
-                />
+                <DropdownMenu.Root
+                  modal={false}
+                  open={composerMenuOpen}
+                  onOpenChange={setComposerMenuOpen}
+                >
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      className="composer-add-trigger"
+                      aria-label="更多功能"
+                      title="添加附件、MCP 工具和技能"
+                    >
+                      <Plus size={19} />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      className="model-menu composer-add-menu"
+                      aria-label="更多功能"
+                      align="start"
+                      side="top"
+                      sideOffset={8}
+                      collisionPadding={16}
+                    >
+                      <DropdownMenu.Item
+                        className="model-menu-item composer-add-menu-item"
+                        disabled={submitting || stopping || !modelReady}
+                        onSelect={() => attachmentPicker.current?.click()}
+                      >
+                        <ImagePlus size={16} />
+                        添加文件或图片
+                      </DropdownMenu.Item>
+                      <ToolboxMenu
+                        asSubmenu
+                        onSettings={() => {
+                          setComposerMenuOpen(false);
+                          onAction("tools");
+                        }}
+                      />
+                      <SkillsMenu
+                        asSubmenu
+                        onSettings={() => {
+                          setComposerMenuOpen(false);
+                          onAction("skills");
+                        }}
+                      />
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
                 <Hint
                   label={
                     thinkingControl === "none"

@@ -144,6 +144,8 @@ export function ImagesInput({
   previewMode = "thumbnails",
   allowFiles = false,
   scopeKey = "default",
+  pickerRef,
+  hideTrigger = false,
 }: {
   images: Attachment[];
   onChange: (values: Attachment[]) => void;
@@ -155,11 +157,14 @@ export function ImagesInput({
   previewMode?: "thumbnails" | "names";
   allowFiles?: boolean;
   scopeKey?: string;
+  pickerRef?: RefObject<HTMLInputElement | null>;
+  hideTrigger?: boolean;
 }) {
   const [pending, setPending] = useState<Pending[]>([]);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const pendingRef = useRef<Pending[]>([]);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const localFileInput = useRef<HTMLInputElement>(null);
+  const fileInput = pickerRef ?? localFileInput;
   const imagesRef = useRef(images);
   imagesRef.current = images;
   const generation = useRef(0);
@@ -367,9 +372,7 @@ export function ImagesInput({
             )}
             <small>{image.name}</small>
             {!!image.warnings?.length && (
-              <span className="file-attachment-warning">
-                有解析提示
-              </span>
+              <span className="file-attachment-warning">有解析提示</span>
             )}
             <button
               type="button"
@@ -446,27 +449,29 @@ export function ImagesInput({
     ) : null;
   return (
     <div className="image-input">
-      <Tooltip.Provider delayDuration={260} skipDelayDuration={100}>
-        <Tooltip.Root>
-          <Tooltip.Trigger asChild>
-            <button
-              type="button"
-              className={`attach-button ${disabled ? "disabled" : ""}`}
-              aria-label={allowFiles ? "添加文件或图片" : "添加图片"}
-              disabled={disabled}
-              onClick={() => fileInput.current?.click()}
-            >
-              <ImagePlus size={18} />
-            </button>
-          </Tooltip.Trigger>
-          <Tooltip.Portal>
-            <Tooltip.Content className="ui-hint" side="top" sideOffset={7}>
-              {allowFiles ? "添加文件或图片" : "添加图片"}
-              <Tooltip.Arrow className="ui-hint-arrow" />
-            </Tooltip.Content>
-          </Tooltip.Portal>
-        </Tooltip.Root>
-      </Tooltip.Provider>
+      {!hideTrigger && (
+        <Tooltip.Provider delayDuration={260} skipDelayDuration={100}>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <button
+                type="button"
+                className={`attach-button ${disabled ? "disabled" : ""}`}
+                aria-label={allowFiles ? "添加文件或图片" : "添加图片"}
+                disabled={disabled}
+                onClick={() => fileInput.current?.click()}
+              >
+                <ImagePlus size={18} />
+              </button>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content className="ui-hint" side="top" sideOffset={7}>
+                {allowFiles ? "添加文件或图片" : "添加图片"}
+                <Tooltip.Arrow className="ui-hint-arrow" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        </Tooltip.Provider>
+      )}
       <input
         ref={fileInput}
         type="file"

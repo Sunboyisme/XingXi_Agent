@@ -1,18 +1,21 @@
 import { useState } from "react";
-import { ChevronDown, Layers2, Loader2, Settings2 } from "lucide-react";
+import { Layers2, Loader2, Settings2 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { api, type Tool } from "@/lib/api";
+import { ToolMenuFrame } from "./ToolMenuFrame";
 
 export function ToolboxMenu({
   onSettings,
   open,
   onOpenChange,
   restoreFocus = true,
+  asSubmenu = false,
 }: {
   onSettings: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   restoreFocus?: boolean;
+  asSubmenu?: boolean;
 }) {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,84 +48,66 @@ export function ToolboxMenu({
     }
   }
   return (
-    <DropdownMenu.Root
-      modal={false}
+    <ToolMenuFrame
+      label="MCP 工具"
+      icon={<Layers2 size={15} />}
+      asSubmenu={asSubmenu}
       open={open}
+      restoreFocus={restoreFocus}
       onOpenChange={(value) => {
         if (value) void load(true);
         onOpenChange?.(value);
       }}
     >
-      <DropdownMenu.Trigger asChild>
-        <button className="composer-toolbox-trigger" aria-label="MCP 工具">
-          <Layers2 size={15} />
-          <span>MCP</span>
-          <ChevronDown size={13} />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          onCloseAutoFocus={(event) => {
-            if (!restoreFocus) event.preventDefault();
-          }}
-          aria-label="MCP 工具"
-          className="model-menu toolbox-menu"
-          align="start"
-          side="top"
-          sideOffset={8}
-          collisionPadding={16}
-        >
-          <DropdownMenu.Label className="model-menu-label">
-            MCP 工具 · 全局生效
-          </DropdownMenu.Label>
-          <p className="toolbox-notice">影响所有对话的后续工具调用。</p>
-          {loading && (
-            <p className="toolbox-notice">
-              <Loader2 size={14} className="spin" />
-              正在读取…
-            </p>
-          )}
-          {error && (
-            <p className="toolbox-notice" role="alert">
-              {error}
-            </p>
-          )}
-          {!loading && !error && tools.length === 0 && (
-            <p className="toolbox-notice">还没有配置 MCP 工具</p>
-          )}
-          {!loading &&
-            tools.map((tool) => (
-              <DropdownMenu.CheckboxItem
-                key={tool.id}
-                checked={tool.enabled}
-                disabled={Boolean(saving)}
-                className="model-menu-item toolbox-item"
-                onSelect={(event) => event.preventDefault()}
-                onCheckedChange={() => void toggle(tool)}
-              >
-                <span className="toolbox-row-copy">
-                  <strong>{tool.name}</strong>
-                  <small>
-                    {tool.source_label} ·{" "}
-                    {tool.available ? tool.description : tool.note}
-                  </small>
-                </span>
-                <span
-                  className="mini-toggle"
-                  data-checked={tool.enabled}
-                  aria-hidden="true"
-                >
-                  <span />
-                </span>
-              </DropdownMenu.CheckboxItem>
-            ))}
-          <DropdownMenu.Separator className="model-menu-separator" />
-          <DropdownMenu.Item className="model-menu-item" onSelect={onSettings}>
-            <Settings2 size={15} />
-            配置 MCP
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+      <DropdownMenu.Label className="model-menu-label">
+        MCP 工具 · 全局生效
+      </DropdownMenu.Label>
+      <p className="toolbox-notice">影响所有对话的后续工具调用。</p>
+      {loading && (
+        <p className="toolbox-notice">
+          <Loader2 size={14} className="spin" />
+          正在读取…
+        </p>
+      )}
+      {error && (
+        <p className="toolbox-notice" role="alert">
+          {error}
+        </p>
+      )}
+      {!loading && !error && tools.length === 0 && (
+        <p className="toolbox-notice">还没有配置 MCP 工具</p>
+      )}
+      {!loading &&
+        tools.map((tool) => (
+          <DropdownMenu.CheckboxItem
+            key={tool.id}
+            checked={tool.enabled}
+            disabled={Boolean(saving)}
+            className="model-menu-item toolbox-item"
+            onSelect={(event) => event.preventDefault()}
+            onCheckedChange={() => void toggle(tool)}
+          >
+            <span className="toolbox-row-copy">
+              <strong>{tool.name}</strong>
+              <small>
+                {tool.source_label} ·{" "}
+                {tool.available ? tool.description : tool.note}
+              </small>
+            </span>
+            <span
+              className="mini-toggle"
+              data-checked={tool.enabled}
+              aria-hidden="true"
+            >
+              <span />
+            </span>
+          </DropdownMenu.CheckboxItem>
+        ))}
+      <DropdownMenu.Separator className="model-menu-separator" />
+      <DropdownMenu.Item className="model-menu-item" onSelect={onSettings}>
+        <Settings2 size={15} />
+        配置 MCP
+      </DropdownMenu.Item>
+    </ToolMenuFrame>
   );
 }
