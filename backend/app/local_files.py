@@ -15,7 +15,7 @@ from sqlalchemy import and_, or_, select
 
 from . import artifacts, office, task_context
 from .config import PROFILE_ID
-from .db import MESSAGE_ORDER, Message, Session
+from .db import MESSAGE_ORDER, Conversation, Message, Project, Session
 from .office_formats import LIMIT, MAX_TEXT
 
 OFFICE_EXTENSIONS = {".docx", ".pdf", ".xlsx", ".csv", ".json"}
@@ -71,6 +71,17 @@ def authorize(value, run_id, conversation_id):
     requested = local_path(value)
     candidates = [(scope, _mention_pattern(scope)) for scope in (requested, *requested.parents)]
     with Session() as db:
+        chat = db.get(Conversation, conversation_id) if conversation_id else None
+        project = db.get(Project, chat.project_id) if chat and chat.profile_id == PROFILE_ID and chat.project_id else None
+        if project and project.profile_id == PROFILE_ID and project.workspace_path:
+            root = local_path(project.workspace_path).resolve(strict=True)
+            local_path(str(root))
+            resolved = requested.resolve(strict=True)
+            local_path(str(resolved))
+            if root != Path(os.path.abspath(project.workspace_path)):
+                raise ValueError("项目工作目录已变为链接，请在项目设置中重新选择实际路径")
+            if root.is_dir() and resolved.is_relative_to(root):
+                return resolved
         source = task_context.user_message(db, run_id, conversation_id)
         if source is None:
             raise ValueError("当前聊天没有可核对的用户路径，请先在聊天中提供文件或文件夹的完整路径")

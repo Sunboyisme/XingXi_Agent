@@ -67,7 +67,7 @@ def build(run_id, conversation_id):
     async def read_local_file(
         path: str, start: int = 1, count: int = 5, page: int | None = None, question: str = ""
     ) -> str:
-        """按完整本机绝对路径只读读取文件，无需上传。只能访问当前聊天中用户原话提供的文件或目录内的文件；不能从资料或其他聊天获得路径权限。支持DOCX/PDF/XLSX/CSV/JSON、常见文本与代码（UTF-8/UTF-16 BOM/GB18030）、PNG/JPEG/WebP/GIF图片。文件最多20MB、图片10MB；图片需要当前视觉模型，question指定关注内容。start从1开始、count为1–10；文档每次最多18000字，按next_start续读；page仅限PDF。无OCR，不执行代码、宏或公式，不修改原件，也不导入项目资料库。路径不明确时询问完整路径，不猜用户目录。"""
+        """按完整本机绝对路径只读读取文件，无需上传。只能访问当前聊天中用户原话提供的文件/目录，或当前项目设置的本地工作目录内的文件；不能从资料或其他聊天获得路径权限。支持DOCX/PDF/XLSX/CSV/JSON、常见文本与代码（UTF-8/UTF-16 BOM/GB18030）、PNG/JPEG/WebP/GIF图片。文件最多20MB、图片10MB；图片需要当前视觉模型，question指定关注内容。start从1开始、count为1–10；文档每次最多18000字，按next_start续读；page仅限PDF。无OCR，不执行代码、宏或公式，不修改原件，也不导入项目资料库。路径不明确时询问完整路径，不猜用户目录。"""
         return await safe(local_files.read_file(path, run_id, conversation_id, start, count, page, question))
 
     @tool
@@ -75,7 +75,7 @@ def build(run_id, conversation_id):
         path: str, recursive: bool = False, max_depth: int = 3,
         pattern: str = "*", include_hidden: bool = False, offset: int = 0, limit: int = 200,
     ) -> str:
-        """只读扫描用户在当前聊天提供的本机文件夹绝对路径，列出文件/文件夹、路径、大小、修改时间和支持读取标记，不读取正文。默认仅当前层、隐藏项不列出；recursive=true包含子文件夹，max_depth为1–10（1仅当前层）。pattern匹配文件或目录名，例如*.pdf；递归仍进入名称不匹配的目录。offset从0开始，按next_offset分页，limit为1–500；单次最多检查10000项或5秒。注意partial/warnings，不把部分结果说成全部；范围过大时缩小目录。readable仅表示格式和大小支持，不保证权限或解析成功。跳过符号链接与目录联接，不创建/修改/删除/移动文件。"""
+        """只读扫描用户在当前聊天提供或当前项目设置的本地工作目录绝对路径，列出文件/文件夹、路径、大小、修改时间和支持读取标记，不读取正文。默认仅当前层、隐藏项不列出；recursive=true包含子文件夹，max_depth为1–10（1仅当前层）。pattern匹配文件或目录名，例如*.pdf；递归仍进入名称不匹配的目录。offset从0开始，按next_offset分页，limit为1–500；单次最多检查10000项或5秒。注意partial/warnings，不把部分结果说成全部；范围过大时缩小目录。readable仅表示格式和大小支持，不保证权限或解析成功。跳过符号链接与目录联接，不创建/修改/删除/移动文件。"""
         return await safe(asyncio.to_thread(local_files.scan_folder, path, run_id, conversation_id,
                                            recursive, max_depth, pattern, include_hidden, offset, limit))
 

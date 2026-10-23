@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 test.skip(process.env.BAI_MODELS_QA !== "1", "Requires isolated model QA data");
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 async function select(page: Page, label: string, name: string) {
   await page.getByRole("combobox", { name: label, exact: true }).click();

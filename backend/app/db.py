@@ -55,6 +55,7 @@ class Project(Record, Base):
     __tablename__ = "projects"
     name: Mapped[str] = mapped_column(String(200))
     instructions: Mapped[str] = mapped_column(Text, default="")
+    workspace_path: Mapped[str] = mapped_column(String(4096), default="", server_default="")
 
 
 class Conversation(Record, Base):

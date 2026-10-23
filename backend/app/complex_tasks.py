@@ -485,6 +485,7 @@ async def guarded(entry, run_id, arguments, operation):
 
 async def make_plan(run_id, task_id, *, repair=False):
     from .tools import tool_catalog
+    from .projects import instructions as project_instructions
     with Session() as db:
         task = require(db, task_id)
         pending = list(task.pending_message_ids)
@@ -519,6 +520,7 @@ async def make_plan(run_id, task_id, *, repair=False):
                                 "tools": value.tools, "formats": value.formats, "dependencies": value.dependencies} for value in old_steps],
             "operations": [{"id": value.id, "tool": value.tool_id, "status": value.status, "result": bounded(value.result)} for value in operations],
             "files": office.list_files(task.conversation_id),
+            "project_context": project_instructions(task.conversation_id),
             "review_missing": task.result.get("review_missing", []),
             "tools": [{"id": value["id"], "description": value["description"], "available": value["available"]}
                       for value in tool_catalog() if value["enabled"]],
@@ -692,6 +694,7 @@ async def execute(run_id, task_id, *, repairs=0):
         for saved in db.scalars(select(TaskStep).where(TaskStep.task_id == task_id, TaskStep.revision == task.revision)):
             saved.formats = normalize_formats(saved.formats)
         if task.status in TERMINAL:
+            db.commit()
             return notice(run_id, task_id)
         needs_answer = task.status == "waiting_input" and not task.pending_message_ids
         if not needs_answer:

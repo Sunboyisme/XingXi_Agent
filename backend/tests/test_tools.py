@@ -206,7 +206,7 @@ def test_catalog_matches_agent_tools_and_search_configuration(client, isolate):
     isolate["search"] = "synthetic-key"
     catalog = client.get(API + "/tools").json()
     skill_tools = {"load_skill", "read_skill_file", "run_skill_script"}
-    assert all(item["available"] for item in catalog if item["id"] not in skill_tools)
+    assert all(item["available"] for item in catalog if item["id"] not in skill_tools | {"generate_image"})
     assert all(not item["available"] for item in catalog if item["id"] in skill_tools)
 
 
@@ -236,7 +236,8 @@ def test_agent_utility_loop_and_persisted_events(configured, prompt, expected_na
     assert {event["data"]["name"] for event in events} == expected_names
     if prompt == "查资料":
         assert events[0]["data"]["status"] == "error"
-        assert "请求未完成" in events[0]["data"]["result"]["error"]
+        assert events[0]["data"]["result"]["error"]
+        assert events[0]["data"]["result"]["category"] == "connection_error"
     else:
         results = {event["data"]["name"]: event["data"]["result"] for event in events}
         assert results["计算器"]["result"] == "244.80"

@@ -138,7 +138,7 @@ def test_known_export_upgrades_only_in_import_staging(client, tmp_path, revision
     response = client.post("/api/v1/settings/data/inspect", files={"file": ("legacy.zip", raw.getvalue())})
     assert response.status_code == 200
     with sqlite3.connect(config.DATA_DIR / "bai.sqlite") as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0019"
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0020"
     with sqlite3.connect(legacy) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == revision
 

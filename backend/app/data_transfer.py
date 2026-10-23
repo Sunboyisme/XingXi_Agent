@@ -78,6 +78,7 @@ def create_archive():
             # Never move MCP environment variables, provider setup or channel binding.
             for table in LOCAL_TABLES:
                 connection.execute(f'DELETE FROM "{table}"')
+            connection.execute("UPDATE projects SET workspace_path=''")
             connection.commit()
             connection.execute("VACUUM")
             revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
@@ -127,6 +128,11 @@ def validate(stage):
         incoming_schema, current_schema = schema(incoming), schema(current)
         incoming_revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
         current_revision = current.execute("SELECT version_num FROM alembic_version").fetchone()
+        workspace_schema = current_schema
+        if current_revision == ("0020",) and incoming_revision != ("0020",):
+            current_schema = dict(current_schema)
+            current_schema["projects"] = re.sub(r",\s*workspace_path VARCHAR\(4096\) DEFAULT '' NOT NULL", "", current_schema["projects"])
+            current_revision = ("0019",)
         if current_revision == ("0019",) and incoming_revision in {("0016",), ("0017",), ("0018",)}:
             additions = {"projects", "project_materials", "plan_day_orders"}
             expected = {name: sql for name, sql in current_schema.items() if name not in additions}
@@ -179,6 +185,12 @@ def validate(stage):
             incoming.execute(current_schema["plan_creations"])
             incoming.execute("UPDATE alembic_version SET version_num='0017' WHERE version_num='0016'")
             incoming_schema = schema(incoming)
+        if (workspace_schema != current_schema and incoming_schema == current_schema
+            and incoming.execute("SELECT version_num FROM alembic_version").fetchone() == ("0019",)):
+            incoming.execute("ALTER TABLE projects ADD COLUMN workspace_path VARCHAR(4096) DEFAULT '' NOT NULL")
+            incoming.execute("UPDATE alembic_version SET version_num='0020'")
+            incoming_schema = schema(incoming)
+        current_schema = workspace_schema
         # Reject SQL objects supplied by other applications or modified archives.
         if incoming_schema != current_schema or incoming.execute(
             "SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')"
@@ -192,6 +204,8 @@ def validate(stage):
             "PRAGMA foreign_key_check"
         ).fetchone():
             raise ValueError("数据库校验失败")
+        # A portable archive cannot grant filesystem access on another machine.
+        incoming.execute("UPDATE projects SET workspace_path=''")
         values = counts(incoming)
         ids = [row[0] for row in incoming.execute("SELECT id FROM attachments")]
         documents = {row[0] for row in incoming.execute("SELECT id FROM office_files")}

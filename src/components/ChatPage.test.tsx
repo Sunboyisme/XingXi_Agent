@@ -434,6 +434,6 @@ test("keeps an animated status line while a reply is still streaming", async () 
   await waitFor(() => expect(emit).toBeTruthy());
   act(() => emit?.({ kind: "delta", data: { text: "我先整理一下" } }));
   expect(await screen.findByText("我先整理一下")).toBeTruthy();
-  expect(screen.getByText("正在努力工作")).toBeTruthy();
+  expect(screen.getByText("XiaoXi 正在思考")).toBeTruthy();
   expect(document.querySelectorAll(".thinking-dots > i")).toHaveLength(3);
 });

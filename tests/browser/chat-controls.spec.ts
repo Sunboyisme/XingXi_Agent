@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.skip(process.env.BAI_CONTEXT_QA !== "1", "Requires isolated UI QA data");
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 test("answer actions are compact, copyable and stay attached to historical runs", async ({
   page,

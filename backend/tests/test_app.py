@@ -177,7 +177,7 @@ def test_domain_independent_course_and_no_overwrite(configured, topic):
 
 
 def test_invalid_course_is_atomic(configured, monkeypatch):
-    async def malformed(*_):
+    async def malformed(*_, **__):
         return schemas.CoursePlan.model_validate(
             {
                 "overview": "bad",
@@ -197,7 +197,7 @@ def test_invalid_course_is_atomic(configured, monkeypatch):
         )
 
     monkeypatch.setattr(provider, "ask_json", malformed)
-    goal = configured.post(API + "/learning/goals", json={"title": "测试"}).json()
+    goal = configured.post(API + "/learning/goals", json={"title": "测试", "objective": "掌握测试主题", "foundation": "零基础"}).json()
     run = wait_run(
         configured, configured.post(f"{API}/learning/goals/{goal['id']}/plan")
     )
@@ -319,7 +319,7 @@ def test_conversation_creates_learning_framework_when_explicit(configured):
         configured,
         configured.post(
             f"{API}/conversations/{conv['id']}/messages",
-            json={"content": "我想学习做饭，能独立做晚餐"},
+            json={"content": "我想学习做饭，零基础，能独立做晚餐"},
         ),
     )
     assert run["status"] == "completed", run.get("error")

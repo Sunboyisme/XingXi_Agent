@@ -1625,53 +1625,6 @@ export function ChatPage({
           </Tooltip.Provider>
         )}
         <div className="composer-area">
-          {onProjectChange && (
-            <div className="chat-project-context">
-              <label className="chat-project-picker">
-                <Folder size={15} />
-                <span className="sr-only">
-                  {conversationId ? "移动当前对话到项目" : "新对话所属项目"}
-                </span>
-                <select
-                  value={projectId || ""}
-                  disabled={busy || submitting || uploading || movingProject}
-                  onChange={(event) =>
-                    void changeProject(event.target.value || null)
-                  }
-                  title={
-                    conversationId
-                      ? "选择项目会移动当前对话"
-                      : "选择新对话所属项目"
-                  }
-                >
-                  <option value="">未加入项目</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {projectId && (
-                <>
-                  <button onClick={() => onProjectOpen?.(projectId)}>
-                    项目概览
-                  </button>
-                  <button onClick={() => onLibrary?.(projectId)}>
-                    <Library size={14} />
-                    资料库
-                  </button>
-                </>
-              )}
-              {!conversationId && pinNew && (
-                <span className="chat-project-pin">
-                  <Pin size={13} />
-                  发送后置顶
-                </span>
-              )}
-              {movingProject && <span role="status">正在移动…</span>}
-            </div>
-          )}
           {!empty && !atLatest && (
             <button
               className="chat-jump-latest"
@@ -1750,6 +1703,90 @@ export function ChatPage({
             </button>
           )}
           <div className="composer">
+            {onProjectChange && (
+              <div className="chat-project-context">
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      className="chat-project-trigger"
+                      aria-label={
+                        conversationId ? "移动当前对话到项目" : "新对话所属项目"
+                      }
+                      disabled={
+                        busy || submitting || uploading || movingProject
+                      }
+                    >
+                      <Folder size={15} />
+                      <span>
+                        {projects.find((item) => item.id === projectId)?.name ||
+                          "未加入项目"}
+                      </span>
+                      <ChevronDown size={13} />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      className="project-menu project-choice-menu"
+                      align="start"
+                      side="top"
+                      sideOffset={8}
+                      collisionPadding={12}
+                    >
+                      <DropdownMenu.Label className="project-choice-label">
+                        对话所属项目
+                      </DropdownMenu.Label>
+                      <DropdownMenu.RadioGroup
+                        value={projectId || ""}
+                        onValueChange={(id) => void changeProject(id || null)}
+                      >
+                        {[{ id: "", name: "未加入项目" }, ...projects].map(
+                          (item) => (
+                            <DropdownMenu.RadioItem
+                              key={item.id}
+                              value={item.id}
+                              disabled={
+                                busy || submitting || uploading || movingProject
+                              }
+                            >
+                              <Folder size={14} />
+                              <span>{item.name}</span>
+                              <DropdownMenu.ItemIndicator>
+                                <Check size={14} />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          ),
+                        )}
+                      </DropdownMenu.RadioGroup>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+                {projectId && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onProjectOpen?.(projectId)}
+                    >
+                      项目概览
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onLibrary?.(projectId)}
+                    >
+                      <Library size={14} />
+                      资料库
+                    </button>
+                  </>
+                )}
+                {!conversationId && pinNew && (
+                  <span className="chat-project-pin">
+                    <Pin size={13} />
+                    发送后置顶
+                  </span>
+                )}
+                {movingProject && <span role="status">正在移动…</span>}
+              </div>
+            )}
             <div className="composer-attachments" ref={previewTarget} />
             <Textarea
               id="chat-message"
@@ -1792,6 +1829,7 @@ export function ChatPage({
                 />
                 <ToolboxMenu
                   open={composerMenu === "mcp"}
+                  restoreFocus={composerMenu !== "skills"}
                   onOpenChange={(open) => changeComposerMenu("mcp", open)}
                   onSettings={() => {
                     setComposerMenu(null);
@@ -1800,6 +1838,7 @@ export function ChatPage({
                 />
                 <SkillsMenu
                   open={composerMenu === "skills"}
+                  restoreFocus={composerMenu !== "mcp"}
                   onOpenChange={(open) => changeComposerMenu("skills", open)}
                   onSettings={() => {
                     setComposerMenu(null);

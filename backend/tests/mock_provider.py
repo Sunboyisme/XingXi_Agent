@@ -141,7 +141,7 @@ def reply(body):
                             {
                                 "title": "学习做饭",
                                 "objective": "能独立做晚餐",
-                                "foundation": "",
+                                "foundation": "零基础" if any("零基础" in str(m.get("content", "")) for m in messages if m["role"] == "user") else "",
                                 "explicit_request": True,
                                 "confirm": True,
                             },
@@ -316,7 +316,7 @@ def reply(body):
                             {
                                 "title": "学习做饭",
                                 "objective": "能独立做晚餐",
-                                "foundation": "",
+                                "foundation": "零基础" if any("零基础" in str(m.get("content", "")) for m in messages if m["role"] == "user") else "",
                                 "explicit_request": True,
                             },
                             ensure_ascii=False,

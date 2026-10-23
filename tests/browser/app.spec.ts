@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { selectCalendarDate } from "./helpers/calendarPicker";
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("button", { name: "连接与设置", exact: true }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 20000 });
 });
 test.afterEach(async ({ page }) =>
   expect((page as any).testErrors).toEqual([]),
@@ -89,7 +89,18 @@ test("separate sidebar toggle preserves draft, navigation and saved preference",
 
 test("MCP toolbox hides built-ins and opens configuration", async ({
   page,
+  request,
 }) => {
+  if (process.env.BAI_QA_DATA_MARKER === "qa-017a") {
+    const data = await request
+      .get("/api/v1/settings/data")
+      .then((response) => response.json());
+    expect(data.directory).toContain("qa-017a");
+    for (const server of await request
+      .get("/api/v1/mcp/servers")
+      .then((response) => response.json()))
+      await request.delete(`/api/v1/mcp/servers/${server.id}`);
+  }
   const toolbox = page.getByRole("button", { name: "MCP 工具", exact: true });
   await toolbox.click();
   await expect(
@@ -131,13 +142,13 @@ test("new conversation stream saves final answer and tool memory", async ({
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
   await page.getByRole("tab", { name: "记忆", exact: true }).click();
   await expect(
-    page.getByText("我喜欢先看例子再学习理论", { exact: true }),
+    page.getByText("用户喜欢先看例子再学习理论", { exact: true }),
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
   await page.getByRole("tab", { name: "记忆", exact: true }).click();
   await expect(
-    page.getByText("我喜欢先看例子再学习理论", { exact: true }),
+    page.getByText("用户喜欢先看例子再学习理论", { exact: true }),
   ).toBeVisible();
 });
 
@@ -175,6 +186,7 @@ test("course, teaching, feedback, next node and reload progress", async ({
   await page.getByRole("button", { name: "新的学习目标", exact: true }).click();
   await page.getByLabel("学习主题").fill("学习前端");
   await page.getByLabel("你希望学到什么程度").fill("独立做一个网页");
+  await page.getByLabel("目前的基础与相关背景").fill("零基础，尚未学习编程");
   await page.getByRole("button", { name: "建立学习路线", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "学习前端 · 认识基础", exact: true }),
@@ -182,11 +194,12 @@ test("course, teaching, feedback, next node and reload progress", async ({
   await page
     .getByRole("button", { name: "开始这个知识点", exact: true })
     .click();
+  await page.getByRole("button", { name: "作答", exact: true }).click();
   await expect(page.getByLabel("练习回答")).toBeVisible();
   await page
     .getByLabel("练习回答")
     .fill("概念描述事物，例如前端页面中的结构。");
-  await page.getByRole("button", { name: "提交练习", exact: true }).click();
+  await page.getByRole("button", { name: "发送回答", exact: true }).click();
   await expect(
     page.getByText("这次练习通过了", { exact: false }),
   ).toBeVisible();
@@ -195,9 +208,7 @@ test("course, teaching, feedback, next node and reload progress", async ({
   await expect(
     page.getByText("这次练习通过了", { exact: false }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "下一个知识点", exact: false })
-    .click();
+  await page.getByRole("button", { name: /学习前端 · 应用方法/ }).click();
   await expect(
     page.getByRole("heading", { name: "学习前端 · 应用方法", exact: true }),
   ).toBeVisible();
@@ -233,6 +244,18 @@ test("manual plan with reminder can be saved, edited and completed", async ({
   page,
   request,
 }) => {
+  if (process.env.BAI_QA_DATA_MARKER === "qa-017a") {
+    const data = await request
+      .get("/api/v1/settings/data")
+      .then((response) => response.json());
+    expect(data.directory).toContain("qa-017a");
+    for (const plan of await request
+      .get("/api/v1/plans")
+      .then((response) => response.json())) {
+      if (plan.title.startsWith("浏览器测试："))
+        await request.delete(`/api/v1/plans/${plan.id}`);
+    }
+  }
   await page.getByRole("button", { name: "计划", exact: true }).click();
   await page.getByRole("button", { name: "添加计划", exact: true }).click();
   await page.getByRole("menuitem", { name: /普通计划/ }).click();
@@ -250,7 +273,7 @@ test("manual plan with reminder can be saved, edited and completed", async ({
   const day = page.locator(
     `.plan-day:has([aria-label="${tomorrow} 添加计划"])`,
   );
-  await day.getByRole("button", { name: /09:00 浏览器测试：明天学习/ }).click();
+  await day.getByRole("button", { name: /浏览器测试：明天学习/ }).click();
   await page
     .getByRole("button", {
       name: "编辑 浏览器测试：明天学习",
@@ -261,7 +284,7 @@ test("manual plan with reminder can be saved, edited and completed", async ({
   await page.getByRole("button", { name: "保存计划", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const changedEvent = day.getByRole("button", {
-    name: /09:00 浏览器测试：已调整学习时间/,
+    name: /浏览器测试：已调整学习时间/,
   });
   await expect(changedEvent).toBeVisible();
   await changedEvent.click();

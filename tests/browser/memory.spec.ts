@@ -4,7 +4,7 @@ test.skip(
   process.env.BAI_MEMORY_QA !== "1",
   "需要独立记忆 QA 数据空间与模拟模型",
 );
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 async function send(page: Page, text: string) {
   await page.getByLabel("发送给XiaoXi的消息").fill(text);

@@ -4,7 +4,7 @@ test.skip(
   process.env.BAI_MCP_QA !== "1",
   "Requires isolated local MCP fixture",
 );
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 async function openTools(page: Page) {
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
   await page.getByRole("tab", { name: "工具", exact: true }).click();

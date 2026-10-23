@@ -12,19 +12,17 @@ test("upload Word/PDF, read via tools, generate and preview/download office file
   request,
 }) => {
   const data = await request.get("/api/v1/settings/data").then((r) => r.json());
-  expect(data.directory).toContain("qa-office");
+  expect(data.directory).toContain(process.env.BAI_QA_DATA_MARKER || "qa-office");
   await request.put("/api/v1/settings", {
     data: {
-      model_url: "http://127.0.0.1:8896/v1",
+      model_url: process.env.BAI_MOCK_URL || "http://127.0.0.1:8896/v1",
       model_name: "mock-test",
       model_key: "synthetic-office-key",
       vision_enabled: false,
     },
   });
   await page.goto("/");
-  await page
-    .getByLabel("添加文件或图片")
-    .setInputFiles([
+  await page.locator('input[type="file"]').first().setInputFiles([
       resolve(".local-data/qa-office/fixtures/source.docx"),
       resolve(".local-data/qa-office/fixtures/source.pdf"),
     ]);

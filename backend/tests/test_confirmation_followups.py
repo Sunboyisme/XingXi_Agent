@@ -37,7 +37,7 @@ def exchange(*, task_source=None, effect=False):
         run = db.Run(kind="chat", conversation_id=conversation.id, source_message_id=reply.id, model_config=config)
         session.add(run)
         if effect:
-            step = db.TaskStep(task_id=task.id, ordinal=0, title="创建", instruction="创建计划")
+            step = db.TaskStep(task_id=task.id, source_message_id=request.id, ordinal=0, title="创建", instruction="创建计划")
             session.add(step)
             session.flush()
             session.add(db.TaskOperation(task_id=task.id, step_id=step.id, run_id=previous.id, revision=1,

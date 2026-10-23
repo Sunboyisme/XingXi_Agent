@@ -10,6 +10,17 @@ test("loaded Markdown pictures survive scrolling and composer updates without ju
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  // Keep the scroll fixture self-contained instead of depending on an old QA DB.
+  const stamp = "2026-10-23T00:00:00+00:00";
+  await page.route("**/api/v1/conversations", (route) => route.fulfill({ json: [{
+    id: "qa-scroll-chat", title: "隔离图片滚动回归", project_id: null, pinned_at: null,
+    created_at: stamp, updated_at: stamp,
+  }] }));
+  await page.route("**/api/v1/conversations/qa-scroll-chat/messages", (route) => route.fulfill({ json: [
+    { id: "qa-scroll-user", role: "user", content: "查看这四张隔离测试图", attachment_ids: [], created_at: stamp },
+    { id: "qa-scroll-answer", role: "assistant", run_id: "qa-scroll-run", attachment_ids: [], created_at: stamp,
+      content: Array.from({ length: 4 }, (_, index) => `段落 ${index + 1}\n\n![隔离图片 ${index + 1}](https://example.com/qa-scroll-${index}.png)\n\n` + "滚动时应保留已加载的图片。".repeat(60)).join("\n\n") },
+  ] }));
   await page.route("**/api/v1/runs**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const data = path.endsWith("/images")

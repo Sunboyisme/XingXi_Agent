@@ -39,7 +39,7 @@ test("a later start moves the end to one hour after it", () => {
   expect(nextPlanEnd("2026-10-23T15:30", "2026-10-22T16:00", false)).toBe(
     "2026-10-23T16:30",
   );
-  expect(nextPlanEnd("2026-10-23T23:30", "2026-10-23T23:45", false)).toBe(
+  expect(nextPlanEnd("2026-10-23T23:30", "2026-10-23T23:15", false)).toBe(
     "2026-10-24T00:30",
   );
   expect(nextPlanEnd("2026-10-23", "2026-10-22", true)).toBe("2026-10-23");

@@ -13,7 +13,7 @@ test.beforeAll(async ({ request }) => {
   const status = await request
     .get("/api/v1/settings/data")
     .then((r) => r.json());
-  expect(JSON.stringify(status)).toMatch(/qa-(?:unified|recurring)-plans/);
+  expect(JSON.stringify(status)).toMatch(/qa-(?:(?:unified|recurring)-plans|017a)/);
   for (const item of await request.get("/api/v1/plans").then((r) => r.json()))
     await request.delete(`/api/v1/plans/${item.id}`);
 });

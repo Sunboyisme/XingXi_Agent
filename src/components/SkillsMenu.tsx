@@ -7,10 +7,12 @@ export function SkillsMenu({
   onSettings,
   open,
   onOpenChange,
+  restoreFocus = true,
 }: {
   onSettings: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  restoreFocus?: boolean;
 }) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,6 +76,9 @@ export function SkillsMenu({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
+          onCloseAutoFocus={(event) => {
+            if (!restoreFocus) event.preventDefault();
+          }}
           aria-label="技能"
           className="model-menu toolbox-menu skill-menu"
           align="start"

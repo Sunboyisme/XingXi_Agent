@@ -13,7 +13,7 @@ test("data settings export, inspect, stage and cancel an isolated archive", asyn
   await page.getByRole("tab", { name: "数据", exact: true }).click();
   await expect(page.getByRole("heading", { name: "本机数据" })).toBeVisible();
   await expect(page.locator(".data-paths")).toContainText(
-    "context-review-20261017",
+    process.env.BAI_QA_DATA_MARKER || "context-review-20261017",
   );
   await expect(page.locator(".data-paths")).toContainText("bai.sqlite");
   const downloading = page.waitForEvent("download");

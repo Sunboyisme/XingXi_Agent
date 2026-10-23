@@ -1824,6 +1824,8 @@ export interface components {
             project_id?: string | null;
             /** Pinned */
             pinned?: boolean | null;
+            /** Title */
+            title?: string | null;
         };
         /** DataExportRead */
         DataExportRead: {
@@ -2783,6 +2785,11 @@ export interface components {
             name: string;
             /** Instructions */
             instructions: string;
+            /**
+             * Workspace Path
+             * @default
+             */
+            workspace_path: string;
         };
         /** ProjectWrite */
         ProjectWrite: {
@@ -2793,6 +2800,11 @@ export interface components {
              * @default
              */
             instructions: string;
+            /**
+             * Workspace Path
+             * @default
+             */
+            workspace_path: string;
         };
         /** ProviderPresetRead */
         ProviderPresetRead: {

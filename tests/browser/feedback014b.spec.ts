@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -28,7 +28,7 @@ test("an unsent draft survives leaving the chat page", async ({ page }) => {
   await expect(composer).toHaveValue("离开页面也要留下这段草稿");
 });
 
-test("authentication errors are centered and offer interface settings", async ({
+test("authentication errors keep the message aligned and offer interface settings", async ({
   page,
 }) => {
   await page.route("**/api/v1/conversations", (route) =>
@@ -50,7 +50,7 @@ test("authentication errors are centered and offer interface settings", async ({
     await notice
       .locator(".error-notice-text")
       .evaluate((element) => getComputedStyle(element).textAlign),
-  ).toBe("center");
+  ).toBe("left");
   await notice.getByRole("button", { name: "配置接口", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "设置", exact: true }),
@@ -72,6 +72,8 @@ test("learning failures appear as a bottom toast", async ({ page }) => {
   await page.getByRole("button", { name: "学习", exact: true }).click();
   await page.getByRole("button", { name: "新的学习目标", exact: true }).click();
   await page.getByLabel("学习主题").fill("浏览器验证");
+  await page.getByLabel("你希望学到什么程度").fill("能独立完成练习");
+  await page.getByLabel("目前的基础与相关背景").fill("零基础");
   await page.getByRole("button", { name: "建立学习路线", exact: true }).click();
   const toast = page.locator(".app-toast.is-error");
   await expect(toast).toContainText("学习主题暂时无法保存");
@@ -86,6 +88,13 @@ test("learning failures appear as a bottom toast", async ({ page }) => {
 test("a clear habit is remembered even when the model does not call the tool", async ({
   page,
 }) => {
+  expect(
+    (
+      await page.request.patch("/api/v1/settings/memory", {
+        data: { memory_mode: "auto" },
+      })
+    ).ok(),
+  ).toBeTruthy();
   const existing = await page.request.get("/api/v1/memories");
   for (const item of await existing.json())
     await page.request.delete(`/api/v1/memories/${item.id}`);
@@ -105,7 +114,7 @@ test("a clear habit is remembered even when the model does not call the tool", a
   await expect(
     page
       .locator(".memory-content")
-      .filter({ hasText: "我有每天学英语和读书的习惯" }),
+      .filter({ hasText: "用户有每天学英语和读书的习惯" }),
   ).toBeVisible();
 });
 

@@ -150,7 +150,7 @@ def test_correction_undo_restores_previous_memory_and_protects_later_edit(client
         == 200
     )
     record = client.get(API + "/memories").json()[0]
-    assert record["content"] == "我喜欢简短的回答"
+    assert record["content"] == "用户喜欢简短的回答"
     later = save("我更喜欢先看例子", replaces_id=first["id"])
     client.put(
         f"{API}/memories/{first['id']}",
@@ -170,7 +170,7 @@ def test_pending_correction_preserves_old_value_until_confirmed(client):
     assert len(records) == 2
     assert (
         next(x for x in records if x["id"] == first["id"])["content"]
-        == "我喜欢简短的回答"
+        == "用户喜欢简短的回答"
     )
     result = client.post(
         f"{API}/memories/{suggestion['id']}/confirm",
@@ -204,12 +204,12 @@ def test_explicit_approval_of_pending_correction_updates_original_without_duplic
     )
     records = client.get(API + "/memories").json()
     assert len(records) == 1 and records[0]["id"] == first["id"]
-    assert records[0]["content"] == "我更喜欢详细回答"
+    assert records[0]["content"] == "用户更喜欢详细回答"
     assert (
         client.post(f"{API}/memory-changes/{changed['change_id']}/undo").status_code
         == 200
     )
-    assert client.get(API + "/memories").json()[0]["content"] == "我喜欢简短的回答"
+    assert client.get(API + "/memories").json()[0]["content"] == "用户喜欢简短的回答"
 
 
 def test_agent_calls_non_explicit_memory_tool_and_restores_events(configured):
@@ -239,7 +239,7 @@ def test_agent_saves_a_clear_habit_when_the_model_only_claims_to_remember(config
     assert run["status"] == "completed", run.get("error")
     records = configured.get(API + "/memories").json()
     assert any(
-        item["content"] == "我有每天学英语和读书的习惯"
+        item["content"] == "用户有每天学英语和读书的习惯"
         and item["state"] == "confirmed"
         for item in records
     )

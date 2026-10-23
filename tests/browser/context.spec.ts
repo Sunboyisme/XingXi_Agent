@@ -5,7 +5,7 @@ test.skip(
   process.env.BAI_CONTEXT_QA !== "1",
   "Requires isolated context QA data",
 );
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 test("Bailian search preset saves the correct disabled connection without contacting the provider", async ({
   page,

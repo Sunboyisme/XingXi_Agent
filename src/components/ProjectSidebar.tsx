@@ -6,6 +6,7 @@ import {
   FolderOpen,
   MessageCircle,
   MoreHorizontal,
+  Pencil,
   Pin,
   Plus,
   Search,
@@ -212,6 +213,11 @@ export function ProjectSidebar({
   const [editing, setEditing] = useState<Project | null | undefined>();
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [workspacePath, setWorkspacePath] = useState("");
+  const [renaming, setRenaming] = useState<Conversation | null>(null);
+  const [conversationName, setConversationName] = useState("");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropProject, setDropProject] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [library, setLibrary] = useState<Project | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -229,6 +235,8 @@ export function ProjectSidebar({
   const searchSequence = useRef(0);
   const mutationLock = useRef(false);
   const current = conversations.find((item) => item.id === currentId);
+  const selectedConversation = useRef(currentId);
+  selectedConversation.current = currentId;
 
   useEffect(() => {
     if (!request) return;
@@ -239,6 +247,7 @@ export function ProjectSidebar({
     else {
       setName(project.name);
       setInstructions(project.instructions);
+      setWorkspacePath(project.workspace_path || "");
       setEditing(project);
     }
     // A request is an explicit open action; refreshing project data must not reopen a closed dialog.
@@ -249,6 +258,7 @@ export function ProjectSidebar({
     setError("");
     setName(project?.name || "");
     setInstructions(project?.instructions || "");
+    setWorkspacePath(project?.workspace_path || "");
     setEditing(project);
   }
   async function mutate(operation: () => Promise<unknown>) {
@@ -362,11 +372,33 @@ export function ProjectSidebar({
       <div
         className={`conversation-link ${currentId === value.id ? "selected" : ""}`}
         key={value.id}
+        draggable={!busy && !activity[value.id]}
+        onDragStart={(event) => {
+          if (busy || activity[value.id]) {
+            event.preventDefault();
+            return;
+          }
+          event.dataTransfer.setData(
+            "application/x-xiaoxi-conversation",
+            value.id,
+          );
+          event.dataTransfer.effectAllowed = "move";
+          setDraggingId(value.id);
+        }}
+        onDragEnd={() => {
+          setDraggingId(null);
+          setDropProject(null);
+        }}
+        data-dragging={draggingId === value.id}
       >
         <button
           aria-label={`打开对话 ${value.title}`}
           aria-current={currentId === value.id ? "page" : undefined}
           onClick={() => onOpen(value)}
+          onDoubleClick={() => {
+            setConversationName(value.title);
+            setRenaming(value);
+          }}
         >
           {value.pinned_at ? <Pin size={13} /> : <MessageCircle size={14} />}
           <span>{value.title}</span>
@@ -383,6 +415,16 @@ export function ProjectSidebar({
               side="right"
               align="start"
             >
+              <DropdownMenu.Item
+                disabled={busy}
+                onSelect={() => {
+                  setConversationName(value.title);
+                  setRenaming(value);
+                }}
+              >
+                <Pencil size={14} />
+                重命名
+              </DropdownMenu.Item>
               <DropdownMenu.Item
                 disabled={busy}
                 onSelect={() =>
@@ -415,7 +457,8 @@ export function ProjectSidebar({
                                 "PATCH",
                                 { project_id: project.id || null },
                               );
-                              if (currentId === value.id) onOpen(moved);
+                              if (selectedConversation.current === value.id)
+                                onOpen(moved);
                             })
                           }
                         >
@@ -481,11 +524,15 @@ export function ProjectSidebar({
         新聊天
       </Button>
       <div className="conversation-sidebar project-conversations">
-        {error && editing === undefined && !library && !searchOpen && (
-          <p className="sidebar-error" role="alert">
-            {error}
-          </p>
-        )}
+        {error &&
+          editing === undefined &&
+          !library &&
+          !searchOpen &&
+          !renaming && (
+            <p className="sidebar-error" role="alert">
+              {error}
+            </p>
+          )}
         <section>
           <GroupHeading
             label="置顶"
@@ -542,6 +589,60 @@ export function ProjectSidebar({
                 key={project.id}
                 className="sidebar-project"
                 data-selected={projectId === project.id}
+                data-drop-target={dropProject === project.id}
+                onDragOver={(event) => {
+                  if (
+                    !draggingId ||
+                    busy ||
+                    activity[draggingId] ||
+                    !event.dataTransfer.types.includes(
+                      "application/x-xiaoxi-conversation",
+                    )
+                  )
+                    return;
+                  const source = conversations.find(
+                    (item) => item.id === draggingId,
+                  );
+                  if (!source || source.project_id === project.id) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDropProject(project.id);
+                }}
+                onDragLeave={(event) => {
+                  if (
+                    !(event.relatedTarget instanceof Node) ||
+                    !event.currentTarget.contains(event.relatedTarget)
+                  )
+                    setDropProject(null);
+                }}
+                onDrop={(event) => {
+                  const id = event.dataTransfer.getData(
+                    "application/x-xiaoxi-conversation",
+                  );
+                  if (!id || id !== draggingId) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setDraggingId(null);
+                  setDropProject(null);
+                  if (
+                    busy ||
+                    activity[id] ||
+                    conversations.find((item) => item.id === id)?.project_id ===
+                      project.id
+                  )
+                    return;
+                  void mutate(async () => {
+                    const moved = await api<Conversation>(
+                      `/conversations/${id}`,
+                      "PATCH",
+                      { project_id: project.id },
+                    );
+                    if (selectedConversation.current === id) onOpen(moved);
+                    setCollapsed((ids) =>
+                      ids.filter((key) => key !== project.id),
+                    );
+                  });
+                }}
               >
                 <div className="project-heading">
                   <button
@@ -567,6 +668,7 @@ export function ProjectSidebar({
                   </button>
                   <button
                     className="project-name"
+                    aria-label={`打开项目 ${project.name}`}
                     onClick={() => onProject(project.id)}
                   >
                     <Folder size={14} />
@@ -674,6 +776,19 @@ export function ProjectSidebar({
               onChange={(event) => setInstructions(event.target.value)}
             />
           </label>
+          <label>
+            本地工作路径
+            <Input
+              value={workspacePath}
+              aria-label="本地工作路径"
+              maxLength={4096}
+              placeholder="例如 D:\\工作资料\\学习"
+              onChange={(event) => setWorkspacePath(event.target.value)}
+            />
+            <small className="project-workspace-hint">
+              可选。此项目内的对话可以只读扫描、读取该文件夹；留空取消访问。
+            </small>
+          </label>
           {error && <p role="alert">{error}</p>}
           <DialogFooter>
             <Button
@@ -690,7 +805,11 @@ export function ProjectSidebar({
                   const saved = await api<Project>(
                     editing ? `/projects/${editing.id}` : "/projects",
                     editing ? "PUT" : "POST",
-                    { name: name.trim(), instructions },
+                    {
+                      name: name.trim(),
+                      instructions,
+                      workspace_path: workspacePath.trim(),
+                    },
                   );
                   setEditing(undefined);
                   if (!editing) onProject(saved.id);
@@ -700,6 +819,62 @@ export function ProjectSidebar({
               {busy ? "保存中…" : "保存"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(renaming)}
+        onOpenChange={(open) => {
+          if (!open && !busy) setRenaming(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重命名对话</DialogTitle>
+            <DialogDescription>
+              为这段对话取一个便于查找的名称。
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!renaming || !conversationName.trim() || busy) return;
+              const selected = renaming;
+              void mutate(async () => {
+                const updated = await api<Conversation>(
+                  `/conversations/${selected.id}`,
+                  "PATCH",
+                  { title: conversationName.trim() },
+                );
+                if (selectedConversation.current === selected.id)
+                  onOpen(updated);
+                setRenaming(null);
+              });
+            }}
+          >
+            <label>
+              对话名称
+              <Input
+                autoFocus
+                value={conversationName}
+                maxLength={200}
+                onChange={(event) => setConversationName(event.target.value)}
+              />
+            </label>
+            {error && <p role="alert">{error}</p>}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setRenaming(null)}
+              >
+                取消
+              </Button>
+              <Button type="submit" disabled={busy || !conversationName.trim()}>
+                保存名称
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
       <ConfirmDelete

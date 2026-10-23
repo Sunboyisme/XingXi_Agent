@@ -190,10 +190,8 @@ def test_upload_parse_claim_tool_generation_preview_and_portable_data(client):
         db.get(Run, rid).status = "completed"
         db.commit()
     assert client.delete(f"{API}/conversations/{cid}").status_code in {200, 204}
-    assert client.get(f"{API}/files/{key}").json()["file_status"] in {
-        "ready",
-        "partial",
-    }
+    assert client.get(f"{API}/files/{key}").status_code == 404
+    assert not (office.root() / f"{key}.bin").exists()
     assert data_transfer.create_archive()["path"]
 
 

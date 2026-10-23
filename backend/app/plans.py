@@ -261,7 +261,7 @@ def sync_rules(db, plan, offsets, reset=True):
     for rule in recurrence.variants(db, plan):
         union.extend(offset for offset in rule.reminder_offsets if offset not in union)
     for record in db.scalars(select(PlanOccurrence).where(PlanOccurrence.plan_id == plan.id, PlanOccurrence.override.is_not(None))):
-        union.extend(offset for offset in record.override.get("reminder_offsets", []) if offset not in union)
+        union.extend(offset for offset in (record.override or {}).get("reminder_offsets", []) if offset not in union)
     existing, selected = rules(db, plan.id), []
     for position, offset in enumerate(union):
         rule = next((r for r in existing if r.offset_minutes == offset and r not in selected), None)
@@ -474,7 +474,7 @@ def update_event(key, value):
             if not value.reminder_enabled:
                 cancel_notes(db, key)
                 for record in db.scalars(select(PlanOccurrence).where(PlanOccurrence.plan_id == key, PlanOccurrence.override.is_not(None))):
-                    record.override = {**record.override, "reminder_enabled": False}
+                    record.override = {**(record.override or {}), "reminder_enabled": False}
             if reset:
                 cancel_notes(db, row.id)
             db.flush()
@@ -507,7 +507,7 @@ def act(key, value):
             for segment in db.scalars(select(PlanSegment).where(PlanSegment.plan_id == key)):
                 segment.value = {**segment.value, "reminder_enabled": False}
             for record in db.scalars(select(PlanOccurrence).where(PlanOccurrence.plan_id == key, PlanOccurrence.override.is_not(None))):
-                record.override = {**record.override, "reminder_enabled": False}
+                record.override = {**(record.override or {}), "reminder_enabled": False}
             for rule in rules(db, key):
                 rule.status = "disabled"
             cancel_notes(db, key)

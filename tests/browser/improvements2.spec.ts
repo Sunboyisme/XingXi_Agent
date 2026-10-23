@@ -11,7 +11,7 @@ const shots = resolve(".local-data/qa-013-improvements2/screenshots");
 
 test.beforeEach(async ({ request }) => {
   const data = await request.get("/api/v1/settings/data").then((r) => r.json());
-  expect(data.directory).toContain("qa-013-improvements2-runtime");
+  expect(data.directory).toContain(process.env.BAI_QA_DATA_MARKER || "qa-013-improvements2-runtime");
   mkdirSync(shots, { recursive: true });
 });
 
@@ -52,9 +52,7 @@ test("new chat focuses the composer and keeps text and images across navigation"
   const input = page.getByLabel("发送给XiaoXi的消息");
   await expect(input).toBeFocused();
   await input.fill("离开对话前还没发送的内容");
-  await page
-    .getByLabel("添加图片")
-    .setInputFiles(resolve("docs/updata/0.1.3/0.1.3改进2/9.png"));
+  await page.locator('input[type="file"]').first().setInputFiles(resolve("docs/updata/0.1.3/0.1.3改进2/9.png"));
   await expect(page.getByText("9.png", { exact: true })).toBeVisible();
   await expect(page.locator(".attachment-uploading")).toHaveCount(0);
 

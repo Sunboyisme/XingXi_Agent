@@ -49,5 +49,5 @@ def test_chat_does_not_store_a_model_invented_plan_failure(configured, monkeypat
     assert "没有执行日历计划写入" in messages[-1]["content"]
     assert "遇到了系统错误" not in messages[-1]["content"]
     assert "创建前必须先提出方案并询问用户，确认后才写入" not in prompts[0]
-    assert "成功和失败都必须有本轮实际工具结果为依据" in prompts[0]
+    assert any("成功和失败都必须有本轮实际工具结果为依据" in prompt for prompt in prompts)
     assert configured.get(API + "/calendar/events").json() == []

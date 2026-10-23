@@ -8,7 +8,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-test("learning drafts survive node changes and remounts, and clear after review", () => {
+test("learning drafts survive node changes, remounts and continued dialogue after review", () => {
   const first = {
     id: "lesson-1",
     node_id: "node-1",
@@ -43,5 +43,7 @@ test("learning drafts survive node changes and remounts, and clear after review"
   );
   expect(reopened.result.current.answer).toBe("尚未提交的思路");
   reopened.rerender({ lesson: { ...first, state: "reviewed" } });
+  expect(reopened.result.current.answer).toBe("尚未提交的思路");
+  act(() => { reopened.result.current.setAnswer(""); reopened.result.current.setImages([]); });
   expect(localStorage.getItem("bai-learning-draft:node-1")).toBeNull();
 });

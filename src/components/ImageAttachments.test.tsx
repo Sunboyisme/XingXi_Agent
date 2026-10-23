@@ -104,7 +104,7 @@ test("failed upload can retry without losing other successful files", async () =
     .mockResolvedValueOnce({ id: "ok", name: "ok.png" })
     .mockResolvedValueOnce({ id: "retried", name: "failed.png" });
   render(<Host />);
-  fireEvent.change(screen.getByLabelText("添加图片"), {
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
     target: {
       files: [new File(["x"], "failed.png"), new File(["x"], "ok.png")],
     },
@@ -123,7 +123,7 @@ test("invalid types, oversized images and more than four files are blocked", asy
   render(<Host error={error} />);
   const huge = new File(["x"], "huge.png");
   Object.defineProperty(huge, "size", { value: 10 * 1024 * 1024 + 1 });
-  fireEvent.change(screen.getByLabelText("添加图片"), {
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
     target: {
       files: [
         new File(["x"], "bad.txt"),
@@ -156,7 +156,7 @@ test("upload completing after conversation switch cannot attach to the new draft
       scopeKey="first"
     />,
   );
-  fireEvent.change(screen.getByLabelText("添加图片"), {
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
     target: { files: [new File(["x"], "old.png")] },
   });
   view.rerender(
@@ -199,7 +199,7 @@ test("office documents show parsing state and become readable without image requ
   });
   const uploading = vi.fn();
   render(<Host allowFiles uploading={uploading} />);
-  fireEvent.change(screen.getByLabelText("添加文件或图片"), {
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
     target: { files: [new File(["docx"], "报告.docx")] },
   });
   expect(await screen.findByText("解析中…")).toBeTruthy();
@@ -218,7 +218,7 @@ test("failed office parsing keeps submission blocked until the failed attachment
   });
   const uploading = vi.fn();
   render(<Host allowFiles uploading={uploading} />);
-  fireEvent.change(screen.getByLabelText("添加文件或图片"), {
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
     target: { files: [new File(["pdf"], "扫描.pdf")] },
   });
   await screen.findByText("扫描文档需要 OCR");

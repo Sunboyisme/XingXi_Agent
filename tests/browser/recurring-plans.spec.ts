@@ -10,7 +10,7 @@ test.skip(
 const shots = resolve(".local-data/qa-recurring-plans/screenshots");
 test.beforeEach(async ({ page, request }) => {
   const data = await request.get("/api/v1/settings/data").then((r) => r.json());
-  expect(data.directory).toContain("qa-recurring-plans");
+  expect(data.directory).toContain(process.env.BAI_QA_DATA_MARKER || "qa-recurring-plans");
   mkdirSync(shots, { recursive: true });
   for (const plan of await request.get("/api/v1/plans").then((r) => r.json()))
     await request.delete(`/api/v1/plans/${plan.id}`);

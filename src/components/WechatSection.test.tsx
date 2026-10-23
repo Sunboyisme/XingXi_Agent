@@ -27,7 +27,7 @@ afterEach(() => {
 test("only reads local status until the user connects", async () => {
   apiMock.mockResolvedValue(disconnected);
   render(<WechatSection />);
-  await screen.findByText("未连接");
+  await screen.findAllByText("未连接");
   expect(apiMock).toHaveBeenCalledTimes(1);
   expect(apiMock).toHaveBeenCalledWith("/wechat/status");
   expect(screen.queryByRole("img")).toBeNull();
@@ -44,11 +44,11 @@ test("connect requests a QR only after click and displays the scan action", asyn
       : disconnected,
   );
   render(<WechatSection />);
-  await screen.findByText("未连接");
+  await screen.findAllByText("未连接");
   fireEvent.click(screen.getByRole("button", { name: "连接微信" }));
   await screen.findByRole("img", { name: "使用本人微信扫码连接XiaoXi" });
   expect(apiMock).toHaveBeenCalledWith("/wechat/connect", "POST", undefined);
-  expect(screen.getByText("等待扫码")).toBeTruthy();
+  expect(screen.getAllByText("等待扫码").length).toBeGreaterThan(0);
 });
 
 test("turning on reminders is explicit and delivery acceptance is qualified", async () => {
@@ -70,7 +70,7 @@ test("turning on reminders is explicit and delivery acceptance is qualified", as
     method === "PUT" ? { ...connected, reminders_enabled: true } : connected,
   );
   render(<WechatSection />);
-  await screen.findByText("已连接");
+  await screen.findAllByText("已连接");
   const checkbox = screen.getByRole("checkbox");
   expect(checkbox.getAttribute("aria-checked")).toBe("false");
   fireEvent.click(checkbox);

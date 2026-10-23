@@ -9,7 +9,7 @@ test.skip(
 const shots = resolve(".local-data/qa-appearance/screenshots/chat-home");
 test.beforeAll(async ({ request }) => {
   const data = await request.get("/api/v1/settings/data").then((r) => r.json());
-  expect(data.directory).toContain("qa-appearance");
+  expect(data.directory).toContain(process.env.BAI_QA_DATA_MARKER || "qa-appearance");
   mkdirSync(shots, { recursive: true });
 });
 

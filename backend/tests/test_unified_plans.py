@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from pathlib import Path
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -63,6 +64,7 @@ def test_one_item_multiple_reminders_and_completion_are_shared(client, monkeypat
 def test_repeating_completion_only_finishes_this_occurrence_and_end_finishes_series(
     client, monkeypatch
 ):
+    clock(monkeypatch, "2026-10-20T00:00:00+00:00")
     row = client.post(
         API + "/plans",
         json=plan(recurrence="daily", reminder_enabled=True, reminder_offsets=[0, 15]),
@@ -239,8 +241,9 @@ def test_invalid_occurrence_and_restoring_future_repeat(client, monkeypatch):
 
 def test_migration_preserves_legacy_rules_status_and_deduplicates_links(tmp_path):
     path = tmp_path / "legacy.sqlite"
-    cfg = Config("backend/alembic.ini")
-    cfg.set_main_option("script_location", "backend/migrations")
+    backend = Path(__file__).resolve().parents[1]
+    cfg = Config(str(backend / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend / "migrations"))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{path.as_posix()}")
     command.upgrade(cfg, "0010")
     with sqlite3.connect(path) as connection:

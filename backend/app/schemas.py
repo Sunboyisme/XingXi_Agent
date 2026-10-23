@@ -336,6 +336,7 @@ class ConversationCreate(BaseModel):
 class ConversationUpdate(BaseModel):
     project_id: str | None = None
     pinned: bool | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ConversationRead(RecordRead):
@@ -347,11 +348,13 @@ class ConversationRead(RecordRead):
 class ProjectWrite(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     instructions: str = Field(default="", max_length=12000)
+    workspace_path: str = Field(default="", max_length=4096)
 
 
 class ProjectRead(RecordRead):
     name: str
     instructions: str
+    workspace_path: str = ""
 
 
 class ProjectMaterialCreate(BaseModel):

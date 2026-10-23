@@ -59,9 +59,9 @@ test("failed Markdown image retries only fetching, without replaying generation"
     />,
   );
   fireEvent.click(
-    await screen.findByRole("button", { name: "图片加载失败，重试" }),
+    await screen.findByRole("button", { name: "图片地址已过期，点击重试" }),
   );
-  await screen.findByRole("button", { name: "图片加载失败，重试" });
+  await screen.findByRole("button", { name: "图片地址已过期，点击重试" });
   expect(mocks.api.mock.calls).toEqual(
     Array(2).fill([
       "/runs/run-1/images",

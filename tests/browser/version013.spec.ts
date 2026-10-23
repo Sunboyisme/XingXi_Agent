@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { selectCalendarDate } from "./helpers/calendarPicker";
 
 test.skip(process.env.BAI_013_QA !== "1", "Requires isolated 0.1.3 QA data");
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 const shots = ".local-data/qa-0.1.3/screenshots";
 test.beforeAll(async ({ request }) => {
   mkdirSync(shots, { recursive: true });

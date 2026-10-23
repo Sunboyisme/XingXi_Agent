@@ -173,7 +173,11 @@ def builtin_tools(run_id: str, conversation_id: str):
         """搜索当前公开资料；结果是摘要，重要来源需要继续读取正文。"""
         try:
             result = await search.search_web(query)
-        except (httpx.HTTPError, provider.ConfigurationError, ValueError) as error:
+        except httpx.HTTPError as error:
+            details = provider.error_details(error)
+            result = {"error": "搜索服务请求失败，请检查网络或稍后重试。", **details,
+                      "not_executed": True, "retryable": details["category"] in {"connection_error", "provider_unavailable", "request_timeout"}}
+        except (provider.ConfigurationError, ValueError) as error:
             result = {"error": provider.safe_error(error)}
         return json.dumps(result, ensure_ascii=False)
 

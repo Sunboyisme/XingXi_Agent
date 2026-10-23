@@ -73,7 +73,9 @@ test("cancelling search edits discards the draft without overwriting models or m
       ? settings
       : path === "/wechat/status"
         ? { enabled: false, bound: false, deliveries: [] }
-        : [],
+        : path === "/settings/image-generation"
+          ? { enabled: false, url: "https://example.com/v1", model: "", size: "", response_format: "auto", key_configured: false }
+          : [],
   );
   function Host() {
     const [tab, setTab] = React.useState<SettingsTab>("connections");

@@ -90,6 +90,16 @@ export function ProjectOverview({
           <p className="project-overview-description">
             {project.instructions || "在这里集中管理项目对话与共享资料。"}
           </p>
+          {project.workspace_path && (
+            <p
+              className="project-workspace-path"
+              title={project.workspace_path}
+            >
+              <Folder size={14} />
+              {project.workspace_path}
+              <small>只读</small>
+            </p>
+          )}
         </div>
         <div className="project-overview-actions">
           <Button onClick={onNew}>
