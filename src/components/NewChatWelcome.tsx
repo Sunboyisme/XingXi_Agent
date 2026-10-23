@@ -18,18 +18,15 @@ const starters = [
     icon: CalendarCheck,
     prompt: "请帮我规划一下今天的日程",
   },
-  {
-    label: "继续学习",
-    icon: BookOpen,
-    prompt: "我想继续学习，请帮我梳理接下来的学习内容。",
-  },
 ];
 
 export function NewChatStarters({
   onPrompt,
+  onLearning,
   disabled,
 }: {
   onPrompt: (prompt: string) => void;
+  onLearning: () => void;
   disabled: boolean;
 }) {
   return (
@@ -45,6 +42,10 @@ export function NewChatStarters({
           <span>{label}</span>
         </button>
       ))}
+      <button type="button" disabled={disabled} onClick={onLearning}>
+        <BookOpen size={15} strokeWidth={1.5} aria-hidden="true" />
+        <span>继续学习</span>
+      </button>
     </div>
   );
 }

@@ -1934,6 +1934,7 @@ export function ChatPage({
         {empty && (
           <NewChatStarters
             onPrompt={chooseStarter}
+            onLearning={() => onAction("learning")}
             disabled={submitting || stopping || movingProject}
           />
         )}
