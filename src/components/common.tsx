@@ -1,5 +1,5 @@
 import { RemotePicture } from "./AnswerPresentation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -49,7 +49,7 @@ export function Hint({
   );
 }
 
-export function Markdown({
+export const Markdown = memo(function Markdown({
   children,
   runId,
 }: {
@@ -77,7 +77,7 @@ export function Markdown({
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 export function ErrorNotice({
   message,

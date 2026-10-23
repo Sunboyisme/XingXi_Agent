@@ -24,7 +24,39 @@ type Gesture = {
   scrollTop: number;
   keyboard: boolean;
   rows: { top: number; height: number }[];
+  nodes: HTMLElement[];
+  offsets: number[];
+  top: number;
+  bottom: number;
 };
+
+function resetRows(current: Gesture) {
+  for (const node of current.nodes) {
+    node.style.removeProperty("transform");
+    node.style.removeProperty("will-change");
+  }
+}
+
+function paintRows(current: Gesture) {
+  const { from, to, rows } = current;
+  current.nodes.forEach((node, index) => {
+    const offset =
+      index === from
+        ? current.dy
+        : from < index && index <= to
+          ? rows[from].top - rows[from + 1].top
+          : to <= index && index < from
+            ? rows[from].top +
+              rows[from].height -
+              rows[from - 1].top -
+              rows[from - 1].height
+            : 0;
+    if (offset !== current.offsets[index]) {
+      node.style.transform = `translate3d(0, ${offset}px, 0)`;
+      current.offsets[index] = offset;
+    }
+  });
+}
 
 // Keep the DOM order stable while dragging: the complete row follows the
 // pointer and its neighbours move into the vacated space. Persist only on drop.
@@ -50,10 +82,27 @@ export function PlanAgendaList({
   const instructions = useId();
   const signature = events.map(occurrenceOrderKey).join("|");
   useEffect(() => {
+    const cancel = () => {
+      if (!gesture.current) return;
+      resetRows(gesture.current);
+      gesture.current = null;
+      setActive(null);
+    };
+    window.addEventListener("blur", cancel);
+    window.addEventListener("resize", cancel);
+    return () => {
+      window.removeEventListener("blur", cancel);
+      window.removeEventListener("resize", cancel);
+      if (gesture.current) resetRows(gesture.current);
+      gesture.current = null;
+    };
+  }, []);
+  useEffect(() => {
     if (
       gesture.current &&
       (disabled || gesture.current.keys.join("|") !== signature)
     ) {
+      resetRows(gesture.current);
       gesture.current = null;
       setActive(null);
       setAnnouncement("事项已更新，已取消本次排序。");
@@ -89,8 +138,9 @@ export function PlanAgendaList({
       if (center > row.top + row.height / 2) to++;
     }
     if (dy !== current.dy || to !== current.to) {
-      gesture.current = { ...current, dy, to };
-      setActive(gesture.current);
+      current.dy = dy;
+      current.to = to;
+      paintRows(current);
     }
   }, []);
 
@@ -103,8 +153,8 @@ export function PlanAgendaList({
       const current = gesture.current;
       const element = list.current;
       if (!current || current.keyboard || !element) return;
-      const bounds = element.getBoundingClientRect();
-      const edge = Math.min(48, bounds.height / 4);
+      const bounds = { top: current.top, bottom: current.bottom };
+      const edge = Math.min(48, (bounds.bottom - bounds.top) / 4);
       const speed =
         current.y < bounds.top + edge
           ? -Math.min(1, (bounds.top + edge - current.y) / edge)
@@ -115,8 +165,8 @@ export function PlanAgendaList({
       previous = now;
       if (speed) {
         element.scrollTop += speed * elapsed * 0.45;
-        updatePointer();
       }
+      updatePointer();
       frame = requestAnimationFrame(scroll);
     }
     frame = requestAnimationFrame(scroll);
@@ -162,8 +212,15 @@ export function PlanAgendaList({
       scrollTop: list.current.scrollTop,
       keyboard,
       rows,
+      nodes,
+      offsets: nodes.map(() => 0),
+      top: bounds.top,
+      bottom: bounds.bottom,
     };
-    setActive(gesture.current);
+    nodes.forEach((node) => {
+      node.style.willChange = "transform";
+    });
+    setActive({ ...gesture.current });
     setAnnouncement(
       `已拿起 ${values[from].title}，第 ${from + 1} 项，共 ${values.length} 项。`,
     );
@@ -174,6 +231,7 @@ export function PlanAgendaList({
     gesture.current = null;
     setActive(null);
     if (!current) return;
+    resetRows(current);
     if (!commit || current.from === current.to) {
       setAnnouncement(commit ? "顺序未变。" : "已取消排序。");
       return;
@@ -235,8 +293,9 @@ export function PlanAgendaList({
       to > current.from
         ? target.top + target.height - source.top - source.height
         : target.top - source.top;
-    gesture.current = { ...current, to, dy };
-    setActive(gesture.current);
+    current.to = to;
+    current.dy = dy;
+    paintRows(current);
     const element = list.current!;
     if (source.top + dy < element.scrollTop)
       element.scrollTop = source.top + dy;
@@ -278,19 +337,6 @@ export function PlanAgendaList({
         {values.map((event, index) => {
           const key = occurrenceOrderKey(event);
           const moving = active?.key === key;
-          let offset = 0;
-          if (active) {
-            const { from, to, rows } = active;
-            if (moving) offset = active.dy;
-            else if (from < index && index <= to)
-              offset = rows[from].top - rows[from + 1].top;
-            else if (to <= index && index < from)
-              offset =
-                rows[from].top +
-                rows[from].height -
-                rows[from - 1].top -
-                rows[from - 1].height;
-          }
           return (
             <div
               className={`plan-agenda-row ${moving ? "is-dragging" : ""}`}
@@ -298,15 +344,12 @@ export function PlanAgendaList({
               role="listitem"
               data-occurrence={event.occurrence_start || event.start}
               data-order-key={key}
-              style={{
-                transform: offset ? `translateY(${offset}px)` : undefined,
-              }}
             >
               <button
                 type="button"
                 className="plan-order-handle"
                 disabled={disabled || Boolean(pending)}
-                aria-label={`排序 ${event.title}，第 ${(moving ? active!.to : index) + 1} 项，共 ${values.length} 项`}
+                aria-label={`排序 ${event.title}，第 ${index + 1} 项，共 ${values.length} 项`}
                 aria-describedby={instructions}
                 onPointerDown={(pointer) => pointerStart(pointer, key)}
                 onPointerMove={(pointer) => {
@@ -316,11 +359,13 @@ export function PlanAgendaList({
                   )
                     return;
                   gesture.current.y = pointer.clientY;
-                  updatePointer();
                 }}
                 onPointerUp={(pointer) => {
-                  if (gesture.current?.pointerId === pointer.pointerId)
+                  if (gesture.current?.pointerId === pointer.pointerId) {
+                    gesture.current.y = pointer.clientY;
+                    updatePointer();
                     void finish(true);
+                  }
                 }}
                 onPointerCancel={(pointer) => {
                   if (gesture.current?.pointerId === pointer.pointerId)

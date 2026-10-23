@@ -113,11 +113,7 @@ export function CalendarPage({
   const [orderSaving, setOrderSaving] = useState(false);
   const orderLock = useRef(false);
   function orderedDay(day: string) {
-    return orderDayEvents(
-      eventsOnDay(events, day, timezone),
-      timezone,
-      dayOrders[day],
-    );
+    return valuesByDay.get(day) || [];
   }
 
   const [error, setError] = useState("");
@@ -185,6 +181,22 @@ export function CalendarPage({
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => dateMove(weekStart, i)),
     [weekStart],
+  );
+  const valuesByDay = useMemo(
+    () =>
+      new Map(
+        [...new Set([...days, ...weekDays, dayList].filter(Boolean))].map(
+          (day) => [
+            day,
+            orderDayEvents(
+              eventsOnDay(events, day, timezone),
+              timezone,
+              dayOrders[day],
+            ),
+          ],
+        ),
+      ),
+    [days, weekDays, dayList, events, timezone, dayOrders],
   );
   const hasAllDayEvents = weekDays.some((day) =>
     eventsOnDay(events, day, timezone).some(

@@ -45,9 +45,18 @@ const CalendarPage = lazy(() =>
   })),
 );
 import { ChatPage } from "./components/ChatPage";
-import { LearningPage } from "./components/LearningPage";
+const LearningPage = lazy(() =>
+  import("./components/LearningPage").then((module) => ({
+    default: module.LearningPage,
+  })),
+);
 import { NotificationsPanel } from "./components/NotificationsPanel";
-import { SettingsPage, type SettingsTab } from "./components/SettingsPage";
+import type { SettingsTab } from "./components/SettingsPage";
+const SettingsPage = lazy(() =>
+  import("./components/SettingsPage").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
 import { ConfirmDelete, ErrorNotice } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
 import { WindowFrame } from "./components/WindowFrame";
@@ -158,12 +167,36 @@ export function App() {
     ]);
     // Slow earlier snapshots must not overwrite a newer tool/memory update.
     if (version !== refreshVersion.current) return;
-    setSettings(values[0]);
-    setConversations(values[1]);
-    setGoals(values[2]);
-    setMemories(values[3]);
-    setNotifications(values[4]);
-    setProjects(values[5]);
+    setSettings((current) =>
+      JSON.stringify(current) === JSON.stringify(values[0])
+        ? current
+        : values[0],
+    );
+    setConversations((current) =>
+      JSON.stringify(current) === JSON.stringify(values[1])
+        ? current
+        : values[1],
+    );
+    setGoals((current) =>
+      JSON.stringify(current) === JSON.stringify(values[2])
+        ? current
+        : values[2],
+    );
+    setMemories((current) =>
+      JSON.stringify(current) === JSON.stringify(values[3])
+        ? current
+        : values[3],
+    );
+    setNotifications((current) =>
+      JSON.stringify(current) === JSON.stringify(values[4])
+        ? current
+        : values[4],
+    );
+    setProjects((current) =>
+      JSON.stringify(current) === JSON.stringify(values[5])
+        ? current
+        : values[5],
+    );
   }, []);
   const boot = useCallback(async () => {
     setLoading(true);
@@ -188,12 +221,29 @@ export function App() {
   }, [boot]);
   useEffect(() => {
     if (!settings) return;
-    const timer = setInterval(() => {
-      void api<Notification[]>("/notifications?unread_only=true")
-        .then(setNotifications)
-        .catch(() => {});
-    }, 5000);
-    return () => clearInterval(timer);
+    let live = true;
+    let timer = 0;
+    async function poll() {
+      try {
+        const values = await api<Notification[]>(
+          "/notifications?unread_only=true",
+        );
+        if (live)
+          setNotifications((current) =>
+            JSON.stringify(current) === JSON.stringify(values)
+              ? current
+              : values,
+          );
+      } catch {
+        /* Native reminders remain available during connection interruptions. */
+      }
+      if (live) timer = window.setTimeout(() => void poll(), 5000);
+    }
+    timer = window.setTimeout(() => void poll(), 5000);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
   }, [Boolean(settings)]);
   useEffect(() => {
     if (!isTauri()) return;
@@ -563,6 +613,7 @@ export function App() {
             hidden={sidebarCollapsed || page !== "chat"}
           >
             <ProjectSidebar
+              visible={page === "chat" && !sidebarCollapsed}
               conversations={conversations}
               projects={projects}
               currentId={conversationId}
@@ -591,66 +642,74 @@ export function App() {
         </aside>
         <main className="main-panel">
           <div className="page-body">
-            {page === "chat" && (
-              <ChatPage
-                key={chatKey}
-                conversationId={conversationId}
-                projectId={activeProjectId}
-                focusMessageId={focusMessageId}
-                onMessageFocused={() => setFocusMessageId(null)}
-                onConversation={setConversationId}
-                settings={settings}
-                goals={goals}
-                conversations={conversations}
-                memories={memories}
-                refresh={refresh}
-                onAction={navigate}
-                onPlan={openAgenda}
-              />
-            )}{" "}
-            {page === "learning" && (
-              <LearningPage
-                key={`learning-${createKey}`}
-                goals={goals}
-                refresh={refresh}
-                onSettings={() => navigate("settings")}
-                createRequested={createKey}
-              />
-            )}{" "}
-            {page === "plans" && (
-              <Suspense
-                fallback={
-                  <p className="page-content" role="status">
-                    正在打开日历…
-                  </p>
-                }
-              >
-                <CalendarPage
-                  key={`plans-${createKey}`}
-                  createRequested={createKey}
-                  openOccurrenceStart={planOccurrence}
-                  openAgenda={planAgenda}
-                  timezone={settings.timezone}
+            <Suspense
+              fallback={
+                <p className="page-content" role="status">
+                  正在打开页面…
+                </p>
+              }
+            >
+              {page === "chat" && (
+                <ChatPage
+                  key={chatKey}
+                  conversationId={conversationId}
+                  projectId={activeProjectId}
+                  focusMessageId={focusMessageId}
+                  onMessageFocused={() => setFocusMessageId(null)}
+                  onConversation={setConversationId}
+                  settings={settings}
+                  goals={goals}
+                  conversations={conversations}
+                  memories={memories}
                   refresh={refresh}
-                  openEventId={calendarEventId}
-                  onOpened={() => {
-                    setCalendarEventId(undefined);
-                    setPlanAgenda(undefined);
-                  }}
+                  onAction={navigate}
+                  onPlan={openAgenda}
                 />
-              </Suspense>
-            )}
-            {page === "settings" && (
-              <SettingsPage
-                settings={settings}
-                onSaved={setSettings}
-                memories={memories}
-                refresh={refresh}
-                tab={settingsTab}
-                onTab={setSettingsTab}
-                createRequested={createKey}
-              />
-            )}
+              )}{" "}
+              {page === "learning" && (
+                <LearningPage
+                  key={`learning-${createKey}`}
+                  goals={goals}
+                  refresh={refresh}
+                  onSettings={() => navigate("settings")}
+                  createRequested={createKey}
+                />
+              )}{" "}
+              {page === "plans" && (
+                <Suspense
+                  fallback={
+                    <p className="page-content" role="status">
+                      正在打开日历…
+                    </p>
+                  }
+                >
+                  <CalendarPage
+                    key={`plans-${createKey}`}
+                    createRequested={createKey}
+                    openOccurrenceStart={planOccurrence}
+                    openAgenda={planAgenda}
+                    timezone={settings.timezone}
+                    refresh={refresh}
+                    openEventId={calendarEventId}
+                    onOpened={() => {
+                      setCalendarEventId(undefined);
+                      setPlanAgenda(undefined);
+                    }}
+                  />
+                </Suspense>
+              )}
+              {page === "settings" && (
+                <SettingsPage
+                  settings={settings}
+                  onSaved={setSettings}
+                  memories={memories}
+                  refresh={refresh}
+                  tab={settingsTab}
+                  onTab={setSettingsTab}
+                  createRequested={createKey}
+                />
+              )}
+            </Suspense>
           </div>
         </main>
         <NotificationsPanel

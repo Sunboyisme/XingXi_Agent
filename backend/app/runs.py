@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from sqlalchemy import select
 from .db import Session, Run, RunEvent, TaskStep
@@ -12,6 +13,36 @@ def emit(run_id: str, kind: str, data: dict):
     with Session() as db:
         db.add(RunEvent(run_id=run_id, kind=kind, data=data))
         db.commit()
+
+
+class StreamEmitter:
+    """Coalesce text chunks before committing, without changing event meaning."""
+
+    def __init__(self, run_id, interval=0.08):
+        self.run_id, self.interval = run_id, interval
+        self.pending = None
+        self.last_flush = 0.0
+
+    def flush(self):
+        if self.pending:
+            kind, data = self.pending
+            self.pending = None
+            emit(self.run_id, kind, data)
+            self.last_flush = time.monotonic()
+
+    def emit(self, kind, data):
+        if kind not in {"delta", "reasoning"}:
+            self.flush()
+            emit(self.run_id, kind, data)
+            return
+        if self.pending and (self.pending[0] != kind or self.pending[1].get("step") != data.get("step")):
+            self.flush()
+        if self.pending:
+            self.pending[1]["text"] += data.get("text", "")
+        else:
+            self.pending = (kind, dict(data))
+        if time.monotonic() - self.last_flush >= self.interval:
+            self.flush()
 
 
 def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):

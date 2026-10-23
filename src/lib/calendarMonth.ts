@@ -7,18 +7,33 @@ export function dateMove(key: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+const zoneFormats = new Map<string, Intl.DateTimeFormat>();
+const localTimes = new Map<string, string>();
+
 export function zonedInput(value: string, zone: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: zone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(value));
+  const key = `${zone}|${value}`;
+  const cached = localTimes.get(key);
+  if (cached) return cached;
+  let format = zoneFormats.get(zone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    if (zoneFormats.size >= 16) zoneFormats.clear();
+    zoneFormats.set(zone, format);
+  }
+  const parts = format.formatToParts(new Date(value));
   const part = (type: string) => parts.find((p) => p.type === type)?.value;
-  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+  const result = `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+  if (localTimes.size >= 1024) localTimes.clear();
+  localTimes.set(key, result);
+  return result;
 }
 
 export function zonedISO(input: string, zone: string) {
@@ -105,17 +120,21 @@ export function orderDayEvents(
   keys: string[] = [],
 ) {
   const positions = new Map(keys.map((key, index) => [key, index]));
+  const localStarts = new Map(
+    events.map((event) => [
+      event,
+      event.all_day ? event.start : zonedInput(event.start, zone),
+    ]),
+  );
   return [...events].sort((a, b) => {
     const left =
       positions.get(occurrenceOrderKey(a)) ?? Number.MAX_SAFE_INTEGER;
     const right =
       positions.get(occurrenceOrderKey(b)) ?? Number.MAX_SAFE_INTEGER;
-    const local = (event: CalendarEvent) =>
-      event.all_day ? event.start : zonedInput(event.start, zone);
     return (
       left - right ||
       Number(b.all_day) - Number(a.all_day) ||
-      local(a).localeCompare(local(b)) ||
+      localStarts.get(a)!.localeCompare(localStarts.get(b)!) ||
       a.id.localeCompare(b.id)
     );
   });

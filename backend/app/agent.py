@@ -235,6 +235,8 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
         tool.name for tool in available_tools
         if image_generation.is_generation_tool(tool.name, description=tool.description)
     }
+    from .runs import StreamEmitter
+    stream_events = StreamEmitter(run_id)
     try:
         async for mode, chunk in agent.astream(
             {"messages": messages},
@@ -244,16 +246,18 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
             if mode == "messages":
                 message, metadata = chunk
                 calls = getattr(message, "tool_call_chunks", None) or getattr(message, "tool_calls", None) or []
+                if calls:
+                    stream_events.flush()
                 if not buffer_image_reply and any(call.get("name") in image_tool_names for call in calls):
                     buffer_image_reply = True
                     if persist:
-                        emit(run_id, "answer", {"text": ""})
+                        stream_events.emit("answer", {"text": ""})
                 if metadata.get("langgraph_node") == "model":
                     reasoning = chat_context.reasoning_text(message)
                     if reasoning:
                         key = message.id or str(metadata.get("langgraph_step", 0))
                         reasoning_parts[key] = reasoning_parts.get(key, "") + reasoning
-                        emit(run_id, "reasoning", {"text": reasoning, "step": key})
+                        stream_events.emit("reasoning", {"text": reasoning, "step": key})
                 if (
                     metadata.get("langgraph_node") == "model"
                     and getattr(message, "type", "") == "AIMessageChunk"
@@ -263,11 +267,12 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
                     if part:
                         text += part
                         if persist and not buffer_image_reply:
-                            emit(run_id, "delta", {"text": part})
+                            stream_events.emit("delta", {"text": part})
                 usage = getattr(message, "usage_metadata", None)
                 if usage:
                     total_tokens += usage.get("total_tokens", 0)
             elif mode == "updates":
+                stream_events.flush()
                 for update in chunk.values():
                     if isinstance(update, dict):
                         for message in update.get("messages", []):
@@ -277,13 +282,12 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
                                 ):
                                     buffer_image_reply = True
                                     if persist:
-                                        emit(run_id, "answer", {"text": ""})
+                                        stream_events.emit("answer", {"text": ""})
                                 reasoning = chat_context.reasoning_text(message)
                                 key = message.id or str(len(reasoning_parts))
                                 if reasoning and key not in reasoning_parts:
                                     reasoning_parts[key] = reasoning
-                                    emit(
-                                        run_id,
+                                    stream_events.emit(
                                         "reasoning",
                                         {"text": reasoning, "step": key},
                                     )
@@ -316,6 +320,8 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
             raise
         text = receipt
         final_context = {}
+    finally:
+        stream_events.flush()
     model_text = text
     if not persist:
         from .complex_tasks import add_usage

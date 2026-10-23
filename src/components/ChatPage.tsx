@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -352,12 +353,16 @@ export function ChatPage({
     setModelKey(saved?.key || "");
     setThinking(saved?.thinking || false);
   }, [conversationId]);
-  const choices = settings.providers.flatMap((profile) =>
-    profile.models.map((model) => ({
-      profile,
-      model,
-      key: `${profile.id}:${model.name}`,
-    })),
+  const choices = useMemo(
+    () =>
+      settings.providers.flatMap((profile) =>
+        profile.models.map((model) => ({
+          profile,
+          model,
+          key: `${profile.id}:${model.name}`,
+        })),
+      ),
+    [settings.providers],
   );
   const selected =
     choices.find((x) => x.key === modelKey) ||
@@ -371,10 +376,10 @@ export function ChatPage({
   const thinkingEnabled =
     thinkingControl === "always" || (thinkingControl !== "none" && thinking);
   const [messages, setMessages] = useState<Message[]>([]);
-  const initialDraft = useRef(readChatDraft(conversationId));
-  const [draft, setDraft] = useState(initialDraft.current?.text || "");
+  const [initialDraft] = useState(() => readChatDraft(conversationId));
+  const [draft, setDraft] = useState(initialDraft?.text || "");
   const [images, setImages] = useState<Attachment[]>(
-    initialDraft.current?.images || [],
+    initialDraft?.images || [],
   );
   const [attachmentBatch, setAttachmentBatch] = useState(0);
   const [stream, setStream] = useState("");
@@ -421,6 +426,14 @@ export function ChatPage({
   const [atLatest, setAtLatest] = useState(true);
   const [activeTurn, setActiveTurn] = useState("");
   const turnElements = useRef(new Map<string, HTMLElement>());
+  const scrollFrame = useRef(0);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(scrollFrame.current);
+      scrollFrame.current = 0;
+    },
+    [conversationId],
+  );
   const [uploading, setUploading] = useState(false);
   const [buddyNote, setBuddyNote] = useState("");
   const [composerMenu, setComposerMenu] = useState<"mcp" | "skills" | null>(
@@ -1086,51 +1099,66 @@ export function ChatPage({
       !messages.some(
         (message) => message.run_id === run?.id && message.role === "assistant",
       ));
-  const turns: (Message & { answer: string })[] = [];
-  for (const message of messages) {
-    if (message.role === "user") turns.push({ ...message, answer: "" });
-    else if (message.role === "assistant" && turns.length) {
-      const turn = turns[turns.length - 1];
-      turn.answer += (turn.answer ? "\n" : "") + message.content;
+  const baseTurns = useMemo(() => {
+    const turns: (Message & { answer: string })[] = [];
+    for (const message of messages) {
+      if (message.role === "user") turns.push({ ...message, answer: "" });
+      else if (message.role === "assistant" && turns.length) {
+        const turn = turns[turns.length - 1];
+        turn.answer += (turn.answer ? "\n" : "") + message.content;
+      }
     }
-  }
-  if (busy && stream && turns.length) {
-    const turn = turns[turns.length - 1];
-    turn.answer += (turn.answer ? "\n" : "") + stream;
-  }
-  const tasksByMessage = new Map<string, ComplexTask[]>();
-  const pendingTasks = new Map<string, ComplexTask[]>();
-  for (const task of [...tasks].sort((a, b) =>
-    a.created_at.localeCompare(b.created_at),
-  )) {
-    const reply = messages.find(
-      (message) =>
-        message.role === "assistant" &&
-        Boolean(task.source_run_id) &&
-        message.run_id === task.source_run_id,
+    return turns;
+  }, [messages]);
+  const turns = useMemo(() => {
+    if (!busy || !stream || !baseTurns.length) return baseTurns;
+    const last = baseTurns[baseTurns.length - 1];
+    return [
+      ...baseTurns.slice(0, -1),
+      { ...last, answer: last.answer + (last.answer ? "\n" : "") + stream },
+    ];
+  }, [baseTurns, busy, stream]);
+  const entries = useMemo(() => {
+    const tasksByMessage = new Map<string, ComplexTask[]>();
+    const pendingTasks = new Map<string, ComplexTask[]>();
+    const replies = new Map(
+      messages
+        .filter((message) => message.role === "assistant")
+        .map((message) => [message.run_id, message]),
     );
-    const target = reply ? tasksByMessage : pendingTasks;
-    const key = reply?.id || task.source_message_id;
-    const anchored = target.get(key) || [];
-    anchored.push(task);
-    target.set(key, anchored);
-  }
-  const entries = messages.flatMap((message) => [
-    { message, cards: tasksByMessage.get(message.id) || [], synthetic: false },
-    ...(pendingTasks.get(message.id) || []).map((task) => ({
-      message: {
-        ...message,
-        id: `task-reply-${task.id}`,
-        role: "assistant",
-        content: "",
-        attachment_ids: [],
-        run_id: task.source_run_id || null,
-        reasoning: "",
-      } as Message,
-      cards: [task],
-      synthetic: true,
-    })),
-  ]);
+    for (const task of [...tasks].sort((a, b) =>
+      a.created_at.localeCompare(b.created_at),
+    )) {
+      const reply = task.source_run_id
+        ? replies.get(task.source_run_id)
+        : undefined;
+      const target = reply ? tasksByMessage : pendingTasks;
+      const key = reply?.id || task.source_message_id;
+      const anchored = target.get(key) || [];
+      anchored.push(task);
+      target.set(key, anchored);
+    }
+    return messages.flatMap((message) => [
+      {
+        message,
+        cards: tasksByMessage.get(message.id) || [],
+        synthetic: false,
+      },
+      ...(pendingTasks.get(message.id) || []).map((task) => ({
+        message: {
+          ...message,
+          id: `task-reply-${task.id}`,
+          role: "assistant",
+          content: "",
+          attachment_ids: [],
+          run_id: task.source_run_id || null,
+          reasoning: "",
+        } as Message,
+        cards: [task],
+        synthetic: true,
+      })),
+    ]);
+  }, [messages, tasks]);
   const inlineActivity =
     busy &&
     entries.some(
@@ -1150,19 +1178,28 @@ export function ChatPage({
           ref={scroller}
           onScroll={(event) => {
             const element = event.currentTarget;
-            const latest =
-              element.scrollHeight - element.scrollTop - element.clientHeight <
-              36;
-            if (latest) followLatest.current = true;
-            setAtLatest(latest);
-            const boundary = element.getBoundingClientRect().top + 80;
-            let current = turns[0]?.id || "";
-            for (const turn of turns) {
-              const target = turnElements.current.get(turn.id);
-              if (target && target.getBoundingClientRect().top <= boundary)
-                current = turn.id;
-            }
-            setActiveTurn(current);
+            if (scrollFrame.current) return;
+            scrollFrame.current = requestAnimationFrame(() => {
+              scrollFrame.current = 0;
+              if (!element.isConnected) return;
+              const latest =
+                element.scrollHeight -
+                  element.scrollTop -
+                  element.clientHeight <
+                36;
+              if (latest) followLatest.current = true;
+              setAtLatest(latest);
+              const boundary = element.getBoundingClientRect().top + 80;
+              let current = turns[0]?.id || "";
+              for (let index = turns.length - 1; index >= 0; index--) {
+                const target = turnElements.current.get(turns[index].id);
+                if (target && target.getBoundingClientRect().top <= boundary) {
+                  current = turns[index].id;
+                  break;
+                }
+              }
+              setActiveTurn(current);
+            });
           }}
           onWheel={(event) => {
             if (event.deltaY < 0) {
