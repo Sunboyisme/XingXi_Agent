@@ -1,4 +1,5 @@
 import { Hint } from "./common";
+import { PlanAgendaList } from "./PlanAgendaList";
 import {
   useCallback,
   useEffect,
@@ -9,9 +10,6 @@ import {
 } from "react";
 import {
   CalendarPlus,
-  GripVertical,
-  ArrowUp,
-  ArrowDown,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -114,7 +112,6 @@ export function CalendarPage({
   const [dayOrders, setDayOrders] = useState<Record<string, string[]>>({});
   const [orderSaving, setOrderSaving] = useState(false);
   const orderLock = useRef(false);
-  const [orderDragging, setOrderDragging] = useState("");
   function orderedDay(day: string) {
     return orderDayEvents(
       eventsOnDay(events, day, timezone),
@@ -760,7 +757,7 @@ export function CalendarPage({
     return () => clearTimeout(timer);
   }, [moveNotice]);
   async function saveOrder(keys: string[]) {
-    if (!dayList || orderLock.current || busy || loading) return;
+    if (!dayList || orderLock.current || busy || loading) return false;
     const day = dayList;
     orderLock.current = true;
     setOrderSaving(true);
@@ -772,21 +769,25 @@ export function CalendarPage({
         keys,
       });
       setDayOrders((orders) => ({ ...orders, [day]: result.keys }));
+      setAgendaNotice(keys.length ? "顺序已保存。" : "已恢复时间排序。");
+      return true;
     } catch (cause) {
       setError((cause as Error).message);
+      return false;
     } finally {
       orderLock.current = false;
       setOrderSaving(false);
-      setOrderDragging("");
     }
   }
-  function reorder(source: string, target: string) {
-    const keys = orderedDay(dayList).map(occurrenceOrderKey);
-    const from = keys.indexOf(source),
-      to = keys.indexOf(target);
-    if (from < 0 || to < 0 || from === to) return;
-    keys.splice(to, 0, keys.splice(from, 1)[0]);
-    void saveOrder(keys);
+  async function reorder(visibleKeys: string[]) {
+    const selected = new Set(visibleKeys);
+    let index = 0;
+    // Reorder only this tab's instances, preserving the other tab's slots.
+    const keys = orderedDay(dayList).map((event) => {
+      const key = occurrenceOrderKey(event);
+      return selected.has(key) ? visibleKeys[index++] : key;
+    });
+    return saveOrder(keys);
   }
   const dayValues = dayList ? orderedDay(dayList) : [];
   const todoCount = dayValues.filter((event) => !isRepeating(event)).length;
@@ -1166,6 +1167,14 @@ export function CalendarPage({
         <DialogContent
           className="calendar-editor plan-agenda-dialog"
           aria-describedby={undefined}
+          onEscapeKeyDown={(event) => {
+            // Let the focused handle cancel a sort before Escape closes the dialog.
+            if (
+              event.target instanceof HTMLElement &&
+              event.target.closest(".plan-agenda-list.is-sorting")
+            )
+              event.preventDefault();
+          }}
         >
           <DialogHeader>
             <DialogTitle>
@@ -1211,67 +1220,21 @@ export function CalendarPage({
               {agendaNotice}
             </p>
           )}
-          <div className="plan-agenda-list">
-            {selectedOccurrences.map((event, index) => (
-              <div
-                className="plan-agenda-row"
-                key={`${event.id}:${event.occurrence_start || event.start}`}
-                data-occurrence={event.occurrence_start || event.start}
-                onDragOver={(pointer) => {
-                  if (orderDragging) pointer.preventDefault();
-                }}
-                onDrop={(pointer) => {
-                  pointer.preventDefault();
-                  if (orderDragging)
-                    reorder(orderDragging, occurrenceOrderKey(event));
-                }}
-              >
-                <button
-                  className="plan-order-handle"
-                  aria-label={`拖动排序 ${event.title}`}
-                  draggable={!busy && !orderSaving}
-                  onDragStart={(pointer) => {
-                    pointer.dataTransfer.setData(
-                      "text/plain",
-                      occurrenceOrderKey(event),
-                    );
-                    pointer.dataTransfer.effectAllowed = "move";
-                    setOrderDragging(occurrenceOrderKey(event));
-                  }}
-                  onDragEnd={() => setOrderDragging("")}
-                >
-                  <GripVertical size={14} />
-                </button>
-                <div className="plan-order-buttons">
-                  <button
-                    aria-label={`上移 ${event.title}`}
-                    disabled={busy || orderSaving || index === 0}
-                    onClick={() =>
-                      reorder(
-                        occurrenceOrderKey(event),
-                        occurrenceOrderKey(selectedOccurrences[index - 1]),
-                      )
-                    }
-                  >
-                    <ArrowUp size={12} />
-                  </button>
-                  <button
-                    aria-label={`下移 ${event.title}`}
-                    disabled={
-                      busy ||
-                      orderSaving ||
-                      index === selectedOccurrences.length - 1
-                    }
-                    onClick={() =>
-                      reorder(
-                        occurrenceOrderKey(event),
-                        occurrenceOrderKey(selectedOccurrences[index + 1]),
-                      )
-                    }
-                  >
-                    <ArrowDown size={12} />
-                  </button>
-                </div>
+          <PlanAgendaList
+            key={`${dayList}:${agendaTab}:${timezone}`}
+            events={selectedOccurrences}
+            disabled={busy || orderSaving || loading}
+            onReorder={reorder}
+            empty={
+              <p className="plan-agenda-empty">
+                {agendaTab === "repeat"
+                  ? "这一天还没有重复安排。"
+                  : "这一天还没有待办事项。"}
+              </p>
+            }
+          >
+            {(event) => (
+              <>
                 <button
                   className="complete-circle"
                   aria-label={`${["completed", "cancelled"].includes(event.status) ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}
@@ -1312,16 +1275,9 @@ export function CalendarPage({
                   <Pencil size={13} />
                   编辑
                 </Button>
-              </div>
-            ))}
-            {!selectedOccurrences.length && (
-              <p className="plan-agenda-empty">
-                {agendaTab === "repeat"
-                  ? "这一天还没有重复安排。"
-                  : "这一天还没有待办事项。"}
-              </p>
+              </>
             )}
-          </div>
+          </PlanAgendaList>
           <div className="plan-agenda-create">
             <Button onClick={() => startCreate(dayList)}>
               <Plus size={15} />

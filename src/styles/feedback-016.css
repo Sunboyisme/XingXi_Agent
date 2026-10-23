@@ -2,6 +2,22 @@
 .plan-week-column {
   isolation: isolate;
 }
+.answer-tools-dialog[data-slot="dialog-content"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.answer-tools-dialog > [data-slot="dialog-header"] {
+  flex-shrink: 0;
+  padding-right: 24px;
+}
+.answer-tools-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
 .tool-result-title {
   justify-content: flex-start;
   align-items: center;
@@ -97,11 +113,36 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  position: relative;
+  overflow-x: hidden;
 }
 .plan-agenda-row {
   display: flex;
   align-items: center;
   gap: 9px;
+  position: relative;
+}
+.plan-agenda-list.is-sorting .plan-agenda-row:not(.is-dragging) {
+  transition: transform var(--plan-sort-transition, 160ms) ease;
+}
+.plan-agenda-list.is-sorting {
+  user-select: none;
+}
+.plan-agenda-list.is-sorting .plan-agenda-row > :not(.plan-order-handle) {
+  pointer-events: none;
+}
+.plan-agenda-row.is-dragging {
+  z-index: 2;
+  background: var(--ui-color-surface, var(--appearance-surface, #302b25));
+  box-shadow: 0 5px 14px #0003;
+  border-radius: 10px;
+  outline: 1px solid var(--ui-color-action);
+  outline-offset: -1px;
+  transition: none;
+}
+.plan-agenda-row.is-dragging .plan-order-handle {
+  cursor: grabbing;
+  color: var(--ui-color-action);
 }
 .plan-occurrence-content {
   flex: 1;
@@ -112,7 +153,10 @@
   align-items: center;
 }
 .plan-order-handle {
-  width: 18px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  min-height: 36px;
   flex-shrink: 0;
   color: var(--ui-color-text-muted);
   cursor: grab;
@@ -121,22 +165,14 @@
 .plan-order-handle:active {
   cursor: grabbing;
 }
-.plan-order-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex-shrink: 0;
-}
-.plan-order-buttons button {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  color: var(--ui-color-text-muted);
-  border-radius: 4px;
-}
-.plan-order-buttons button:disabled {
+.plan-order-handle:disabled {
   opacity: 0.25;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-agenda-list {
+    --plan-sort-transition: 0ms;
+  }
 }
 .plan-agenda-create {
   padding-top: 8px;
@@ -459,9 +495,7 @@
   overflow-wrap: anywhere;
 }
 .message:focus {
-  outline: 1px solid var(--ui-color-action);
-  outline-offset: 8px;
-  border-radius: 10px;
+  outline: none;
 }
 .sidebar-error {
   color: var(--ui-color-danger);
@@ -469,11 +503,13 @@
   font-size: 12px;
 }
 .project-heading button:focus-visible,
-.plan-order-buttons button:focus-visible,
 .plan-order-handle:focus-visible,
 .goal-card-main:focus-visible {
   outline: 2px solid var(--ui-color-action);
   outline-offset: 3px;
+}
+.plan-order-handle:focus-visible {
+  outline-offset: -2px;
 }
 @media (max-width: 850px) {
   .goal-card-row {

@@ -167,78 +167,82 @@ export function AnswerActions({
               这次回答实际执行的工具与返回结果。
             </DialogDescription>
           </DialogHeader>
-          {error && <ErrorNotice message={error} />}
-          {loading ? (
-            <p className="retrieval-empty">正在读取工具记录…</p>
-          ) : !events.length ? (
-            <p className="retrieval-empty">本轮没有工具调用记录。</p>
-          ) : (
-            <div className="tool-record-list">
-              {events.map((event, index) => {
-                const result = event.data.result as
-                  Record<string, unknown> | undefined;
-                const failed =
-                  event.data.status === "error" || Boolean(result?.error);
-                const clarify = Boolean(result?.needs_clarification);
-                return (
-                  <div
-                    className={`tool-result ${failed ? "tool-result-failed" : ""}`}
-                    key={index}
-                  >
-                    <span className="tool-result-symbol">
-                      {failed || clarify ? (
-                        <CircleAlert size={16} />
-                      ) : (
-                        <Check size={16} />
-                      )}
-                    </span>
-                    <div className="tool-result-copy">
-                      <div className="tool-result-title">
-                        <strong>{String(event.data.name)}</strong>
-                        {event.data.source === "mcp" && (
-                          <small>{String(event.data.source_label)}</small>
+          <div className="answer-tools-body">
+            {error && <ErrorNotice message={error} />}
+            {loading ? (
+              <p className="retrieval-empty">正在读取工具记录…</p>
+            ) : !events.length ? (
+              <p className="retrieval-empty">本轮没有工具调用记录。</p>
+            ) : (
+              <div className="tool-record-list">
+                {events.map((event, index) => {
+                  const result = event.data.result as
+                    Record<string, unknown> | undefined;
+                  const failed =
+                    event.data.status === "error" || Boolean(result?.error);
+                  const clarify = Boolean(result?.needs_clarification);
+                  return (
+                    <div
+                      className={`tool-result ${failed ? "tool-result-failed" : ""}`}
+                      key={index}
+                    >
+                      <span className="tool-result-symbol">
+                        {failed || clarify ? (
+                          <CircleAlert size={16} />
+                        ) : (
+                          <Check size={16} />
                         )}
-                        <span className="tool-result-meta">
-                          {typeof event.data.duration_ms === "number" && (
-                            <small>
-                              {(event.data.duration_ms / 1000).toFixed(1)}s
-                            </small>
+                      </span>
+                      <div className="tool-result-copy">
+                        <div className="tool-result-title">
+                          <strong>{String(event.data.name)}</strong>
+                          {event.data.source === "mcp" && (
+                            <small>{String(event.data.source_label)}</small>
                           )}
-                          <span className="tool-result-state">
-                            {event.data.status === "cancelled"
-                              ? "已取消"
-                              : failed
-                                ? "调用失败"
-                                : clarify
-                                  ? "待确认"
-                                  : "已返回"}
+                          <span className="tool-result-meta">
+                            {typeof event.data.duration_ms === "number" && (
+                              <small>
+                                {(event.data.duration_ms / 1000).toFixed(1)}s
+                              </small>
+                            )}
+                            <span className="tool-result-state">
+                              {event.data.status === "cancelled"
+                                ? "已取消"
+                                : failed
+                                  ? "调用失败"
+                                  : clarify
+                                    ? "待确认"
+                                    : "已返回"}
+                            </span>
                           </span>
-                        </span>
+                        </div>
+                        <p>{toolSummary(event)}</p>
+                        {result &&
+                          Boolean(
+                            result.exit_code !== undefined ||
+                            result.stdout ||
+                            result.stderr,
+                          ) && (
+                            <details className="script-execution-details">
+                              <summary>脚本执行详情</summary>
+                              <p>
+                                退出码：{String(result.exit_code ?? "未知")}
+                              </p>
+                              <pre>
+                                {String(result.stdout || "")}
+                                {result.stderr
+                                  ? `\n错误输出：\n${String(result.stderr)}`
+                                  : ""}
+                              </pre>
+                            </details>
+                          )}
                       </div>
-                      <p>{toolSummary(event)}</p>
-                      {result &&
-                        Boolean(
-                          result.exit_code !== undefined ||
-                          result.stdout ||
-                          result.stderr,
-                        ) && (
-                          <details className="script-execution-details">
-                            <summary>脚本执行详情</summary>
-                            <p>退出码：{String(result.exit_code ?? "未知")}</p>
-                            <pre>
-                              {String(result.stdout || "")}
-                              {result.stderr
-                                ? `\n错误输出：\n${String(result.stderr)}`
-                                : ""}
-                            </pre>
-                          </details>
-                        )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </>
