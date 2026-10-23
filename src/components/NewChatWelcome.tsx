@@ -1,22 +1,27 @@
 import { useEffect, useState } from "react";
-import { CalendarCheck, Lightbulb, PenLine } from "lucide-react";
+import { BookOpen, CalendarCheck, Lightbulb, PenLine } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 
 const starters = [
   {
     label: "理清思路",
     icon: Lightbulb,
-    prompt: "我有一些零散的想法，想请你帮我一起梳理。",
+    prompt: "我有一些零散的想法，请帮我一起梳理：",
   },
   {
     label: "写点东西",
     icon: PenLine,
-    prompt: "我想写点东西，先和我聊聊选题与表达方向。",
+    prompt: "我想写点东西，先跟我聊聊选题和方向",
   },
   {
     label: "安排今天",
     icon: CalendarCheck,
-    prompt: "帮我梳理一下今天的事情，先确定最值得推进的一件。",
+    prompt: "请帮我规划一下今天的日程",
+  },
+  {
+    label: "继续学习",
+    icon: BookOpen,
+    prompt: "我想继续学习，请帮我梳理接下来的学习内容。",
   },
 ];
 

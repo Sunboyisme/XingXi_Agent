@@ -73,9 +73,8 @@ export function SkillsMenu({
       }}
     >
       <DropdownMenu.Label className="model-menu-label">
-        技能 · 全局生效
+        技能
       </DropdownMenu.Label>
-      <p className="toolbox-notice">影响所有对话的后续技能调用。</p>
       {loading && (
         <p className="toolbox-notice">
           <Loader2 size={14} className="spin" />

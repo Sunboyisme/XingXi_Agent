@@ -60,9 +60,8 @@ export function ToolboxMenu({
       }}
     >
       <DropdownMenu.Label className="model-menu-label">
-        MCP 工具 · 全局生效
+        MCP 工具
       </DropdownMenu.Label>
-      <p className="toolbox-notice">影响所有对话的后续工具调用。</p>
       {loading && (
         <p className="toolbox-notice">
           <Loader2 size={14} className="spin" />

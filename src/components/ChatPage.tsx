@@ -557,10 +557,7 @@ export function ChatPage({
   }
   function chooseStarter(prompt: string) {
     if (submitting || stopping || movingProject) return;
-    const current = draftRef.current;
-    if (current !== prompt && !current.startsWith(`${prompt}\n\n`)) {
-      changeDraft(current.trim() ? `${prompt}\n\n${current}` : prompt);
-    }
+    changeDraft(prompt);
     requestAnimationFrame(() => {
       const input = composer.current;
       if (!input || input.disabled) return;
@@ -1728,7 +1725,7 @@ export function ChatPage({
                   ? "补充当前任务要求…"
                   : modelReady
                     ? empty
-                      ? "和小希说说你的想法…"
+                      ? "今天有什么灵感，随心输入"
                       : "输入消息…"
                     : "连接模型后开始对话"
               }
