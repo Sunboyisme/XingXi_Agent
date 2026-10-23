@@ -496,6 +496,8 @@ export function ChatPage({
     }
   }, [modelKey, settings.providers, conversationId]);
   const scroller = useRef<HTMLDivElement>(null);
+  const chatSurface = useRef<HTMLDivElement>(null);
+  const composerArea = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const dropTarget = useRef<HTMLDivElement>(null);
   const previewTarget = useRef<HTMLDivElement>(null);
@@ -866,6 +868,34 @@ export function ChatPage({
     ) || [];
   const empty = !messages.length && !busy && !stream && !reasoning && !run;
   useLayoutEffect(() => {
+    const surface = chatSurface.current;
+    const area = composerArea.current;
+    if (empty || !surface || !area) return;
+    let height = -1;
+    function measure() {
+      if (!surface || !area) return;
+      const nextHeight = Math.ceil(area.getBoundingClientRect().height);
+      if (nextHeight === height) return;
+      height = nextHeight;
+      surface.style.setProperty("--chat-composer-height", `${height}px`);
+      const container = scroller.current;
+      if (container && followLatest.current)
+        container.scrollTop = container.scrollHeight;
+    }
+    measure();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(measure);
+    observer?.observe(area);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+      surface.style.removeProperty("--chat-composer-height");
+    };
+  }, [empty]);
+  useLayoutEffect(() => {
     const container = scroller.current;
     if (container && followLatest.current) {
       container.scrollTop = container.scrollHeight;
@@ -1225,7 +1255,7 @@ export function ChatPage({
   }
   return (
     <div className="chat-layout" ref={dropTarget}>
-      <div className={`chat-main ${empty ? "is-empty" : ""}`}>
+      <div className={`chat-main ${empty ? "is-empty" : ""}`} ref={chatSurface}>
         <div
           className={`chat-scroll ${empty ? "is-empty" : ""}`}
           ref={scroller}
@@ -1621,7 +1651,7 @@ export function ChatPage({
             </nav>
           </Tooltip.Provider>
         )}
-        <div className="composer-area">
+        <div className="composer-area" ref={composerArea}>
           {!empty && !atLatest && (
             <button
               className="chat-jump-latest"
