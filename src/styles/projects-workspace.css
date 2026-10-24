@@ -23,9 +23,6 @@
 .project-overview-fixed .project-overview-header h1 { font-size: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 9px 0; }
 .project-overview-fixed .project-overview-intro { min-width: 0; }
 .project-back { display: flex; align-items: center; gap: 6px; color: var(--ui-color-text-muted); }
-.project-description-details { color: var(--ui-color-text-muted); position: relative; font-size: 13px; }
-.project-description-details > summary { max-width: min(760px, 100%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; list-style: none; }
-.project-description-details[open] > p { position: absolute; z-index: 20; max-height: 180px; overflow: auto; width: min(580px, 75vw); padding: 14px; margin-top: 8px; border: 1px solid var(--ui-color-line); border-radius: 12px; background: var(--ui-color-surface); white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 0 10px 30px #0002; }
 .project-overview-fixed .project-workspace-path { max-width: 100%; display: flex; align-items: center; gap: 7px; margin-top: 12px; }
 .project-overview-fixed .project-workspace-path > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-overview-fixed .project-workspace-path > svg, .project-overview-fixed .project-workspace-path > small { flex-shrink: 0; }
@@ -43,10 +40,6 @@
 .office-file-card-compact .office-file-copy strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .office-file-card-compact .office-file-actions { flex-shrink: 0; gap: 4px; }
 .office-file-card-compact .office-file-actions > button { padding: 5px 7px; border: 0; }
-.project-file-more { position: relative; }
-.project-file-more > summary { list-style: none; cursor: pointer; padding: 6px; border-radius: 6px; }
-.project-file-more > div { position: absolute; right: 0; top: 100%; z-index: 25; display: flex; flex-direction: column; gap: 3px; padding: 7px; min-width: 110px; border: 1px solid var(--ui-color-line); background: var(--ui-color-surface); border-radius: 10px; box-shadow: 0 8px 24px #0002; }
-.project-file-more > div button { border: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; padding: 6px 8px; }
 .project-overview-fixed .project-overview-image { min-height: 48px; font-size: 13px; }
 .project-overview-fixed .project-overview-image img { width: 30px; height: 30px; border-radius: 5px; }
 .project-overview-fixed .project-overview-image > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

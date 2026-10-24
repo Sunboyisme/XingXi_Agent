@@ -160,6 +160,6 @@
 }
 
 :root[data-theme="warm-dark"] .composer textarea::placeholder {
-  color: #c9bba9;
+  color: #998b7a;
   opacity: 1;
 }

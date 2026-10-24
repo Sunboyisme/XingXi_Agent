@@ -54,21 +54,7 @@
 .creation-fields textarea {
   width: 100%;
 }
-.creation-fields .learning-beginner-choice {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  color: var(--ui-color-text-muted);
-  line-height: 1.6;
-}
-.creation-fields .learning-beginner-choice input {
-  width: auto;
-  margin-top: 4px;
-}
-.creation-optional-body {
-  display: grid;
-  gap: 22px;
-}
+
 .creation-page-footer {
   flex-shrink: 0;
   border-top: 1px solid var(--ui-color-line);

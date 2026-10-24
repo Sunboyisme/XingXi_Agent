@@ -104,10 +104,7 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.memory-provenance summary {
-  cursor: pointer;
-  width: fit-content;
-}
+
 .memory-provenance > div {
   display: flex;
   gap: 8px 16px;

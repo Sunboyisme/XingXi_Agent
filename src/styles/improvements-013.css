@@ -59,43 +59,12 @@
   border: 0;
   border-radius: 0;
 }
-.answer-sources > summary,
-.retrieval-technical > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  list-style: none;
-  padding: 10px 0;
-  cursor: pointer;
-  user-select: none;
-}
-.answer-sources > summary::-webkit-details-marker,
-.retrieval-technical > summary::-webkit-details-marker {
-  display: none;
-}
-.answer-sources > summary {
-  width: fit-content;
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-}
-.answer-sources > summary > span {
-  display: grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  margin: 0;
-  background: var(--ui-color-bg);
-  border-radius: 6px;
-  font-size: 11px;
-}
+
 .disclosure-chevron {
   flex-shrink: 0;
   transition: transform 150ms;
 }
-details[open] > summary > .disclosure-chevron {
-  transform: rotate(180deg);
-}
+
 .answer-sources > div {
   margin-top: 2px;
   border-left: 2px solid var(--ui-color-line);
@@ -138,9 +107,7 @@ details[open] > summary > .disclosure-chevron {
   color: var(--ui-color-danger);
   overflow-wrap: anywhere;
 }
-.retrieval-technical > summary {
-  justify-content: space-between;
-}
+
 .retrieval-technical .retrieval-candidate {
   margin-top: 10px;
   padding: 12px 14px;

@@ -448,24 +448,7 @@ body,
   padding-top: 14px;
   font-size: 13px;
 }
-.wechat-deliveries summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  list-style: none;
-  color: var(--ui-color-text-muted);
-}
-.wechat-deliveries summary::-webkit-details-marker {
-  display: none;
-}
-.wechat-deliveries summary small {
-  margin-left: 6px;
-  opacity: 0.65;
-}
-.wechat-deliveries[open] summary > svg {
-  transform: rotate(180deg);
-}
+
 .wechat-deliveries ul {
   padding: 0;
   margin: 12px 0 0;
@@ -564,11 +547,7 @@ body,
     font-size: 12px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .wechat-deliveries summary > svg {
-    transition: none;
-  }
-}
+
 @media (max-height: 680px) {
   .chat-scroll.is-empty {
     padding-top: 24px;
@@ -1025,24 +1004,7 @@ textarea:not(#chat-message):focus-visible,
   margin-bottom: 0;
   align-self: center;
 }
-.model-advanced {
-  margin-top: 10px;
-}
-.model-advanced > summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--ui-color-text-muted);
-  list-style: none;
-}
-.model-advanced[open] > summary svg {
-  transform: rotate(180deg);
-}
-.model-advanced .model-capabilities {
-  margin-top: 10px;
-}
+
 @media (max-width: 600px) {
   .connection-form-grid {
     grid-template-columns: 1fr;

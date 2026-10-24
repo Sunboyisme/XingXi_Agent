@@ -54,10 +54,7 @@
   font-size: 12px;
   color: var(--ui-color-text-muted);
 }
-.retrieval-technical > summary {
-  cursor: pointer;
-  padding: 5px 0;
-}
+
 .retrieval-technical .retrieval-metrics {
   margin-top: 12px;
 }
@@ -126,13 +123,7 @@
   padding: 12px 14px;
   font-size: 13px;
 }
-.answer-sources > summary {
-  cursor: pointer;
-  color: var(--ui-color-text-muted);
-}
-.answer-sources > summary > span {
-  margin-left: 5px;
-}
+
 .answer-sources > div {
   display: grid;
   gap: 8px;
@@ -558,23 +549,7 @@
   font-size: 11px;
   color: var(--ui-color-text-muted);
 }
-.skill-runtime-settings {
-  border-top: 1px solid var(--ui-color-line);
-  padding-top: 18px;
-  color: var(--ui-color-text-muted);
-  font-size: 13px;
-}
-.skill-runtime-settings > summary {
-  cursor: pointer;
-}
-.skill-runtime-settings > summary > svg {
-  display: inline;
-  vertical-align: middle;
-  margin-right: 5px;
-}
-.skill-runtime-settings p {
-  line-height: 1.8;
-}
+
 .runtime-row {
   display: grid;
   grid-template-columns: 90px 1fr 45px;
@@ -591,12 +566,7 @@
 .skill-detail-dialog details {
   min-width: 0;
 }
-.skill-detail-dialog details > summary {
-  cursor: pointer;
-  font-size: 13px;
-  padding: 8px 0;
-  color: var(--ui-color-text-muted);
-}
+
 .skill-detail-dialog details > ul {
   max-height: 200px;
   overflow: auto;
@@ -654,9 +624,7 @@
   font-size: 12px;
   color: var(--ui-color-text-muted);
 }
-.script-execution-details summary {
-  cursor: pointer;
-}
+
 .script-execution-details pre {
   max-height: 240px;
   white-space: pre-wrap;

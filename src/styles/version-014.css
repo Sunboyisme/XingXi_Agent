@@ -995,15 +995,7 @@ body:has(.reminder-popup),
 .confirm-dialog-footer .confirm-dialog-danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ui-color-danger) 86%, black);
 }
-
 /* Prompt ideas on the empty conversation page. */
-.home-shortcuts {
-  align-items: center;
-}
-
-.home-shortcuts button {
-  flex: 0 1 auto;
-}
 
 .skill-cards {
   align-items: stretch;
@@ -1071,23 +1063,6 @@ body:has(.reminder-popup),
     var(--ui-color-line)
   );
   background: color-mix(in srgb, var(--ui-color-action) 10%, transparent);
-}
-
-.skill-detail-dialog .skill-disclosure {
-  overflow: hidden;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 14px;
-  background: var(--ui-color-bg);
-}
-
-.skill-detail-dialog .skill-disclosure > summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 13px;
-  color: var(--ui-color-heading);
-  cursor: pointer;
-  list-style: none;
 }
 
 .skill-menu .skill-menu-item {
@@ -1217,14 +1192,6 @@ body:has(.reminder-popup),
   padding-right: 32px;
 }
 
-.skill-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-
-.skill-disclosure > summary:hover {
-  background: color-mix(in srgb, var(--ui-color-action) 5%, transparent);
-}
-
 .skill-disclosure-icon {
   display: grid;
   width: 32px;
@@ -1256,16 +1223,6 @@ body:has(.reminder-popup),
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.skill-disclosure-chevron {
-  flex: 0 0 auto;
-  color: var(--ui-color-text-muted);
-  transition: transform 160ms ease;
-}
-
-.skill-disclosure[open] .skill-disclosure-chevron {
-  transform: rotate(180deg);
 }
 
 .skill-disclosure-body {
@@ -2277,7 +2234,8 @@ body:has(.reminder-popup),
 }
 
 .image-generation-preview[data-state="running"]
-  .image-generation-status-icon > svg {
+  .image-generation-status-icon
+  > svg {
   animation: image-generation-spin 1.6s linear infinite;
 }
 
@@ -2334,7 +2292,8 @@ body:has(.reminder-popup),
   .navigation-tooltip,
   .ui-hint,
   .image-generation-preview[data-state="running"]
-    .image-generation-status-icon > svg {
+    .image-generation-status-icon
+    > svg {
     animation: none;
   }
 }

@@ -36,28 +36,7 @@
 .task-operation-records {
   margin-top: 18px;
 }
-.task-operation-records > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  list-style: none;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--ui-color-bg);
-  color: var(--ui-color-text-muted);
-  cursor: pointer;
-  font-size: 12px;
-}
-.task-operation-records > summary::-webkit-details-marker {
-  display: none;
-}
-.task-operation-records > summary small {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
-.task-operation-records[open] > summary > svg:last-child {
-  transform: rotate(180deg);
-}
+
 .task-operation-title small[data-status="failed"],
 .task-operation-title small[data-status="unknown"] {
   color: var(--ui-color-danger);
@@ -85,11 +64,7 @@
   font-size: 12px;
   color: var(--ui-color-text-muted);
 }
-.task-operation-data summary {
-  font-size: 11px;
-  color: var(--ui-color-text-muted);
-  cursor: pointer;
-}
+
 .task-operation-data pre {
   max-height: 240px;
   overflow: auto;
@@ -495,14 +470,7 @@
   overflow-y: auto;
   font-size: 12px;
 }
-.project-source-files summary {
-  cursor: pointer;
-  color: var(--ui-color-text-muted);
-}
-.project-source-files summary svg {
-  display: inline;
-  margin-right: 5px;
-}
+
 .project-source-files > div {
   display: flex;
   gap: 12px;

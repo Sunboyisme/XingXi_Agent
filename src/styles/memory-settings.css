@@ -309,11 +309,6 @@
   border-top: 1px solid var(--ui-color-line);
 }
 
-.retrieval-technical > summary {
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-}
-
 .retrieval-metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
