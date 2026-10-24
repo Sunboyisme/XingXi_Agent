@@ -80,7 +80,11 @@ def terms(text):
 
 def keyword_score(query, text):
     keys, words = terms(query), terms(text)
-    return len(keys & words) / math.sqrt(max(1, len(keys) * len(words)))
+    score = len(keys & words) / math.sqrt(max(1, len(keys) * len(words)))
+    short_topics = re.findall(r"[\u3400-\u9fff]{1,2}(?![\u3400-\u9fff])", query)
+    topic_chars = set("".join(short_topics)) - set("的一是在了有我你他她它个只要想学会吗呢吧好不无从到多少什么")
+    overlap = sum(char in text for char in topic_chars)
+    return score + (0.08 * overlap / max(1, len(topic_chars)))
 
 
 def cosine(a, b):
@@ -200,7 +204,7 @@ async def retrieve_detailed(query: str, purpose="preview", project_id=None):
             db.scalars(
                 select(Memory).where(
                     Memory.profile_id == config.PROFILE_ID, Memory.state == "confirmed",
-                    ((Memory.project_id == project_id) | (Memory.project_id.is_(None) & (Memory.category == "preference"))) if project_id else Memory.project_id.is_(None),
+                    ((Memory.project_id == project_id) | (Memory.project_id.is_(None) & (Memory.category.in_(["preference", "fact"])))) if project_id else Memory.project_id.is_(None),
                 )
             )
         )

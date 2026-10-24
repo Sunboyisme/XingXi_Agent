@@ -1,4 +1,5 @@
 import { Hint } from "./common";
+import "@/styles/detail-view.css";
 import { useNativeDrop, nativeFile } from "@/lib/nativeDrop";
 import { isTauri } from "@tauri-apps/api/core";
 import {
@@ -9,7 +10,6 @@ import {
   useState,
 } from "react";
 import {
-  ChevronDown,
   Code2,
   FileArchive,
   FileText,
@@ -38,22 +38,20 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 
-function SkillDisclosure({
+function SkillSection({
   title,
   hint,
   icon: Icon,
-  open = false,
   children,
 }: {
   title: string;
   hint: string;
   icon: typeof FileText;
-  open?: boolean;
   children: ReactNode;
 }) {
   return (
-    <details className="skill-disclosure" open={open}>
-      <summary>
+    <section className="skill-section plain-section">
+      <header>
         <span className="skill-disclosure-icon" aria-hidden="true">
           <Icon size={16} />
         </span>
@@ -61,14 +59,9 @@ function SkillDisclosure({
           <strong>{title}</strong>
           <small>{hint}</small>
         </span>
-        <ChevronDown
-          className="skill-disclosure-chevron"
-          size={16}
-          aria-hidden="true"
-        />
-      </summary>
+      </header>
       <div className="skill-disclosure-body">{children}</div>
-    </details>
+    </section>
   );
 }
 
@@ -83,7 +76,19 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const nativeTarget = useRef<HTMLElement>(null);
-  useNativeDrop(nativeTarget, (files) => inspect(files.map((file) => ({ file: nativeFile(file), path: file.relative_path }))), setError, true, busy);
+  useNativeDrop(
+    nativeTarget,
+    (files) =>
+      inspect(
+        files.map((file) => ({
+          file: nativeFile(file),
+          path: file.relative_path,
+        })),
+      ),
+    setError,
+    true,
+    busy,
+  );
   const importBusy = useRef(false);
   const zip = useRef<HTMLInputElement>(null),
     directory = useRef<HTMLInputElement>(null);
@@ -332,17 +337,16 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
           {error && <ErrorNotice message={error} />}
           {preview && (
             <>
-              <SkillDisclosure
+              <SkillSection
                 title="技能说明"
                 hint="导入前检查这个技能会做什么"
                 icon={FileText}
-                open
               >
                 <Markdown>{preview.body}</Markdown>
-              </SkillDisclosure>
-              <SkillDisclosure
+              </SkillSection>
+              <SkillSection
                 title="文件清单"
-                hint={`包含 ${preview.files.length} 个文件，可展开核对`}
+                hint={`包含 ${preview.files.length} 个文件，可逐项核对`}
                 icon={Files}
               >
                 <ul>
@@ -352,7 +356,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                     </li>
                   ))}
                 </ul>
-              </SkillDisclosure>
+              </SkillSection>
               <p className="skill-permission-note">
                 {preview.existing_id
                   ? "替换内容有变化时，将关闭此技能并撤销脚本授权。"
@@ -448,16 +452,16 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                   这个技能只包含说明与参考资料，没有可执行脚本。
                 </p>
               )}
-              <SkillDisclosure
+              <SkillSection
                 title="技能正文"
                 hint="查看完整说明、使用条件与参考资料"
                 icon={FileText}
               >
                 <Markdown>{detail.body}</Markdown>
-              </SkillDisclosure>
-              <SkillDisclosure
+              </SkillSection>
+              <SkillSection
                 title="文件清单"
-                hint={`包含 ${detail.files.length} 个文件，可展开核对`}
+                hint={`包含 ${detail.files.length} 个文件，可逐项核对`}
                 icon={Files}
               >
                 <ul>
@@ -467,7 +471,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                     </li>
                   ))}
                 </ul>
-              </SkillDisclosure>
+              </SkillSection>
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setDeleting(detail)}>
                   <Trash2 size={15} />

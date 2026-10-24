@@ -1,3 +1,4 @@
+import { DropdownMenu } from "radix-ui";
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
@@ -168,11 +169,15 @@ export function FileCard({
   }
   return (
     <>
-      <div className={`office-file-card${compact ? " office-file-card-compact" : ""}`}>
+      <div
+        className={`office-file-card${compact ? " office-file-card-compact" : ""}`}
+      >
         <FileText size={23} />
         <div className="office-file-copy">
           <strong>{file.name}</strong>
-          {!compact && <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>}
+          {!compact && (
+            <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>
+          )}
         </div>
         <div className="office-file-actions">
           <button
@@ -186,14 +191,16 @@ export function FileCard({
             <Eye size={14} />
             预览
           </button>
-          {!compact && <button
-            disabled={saving}
-            aria-label={`下载 ${file.name}`}
-            onClick={() => void save(false)}
-          >
-            <Download size={14} />
-            下载
-          </button>}
+          {!compact && (
+            <button
+              disabled={saving}
+              aria-label={`下载 ${file.name}`}
+              onClick={() => void save(false)}
+            >
+              <Download size={14} />
+              下载
+            </button>
+          )}
           {!compact && isTauri() && (
             <button
               disabled={saving}
@@ -205,13 +212,37 @@ export function FileCard({
             </button>
           )}
           {compact && (
-            <details className="project-file-more">
-              <summary aria-label={`更多操作 ${file.name}`}><MoreHorizontal size={16} /></summary>
-              <div>
-                <button disabled={saving} onClick={() => void save(false)}><Download size={14} />下载</button>
-                {isTauri() && <button disabled={saving} onClick={() => void save(true)}><Save size={14} />另存为</button>}
-              </div>
-            </details>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button type="button" aria-label={`更多操作 ${file.name}`}>
+                  <MoreHorizontal size={16} />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="project-menu file-action-menu"
+                  sideOffset={6}
+                  align="end"
+                >
+                  <DropdownMenu.Item
+                    disabled={saving}
+                    onSelect={() => void save(false)}
+                  >
+                    <Download size={14} />
+                    下载
+                  </DropdownMenu.Item>
+                  {isTauri() && (
+                    <DropdownMenu.Item
+                      disabled={saving}
+                      onSelect={() => void save(true)}
+                    >
+                      <Save size={14} />
+                      另存为
+                    </DropdownMenu.Item>
+                  )}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           )}
         </div>
         {error && !open && <p role="alert">{error}</p>}

@@ -1,3 +1,4 @@
+import { SoftSelect } from "./ui/soft-select";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -23,7 +24,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
-import { ProjectManagement, type ProjectManagementRequest } from "./ProjectManagement";
+import {
+  ProjectManagement,
+  type ProjectManagementRequest,
+} from "./ProjectManagement";
 
 type SearchHit = {
   conversation_id: string;
@@ -191,39 +195,85 @@ export function ProjectSidebar({
   const [error, setError] = useState("");
   const searchSequence = useRef(0);
   const mutationLock = useRef(false);
-  const [management, setManagement] = useState<ProjectManagementRequest | null>(null);
-  const drag = useRef<{ id: string; x: number; y: number; active: boolean } | null>(null);
+  const [management, setManagement] = useState<ProjectManagementRequest | null>(
+    null,
+  );
+  const drag = useRef<{
+    id: string;
+    x: number;
+    y: number;
+    active: boolean;
+  } | null>(null);
   const suppressClick = useRef(false);
   const selectedConversation = useRef(currentId);
   selectedConversation.current = currentId;
 
-  useEffect(() => { if (request) setManagement(request); }, [request]);
-  function manage(action: ProjectManagementRequest["action"], id: string | null = null) {
+  useEffect(() => {
+    if (request) setManagement(request);
+  }, [request]);
+  function manage(
+    action: ProjectManagementRequest["action"],
+    id: string | null = null,
+  ) {
     const next = { id, action, key: Date.now() + Math.random() };
-    if (onManage) onManage(next); else setManagement(next);
+    if (onManage) onManage(next);
+    else setManagement(next);
   }
   async function mutate(operation: () => Promise<unknown>) {
     if (mutationLock.current) return;
-    mutationLock.current = true; setBusy(true); setError("");
+    mutationLock.current = true;
+    setBusy(true);
+    setError("");
     let applied = false;
-    try { await operation(); applied = true; await refresh(); }
-    catch (cause) { setError(applied ? "修改已保存，列表暂未刷新，请稍后重试刷新。" : (cause as Error).message); }
-    finally { mutationLock.current = false; setBusy(false); }
+    try {
+      await operation();
+      applied = true;
+      await refresh();
+    } catch (cause) {
+      setError(
+        applied
+          ? "修改已保存，列表暂未刷新，请稍后重试刷新。"
+          : (cause as Error).message,
+      );
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
+    }
   }
   function dragTarget(x: number, y: number) {
-    return document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-project-drop]")?.dataset.projectDrop || null;
+    return (
+      document
+        .elementFromPoint(x, y)
+        ?.closest<HTMLElement>("[data-project-drop]")?.dataset.projectDrop ||
+      null
+    );
   }
   function finishDrag(x: number, y: number) {
     const value = drag.current;
-    drag.current = null; setDraggingId(null); setDropProject(null);
+    drag.current = null;
+    setDraggingId(null);
+    setDropProject(null);
     if (!value?.active) return;
     suppressClick.current = true;
-    window.setTimeout(() => { suppressClick.current = false; }, 0);
+    window.setTimeout(() => {
+      suppressClick.current = false;
+    }, 0);
     const target = dragTarget(x, y);
     const source = conversations.find((item) => item.id === value.id);
-    if (!target || !source || source.project_id === target || busy || activity[value.id]) return;
+    if (
+      !target ||
+      !source ||
+      source.project_id === target ||
+      busy ||
+      activity[value.id]
+    )
+      return;
     void mutate(async () => {
-      const moved = await api<Conversation>(`/conversations/${value.id}`, "PATCH", { project_id: target });
+      const moved = await api<Conversation>(
+        `/conversations/${value.id}`,
+        "PATCH",
+        { project_id: target },
+      );
       if (selectedConversation.current === value.id) onOpen(moved);
       setCollapsed((ids) => ids.filter((key) => key !== target));
     });
@@ -288,20 +338,39 @@ export function ProjectSidebar({
           style={{ touchAction: "pan-y" }}
           onPointerDown={(event) => {
             if (event.button !== 0 || busy || activity[value.id]) return;
-            drag.current = { id: value.id, x: event.clientX, y: event.clientY, active: false };
+            drag.current = {
+              id: value.id,
+              x: event.clientX,
+              y: event.clientY,
+              active: false,
+            };
             event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerMove={(event) => {
             const own = drag.current;
             if (!own || own.id !== value.id) return;
-            if (!own.active && Math.hypot(event.clientX - own.x, event.clientY - own.y) < 7) return;
-            own.active = true; event.preventDefault(); setDraggingId(value.id);
+            if (
+              !own.active &&
+              Math.hypot(event.clientX - own.x, event.clientY - own.y) < 7
+            )
+              return;
+            own.active = true;
+            event.preventDefault();
+            setDraggingId(value.id);
             const target = dragTarget(event.clientX, event.clientY);
-            setDropProject(target && value.project_id !== target ? target : null);
+            setDropProject(
+              target && value.project_id !== target ? target : null,
+            );
           }}
           onPointerUp={(event) => finishDrag(event.clientX, event.clientY)}
-          onPointerCancel={() => { drag.current = null; setDraggingId(null); setDropProject(null); }}
-          onClick={() => { if (!suppressClick.current) onOpen(value); }}
+          onPointerCancel={() => {
+            drag.current = null;
+            setDraggingId(null);
+            setDropProject(null);
+          }}
+          onClick={() => {
+            if (!suppressClick.current) onOpen(value);
+          }}
           onDoubleClick={() => {
             setConversationName(value.title);
             setRenaming(value);
@@ -387,13 +456,11 @@ export function ProjectSidebar({
         新聊天
       </Button>
       <div className="conversation-sidebar project-conversations">
-        {error &&
-          !searchOpen &&
-          !renaming && (
-            <p className="sidebar-error" role="alert">
-              {error}
-            </p>
-          )}
+        {error && !searchOpen && !renaming && (
+          <p className="sidebar-error" role="alert">
+            {error}
+          </p>
+        )}
         <section>
           <GroupHeading
             label="置顶"
@@ -480,7 +547,9 @@ export function ProjectSidebar({
                         <DropdownMenu.Item onSelect={() => onNew(project.id)}>
                           新建项目聊天
                         </DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => manage("settings", project.id)}>
+                        <DropdownMenu.Item
+                          onSelect={() => manage("settings", project.id)}
+                        >
                           项目名称与说明
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
@@ -578,11 +647,20 @@ export function ProjectSidebar({
           </form>
         </DialogContent>
       </Dialog>
-      {!onManage && <ProjectManagement
-        projects={projects} conversations={conversations} currentId={currentId}
-        request={management} refresh={refresh} onProject={onProject}
-        onDeleted={(id) => { if (projectId === id) onNew(null); }} onLibraryChange={onLibraryChange}
-      />}
+      {!onManage && (
+        <ProjectManagement
+          projects={projects}
+          conversations={conversations}
+          currentId={currentId}
+          request={management}
+          refresh={refresh}
+          onProject={onProject}
+          onDeleted={(id) => {
+            if (projectId === id) onNew(null);
+          }}
+          onLibraryChange={onLibraryChange}
+        />
+      )}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="chat-search-dialog">
           <DialogHeader>
@@ -599,19 +677,19 @@ export function ProjectSidebar({
               placeholder="输入关键词…"
               onChange={(event) => setQuery(event.target.value)}
             />
-            <select
-              aria-label="搜索范围"
+            <SoftSelect
+              label="搜索范围"
               value={scope}
-              onChange={(event) => setScope(event.target.value)}
-            >
-              <option value="all">全部聊天</option>
-              <option value="unfiled">未加入项目</option>
-              {projects.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setScope}
+              options={[
+                { value: "all", label: "全部聊天" },
+                { value: "unfiled", label: "未加入项目" },
+                ...projects.map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                })),
+              ]}
+            />
           </div>
           {error && <p role="alert">{error}</p>}
           <div className="chat-search-results" aria-busy={loading}>

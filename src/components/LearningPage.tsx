@@ -1,3 +1,4 @@
+import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useState, useRef } from "react";
 import {
   ArrowLeft,
@@ -26,14 +27,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { CreationPage } from "./CreationPage";
+import { DateTimePicker } from "./DateTimePicker";
 import {
   api,
   readEvents,
@@ -44,7 +39,12 @@ import {
   type Run,
 } from "@/lib/api";
 import { clearLearningGoalDrafts, useLearningDraft } from "@/lib/learningDraft";
-import { type LearningContinuation, type LearningGoalDetails, type LearningSession, learningDate } from "@/lib/learningSessions";
+import {
+  type LearningContinuation,
+  type LearningGoalDetails,
+  type LearningSession,
+  learningDate,
+} from "@/lib/learningSessions";
 import {
   EmptyState,
   ErrorNotice,
@@ -95,6 +95,7 @@ export function LearningPage({
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const stopLock = useRef(false);
+  const reviewReminderLock = useRef(false);
   const selectedGoalId = useRef(goalId);
   selectedGoalId.current = goalId;
   const [run, setRun] = useState<Run | null>(null);
@@ -102,8 +103,20 @@ export function LearningPage({
   const sessionRef = useRef(session);
   sessionRef.current = session;
   const [sessionBusy, setSessionBusy] = useState(false);
-  const [continuations, setContinuations] = useState<Record<string, LearningContinuation>>({});
-  const submittedDrafts = useRef(new Map<string, { nodeId: string; lessonId: string; answer: string; attachment_ids: string[] }>());
+  const [continuations, setContinuations] = useState<
+    Record<string, LearningContinuation>
+  >({});
+  const submittedDrafts = useRef(
+    new Map<
+      string,
+      {
+        nodeId: string;
+        lessonId: string;
+        answer: string;
+        attachment_ids: string[];
+      }
+    >(),
+  );
   const pinnedSession = useRef<{ goalId: string; id: string } | null>(null);
   const continuityVersion = useRef(0);
   const [learningStream, setLearningStream] = useState<{
@@ -111,11 +124,17 @@ export function LearningPage({
     stage: string;
     fields: Record<string, string>;
   } | null>(null);
-  const { answer, setAnswer, images, setImages, saving: savingDraft, flush: flushDraft, clearIfUnchanged: clearSubmittedDraft, conflict: draftConflict, resolveConflict: resolveDraftConflict } = useLearningDraft(
-    nodeId,
-    lesson,
-    { session, onError: setError },
-  );
+  const {
+    answer,
+    setAnswer,
+    images,
+    setImages,
+    saving: savingDraft,
+    flush: flushDraft,
+    clearIfUnchanged: clearSubmittedDraft,
+    conflict: draftConflict,
+    resolveConflict: resolveDraftConflict,
+  } = useLearningDraft(nodeId, lesson, { session, onError: setError });
   const [hints, setHints] = useState(false);
   const [answerExpanded, setAnswerExpanded] = useState(false);
   const [deleting, setDeleting] = useState<Goal | null>(null);
@@ -143,13 +162,18 @@ export function LearningPage({
   const selectedGoal = availableGoals.find((x) => x.id === goalId);
   const goal = selectedGoal || null;
   const node = goal?.nodes.find((x) => x.id === nodeId);
-  const pinnedLessonId = session?.id === pinnedSession.current?.id && session?.node_id === nodeId ? session?.lesson_id : null;
+  const pinnedLessonId =
+    session?.id === pinnedSession.current?.id && session?.node_id === nodeId
+      ? session?.lesson_id
+      : null;
   function selectGoal(value: Goal) {
     pinnedSession.current = null;
     continuityVersion.current += 1;
     const previous = sessionRef.current;
     if (previous?.status === "active")
-      void api(`/learning/sessions/${previous.id}/pause`, "POST").catch((cause: Error) => setError(cause.message));
+      void api(`/learning/sessions/${previous.id}/pause`, "POST").catch(
+        (cause: Error) => setError(cause.message),
+      );
     setSession(null);
     watch.current?.abort();
     setBusy(false);
@@ -175,57 +199,113 @@ export function LearningPage({
   async function reloadContinuity(targetGoal = selectedGoalId.current) {
     if (!targetGoal) return;
     const request = ++continuityVersion.current;
-    const value = await api<LearningContinuation>(`/learning/goals/${targetGoal}/continuation`);
-    const pinned = pinnedSession.current?.goalId === targetGoal ? pinnedSession.current.id : null;
+    const value = await api<LearningContinuation>(
+      `/learning/goals/${targetGoal}/continuation`,
+    );
+    const pinned =
+      pinnedSession.current?.goalId === targetGoal
+        ? pinnedSession.current.id
+        : null;
     const id = pinned || value.session_id;
-    const saved = id ? await api<LearningSession>(`/learning/sessions/${id}`) : null;
-    if (request !== continuityVersion.current || selectedGoalId.current !== targetGoal) return;
-    if (saved && saved.goal_id !== targetGoal) throw new Error("接续卡与学习目标不一致，请从学习列表继续。");
+    const saved = id
+      ? await api<LearningSession>(`/learning/sessions/${id}`)
+      : null;
+    if (
+      request !== continuityVersion.current ||
+      selectedGoalId.current !== targetGoal
+    )
+      return;
+    if (saved && saved.goal_id !== targetGoal)
+      throw new Error("接续卡与学习目标不一致，请从学习列表继续。");
     setSession(saved);
-    const nodeTitle = goals.find((item) => item.id === targetGoal)?.nodes.find((item) => item.id === saved?.node_id)?.title || "";
-    setContinuations((previous) => ({ ...previous, [targetGoal]: pinned && saved ? {
-      ...value, session_id: saved.id, node_id: saved.node_id, node_title: nodeTitle, lesson_id: saved.lesson_id,
-      status: saved.status, summary: saved.summary, gaps: saved.gaps, next_step: saved.next_step,
-      last_studied_at: saved.last_studied_at,
-    } : value }));
+    const nodeTitle =
+      goals
+        .find((item) => item.id === targetGoal)
+        ?.nodes.find((item) => item.id === saved?.node_id)?.title || "";
+    setContinuations((previous) => ({
+      ...previous,
+      [targetGoal]:
+        pinned && saved
+          ? {
+              ...value,
+              session_id: saved.id,
+              node_id: saved.node_id,
+              node_title: nodeTitle,
+              lesson_id: saved.lesson_id,
+              status: saved.status,
+              summary: saved.summary,
+              gaps: saved.gaps,
+              next_step: saved.next_step,
+              last_studied_at: saved.last_studied_at,
+            }
+          : value,
+    }));
     if (pinned && saved?.node_id) setNodeId(saved.node_id);
   }
   useEffect(() => {
     let live = true;
-    api<LearningContinuation[]>("/learning/continuations").then((values) => {
-      if (live) setContinuations((previous) => {
-        const next = Object.fromEntries(values.map((item) => [item.goal_id, item]));
-        const pin = pinnedSession.current;
-        if (pin && previous[pin.goalId]?.session_id === pin.id) next[pin.goalId] = previous[pin.goalId];
-        return next;
+    api<LearningContinuation[]>("/learning/continuations")
+      .then((values) => {
+        if (live)
+          setContinuations((previous) => {
+            const next = Object.fromEntries(
+              values.map((item) => [item.goal_id, item]),
+            );
+            const pin = pinnedSession.current;
+            if (pin && previous[pin.goalId]?.session_id === pin.id)
+              next[pin.goalId] = previous[pin.goalId];
+            return next;
+          });
+      })
+      .catch((cause: Error) => {
+        if (live) setError(cause.message);
       });
-    }).catch((cause: Error) => { if (live) setError(cause.message); });
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [goals]);
   useEffect(() => {
-    if (goalId) void reloadContinuity(goalId).catch((cause: Error) => setError(cause.message));
+    if (goalId)
+      void reloadContinuity(goalId).catch((cause: Error) =>
+        setError(cause.message),
+      );
     // Goal navigation reads saved continuity, never starts teaching.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goalId]);
-  useEffect(() => () => {
-    const saved = sessionRef.current;
-    if (saved?.status === "active") void api(`/learning/sessions/${saved.id}/pause`, "POST").catch(() => {});
-  }, []);
+  useEffect(
+    () => () => {
+      const saved = sessionRef.current;
+      if (saved?.status === "active")
+        void api(`/learning/sessions/${saved.id}/pause`, "POST").catch(
+          () => {},
+        );
+    },
+    [],
+  );
   const handledRequest = useRef<number | null>(null);
   useEffect(() => {
     if (!openRequest || handledRequest.current === openRequest.key) return;
     handledRequest.current = openRequest.key;
-    const requestedGoal = goals.find((value) => value.id === openRequest.goalId);
+    const requestedGoal = goals.find(
+      (value) => value.id === openRequest.goalId,
+    );
     if (!requestedGoal) {
       setError("这个学习目标已不存在，请从学习列表选择。");
-      setGoalId(""); setNodeId(""); onOpenHandled?.();
+      setGoalId("");
+      setNodeId("");
+      onOpenHandled?.();
       return;
     }
     selectGoal(requestedGoal);
     if (openRequest.sessionId) {
-      pinnedSession.current = { goalId: requestedGoal.id, id: openRequest.sessionId };
+      pinnedSession.current = {
+        goalId: requestedGoal.id,
+        id: openRequest.sessionId,
+      };
     }
-    void reloadContinuity(requestedGoal.id).catch((cause: Error) => setError(`无法打开原会话：${cause.message}`));
+    void reloadContinuity(requestedGoal.id).catch((cause: Error) =>
+      setError(`无法打开原会话：${cause.message}`),
+    );
     onOpenHandled?.();
     // Each explicit card activation has its own key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -245,13 +325,25 @@ export function LearningPage({
     setHints(false);
     if (nodeId)
       Promise.all([
-        api<Lesson | null>(pinnedLessonId ? `/learning/lessons/${pinnedLessonId}` : `/learning/nodes/${nodeId}/lesson`),
+        api<Lesson | null>(
+          pinnedLessonId
+            ? `/learning/lessons/${pinnedLessonId}`
+            : `/learning/nodes/${nodeId}/lesson`,
+        ),
         api<LearningTurn[]>(`/learning/nodes/${nodeId}/turns`),
       ])
         .then(([value, history]) => {
           if (live) {
             setLesson(value);
-            setTurns(pinnedLessonId && session ? history.filter((turn) => (turn as LearningTurn & { session_id?: string }).session_id === session.id) : history);
+            setTurns(
+              pinnedLessonId && session
+                ? history.filter(
+                    (turn) =>
+                      (turn as LearningTurn & { session_id?: string })
+                        .session_id === session.id,
+                  )
+                : history,
+            );
           }
         })
         .catch((error) => {
@@ -266,81 +358,95 @@ export function LearningPage({
     await flushDraft();
     pinnedSession.current = null;
     continuityVersion.current += 1;
-    const saved = await api<LearningSession>(`/learning/goals/${goal.id}/sessions`, "POST", {
-      node_id: targetNode || nodeId || undefined, target_minutes: minutes,
-    });
-    if (selectedGoalId.current !== saved.goal_id) throw new Error("学习目标已经切换，请在当前目标中重新开始。");
+    const saved = await api<LearningSession>(
+      `/learning/goals/${goal.id}/sessions`,
+      "POST",
+      {
+        node_id: targetNode || nodeId || undefined,
+        target_minutes: minutes,
+      },
+    );
+    if (selectedGoalId.current !== saved.goal_id)
+      throw new Error("学习目标已经切换，请在当前目标中重新开始。");
     setSession(saved);
     return saved;
-  }
-  async function beginSession(minutes?: number) {
-    if (!goal || busy || sessionBusy) return;
-    setSessionBusy(true); setError("");
-    try {
-      const saved = await ensureSession(nodeId || undefined, minutes);
-      await reloadContinuity(goal.id);
-      if (selectedGoalId.current !== goal.id) return;
-      if (!saved.node_id) {
-        const next = await api<Run>(`/learning/goals/${goal.id}/plan`, "POST");
-        void track(next);
-      } else {
-        setNodeId(saved.node_id);
-        const existing = await api<Lesson | null>(`/learning/nodes/${saved.node_id}/lesson`);
-        if (existing) { setLesson(existing); setAnswerExpanded(true); }
-        else {
-          const next = await api<Run>(`/learning/nodes/${saved.node_id}/lesson`, "POST", { session_id: saved.id });
-          void track(next, saved.node_id);
-        }
-      }
-    } catch (cause) { setError((cause as Error).message); }
-    finally { setSessionBusy(false); }
   }
   async function changeSession(action: "pause" | "end") {
     const saved = sessionRef.current;
     if (!saved || busy || sessionBusy || uploading) return;
-    setSessionBusy(true); setError("");
+    setSessionBusy(true);
+    setError("");
     try {
       await flushDraft();
-      const updated = await api<LearningSession>(`/learning/sessions/${saved.id}/${action}`, "POST");
+      const updated = await api<LearningSession>(
+        `/learning/sessions/${saved.id}/${action}`,
+        "POST",
+      );
       if (selectedGoalId.current !== saved.goal_id) return;
       setSession(updated);
       await reloadContinuity(saved.goal_id);
-      setNotice(action === "end" ? "本次学习已结束，课程、练习和草稿已保留。" : "已暂停，下次可以接着学。");
-    } catch (cause) { setError((cause as Error).message); }
-    finally { setSessionBusy(false); }
+      setNotice(
+        action === "end"
+          ? "本次学习已结束，课程、练习和草稿已保留。"
+          : "已暂停，下次可以接着学。",
+      );
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setSessionBusy(false);
+    }
   }
   async function switchNode(value: Node) {
     if (busy || sessionBusy || uploading || nodeId === value.id) return;
-    setSessionBusy(true); setError("");
+    setSessionBusy(true);
+    setError("");
     try {
       await flushDraft();
       const previous = sessionRef.current;
       if (previous && previous.status !== "ended") {
         await api(`/learning/sessions/${previous.id}/pause`, "POST");
-        await api(`/learning/sessions/${previous.id}/resume`, "POST", { node_id: value.id });
-        const paused = await api<LearningSession>(`/learning/sessions/${previous.id}/pause`, "POST");
+        await api(`/learning/sessions/${previous.id}/resume`, "POST", {
+          node_id: value.id,
+        });
+        const paused = await api<LearningSession>(
+          `/learning/sessions/${previous.id}/pause`,
+          "POST",
+        );
         if (selectedGoalId.current !== previous.goal_id) return;
         setSession(paused);
       }
       setNodeId(value.id);
-      if (typeof window.matchMedia === "function" && window.matchMedia("(max-width: 1099px)").matches)
+      if (
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(max-width: 1099px)").matches
+      )
         setOutlineOpen(false);
       if (goal) await reloadContinuity(goal.id);
-    } catch (cause) { setError((cause as Error).message); }
-    finally { setSessionBusy(false); }
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setSessionBusy(false);
+    }
   }
   async function leaveGoal() {
     const targetGoal = selectedGoalId.current;
     try {
       await flushDraft();
       const previous = sessionRef.current;
-      if (previous?.status === "active") await api(`/learning/sessions/${previous.id}/pause`, "POST");
-    } catch (cause) { setError((cause as Error).message); }
+      if (previous?.status === "active")
+        await api(`/learning/sessions/${previous.id}/pause`, "POST");
+    } catch (cause) {
+      setError((cause as Error).message);
+    }
     if (selectedGoalId.current !== targetGoal) return;
     watch.current?.abort();
     pinnedSession.current = null;
     continuityVersion.current += 1;
-    setSession(null); setGoalId(""); setNodeId(""); setRun(null); setBusy(false);
+    setSession(null);
+    setGoalId("");
+    setNodeId("");
+    setRun(null);
+    setBusy(false);
   }
   async function finishRun(
     value: Run,
@@ -462,15 +568,19 @@ export function LearningPage({
     setError("");
     try {
       const editing = editingGoalId;
-      const value = await api<Goal>(editing ? `/learning/goals/${editing}` : "/learning/goals", editing ? "PUT" : "POST", {
-        title,
-        objective,
-        foundation,
-        use_beginner_defaults: useBeginnerDefaults,
-        outcome,
-        weekly_minutes: weeklyMinutes ? Number(weeklyMinutes) : null,
-        target_date: targetDate || null,
-      });
+      const value = await api<Goal>(
+        editing ? `/learning/goals/${editing}` : "/learning/goals",
+        editing ? "PUT" : "POST",
+        {
+          title,
+          objective,
+          foundation,
+          use_beginner_defaults: useBeginnerDefaults,
+          outcome,
+          weekly_minutes: weeklyMinutes ? Number(weeklyMinutes) : null,
+          target_date: targetDate || null,
+        },
+      );
       await refresh();
       setOpen(false);
       if (editing) {
@@ -509,7 +619,9 @@ export function LearningPage({
     setError("");
     try {
       void track(
-        await api<Run>(`/learning/nodes/${value.id}/lesson`, "POST", { session_id: (await ensureSession(value.id)).id }),
+        await api<Run>(`/learning/nodes/${value.id}/lesson`, "POST", {
+          session_id: (await ensureSession(value.id)).id,
+        }),
         value.id,
       );
     } catch (error) {
@@ -535,8 +647,12 @@ export function LearningPage({
           session_id: saved.id,
         },
       );
-      submittedDrafts.current.set(value.id, { nodeId: node.id, lessonId: lesson.id,
-        answer: submittedAnswer, attachment_ids: submittedImages.map((item) => item.id) });
+      submittedDrafts.current.set(value.id, {
+        nodeId: node.id,
+        lessonId: lesson.id,
+        answer: submittedAnswer,
+        attachment_ids: submittedImages.map((item) => item.id),
+      });
       void track(value, node.id);
     } catch (error) {
       setError((error as Error).message);
@@ -544,7 +660,8 @@ export function LearningPage({
     }
   }
   async function reviewReminder() {
-    if (!node) return;
+    if (!node || reviewReminderLock.current) return;
+    reviewReminderLock.current = true;
     try {
       await api("/reminders", "POST", {
         title: `复习：${node.title}`,
@@ -553,11 +670,15 @@ export function LearningPage({
         timezone: "Asia/Shanghai",
         recurrence: "none",
       });
-      await refresh();
       setError("");
+      await refresh().catch(() =>
+        setError("复习提醒已创建，列表暂未刷新，请稍后查看日历。"),
+      );
       setNotice("已创建明天同一时间的复习提醒，可在提醒页调整。");
     } catch (cause) {
       setError((cause as Error).message);
+    } finally {
+      reviewReminderLock.current = false;
     }
   }
   const feedback = lesson?.feedback as
@@ -570,15 +691,188 @@ export function LearningPage({
         evidence?: string;
       }
     | undefined;
+  const lessonMaterial = lesson ? (
+    <>
+      {" "}
+      <Markdown>{lesson.content}</Markdown>
+      <section className="exercise-box">
+        <div className="section-title">
+          <FileQuestion size={20} />
+          <div>
+            <h2>现在轮到你试一试</h2>
+          </div>
+        </div>
+        <Markdown>{lesson.exercise}</Markdown>
+        <div className="exercise-criteria">
+          <strong>检查标准</strong>
+          <p>{lesson.criteria}</p>
+        </div>
+        {lesson.hints.length > 0 && (
+          <>
+            <button className="text-button" onClick={() => setHints(!hints)}>
+              {hints ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              需要一点提示
+            </button>
+            {hints && (
+              <ul className="hint-list">
+                {lesson.hints.map((hint, i) => (
+                  <li key={i}>{hint}</li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </section>{" "}
+    </>
+  ) : null;
   const passedCount =
     goal?.nodes.filter((value) => value.status === "passed").length ?? 0;
   return (
-    <div className={`learning-page ${goal ? "has-course" : "page-content"}`}>
+    <div
+      className={`learning-page ${open ? "is-editing" : goal ? "has-course" : "page-content"}`}
+    >
       {notice && <Toast message={notice} onClose={() => setNotice("")} />}
       {error && (
         <Toast tone="error" message={error} onClose={() => setError("")} />
       )}
-      {!goal ? (
+      {open ? (
+        <CreationPage
+          title={editingGoalId ? "调整学习目标" : "你想学什么？"}
+          description={
+            editingGoalId
+              ? "调整接下来的方向，已有课程与学习记录会继续保留。"
+              : "告诉 XiaoXi 你想做成什么，从适合你的一小步开始。"
+          }
+          backLabel={goal ? "返回课程" : "返回学习"}
+          onBack={() => setOpen(false)}
+          busy={busy}
+          actions={
+            <>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                disabled={
+                  !title.trim() ||
+                  busy ||
+                  (Boolean(weeklyMinutes) &&
+                    (!Number.isInteger(Number(weeklyMinutes)) ||
+                      Number(weeklyMinutes) < 1 ||
+                      Number(weeklyMinutes) > 10080)) ||
+                  (!useBeginnerDefaults &&
+                    (!objective.trim() || !foundation.trim()))
+                }
+                onClick={() => void create()}
+              >
+                <Sparkles size={15} />
+                {busy
+                  ? "正在保存…"
+                  : editingGoalId
+                    ? "保存目标"
+                    : "建立学习路线"}
+              </Button>
+            </>
+          }
+        >
+          {error && <ErrorNotice message={error} />}
+          <div className="form-field">
+            <Label htmlFor="goal-title">学习主题</Label>
+            <Input
+              id="goal-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="例如：家常菜、养猫、前端开发、某款游戏"
+            />
+          </div>
+          <div className="form-field">
+            <Label htmlFor="goal-objective">你希望学到什么程度</Label>
+            <Textarea
+              id="goal-objective"
+              value={objective}
+              onChange={(e) => setObjective(e.target.value)}
+              rows={3}
+              placeholder="例如：能独立做出三道日常晚餐，知道如何安排步骤。"
+            />
+          </div>
+          <div className="form-field">
+            <Label htmlFor="goal-foundation">目前的基础与相关背景</Label>
+            <Textarea
+              id="goal-foundation"
+              value={foundation}
+              onChange={(e) => setFoundation(e.target.value)}
+              rows={3}
+              placeholder="已经会什么，在哪些地方容易卡住？"
+            />
+          </div>
+          <label className="learning-beginner-choice">
+            <input
+              type="checkbox"
+              checked={useBeginnerDefaults}
+              onChange={(event) => setUseBeginnerDefaults(event.target.checked)}
+            />
+            不确定怎么填写，按零基础入门安排未填写的部分
+          </label>
+
+          <section className="plain-section">
+            <header>
+              <h2>更多安排</h2>
+              <p>成果、时间与日期可按需填写。</p>
+            </header>
+            <div className="creation-optional-body">
+              {" "}
+              <div className="form-field">
+                <Label htmlFor="goal-outcome">希望做出的具体成果（可选）</Label>
+                <Textarea
+                  id="goal-outcome"
+                  rows={2}
+                  value={outcome}
+                  onChange={(event) => setOutcome(event.target.value)}
+                  placeholder="例如：独立完成一份销售数据汇总表。"
+                />
+              </div>
+              <div className="learning-goal-options">
+                <div className="form-field">
+                  <Label htmlFor="goal-weekly-minutes">
+                    每周可用分钟（可选）
+                  </Label>
+                  <Input
+                    id="goal-weekly-minutes"
+                    type="number"
+                    min={1}
+                    max={10080}
+                    value={weeklyMinutes}
+                    onChange={(event) => setWeeklyMinutes(event.target.value)}
+                    placeholder="例如：120"
+                  />
+                </div>
+                <div className="form-field">
+                  <Label htmlFor="goal-target-date">目标日期（可选）</Label>
+                  <DateTimePicker
+                    id="goal-target-date"
+                    dateOnly
+                    label="目标日期"
+                    value={targetDate}
+                    onChange={setTargetDate}
+                  />
+                  {targetDate && (
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => setTargetDate("")}
+                    >
+                      清除日期
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        </CreationPage>
+      ) : !goal ? (
         <>
           <div className="page-heading">
             <div>
@@ -614,11 +908,25 @@ export function LearningPage({
                             (node) => node.id === value.current_node_id,
                           )?.title || "建立你的知识框架"}
                         </small>
-                        {continuations[value.id] && <span className="goal-continuation-summary">
-                          <span>上次学习：{learningDate(continuations[value.id].last_studied_at)}</span>
-                          {continuations[value.id].gaps.length > 0 && <span>当前卡点：{continuations[value.id].gaps.join("；")}</span>}
-                          <span>下一步：{continuations[value.id].next_step}</span>
-                        </span>}
+                        {continuations[value.id] && (
+                          <span className="goal-continuation-summary">
+                            <span>
+                              上次学习：
+                              {learningDate(
+                                continuations[value.id].last_studied_at,
+                              )}
+                            </span>
+                            {continuations[value.id].gaps.length > 0 && (
+                              <span>
+                                当前卡点：
+                                {continuations[value.id].gaps.join("；")}
+                              </span>
+                            )}
+                            <span>
+                              下一步：{continuations[value.id].next_step}
+                            </span>
+                          </span>
+                        )}
                       </span>
                     </button>
                     <div className="goal-row-progress">
@@ -643,7 +951,14 @@ export function LearningPage({
                       </div>
                     </div>
                     <div className="goal-row-actions">
-                      <Button size="icon" variant="ghost" aria-label={`编辑学习目标 ${value.title}`} onClick={() => openGoalEditor(value)}><Settings2 size={15} /></Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`编辑学习目标 ${value.title}`}
+                        onClick={() => openGoalEditor(value)}
+                      >
+                        <Settings2 size={15} />
+                      </Button>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -714,10 +1029,7 @@ export function LearningPage({
             aria-label={goal.title}
           >
             <div className="course-heading">
-              <button
-                className="back-link"
-                onClick={() => void leaveGoal()}
-              >
+              <button className="back-link" onClick={() => void leaveGoal()}>
                 <ArrowLeft size={15} />
                 所有学习目标
               </button>
@@ -738,6 +1050,18 @@ export function LearningPage({
                 <span>目录</span>
               </Button>
             </div>
+            <LearningSessionPanel
+              goal={goal}
+              session={session}
+              busy={busy || sessionBusy || uploading}
+              savingDraft={savingDraft}
+              onPause={() => void changeSession("pause")}
+              onEnd={() => void changeSession("end")}
+              onEdit={() => openGoalEditor(goal)}
+              onReviewReminder={
+                node && lesson ? () => void reviewReminder() : undefined
+              }
+            />
             <div className="course-progress">
               <span>
                 <strong>{passedCount}</strong> / {goal.nodes.length} 练习通过
@@ -814,18 +1138,27 @@ export function LearningPage({
             <div className="lesson-content" ref={answerDropTarget}>
               <div className="lesson-scroll">
                 <div className="lesson-inner">
-                  <LearningSessionPanel
-                    goal={goal}
-                    continuation={continuations[goal.id]}
-                    session={session}
-                    busy={busy || sessionBusy || uploading}
-                    savingDraft={savingDraft}
-                    onStart={(minutes) => void beginSession(minutes)}
-                    onPause={() => void changeSession("pause")}
-                    onEnd={() => void changeSession("end")}
-                    onEdit={() => openGoalEditor(goal)}
-                  />
-                  {draftConflict && <div className="learning-draft-conflict" role="alert"><p>会话草稿已在另一个操作中更新。当前输入仍保留，请选择继续使用哪一份。</p><Button size="sm" variant="outline" onClick={() => void resolveDraftConflict("remote")}>使用会话中的草稿</Button><Button size="sm" variant="ghost" onClick={() => void resolveDraftConflict("local")}>保留本机并覆盖会话草稿</Button></div>}
+                  {draftConflict && (
+                    <div className="learning-draft-conflict" role="alert">
+                      <p>
+                        会话草稿已在另一个操作中更新。当前输入仍保留，请选择继续使用哪一份。
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void resolveDraftConflict("remote")}
+                      >
+                        使用会话中的草稿
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void resolveDraftConflict("local")}
+                      >
+                        保留本机并覆盖会话草稿
+                      </Button>
+                    </div>
+                  )}
                   <div className="lesson-topline">
                     <div className="lesson-location">
                       <span>{node?.module || "课程规划"}</span>
@@ -934,72 +1267,55 @@ export function LearningPage({
                       {lesson &&
                       !(busy && learningStream?.stage === "lesson") ? (
                         <>
-                          <Markdown>{lesson.content}</Markdown>
-                          <section className="exercise-box">
-                            <div className="section-title">
-                              <FileQuestion size={20} />
-                              <div>
-                                <h2>现在轮到你试一试</h2>
-                              </div>
-                            </div>
-                            <Markdown>{lesson.exercise}</Markdown>
-                            <div className="exercise-criteria">
-                              <strong>检查标准</strong>
-                              <p>{lesson.criteria}</p>
-                            </div>
-                            {lesson.hints.length > 0 && (
-                              <>
-                                <button
-                                  className="text-button"
-                                  onClick={() => setHints(!hints)}
-                                >
-                                  {hints ? (
-                                    <ChevronDown size={14} />
-                                  ) : (
-                                    <ChevronRight size={14} />
-                                  )}
-                                  需要一点提示
-                                </button>
-                                {hints && (
-                                  <ul className="hint-list">
-                                    {lesson.hints.map((hint, i) => (
-                                      <li key={i}>{hint}</li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </>
-                            )}
-                            <LearningConversation
-                              turns={turns}
-                              fallback={feedback}
-                            />
-                            {(turns.length > 0 || feedback?.explanation) && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={busy}
-                                onClick={() => void reviewReminder()}
-                              >
-                                安排复习提醒
-                              </Button>
-                            )}
-                            {busy && learningStream?.stage === "assessment" && (
-                              <div
-                                className="learning-live-reply"
-                                aria-live="polite"
-                              >
-                                <span className="message-name">XiaoXi</span>
-                                <Markdown>
-                                  {learningStream.fields.explanation || ""}
-                                </Markdown>
-                                {learningStream.fields.next_step && (
+                          {turns.length === 0 ? (
+                            lessonMaterial
+                          ) : (
+                            <DetailDialog
+                              title="讲解与练习"
+                              label="查看讲解与原练习"
+                              className="lesson-reference"
+                            >
+                              {lessonMaterial}
+                            </DetailDialog>
+                          )}
+
+                          <LearningConversation
+                            turns={turns}
+                            fallback={feedback}
+                          />
+                          {busy && learningStream?.stage === "assessment" && (
+                            <div
+                              className="learning-live-reply learning-assistant-reply"
+                              aria-live="polite"
+                            >
+                              <span className="message-name">XiaoXi</span>
+                              <Markdown>
+                                {learningStream.fields.explanation || ""}
+                              </Markdown>
+                              {learningStream.fields.reference_answer && (
+                                <>
+                                  <h4>参考答案</h4>
+                                  <Markdown>
+                                    {learningStream.fields.reference_answer}
+                                  </Markdown>
+                                </>
+                              )}
+                              {learningStream.fields.next_exercise ? (
+                                <>
+                                  <h4>换一道试试</h4>
+                                  <Markdown>
+                                    {learningStream.fields.next_exercise}
+                                  </Markdown>
+                                </>
+                              ) : (
+                                learningStream.fields.next_step && (
                                   <Markdown>
                                     {learningStream.fields.next_step}
                                   </Markdown>
-                                )}
-                              </div>
-                            )}
-                          </section>
+                                )
+                              )}
+                            </div>
+                          )}
                         </>
                       ) : busy &&
                         learningStream?.stage === "lesson" &&
@@ -1157,80 +1473,6 @@ export function LearningPage({
           </div>
         </div>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="learning-goal-editor">
-          <DialogHeader>
-            <DialogTitle>{editingGoalId ? "调整学习目标" : "你想学什么？"}</DialogTitle>
-            <DialogDescription>
-              {editingGoalId ? "修改目标信息，保留已有课程、练习与学习记录。" : "从一个具体目标开始，XiaoXi会为你建立知识框架。"}
-            </DialogDescription>
-          </DialogHeader>
-          {error && <ErrorNotice message={error} />}
-          <div className="form-field">
-            <Label htmlFor="goal-title">学习主题</Label>
-            <Input
-              id="goal-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例如：家常菜、养猫、前端开发、某款游戏"
-            />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="goal-objective">你希望学到什么程度</Label>
-            <Textarea
-              id="goal-objective"
-              value={objective}
-              onChange={(e) => setObjective(e.target.value)}
-              rows={3}
-              placeholder="例如：能独立做出三道日常晚餐，知道如何安排步骤。"
-            />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="goal-foundation">目前的基础与相关背景</Label>
-            <Textarea
-              id="goal-foundation"
-              value={foundation}
-              onChange={(e) => setFoundation(e.target.value)}
-              rows={3}
-              placeholder="已经会什么，在哪些地方容易卡住？"
-            />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="goal-outcome">希望做出的具体成果（可选）</Label>
-            <Textarea id="goal-outcome" rows={2} value={outcome} onChange={(event) => setOutcome(event.target.value)} placeholder="例如：独立完成一份销售数据汇总表。" />
-          </div>
-          <div className="learning-goal-options">
-            <div className="form-field"><Label htmlFor="goal-weekly-minutes">每周可用分钟（可选）</Label><Input id="goal-weekly-minutes" type="number" min={1} max={10080} value={weeklyMinutes} onChange={(event) => setWeeklyMinutes(event.target.value)} placeholder="例如：120" /></div>
-            <div className="form-field"><Label htmlFor="goal-target-date">目标日期（可选）</Label><Input id="goal-target-date" type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} /></div>
-          </div>
-          <label className="learning-beginner-choice">
-            <input
-              type="checkbox"
-              checked={useBeginnerDefaults}
-              onChange={(event) => setUseBeginnerDefaults(event.target.checked)}
-            />
-            不确定怎么填写，按零基础入门安排未填写的部分
-          </label>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              取消
-            </Button>
-            <Button
-              disabled={
-                !title.trim() ||
-                busy ||
-                (Boolean(weeklyMinutes) && (!Number.isInteger(Number(weeklyMinutes)) || Number(weeklyMinutes) < 1 || Number(weeklyMinutes) > 10080)) ||
-                (!useBeginnerDefaults &&
-                  (!objective.trim() || !foundation.trim()))
-              }
-              onClick={() => void create()}
-            >
-              <Sparkles size={15} />
-              {busy ? "正在保存…" : editingGoalId ? "保存目标" : "建立学习路线"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <ConfirmDelete
         open={Boolean(deleting)}
         title="删除这个学习目标？"

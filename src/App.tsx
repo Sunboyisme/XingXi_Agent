@@ -150,9 +150,11 @@ export function App() {
   );
   const [projectPanelRequest, setProjectPanelRequest] =
     useState<ProjectManagementRequest | null>(null);
+  const [projectEditorOpen, setProjectEditorOpen] = useState(false);
   const [learningOpenRequest, setLearningOpenRequest] = useState<{ goalId: string; sessionId?: string; key: number }>();
   useEffect(() => {
     const open = (event: Event) => {
+      setProjectPanelRequest(null);
       setLearningOpenRequest((event as CustomEvent).detail);
       setPage("learning");
     };
@@ -189,6 +191,7 @@ export function App() {
     conversation: Conversation,
     messageId?: string | null,
   ) {
+    setProjectPanelRequest(null);
     setProjectOverviewId(null);
     setActiveProjectId(conversation.project_id || null);
     setConversations((items) =>
@@ -335,6 +338,7 @@ export function App() {
     };
   }, [settings?.timezone]);
   function navigate(value: string, create = false) {
+    setProjectPanelRequest(null);
     if (value === "reminders" || value === "calendar") value = "plans";
     // Top-level navigation must never inherit the selected project detail.
     // Project links use openProject explicitly; chat links keep their existing
@@ -702,7 +706,7 @@ export function App() {
           )}
         </aside>
         <main className="main-panel">
-          <div className="page-body">
+          <div className="page-body" hidden={projectEditorOpen}>
             <Suspense
               fallback={
                 <p className="page-content" role="status">
@@ -818,7 +822,7 @@ export function App() {
             </Suspense>
           </div>
           <ProjectManagement projects={projects} conversations={conversations} currentId={conversationId}
-            request={projectPanelRequest} refresh={refresh}
+            request={projectPanelRequest} refresh={refresh} onEditorOpenChange={setProjectEditorOpen}
             onProject={openProject}
             onDeleted={(id) => {
               setProjects((items) => items.filter((item) => item.id !== id));

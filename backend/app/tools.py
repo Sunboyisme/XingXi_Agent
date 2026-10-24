@@ -245,7 +245,7 @@ def builtin_tools(run_id: str, conversation_id: str):
         confirm: bool = False,
         use_beginner_defaults: bool = False,
     ) -> str:
-        """创建学习路线前先从当前对话提取真实的学习目标、基础与相关背景，已有信息不重复问。没有提供的目标和基础留空，不从主题、岗位或旧助手输出推断用户经历；缺关键信息会返回needs_details，不保存目标，请集中询问缺项。只有用户明确说从零开始、直接安排或不想补充时才能设use_beginner_defaults=true。信息齐全且用户明确要求创建时explicit_request=true直接创建，不能用它跳过信息检查。用户只是咨询时，不传confirm先登记方案并询问是否创建；下一条用户同意后confirm=true，同轮提出并创建会被拒绝。修改方案需重新确认。"""
+        """创建学习路线前先从当前对话和已确认记忆提取真实的学习目标、基础与相关背景，已有信息不重复问；先检索主题相关记忆，再一次询问核心缺项。没有提供的目标和基础留空，不从主题、岗位或旧助手输出推断用户经历；缺关键信息会返回needs_details，不保存目标，请集中询问缺项。只有用户明确说从零开始、直接安排或不想补充时才能设use_beginner_defaults=true。用户此前已要求创建、当前正在补充信息时，授权继续有效；信息齐全时explicit_request=true直接创建，不能用它跳过信息检查。用户只是咨询时，不传confirm先登记方案并询问是否创建；下一条用户同意后confirm=true，同轮提出并创建会被拒绝。修改方案需重新确认。"""
         from .schemas import GoalCreate
 
         async def save(values: dict) -> str:
@@ -287,6 +287,14 @@ def builtin_tools(run_id: str, conversation_id: str):
                 }
             return json.dumps(result, ensure_ascii=False)
 
+        # A later confirmation may omit fields already shown to the user.
+        if confirm:
+            with _PENDING_LEARNING_GOALS_LOCK:
+                pending_values = _PENDING_LEARNING_GOALS.get(conversation_id)
+                if pending_values and time.time() - pending_values["created_at"] <= _LEARNING_GOAL_PROPOSAL_TTL:
+                    if title.strip() == pending_values["title"]:
+                        objective = objective or pending_values["objective"]
+                        foundation = foundation or pending_values["foundation"]
         proposal, missing = learning.goal_intake(title, objective, foundation, use_beginner_defaults)
         if not proposal["title"]:
             return json.dumps({"error": "学习主题不能为空"}, ensure_ascii=False)
@@ -294,8 +302,7 @@ def builtin_tools(run_id: str, conversation_id: str):
             return json.dumps({"error": "学习主题不能超过 200 个字符"}, ensure_ascii=False)
         if missing:
             return json.dumps({"status": "needs_details", **proposal, "missing": missing,
-                "message": "尚未保存学习目标。请结合当前对话一次询问缺少的" + "、".join(missing)
-                + "；已明确的信息不要重复问。用户明确让直接安排时才可按零基础默认方案创建。"}, ensure_ascii=False)
+                "message": "还需要了解你的" + "、".join(missing) + "。也可以告诉我按零基础直接安排。"}, ensure_ascii=False)
         with Session() as db:
             latest = task_context.user_message(db, run_id, conversation_id)
             latest_message_id = latest.id if latest else ""
@@ -314,9 +321,9 @@ def builtin_tools(run_id: str, conversation_id: str):
                     "status": "needs_confirmation",
                     **proposal,
                     "message": (
-                        "本轮只登记了待确认方案，尚未保存。请把主题、目标和基础"
-                        "告诉用户，并明确询问是否按此创建学习路线；用户在下一条"
-                        "消息同意后，再调用本工具并传 confirm=true。"
+                        f"我准备建立「{proposal['title']}」学习路线。\n\n"
+                        f"目标：{proposal['objective']}\n\n基础与背景：{proposal['foundation']}\n\n"
+                        "按这个安排创建吗？"
                     ),
                 },
                 ensure_ascii=False,

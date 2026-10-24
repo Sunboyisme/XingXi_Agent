@@ -1,8 +1,8 @@
+import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useState } from "react";
 import {
   Check,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   Database,
   ListFilter,
@@ -230,11 +230,15 @@ export function RetrievalDebugger({
                   </div>
                 </section>
               )}
-              <details className="retrieval-technical">
-                <summary>
-                  <span>查看查找细节</span>
-                  <ChevronDown size={15} className="disclosure-chevron" />
-                </summary>
+              <DetailDialog
+                title="查找细节"
+                className="retrieval-technical"
+                label={
+                  <>
+                    <span>查看查找细节</span>
+                  </>
+                }
+              >
                 <div className="retrieval-metric-grid">
                   <div>
                     <Database size={15} />
@@ -297,7 +301,7 @@ export function RetrievalDebugger({
                     </code>
                   </article>
                 ))}
-              </details>
+              </DetailDialog>
             </div>
           )}
           {!busy && !trace && !error && (

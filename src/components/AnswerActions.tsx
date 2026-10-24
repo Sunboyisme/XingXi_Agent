@@ -1,3 +1,4 @@
+import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, Copy, Layers2 } from "lucide-react";
 import { api, type RunEvent } from "@/lib/api";
@@ -223,8 +224,11 @@ export function AnswerActions({
                             result.stdout ||
                             result.stderr,
                           ) && (
-                            <details className="script-execution-details">
-                              <summary>脚本执行详情</summary>
+                            <DetailDialog
+                              title="脚本执行详情"
+                              className="script-execution-details"
+                              label={<>脚本执行详情</>}
+                            >
                               <p>
                                 退出码：{String(result.exit_code ?? "未知")}
                               </p>
@@ -234,7 +238,7 @@ export function AnswerActions({
                                   ? `\n错误输出：\n${String(result.stderr)}`
                                   : ""}
                               </pre>
-                            </details>
+                            </DetailDialog>
                           )}
                       </div>
                     </div>

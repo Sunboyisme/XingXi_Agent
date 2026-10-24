@@ -1,9 +1,9 @@
+import { DetailDialog } from "./ui/detail-dialog";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import {
   Download,
   ExternalLink as ExternalLinkIcon,
-  ChevronDown,
   Globe2,
 } from "lucide-react";
 import { ExternalLink } from "./ExternalLink";
@@ -276,12 +276,16 @@ export function AnswerPresentation({
           />
         ))}
       {!!value?.sources?.length && (
-        <details className="answer-sources">
-          <summary>
-            <Globe2 size={15} />
-            参考网页 <span>{value.sources.length}</span>
-            <ChevronDown size={15} className="disclosure-chevron" />
-          </summary>
+        <DetailDialog
+          title="参考网页"
+          className="answer-sources"
+          label={
+            <>
+              <Globe2 size={15} />
+              参考网页 <span>{value.sources.length}</span>
+            </>
+          }
+        >
           <div>
             {value.sources.map((source) => (
               <ExternalLink
@@ -308,7 +312,7 @@ export function AnswerPresentation({
               </ExternalLink>
             ))}
           </div>
-        </details>
+        </DetailDialog>
       )}
       {value?.errors?.map((message) => (
         <p className="presentation-notice" key={message}>

@@ -1,7 +1,7 @@
+import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useRef, useState } from "react";
 import {
   Bell,
-  ChevronDown,
   Loader2,
   MessageCircle,
   Send,
@@ -394,13 +394,17 @@ export function WechatSection({ compact = false }: { compact?: boolean }) {
           需电脑开机并运行XiaoXi；微信可能要求重新互动后才能发送。
         </p>
         {Boolean(status?.deliveries.length) && (
-          <details className="wechat-deliveries">
-            <summary>
-              <span>
-                最近投递 <small>{status?.deliveries.length}</small>
-              </span>
-              <ChevronDown size={15} />
-            </summary>
+          <DetailDialog
+            title="最近投递"
+            className="wechat-deliveries"
+            label={
+              <>
+                <span>
+                  最近投递 <small>{status?.deliveries.length}</small>
+                </span>
+              </>
+            }
+          >
             <ul>
               {status?.deliveries.map((item) => (
                 <li key={item.id}>
@@ -433,7 +437,7 @@ export function WechatSection({ compact = false }: { compact?: boolean }) {
                 </li>
               ))}
             </ul>
-          </details>
+          </DetailDialog>
         )}
       </div>
     </section>

@@ -1,3 +1,4 @@
+import { DetailDialog } from "./ui/detail-dialog";
 import { useState } from "react";
 import {
   Check,
@@ -175,13 +176,17 @@ export function TaskCard({
             </div>
           )}
           {task.operations.length > 0 && (
-            <details className="task-operation-records">
-              <summary>
-                <ClipboardList size={15} />
-                <span>实际操作记录</span>
-                <small>{task.operations.length}</small>
-                <ChevronDown size={14} />
-              </summary>
+            <DetailDialog
+              title="实际操作记录"
+              className="task-operation-records"
+              label={
+                <>
+                  <ClipboardList size={15} />
+                  <span>实际操作记录</span>
+                  <small>{task.operations.length}</small>
+                </>
+              }
+            >
               {task.operations.map((operation) => (
                 <div className="complex-task-operation" key={operation.id}>
                   <div className="task-operation-title">
@@ -199,10 +204,13 @@ export function TaskCard({
                       )}
                     </p>
                   )}
-                  <details className="task-operation-data">
-                    <summary>查看详情</summary>
+                  <DetailDialog
+                    title="操作详情"
+                    className="task-operation-data"
+                    label={<>查看详情</>}
+                  >
                     <pre>{JSON.stringify(operation.result, null, 2)}</pre>
-                  </details>
+                  </DetailDialog>
                   {operation.status === "unknown" &&
                     task.status !== "cancelled" && (
                       <div className="complex-task-actions">
@@ -236,7 +244,7 @@ export function TaskCard({
                     )}
                 </div>
               ))}
-            </details>
+            </DetailDialog>
           )}
         </div>
       )}

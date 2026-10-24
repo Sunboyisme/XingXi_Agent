@@ -1,0 +1,193 @@
+.detail-view-trigger {
+  width: fit-content;
+  max-width: 100%;
+}
+.detail-view-trigger > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-view-dialog {
+  width: min(860px, calc(100vw - 48px));
+  max-width: 860px;
+  max-height: calc(100dvh - 64px);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  overflow: hidden;
+}
+.detail-view-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 4px 8px;
+  overflow-wrap: anywhere;
+  line-height: 1.75;
+}
+.detail-view-body pre {
+  overflow: auto;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--ui-color-bg);
+  font-size: 12px;
+}
+.detail-view-body > .complex-task-operation {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+}
+.detail-view-body.answer-sources > div {
+  display: grid;
+  gap: 12px;
+}
+.detail-view-body.answer-sources a {
+  display: block;
+  padding: 14px 16px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 12px;
+}
+.detail-view-body.answer-sources a strong {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.detail-view-body.answer-sources small {
+  display: block;
+  margin-top: 8px;
+  color: var(--ui-color-text-muted);
+}
+.detail-view-body.wechat-deliveries ul {
+  padding: 0;
+  list-style: none;
+}
+.detail-view-body.wechat-deliveries li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.detail-view-body.project-source-files > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.detail-view-body.project-source-files > div > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.plain-section {
+  padding-top: 22px;
+  border-top: 1px solid var(--ui-color-line);
+  display: grid;
+  gap: 18px;
+}
+.plain-section > header > h2,
+.plain-section > header > h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ui-color-heading);
+}
+.plain-section > header > p {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  margin: 6px 0 0;
+  line-height: 1.6;
+}
+.detail-view-body .plain-section {
+  margin-bottom: 24px;
+}
+.content-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 12px;
+  background: var(--ui-color-bg);
+  overflow-x: auto;
+  margin-bottom: 22px;
+}
+.content-view-tabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 9px;
+  padding: 9px 15px;
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+  white-space: nowrap;
+}
+.content-view-tabs > button[data-state="active"] {
+  color: var(--ui-color-heading);
+  background: var(--ui-color-surface);
+  box-shadow: 0 2px 8px #00000008;
+  font-weight: 500;
+}
+.content-view-tabs > button > span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ui-color-text-muted);
+}
+.content-view-tabs > button:focus-visible,
+.learning-history-entries button:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: -2px;
+}
+.skill-section > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.skill-section .skill-disclosure-body {
+  padding: 0 0 4px;
+  border-top: 0;
+  max-height: 360px;
+}
+.skill-section .skill-disclosure-copy small {
+  white-space: normal;
+}
+.file-action-menu [role="menuitem"] {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.project-description-text {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.project-description-text > p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ui-color-text-muted);
+  white-space: pre-wrap;
+}
+.project-description-text .detail-view-trigger {
+  flex-shrink: 0;
+}
+.project-description-full {
+  white-space: pre-wrap;
+  line-height: 1.8;
+}
+.detail-view-body.answer-sources {
+  border: 0;
+  padding: 0 4px 8px;
+}
+.detail-view-body.retrieval-technical {
+  margin: 0;
+  border: 0;
+  padding-top: 0;
+}
+.detail-view-body .history-empty {
+  padding: 30px 10px;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}

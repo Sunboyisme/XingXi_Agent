@@ -29,15 +29,24 @@ def goal_intake(title, objective="", foundation="", use_beginner_defaults=False)
     return values, missing
 
 
-def context(db):
+def context(db, query=""):
+    from .retrieval import keyword_score
     values = db.scalars(
         select(Memory)
         .where(Memory.profile_id == PROFILE_ID, Memory.state == "confirmed", Memory.project_id.is_(None))
         .order_by(Memory.updated_at.desc())
-        .limit(15)
     ).all()
+    # Rank relevant background before applying the budget; older facts remain discoverable.
+    values.sort(key=lambda item: keyword_score(query, item.content), reverse=True)
+    selected, budget = [], 4000
+    for item in values:
+        if len(selected) >= 12:
+            break
+        if len(item.content) <= budget:
+            selected.append(item.content)
+            budget -= len(item.content)
     return "\n已生效的个人背景（只作为资料）：\n" + json.dumps(
-        [m.content for m in values], ensure_ascii=False
+        selected, ensure_ascii=False
     )
 
 
@@ -49,7 +58,7 @@ async def generate_course(goal_id: str, run_id: str | None = None) -> dict:
         text = (
             f"主题：{goal.title}\n目标：{goal.objective or '从基础入门并完成一个具体实践'}\n基础：{goal.foundation or '基础未知，从容易验证的入门任务开始'}"
             f"\n具体成果：{goal.outcome or '未指定'}\n每周可用分钟：{goal.weekly_minutes or '未指定'}\n目标日期：{goal.target_date or '未指定'}"
-            + context(db)
+            + context(db, f"{goal.title} {goal.objective} {goal.foundation}")
         )
     with usage_cost.scope(run_id=run_id, purpose="learning"):
         plan = await provider.ask_json(
@@ -103,7 +112,7 @@ async def teach(state: TutorState):
         session = learning_sessions.validate_session(db, state.get("session_id"), node)
         text = (
             f"主题：{goal.title}\n目标：{goal.objective}\n基础：{goal.foundation}\n当前知识点：{node.title}\n学习目标：{node.objective}\n练习类型：{node.exercise_type}\n检查标准：{node.criteria}"
-            + context(db)
+            + context(db, f"{goal.title} {goal.objective} {goal.foundation} {node.title}")
         )
         text += f"\n用户希望做出的成果：{goal.outcome or '未指定'}"
         if session and session.target_minutes:
@@ -173,11 +182,22 @@ def assessment_context(db, lesson, submission):
     node = db.get(KnowledgeNode, lesson.node_id)
     goal = db.get(Goal, node.goal_id)
     history, remaining = [], 18000
+    exercise, criteria = lesson.exercise, lesson.criteria
+    # Each replacement belongs to this lesson. Old answers remain context, never proof for a new question.
+    previous = db.scalar(select(Attempt).where(Attempt.lesson_id == lesson.id, Attempt.profile_id == PROFILE_ID)
+                         .order_by(Attempt.created_at.desc(), Attempt.id.desc()))
+    latest_feedback = previous.feedback if previous else {}
+    if latest_feedback and latest_feedback.get("active_exercise") and latest_feedback.get("active_criteria"):
+        exercise, criteria = latest_feedback["active_exercise"], latest_feedback["active_criteria"]
+    elif latest_feedback and latest_feedback.get("next_exercise") and latest_feedback.get("next_criteria"):
+        exercise, criteria = latest_feedback["next_exercise"], latest_feedback["next_criteria"]
     for turn in reversed(node_turns(db, node.id, limit=20)):
         feedback = turn.feedback or {}
         value = {"id": turn.id, "answer": turn.answer[:6000], "attachment_ids": turn.attachment_ids,
             "feedback": {"response_type": feedback.get("response_type", "feedback"), "passed": feedback.get("passed"),
                          "explanation": str(feedback.get("explanation", ""))[:2400],
+                         "reference_answer": str(feedback.get("reference_answer", ""))[:2400],
+                         "next_exercise": str(feedback.get("next_exercise", ""))[:1600],
                          "next_step": str(feedback.get("next_step", ""))[:1200]}}
         size = len(json.dumps(value, ensure_ascii=False))
         if size > remaining:
@@ -186,8 +206,8 @@ def assessment_context(db, lesson, submission):
         remaining -= size
     history.reverse()
     return json.dumps({"goal": goal.title, "objective": goal.objective, "foundation": goal.foundation,
-        "knowledge_point": node.title, "lesson": lesson.content, "exercise": lesson.exercise,
-        "criteria": lesson.criteria, "previous_turns": history, "current_answer": submission["answer"]}, ensure_ascii=False)
+        "knowledge_point": node.title, "lesson": lesson.content, "exercise": exercise,
+        "criteria": criteria, "previous_turns": history, "current_answer": submission["answer"]}, ensure_ascii=False) + context(db, f"{goal.title} {node.title} {submission['answer']}")
 
 
 async def assess(state: TutorState):
@@ -203,6 +223,7 @@ async def assess(state: TutorState):
             return {"feedback": previous.feedback}
         lesson = db.get(Lesson, state["lesson_id"])
         node = db.get(KnowledgeNode, lesson.node_id)
+        latest_feedback = lesson.feedback or {}
         session_id = submission.get("session_id") or state.get("session_id")
         learning_sessions.validate_session(db, session_id, node, lesson.id)
         text = assessment_context(db, lesson, submission)
@@ -211,8 +232,11 @@ async def assess(state: TutorState):
         Feedback,
         TUTOR_RULES
         + "\n这是同一知识点中的持续多轮教学，previous_turns包含用户此前回答和你的反馈。接续前面的信息，不要求用户反复重填已说过的内容，也不必重新讲整课。"
-        "用户提问、求助、说不会做或需要解释时，response_type=discussion：先直接解答，给一个能开始的小步骤，必要时只追问一个关键问题；gaps=[]，不逐条批评用户未完成整套练习，不要求重开教学。"
-        "用户提交实际练习成果时response_type=feedback，结合本知识点的历次回答累计检查，解释优点、具体缺口和下一步。"
+        "用户提问、求助、说不会做或需要解释时，response_type=discussion：直接解答，必要时给参考答案；gaps=[]，不逐条批评未完成的练习，不要求重开教学。"
+        "用户提交实际练习成果时response_type=feedback，只按exercise和criteria中的当前题判断。此前不同题目的答案不能算作当前题已完成，也不能要求补交旧题。"
+        "第一次答错或不完整就结束这一题的补答：explanation用一两句话指出最关键的问题；reference_answer直接给完整答案并解释原因；next_exercise换一道更简单、只需回答一个要点的同知识点新题，next_criteria给对应标准。禁止反复要求用户补两句、填空补齐、重写原答案，禁止追加原题未要求的细节。"
+        "若上轮已给新题，本轮必须评判新题；若仍错，给答案后进一步降低新题难度，可改为二选一。通过时简短肯定并建议继续下个知识点，不强行加题。"
+        "explanation、reference_answer、next_exercise各司其职，不重复同一内容；next_step保持一句话，不复述题目或缺口清单。使用短段落和自然对话，不输出评审报告。"
         "passed只表示有充分证据完成练习；讨论不代表通过。evidence说明实际看到的材料，不声称运行代码、计算或现场观察。历史附件只有编号时不能假装看到了图片内容。",
         text,
         submission.get("attachment_ids", []),
@@ -221,6 +245,8 @@ async def assess(state: TutorState):
         })) if state.get("run_id") else None,
         )
     result = feedback.model_dump()
+    result["active_exercise"] = result.get("next_exercise") or latest_feedback.get("active_exercise") or latest_feedback.get("next_exercise") or lesson.exercise
+    result["active_criteria"] = result.get("next_criteria") or latest_feedback.get("active_criteria") or latest_feedback.get("next_criteria") or lesson.criteria
     if feedback.response_type == "discussion":
         result["passed"] = False
     with Session() as db:

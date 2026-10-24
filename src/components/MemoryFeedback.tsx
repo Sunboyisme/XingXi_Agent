@@ -1,3 +1,4 @@
+import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useState } from "react";
 import { Bookmark, Check, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,14 +14,17 @@ export type MemoryNotice = {
 
 export function MemorySource({ memory }: { memory: Memory }) {
   return (
-    <details className="memory-provenance">
-      <summary>查看来源</summary>
+    <DetailDialog
+      title="记忆来源"
+      className="memory-provenance"
+      label={<>查看来源</>}
+    >
       <div>
         <span>{memory.source}</span>
         <time>{dateTime(memory.updated_at)}</time>
       </div>
       {memory.evidence && <blockquote>{memory.evidence}</blockquote>}
-    </details>
+    </DetailDialog>
   );
 }
 

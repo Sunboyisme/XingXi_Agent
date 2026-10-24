@@ -1,12 +1,270 @@
 .usage-costs h2,
-.usage-costs h3 { margin-bottom: 10px; }
-.usage-costs label { display: grid; gap: 7px; font-size: 13px; color: var(--ui-color-text-muted); }
+.usage-costs h3 {
+  margin-bottom: 10px;
+}
+.usage-costs label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+}
 .usage-costs input,
-.usage-costs select { min-height: 38px; padding: 8px 10px; border: 1px solid var(--ui-color-line); border-radius: 9px; color: var(--ui-color-text); background: var(--ui-color-surface); min-width: 0; }
-.usage-costs select { max-width: 100%; }
-.usage-costs summary { cursor: pointer; padding: 8px 0; }
-.usage-costs table { font-size: 12px; }
-.usage-costs td small { display: inline-block; max-width: 300px; white-space: normal; }
-.usage-costs p { line-height: 1.7; }
+.usage-costs select {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 9px;
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface);
+  min-width: 0;
+}
+.usage-costs select {
+  max-width: 100%;
+}
+.usage-costs summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.usage-costs table {
+  font-size: 12px;
+}
+.usage-costs td small {
+  display: inline-block;
+  max-width: 300px;
+  white-space: normal;
+}
+.usage-costs p {
+  line-height: 1.7;
+}
 .usage-costs input:focus-visible,
-.usage-costs select:focus-visible { outline: 2px solid var(--ui-color-focus); outline-offset: 2px; }
+.usage-costs select:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
+.usage-costs {
+  display: grid;
+  gap: 28px;
+  max-width: 1320px;
+  min-width: 0;
+  margin: 0 auto;
+}
+.usage-costs .usage-heading h2 {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ui-color-heading);
+  margin: 7px 0 10px;
+}
+.usage-eyebrow {
+  font-size: 12px;
+  color: var(--ui-color-action);
+  letter-spacing: 0.08em;
+}
+.usage-heading p {
+  font-size: 13px;
+  max-width: 68ch;
+}
+.usage-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.usage-date-field {
+  display: grid;
+  gap: 7px;
+  min-width: 210px;
+}
+.usage-filters select,
+.usage-filters .datetime-trigger {
+  height: 42px;
+}
+.usage-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.usage-stat {
+  border: 1px solid var(--ui-color-line);
+  border-radius: 18px;
+  padding: 22px 24px;
+  background: var(--ui-color-surface);
+}
+.usage-stat > span {
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+}
+.usage-stat > strong {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0 10px;
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--ui-color-heading);
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.usage-stat strong small {
+  font-size: 13px;
+  font-weight: 400;
+}
+.usage-stat p {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  margin: 0;
+}
+.usage-stat-cost {
+  background: var(--ui-color-bg);
+}
+.usage-unknown-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  margin-top: -12px;
+}
+.usage-unknown-note a {
+  color: var(--ui-color-action);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.usage-section {
+  min-width: 0;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 18px;
+  padding: 22px;
+  scroll-margin-top: 24px;
+}
+.usage-section header {
+  margin-bottom: 18px;
+}
+.usage-costs .usage-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ui-color-heading);
+  margin: 0 0 5px;
+}
+.usage-section header p {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  margin: 0;
+}
+.usage-table-scroll {
+  overflow-x: auto;
+}
+.usage-costs table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.usage-costs th,
+.usage-costs td {
+  padding: 14px 12px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.usage-costs th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ui-color-text-muted);
+  background: var(--ui-color-bg);
+}
+.usage-costs th:first-child,
+.usage-costs td:first-child,
+.usage-costs th:nth-child(2),
+.usage-costs td:nth-child(2) {
+  text-align: left;
+}
+.usage-costs tbody tr:last-child td {
+  border-bottom: 0;
+}
+.usage-costs tbody tr:hover {
+  background: var(--ui-color-bg);
+}
+.usage-model strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ui-color-heading);
+}
+.usage-costs .usage-model small {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--ui-color-text-muted);
+}
+.usage-costs td small {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.usage-unknown-badge {
+  display: inline-block;
+  min-width: 26px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--ui-color-bg);
+  color: var(--ui-color-action);
+  text-align: center;
+}
+.usage-detail > summary {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ui-color-heading);
+  padding: 0;
+}
+.usage-detail[open] > summary {
+  margin-bottom: 20px;
+}
+.usage-pricing > .muted {
+  font-size: 12px;
+  max-width: 90ch;
+}
+.usage-date-field .soft-select,
+.usage-model-field .soft-select {
+  width: 100%;
+}
+.usage-model-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.usage-range-field {
+  min-width: 150px;
+}
+.usage-costs .soft-select {
+  height: 42px;
+}
+.usage-records {
+  min-width: 0;
+}
+.usage-price-versions {
+  margin-top: 22px;
+}
+.usage-costs .history-empty {
+  padding: 28px 10px;
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+  text-align: center;
+}
+@media (max-width: 800px) {
+  .usage-stats {
+    grid-template-columns: 1fr;
+  }
+  .usage-stat {
+    padding: 18px;
+  }
+  .usage-section {
+    padding: 16px;
+  }
+  .usage-date-field {
+    min-width: 0;
+    flex: 1 1 210px;
+  }
+}
