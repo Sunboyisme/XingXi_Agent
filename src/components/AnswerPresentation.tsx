@@ -1,6 +1,7 @@
 import { DetailDialog } from "./ui/detail-dialog";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
+import { RestrictedFileContext, proposeFileSave } from "@/lib/restrictedFiles";
 import {
   Download,
   ExternalLink as ExternalLinkIcon,
@@ -169,6 +170,7 @@ export function RemotePicture({
 }
 
 export function ArtifactDownload({ artifact }: { artifact: Artifact }) {
+  const restricted = useContext(RestrictedFileContext);
   const [error, setError] = useState("");
   const [downloaded, setDownloaded] = useState<DownloadedFile | null>(null);
   const [webSaved, setWebSaved] = useState(false);
@@ -178,6 +180,10 @@ export function ArtifactDownload({ artifact }: { artifact: Artifact }) {
         onClick={async () => {
           try {
             setError("");
+            if (restricted) {
+              await proposeFileSave(restricted, artifact.id);
+              return;
+            }
             if (isTauri()) {
               const path = await invoke<string>("download_office_file", {
                 fileId: artifact.id,

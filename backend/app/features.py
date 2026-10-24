@@ -258,6 +258,9 @@ async def resolve_image(run_id: str, value: ImageResolve):
     with Session() as db:
         if db.get(Run, run_id) is None:
             raise HTTPException(404, "执行记录不存在")
+        from . import restricted_files
+        if restricted_files.restricted(db.get(Run, run_id).conversation_id):
+            raise HTTPException(403, "受限文件任务不加载外部图片")
     try:
         return await artifacts.image_from_url(run_id, value.url)
     except (ValueError, OSError, httpx.HTTPError):

@@ -870,6 +870,10 @@ async def execute(run_id, task_id, *, repairs=0):
 
 async def dispatch(run_id, conversation_id):
     from . import agent
+    from . import restricted_files
+    if restricted_files.restricted(conversation_id):
+        restricted_files.guard_run(run_id)
+        return await agent._chat(run_id, conversation_id)
     with Session() as db:
         run = db.get(Run, run_id)
         if not run.model_config:

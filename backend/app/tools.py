@@ -498,7 +498,13 @@ def _guard_tool(entry, originals, run_id):
         status = "completed"
         secrets = []
         value = {}
+        limited = False
         try:
+            from . import restricted_files
+            with Session() as identity_db:
+                identity = identity_db.get(Run, run_id)
+                limited = bool(identity and restricted_files.restricted(identity.conversation_id))
+            limited = restricted_files.guard_run(run_id, entry["id"])
             # Repeating the same rejected parameters cannot repair a request.
             with Session() as db:
                 previous = db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool").order_by(RunEvent.id.desc())).all()
@@ -523,7 +529,7 @@ def _guard_tool(entry, originals, run_id):
                 value = {**cached, "reused_error": True, "hint": "相同参数已被拒绝，请修正参数或明确告知无法完成，不要再次重复调用。"}
                 status = "error"
                 return json.dumps(value, ensure_ascii=False)
-            current = next((x for x in tool_catalog() if x["id"] == entry["id"]), None)
+            current = entry if limited and entry["id"] == "request_file_save" else next((x for x in tool_catalog() if x["id"] == entry["id"]), None)
             if not current or not current["enabled"] or not current["available"]:
                 value = {"error": "工具已关闭或当前不可用", "not_executed": True}
             elif entry["source"] == "builtin":
@@ -544,9 +550,10 @@ def _guard_tool(entry, originals, run_id):
                     if worker
                     else {"error": "MCP 服务未连接", "not_executed": True}
                 )
-            value = await artifacts.normalize(
-                run_id, value, read=entry["id"] == "read_url"
-            )
+            if limited:
+                restricted_files.guard_run(run_id, entry["id"])
+            else:
+                value = await artifacts.normalize(run_id, value, read=entry["id"] == "read_url")
             value = mcp_service.redact(value, secrets)
             if isinstance(value, dict) and value.get("error"):
                 status = "error"
@@ -596,8 +603,10 @@ def _guard_tool(entry, originals, run_id):
                     "image_generation": image_generation.is_generation_tool(
                         entry["id"], entry["name"], entry["description"]
                     ),
-                    "arguments": mcp_service.redact(arguments, secrets),
-                    "result": value,
+                    "arguments": ({k: v for k, v in arguments.items() if k in {"path", "artifact_id", "name", "format"}}
+                                  if limited else mcp_service.redact(arguments, secrets)),
+                    "result": ({k: v for k, v in value.items() if k in {"artifacts", "error", "status", "id", "name", "size", "not_executed"}}
+                               if limited and isinstance(value, dict) else value),
                     "status": status,
                     "duration_ms": round((time.monotonic() - started) * 1000),
                 },
@@ -620,8 +629,19 @@ def _sync_tool(execute):
 def build_tools(run_id: str, conversation_id: str):
     """One guarded execution entry for local and external tools."""
     originals = {x.name: x for x in builtin_tools(run_id, conversation_id)}
+    from . import restricted_files
+    limited = restricted_files.restricted(conversation_id)
     result = []
-    for entry in tool_catalog():
+    entries = tool_catalog()
+    if limited:
+        entries.append({"id": "request_file_save", "name": "申请保存文件", "source": "builtin",
+                        "source_label": "受限文件任务", "description": originals["request_file_save"].description,
+                        "enabled": True, "available": True})
+    for entry in entries:
+        if limited and (entry["source"] != "builtin" or entry["id"] not in restricted_files.ALLOWED_TOOLS):
+            continue
+        if not limited and entry["id"] == "request_file_save":
+            continue
         if not entry["enabled"] or not entry["available"]:
             continue
 
@@ -645,6 +665,7 @@ def build_tools(run_id: str, conversation_id: str):
 
 async def prepare_tools(run_id, conversation_id):
     from . import mcp_service
-
-    await mcp_service.manager.prepare()
+    from . import restricted_files
+    if not restricted_files.restricted(conversation_id):
+        await mcp_service.manager.prepare()
     return build_tools(run_id, conversation_id)

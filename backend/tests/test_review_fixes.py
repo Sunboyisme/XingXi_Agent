@@ -158,7 +158,7 @@ def test_previous_export_schema_can_be_upgraded_in_staging(client, tmp_path):
     command.upgrade(migration, "0016")
     assert data_transfer.validate(stage)["counts"]["conversations"] == 0
     with data_transfer.connect(stage / "bai.sqlite") as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0020",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024",)
 
 
 @pytest.mark.asyncio

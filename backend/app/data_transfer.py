@@ -17,7 +17,8 @@ from . import config, db
 
 LIMIT = 512 * 1024 * 1024
 LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
-                "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes"}
+                "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes",
+                "file_sessions", "file_save_requests", "file_audits"}
 COUNTS = {"conversations": "对话", "messages": "消息", "memories": "记忆",
           "learning_sessions": "学习会话", "usage_calls": "模型调用", "usage_prices": "计价配置",
           "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
@@ -50,6 +51,42 @@ def schema(connection):
     return dict(connection.execute(
         "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
     ))
+
+
+def same_schema(left, right):
+    """Alembic reflection may reorder equivalent table constraints.
+
+    Keep column order and all SQL text significant; compare only top-level
+    constraint order independently. Quotes and nested expressions stay intact.
+    """
+    def parts(sql):
+        start, end = sql.find("("), sql.rfind(")")
+        if start < 0 or end <= start:
+            return sql
+        body, items, depth, quote, begin, index = sql[start + 1:end], [], 0, None, 0, 0
+        while index < len(body):
+            char = body[index]
+            if quote:
+                if char == quote:
+                    if index + 1 < len(body) and body[index + 1] == quote:
+                        index += 1
+                    else:
+                        quote = None
+            elif char in "\"'`[":
+                quote = "]" if char == "[" else char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            elif char == "," and depth == 0:
+                items.append(body[begin:index].strip())
+                begin = index + 1
+            index += 1
+        items.append(body[begin:].strip())
+        constraint = re.compile(r"^(?:CONSTRAINT|PRIMARY\s+KEY|UNIQUE|FOREIGN\s+KEY|CHECK)\b", re.I)
+        return (sql[:start], sql[end:], tuple(x for x in items if not constraint.match(x)),
+                tuple(sorted(x for x in items if constraint.match(x))))
+    return left.keys() == right.keys() and all(parts(left[key]) == parts(right[key]) for key in left)
 
 
 def counts(connection):
@@ -122,6 +159,9 @@ def create_archive():
 
 
 def clear_local_references(connection):
+    for table in ("file_save_requests", "file_audits", "file_sessions"):
+        if table in schema(connection):
+            connection.execute(f'DELETE FROM "{table}"')
     for key, raw in connection.execute("SELECT id, local_references FROM messages WHERE local_references <> '[]'").fetchall():
         refs = json.loads(raw or "[]")
         connection.execute("UPDATE messages SET local_references=? WHERE id=?", (
@@ -136,9 +176,9 @@ def upgrade_portable_schema(stage):
     with connect(incoming_path) as incoming, connect(root() / "bai.sqlite") as current:
         revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
         head = current.execute("SELECT version_num FROM alembic_version").fetchone()
-        if revision == head or head != ("0023",):
+        if revision == head or head != ("0024",):
             return
-        if revision not in {(f"{number:04d}",) for number in range(16, 23)}:
+        if revision not in {(f"{number:04d}",) for number in range(16, 24)}:
             return
         if incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]:
             raise ValueError("导入数据包含不支持的结构")
@@ -152,7 +192,7 @@ def upgrade_portable_schema(stage):
         reference = Path(temporary) / "reference.sqlite"
         command.upgrade(settings_for(reference), revision[0])
         with connect(reference) as trusted:
-            if incoming_schema != schema(trusted):
+            if not same_schema(incoming_schema, schema(trusted)):
                 raise ValueError("旧版数据结构不兼容，未执行升级")
     command.upgrade(settings_for(incoming_path), head[0])
     manifest_path = stage / "manifest.json"
@@ -236,7 +276,7 @@ def validate(stage):
             incoming_schema = schema(incoming)
         current_schema = workspace_schema
         # Reject SQL objects supplied by other applications or modified archives.
-        if incoming_schema != current_schema or incoming.execute(
+        if not same_schema(incoming_schema, current_schema) or incoming.execute(
             "SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')"
         ).fetchone()[0]:
             raise ValueError("数据结构不兼容，请使用当前版本导出的文件")
@@ -400,6 +440,8 @@ def apply_pending():
             incoming.execute("PRAGMA foreign_keys=OFF")
             for table in LOCAL_TABLES:
                 incoming.execute(f'DELETE FROM "{table}"')
+                if table in {"file_sessions", "file_save_requests", "file_audits"}:
+                    continue  # Revocable authority must never survive data replacement.
                 rows = current.execute(f'SELECT * FROM "{table}"').fetchall()
                 if rows:
                     placeholders = ",".join("?" for _ in rows[0])

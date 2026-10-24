@@ -48,6 +48,8 @@ import { ToolboxMenu } from "./ToolboxMenu";
 import { SkillsMenu } from "./SkillsMenu";
 import { Reasoning } from "./Reasoning";
 import { AnswerPresentation } from "./AnswerPresentation";
+import { RestrictedFilesPanel } from "./RestrictedFilesPanel";
+import { RestrictedFileContext, type FileSession } from "@/lib/restrictedFiles";
 import { AnswerActions } from "./AnswerActions";
 import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
@@ -327,6 +329,7 @@ function ReplyActivity({
 
 export function ChatPage({
   conversationId,
+  conversations = [],
   onConversation,
   settings,
   memories,
@@ -359,6 +362,9 @@ export function ChatPage({
   onAction: (page: string, create?: boolean) => void;
   onPlan: (plan: CalendarEvent) => void;
 }) {
+  const restrictedFiles = Boolean(
+    conversations.find((c) => c.id === conversationId)?.restricted_files,
+  );
   const [modelKey, setModelKey] = useState(
     () => readModelPreference(conversationId)?.key || "",
   );
@@ -928,13 +934,17 @@ export function ChatPage({
     observer.observe(target);
     return () => observer.disconnect();
   }, [conversationId, empty, scheduleFollowLatest]);
-  async function send(edited?: Pick<Message, "content" | "attachment_ids" | "local_references">) {
+  async function send(
+    edited?: Pick<Message, "content" | "attachment_ids" | "local_references">,
+  ) {
     const text = edited ? edited.content : draft;
     const attachmentIds = edited
       ? edited.attachment_ids
       : images.filter((x) => !x.local_path).map((x) => x.id);
     const localReferences = edited
-      ? (edited.local_references || []).filter((item) => item.active).map((item) => String(item.path))
+      ? (edited.local_references || [])
+          .filter((item) => item.active)
+          .map((item) => String(item.path))
       : images.filter((x) => x.local_path).map((x) => x.local_path!);
     const supplement = busy && Boolean(run?.task_id);
     if (
@@ -1272,57 +1282,302 @@ export function ChatPage({
     }
   }
   return (
-    <div className="chat-layout" ref={dropTarget}>
-      <div
-        className={`chat-main ${empty ? "is-empty new-chat-screen" : ""}`}
-        ref={chatSurface}
-      >
+    <RestrictedFileContext.Provider
+      value={restrictedFiles ? conversationId : null}
+    >
+      <div className="chat-layout" ref={dropTarget}>
         <div
-          className={`chat-scroll ${empty ? "is-empty" : ""}`}
-          ref={scroller}
+          className={`chat-main ${empty && !restrictedFiles ? "is-empty new-chat-screen" : ""}`}
+          ref={chatSurface}
         >
-          {empty ? (
-            <NewChatWelcome timezone={settings.timezone} />
-          ) : (
-            <div className="message-list" ref={thread}>
-              {entries.map(({ message: value, cards, synthetic }) => (
-                <article
-                  key={cards.length ? `task-reply-${cards[0].id}` : value.id}
-                  id={`chat-message-${value.id}`}
-                  tabIndex={-1}
-                  className={`message ${value.role}`}
-                  ref={(element) => {
-                    if (value.role !== "user") return;
-                    if (element) turnElements.current.set(value.id, element);
-                    else turnElements.current.delete(value.id);
-                  }}
-                >
-                  {value.role !== "assistant" && (
-                    <div className="message-avatar">
-                      <span>我</span>
+          {restrictedFiles && conversationId && (
+            <RestrictedFilesPanel
+              key={conversationId}
+              conversationId={conversationId}
+              running={busy}
+              modelSelection={
+                selected
+                  ? {
+                      provider_id: selected.profile.id,
+                      model_name: selected.model.name,
+                      thinking_enabled: thinkingEnabled,
+                    }
+                  : null
+              }
+              modelLabel={
+                selected
+                  ? `${selected.profile.label} / ${selected.model.name}`
+                  : ""
+              }
+              modelUrl={selected?.profile.model_url || ""}
+            />
+          )}
+          <div
+            className={`chat-scroll ${empty && !restrictedFiles ? "is-empty" : ""}`}
+            ref={scroller}
+          >
+            {empty && restrictedFiles ? (
+              <p className="restricted-files-welcome">
+                在上方选择资料并确认授权，然后告诉小夕需要整理或生成什么文件。
+              </p>
+            ) : empty ? (
+              <NewChatWelcome timezone={settings.timezone} />
+            ) : (
+              <div className="message-list" ref={thread}>
+                {entries.map(({ message: value, cards, synthetic }) => (
+                  <article
+                    key={cards.length ? `task-reply-${cards[0].id}` : value.id}
+                    id={`chat-message-${value.id}`}
+                    tabIndex={-1}
+                    className={`message ${value.role}`}
+                    ref={(element) => {
+                      if (value.role !== "user") return;
+                      if (element) turnElements.current.set(value.id, element);
+                      else turnElements.current.delete(value.id);
+                    }}
+                  >
+                    {value.role !== "assistant" && (
+                      <div className="message-avatar">
+                        <span>我</span>
+                      </div>
+                    )}
+                    {value.role === "assistant" && (
+                      <div className="message-avatar assistant-avatar">
+                        <BaiAvatar
+                          interactive
+                          motion={
+                            synthetic && busy && value.run_id === run?.id
+                              ? "thinking"
+                              : "still"
+                          }
+                          label="和XiaoXi打个招呼，继续聊天"
+                          onClick={() =>
+                            focusComposer(
+                              "我在呢。想追问什么，直接告诉我就好。",
+                            )
+                          }
+                        />
+                      </div>
+                    )}
+                    <div className="message-body">
+                      <span className="message-name">
+                        {value.role === "assistant" ? "XiaoXi" : "你"}
+                      </span>
+                      {synthetic && busy && value.run_id === run?.id ? (
+                        <ReplyActivity
+                          reasoning={reasoning}
+                          stream={stream}
+                          imageGeneration={imageGeneration}
+                          contextStatus={contextStatus}
+                          toolCount={tools.length}
+                          runId={run?.id}
+                        />
+                      ) : (
+                        value.role === "assistant" && (
+                          <Reasoning text={value.reasoning || ""} />
+                        )
+                      )}
+                      {cards.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          busy={busy}
+                          running={busy && run?.task_id === task.id}
+                          onUpdate={updateTask}
+                          onResume={(taskId) => void retry(undefined, taskId)}
+                        />
+                      ))}
+                      {value.role === "user" &&
+                      editingMessageId === value.id ? (
+                        <div className="user-message-editor">
+                          <Textarea
+                            aria-label="修改消息内容"
+                            value={editedText}
+                            disabled={busy}
+                            autoFocus
+                            onChange={(event) =>
+                              setEditedText(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape" && !busy)
+                                setEditingMessageId("");
+                            }}
+                          />
+                          <p className="user-message-editor-hint">
+                            保留原消息和附件，修改后作为新消息发送。
+                          </p>
+                          <div className="user-message-editor-actions">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={busy}
+                              onClick={() => setEditingMessageId("")}
+                            >
+                              取消
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={
+                                busy ||
+                                uploading ||
+                                !modelReady ||
+                                (!editedText.trim() &&
+                                  !value.attachment_ids.length &&
+                                  !(value.local_references || []).some(
+                                    (item) => item.active,
+                                  ))
+                              }
+                              onClick={() =>
+                                void send({
+                                  content: editedText,
+                                  attachment_ids: value.attachment_ids,
+                                  local_references: value.local_references,
+                                })
+                              }
+                            >
+                              发送修改
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        !synthetic && (
+                          <Markdown
+                            runId={
+                              value.role === "assistant"
+                                ? value.run_id || undefined
+                                : undefined
+                            }
+                          >
+                            {value.content}
+                          </Markdown>
+                        )
+                      )}
+                      {value.role === "assistant" && !synthetic && (
+                        <AnswerPresentation
+                          runId={value.run_id || undefined}
+                          status={
+                            value.run_id === run?.id
+                              ? run?.status
+                              : value.run_status || "completed"
+                          }
+                          content={value.content}
+                        />
+                      )}
+                      {value.role === "assistant" && !synthetic && (
+                        <AnswerActions
+                          content={value.content}
+                          runId={
+                            value.run_id ||
+                            (value === lastAssistant &&
+                            run?.status === "completed"
+                              ? run.id
+                              : undefined)
+                          }
+                          runStatus={
+                            value.run_id === run?.id || value === lastAssistant
+                              ? run?.status
+                              : value.run_status || "completed"
+                          }
+                          tools={
+                            value === lastAssistant &&
+                            run?.status === "completed"
+                              ? tools
+                              : undefined
+                          }
+                        />
+                      )}
+                      {value.role === "assistant" &&
+                        !synthetic &&
+                        !value.task_id &&
+                        !cards.length &&
+                        !(value.run_id === run?.id && run?.task_id) &&
+                        ["failed", "cancelled"].includes(
+                          value.run_status ||
+                            (value.run_id === run?.id ? run?.status || "" : ""),
+                        ) && (
+                          <IncompleteReplyNotice
+                            cancelled={
+                              (value.run_status || run?.status) === "cancelled"
+                            }
+                            onRetry={
+                              value === lastAssistant &&
+                              value.run_id === run?.id &&
+                              run?.retry_action !== "none"
+                                ? () => void retry(value.run_id || undefined)
+                                : undefined
+                            }
+                            disabled={busy || submitting || !modelReady}
+                          />
+                        )}
+
+                      {value.role === "assistant" &&
+                        value.run_id &&
+                        value.has_learning_continuation && (
+                          <LearningHandoffCards
+                            runId={value.run_id}
+                            status={value.run_status}
+                          />
+                        )}
+                      {value.attachment_ids.length > 0 && (
+                        <div className="message-pictures">
+                          {value.attachment_ids.map((id) => (
+                            <MessageAttachment id={id} key={id} />
+                          ))}
+                        </div>
+                      )}
+                      {value.role === "user" &&
+                        editingMessageId !== value.id && (
+                          <>
+                            {!!value.local_references?.length && (
+                              <div className="message-local-folders">
+                                {value.local_references.map(
+                                  (reference, index) => (
+                                    <div
+                                      className="local-folder-chip"
+                                      key={index}
+                                      title={String(
+                                        reference.path || "需要重新关联",
+                                      )}
+                                    >
+                                      <Folder size={16} />
+                                      <span>
+                                        {String(reference.name || "文件夹")}
+                                      </span>
+                                      <small>
+                                        {reference.active
+                                          ? "只读"
+                                          : "需要重新关联"}
+                                      </small>
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                            <UserMessageActions
+                              content={value.content}
+                              disabled={busy || uploading}
+                              onEdit={() => {
+                                setEditingMessageId(value.id);
+                                setEditedText(value.content);
+                              }}
+                            />
+                          </>
+                        )}
                     </div>
-                  )}
-                  {value.role === "assistant" && (
+                  </article>
+                ))}
+                {busy && !inlineActivity && (
+                  <article className="message assistant">
                     <div className="message-avatar assistant-avatar">
                       <BaiAvatar
                         interactive
-                        motion={
-                          synthetic && busy && value.run_id === run?.id
-                            ? "thinking"
-                            : "still"
-                        }
-                        label="和XiaoXi打个招呼，继续聊天"
-                        onClick={() =>
-                          focusComposer("我在呢。想追问什么，直接告诉我就好。")
-                        }
+                        motion="thinking"
+                        label="XiaoXi正在思考，点我继续聊天"
+                        onClick={() => focusComposer("别急，我还在整理思路。")}
                       />
                     </div>
-                  )}
-                  <div className="message-body">
-                    <span className="message-name">
-                      {value.role === "assistant" ? "XiaoXi" : "你"}
-                    </span>
-                    {synthetic && busy && value.run_id === run?.id ? (
+                    <div className="message-body">
+                      <span className="message-name">XiaoXi</span>
                       <ReplyActivity
                         reasoning={reasoning}
                         stream={stream}
@@ -1331,630 +1586,477 @@ export function ChatPage({
                         toolCount={tools.length}
                         runId={run?.id}
                       />
-                    ) : (
-                      value.role === "assistant" && (
-                        <Reasoning text={value.reasoning || ""} />
-                      )
-                    )}
-                    {cards.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        busy={busy}
-                        running={busy && run?.task_id === task.id}
-                        onUpdate={updateTask}
-                        onResume={(taskId) => void retry(undefined, taskId)}
+                    </div>
+                  </article>
+                )}
+                {showIncompleteReply && (
+                  <article className="message assistant incomplete-reply">
+                    <div className="message-avatar assistant-avatar">
+                      <BaiAvatar
+                        interactive
+                        motion="still"
+                        label="和XiaoXi打个招呼，继续聊天"
+                        onClick={() =>
+                          focusComposer("没关系，想继续聊什么都可以。")
+                        }
                       />
-                    ))}
-                    {value.role === "user" && editingMessageId === value.id ? (
-                      <div className="user-message-editor">
-                        <Textarea
-                          aria-label="修改消息内容"
-                          value={editedText}
-                          disabled={busy}
-                          autoFocus
-                          onChange={(event) =>
-                            setEditedText(event.target.value)
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape" && !busy)
-                              setEditingMessageId("");
-                          }}
-                        />
-                        <p className="user-message-editor-hint">
-                          保留原消息和附件，修改后作为新消息发送。
+                    </div>
+                    <div className="message-body">
+                      <span className="message-name">XiaoXi</span>
+                      {reasoning && <Reasoning text={reasoning} incomplete />}
+                      {stream && <Markdown runId={run?.id}>{stream}</Markdown>}
+                      {stream && !incompleteRun && (
+                        <p role="status">
+                          记录暂未同步，已显示内容保留在这里。
                         </p>
-                        <div className="user-message-editor-actions">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy}
-                            onClick={() => setEditingMessageId("")}
-                          >
-                            取消
-                          </Button>
-                          <Button
-                            size="sm"
-                            disabled={
-                              busy ||
-                              uploading ||
-                              !modelReady ||
-                              (!editedText.trim() &&
-                                !value.attachment_ids.length &&
-                                !(value.local_references || []).some((item) => item.active))
-                            }
-                            onClick={() =>
-                              void send({
-                                content: editedText,
-                                attachment_ids: value.attachment_ids,
-                                local_references: value.local_references,
-                              })
-                            }
-                          >
-                            发送修改
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      !synthetic && (
-                        <Markdown
-                          runId={
-                            value.role === "assistant"
-                              ? value.run_id || undefined
-                              : undefined
-                          }
-                        >
-                          {value.content}
-                        </Markdown>
-                      )
-                    )}
-                    {value.role === "assistant" && !synthetic && (
-                      <AnswerPresentation
-                        runId={value.run_id || undefined}
-                        status={
-                          value.run_id === run?.id
-                            ? run?.status
-                            : value.run_status || "completed"
-                        }
-                        content={value.content}
-                      />
-                    )}
-                    {value.role === "assistant" && !synthetic && (
-                      <AnswerActions
-                        content={value.content}
-                        runId={
-                          value.run_id ||
-                          (value === lastAssistant &&
-                          run?.status === "completed"
-                            ? run.id
-                            : undefined)
-                        }
-                        runStatus={
-                          value.run_id === run?.id || value === lastAssistant
-                            ? run?.status
-                            : value.run_status || "completed"
-                        }
-                        tools={
-                          value === lastAssistant && run?.status === "completed"
-                            ? tools
-                            : undefined
-                        }
-                      />
-                    )}
-                    {value.role === "assistant" &&
-                      !synthetic &&
-                      !value.task_id &&
-                      !cards.length &&
-                      !(value.run_id === run?.id && run?.task_id) &&
-                      ["failed", "cancelled"].includes(
-                        value.run_status ||
-                          (value.run_id === run?.id ? run?.status || "" : ""),
-                      ) && (
+                      )}
+                      {incompleteRun && (
                         <IncompleteReplyNotice
-                          cancelled={
-                            (value.run_status || run?.status) === "cancelled"
-                          }
+                          cancelled={incompleteRun.status === "cancelled"}
                           onRetry={
-                            value === lastAssistant &&
-                            value.run_id === run?.id &&
-                            run?.retry_action !== "none"
-                              ? () => void retry(value.run_id || undefined)
-                              : undefined
+                            run?.retry_action === "none"
+                              ? undefined
+                              : () => void retry()
                           }
-                          disabled={busy || submitting || !modelReady}
+                          disabled={submitting || !modelReady}
                         />
                       )}
-
-                    {value.role === "assistant" && value.run_id && value.has_learning_continuation && <LearningHandoffCards runId={value.run_id} status={value.run_status} />}
-                    {value.attachment_ids.length > 0 && (
-                      <div className="message-pictures">
-                        {value.attachment_ids.map((id) => (
-                          <MessageAttachment id={id} key={id} />
-                        ))}
-                      </div>
-                    )}
-                    {value.role === "user" && editingMessageId !== value.id && (
-                      <>
-                      {!!value.local_references?.length && <div className="message-local-folders">
-                        {value.local_references.map((reference, index) => <div className="local-folder-chip" key={index} title={String(reference.path || "需要重新关联")}>
-                          <Folder size={16} /><span>{String(reference.name || "文件夹")}</span><small>{reference.active ? "只读" : "需要重新关联"}</small>
-                        </div>)}
-                      </div>}
-                      <UserMessageActions
-                        content={value.content}
-                        disabled={busy || uploading}
-                        onEdit={() => {
-                          setEditingMessageId(value.id);
-                          setEditedText(value.content);
-                        }}
-                      />
-                      </>
-                    )}
-                  </div>
-                </article>
-              ))}
-              {busy && !inlineActivity && (
-                <article className="message assistant">
-                  <div className="message-avatar assistant-avatar">
-                    <BaiAvatar
-                      interactive
-                      motion="thinking"
-                      label="XiaoXi正在思考，点我继续聊天"
-                      onClick={() => focusComposer("别急，我还在整理思路。")}
-                    />
-                  </div>
-                  <div className="message-body">
-                    <span className="message-name">XiaoXi</span>
-                    <ReplyActivity
-                      reasoning={reasoning}
-                      stream={stream}
-                      imageGeneration={imageGeneration}
-                      contextStatus={contextStatus}
-                      toolCount={tools.length}
-                      runId={run?.id}
-                    />
-                  </div>
-                </article>
-              )}
-              {showIncompleteReply && (
-                <article className="message assistant incomplete-reply">
-                  <div className="message-avatar assistant-avatar">
-                    <BaiAvatar
-                      interactive
-                      motion="still"
-                      label="和XiaoXi打个招呼，继续聊天"
-                      onClick={() =>
-                        focusComposer("没关系，想继续聊什么都可以。")
-                      }
-                    />
-                  </div>
-                  <div className="message-body">
-                    <span className="message-name">XiaoXi</span>
-                    {reasoning && <Reasoning text={reasoning} incomplete />}
-                    {stream && <Markdown runId={run?.id}>{stream}</Markdown>}
-                    {stream && !incompleteRun && (
-                      <p role="status">记录暂未同步，已显示内容保留在这里。</p>
-                    )}
-                    {incompleteRun && (
-                      <IncompleteReplyNotice
-                        cancelled={incompleteRun.status === "cancelled"}
-                        onRetry={
-                          run?.retry_action === "none"
-                            ? undefined
-                            : () => void retry()
-                        }
-                        disabled={submitting || !modelReady}
-                      />
-                    )}
-                    {(incompleteRun || stream) && (
-                      <AnswerActions
-                        content={stream}
-                        runId={incompleteRun?.id || run?.id}
-                        runStatus={incompleteRun?.status || run?.status}
-                        tools={tools}
-                      />
-                    )}
-                  </div>
-                </article>
-              )}
-            </div>
-          )}
-          {candidates.length > 0 && (
-            <section className="chat-memory-reviews" aria-label="记忆确认">
-              {candidates.map((memory) => (
-                <MemoryReview
-                  key={memory.id}
-                  memory={memory}
-                  refresh={refresh}
-                />
-              ))}
-            </section>
-          )}
-        </div>
-        {!empty && (
-          <ChatScrollNavigation
-            key={conversationId || "new"}
-            turns={turns}
-            scroller={scroller}
-            thread={thread}
-            turnElements={turnElements}
-            followLatest={followLatest}
-          />
-        )}
-        <div className="composer-area" ref={composerArea}>
-          {buddyNote && (
-            <div className="chat-buddy-note" role="status" aria-live="polite">
-              <span className="chat-buddy-note-avatar">
-                <BaiAvatar motion="still" />
-              </span>
-              <span>{buddyNote}</span>
-            </div>
-          )}
-          {memoryNotice && (
-            <MemorySavedNotice
-              key={memoryNotice.change_id}
-              notice={memoryNotice}
-              refresh={refresh}
-              onClose={closeMemoryNotice}
-            />
-          )}
-          {error && (
-            <ErrorNotice
-              message={
-                run?.kind === "chat" &&
-                error === "接口认证失败，请检查密钥与接口地址。"
-                  ? "聊天模型认证或权限检查失败，请在「模型连接」检查密钥与接口地址。"
-                  : error
-              }
-              retry={
-                run?.status === "failed" && run?.retry_action !== "none"
-                  ? () => void retry()
-                  : undefined
-              }
-              onClose={closeError}
-              action={
-                /密钥|接口|认证|模型|连接|配置|401|403|unauthorized/i.test(
-                  error,
-                )
-                  ? { label: "配置接口", onClick: () => onAction("settings") }
-                  : undefined
-              }
-            />
-          )}
-          {syncWarning && (
-            <ErrorNotice
-              message={syncWarning}
-              onClose={() => setSyncWarning("")}
-              retry={() => void refreshChatView()}
-            />
-          )}
-          {contextStatus && contextStatus !== "正在整理上下文…" && (
-            <p className="context-status" role="status">
-              {contextStatus}
-            </p>
-          )}
-          {!modelReady && (
-            <button
-              className="setup-nudge"
-              onClick={() => onAction("settings")}
-            >
-              <Cable size={16} />
-              <span>先连接你的模型，就能开始对话和学习。</span>
-              <ArrowRight size={15} />
-            </button>
-          )}
-          <div className="composer">
-            {onProjectChange && (
-              <div className="chat-project-context">
-                <DropdownMenu.Root>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      type="button"
-                      className="chat-project-trigger"
-                      aria-label={
-                        conversationId ? "移动当前对话到项目" : "新对话所属项目"
-                      }
-                      disabled={
-                        busy || submitting || uploading || movingProject
-                      }
-                    >
-                      <Folder size={15} />
-                      <span>
-                        {projects.find((item) => item.id === projectId)?.name ||
-                          "未加入项目"}
-                      </span>
-                      <ChevronDown size={13} />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                      className="project-menu project-choice-menu"
-                      align="start"
-                      side="top"
-                      sideOffset={8}
-                      collisionPadding={12}
-                    >
-                      <DropdownMenu.Label className="project-choice-label">
-                        对话所属项目
-                      </DropdownMenu.Label>
-                      <DropdownMenu.RadioGroup
-                        value={projectId || ""}
-                        onValueChange={(id) => void changeProject(id || null)}
-                      >
-                        {[{ id: "", name: "未加入项目" }, ...projects].map(
-                          (item) => (
-                            <DropdownMenu.RadioItem
-                              key={item.id}
-                              value={item.id}
-                              disabled={
-                                busy || submitting || uploading || movingProject
-                              }
-                            >
-                              <Folder size={14} />
-                              <span>{item.name}</span>
-                              <DropdownMenu.ItemIndicator>
-                                <Check size={14} />
-                              </DropdownMenu.ItemIndicator>
-                            </DropdownMenu.RadioItem>
-                          ),
-                        )}
-                      </DropdownMenu.RadioGroup>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Root>
-                {projectId && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onProjectOpen?.(projectId)}
-                    >
-                      项目概览
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onLibrary?.(projectId)}
-                    >
-                      <Library size={14} />
-                      资料库
-                    </button>
-                  </>
+                      {(incompleteRun || stream) && (
+                        <AnswerActions
+                          content={stream}
+                          runId={incompleteRun?.id || run?.id}
+                          runStatus={incompleteRun?.status || run?.status}
+                          tools={tools}
+                        />
+                      )}
+                    </div>
+                  </article>
                 )}
-                {!conversationId && pinNew && (
-                  <span className="chat-project-pin">
-                    <Pin size={13} />
-                    发送后置顶
-                  </span>
-                )}
-                {movingProject && <span role="status">正在移动…</span>}
               </div>
             )}
-            <div className="composer-attachments" ref={previewTarget} />
-            <Textarea
-              id="chat-message"
-              ref={composer}
-              aria-label="发送给XiaoXi的消息"
-              value={draft}
-              onChange={(e) => changeDraft(e.target.value)}
-              placeholder={
-                busy && run?.task_id
-                  ? "补充当前任务要求…"
-                  : modelReady
-                    ? empty
-                      ? "今天有什么灵感，随心输入"
-                      : "输入消息…"
-                    : "连接模型后开始对话"
-              }
-              rows={2}
-              disabled={submitting || stopping}
-              onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
-                  e.preventDefault();
-                  if (modelReady) void send();
-                }
-              }}
+            {candidates.length > 0 && (
+              <section className="chat-memory-reviews" aria-label="记忆确认">
+                {candidates.map((memory) => (
+                  <MemoryReview
+                    key={memory.id}
+                    memory={memory}
+                    refresh={refresh}
+                  />
+                ))}
+              </section>
+            )}
+          </div>
+          {!empty && (
+            <ChatScrollNavigation
+              key={conversationId || "new"}
+              turns={turns}
+              scroller={scroller}
+              thread={thread}
+              turnElements={turnElements}
+              followLatest={followLatest}
             />
-            <div className="composer-bottom">
-              <div className="composer-tools">
-                <ImagesInput
-                  allowFiles
-                  allowFolders
-                  hideTrigger
-                  pickerRef={attachmentPicker}
-                  dropTarget={dropTarget}
-                  previewTarget={previewTarget}
-                  scopeKey={`${conversationId || "new"}:${attachmentBatch}`}
-                  images={images}
-                  onChange={changeImages}
-                  disabled={submitting || stopping || !modelReady}
-                  onError={setError}
-                  onUploading={setUploading}
-                />
-                <DropdownMenu.Root
-                  modal={false}
-                  open={composerMenuOpen}
-                  onOpenChange={setComposerMenuOpen}
-                >
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      type="button"
-                      className="composer-add-trigger"
-                      aria-label="更多功能"
-                      title="添加附件、MCP 工具和技能"
-                    >
-                      <Plus size={19} />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                      className="model-menu composer-add-menu"
-                      aria-label="更多功能"
-                      align="start"
-                      side="top"
-                      sideOffset={8}
-                      collisionPadding={16}
-                    >
-                      <DropdownMenu.Item
-                        className="model-menu-item composer-add-menu-item"
-                        disabled={submitting || stopping || !modelReady}
-                        onSelect={() => attachmentPicker.current?.click()}
+          )}
+          <div className="composer-area" ref={composerArea}>
+            {buddyNote && (
+              <div className="chat-buddy-note" role="status" aria-live="polite">
+                <span className="chat-buddy-note-avatar">
+                  <BaiAvatar motion="still" />
+                </span>
+                <span>{buddyNote}</span>
+              </div>
+            )}
+            {memoryNotice && (
+              <MemorySavedNotice
+                key={memoryNotice.change_id}
+                notice={memoryNotice}
+                refresh={refresh}
+                onClose={closeMemoryNotice}
+              />
+            )}
+            {error && (
+              <ErrorNotice
+                message={
+                  run?.kind === "chat" &&
+                  error === "接口认证失败，请检查密钥与接口地址。"
+                    ? "聊天模型认证或权限检查失败，请在「模型连接」检查密钥与接口地址。"
+                    : error
+                }
+                retry={
+                  run?.status === "failed" && run?.retry_action !== "none"
+                    ? () => void retry()
+                    : undefined
+                }
+                onClose={closeError}
+                action={
+                  /密钥|接口|认证|模型|连接|配置|401|403|unauthorized/i.test(
+                    error,
+                  )
+                    ? { label: "配置接口", onClick: () => onAction("settings") }
+                    : undefined
+                }
+              />
+            )}
+            {syncWarning && (
+              <ErrorNotice
+                message={syncWarning}
+                onClose={() => setSyncWarning("")}
+                retry={() => void refreshChatView()}
+              />
+            )}
+            {contextStatus && contextStatus !== "正在整理上下文…" && (
+              <p className="context-status" role="status">
+                {contextStatus}
+              </p>
+            )}
+            {!modelReady && (
+              <button
+                className="setup-nudge"
+                onClick={() => onAction("settings")}
+              >
+                <Cable size={16} />
+                <span>先连接你的模型，就能开始对话和学习。</span>
+                <ArrowRight size={15} />
+              </button>
+            )}
+            <div className="composer">
+              {onProjectChange && (
+                <div className="chat-project-context">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        className="chat-project-trigger"
+                        aria-label={
+                          conversationId
+                            ? "移动当前对话到项目"
+                            : "新对话所属项目"
+                        }
+                        disabled={
+                          busy || submitting || uploading || movingProject
+                        }
                       >
-                        <ImagePlus size={16} />
-                        添加文件或图片
-                      </DropdownMenu.Item>
-                      <ToolboxMenu
-                        asSubmenu
-                        onSettings={() => {
-                          setComposerMenuOpen(false);
-                          onAction("tools");
-                        }}
-                      />
-                      <SkillsMenu
-                        asSubmenu
-                        onSettings={() => {
-                          setComposerMenuOpen(false);
-                          onAction("skills");
-                        }}
-                      />
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Root>
-                <Hint
-                  label={
-                    thinkingControl === "none"
-                      ? "此模型未配置思考开关"
-                      : thinkingControl === "always"
-                        ? "此模型始终开启思考"
-                        : thinkingEnabled
-                          ? "关闭思考模式"
-                          : "开启思考模式"
+                        <Folder size={15} />
+                        <span>
+                          {projects.find((item) => item.id === projectId)
+                            ?.name || "未加入项目"}
+                        </span>
+                        <ChevronDown size={13} />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        className="project-menu project-choice-menu"
+                        align="start"
+                        side="top"
+                        sideOffset={8}
+                        collisionPadding={12}
+                      >
+                        <DropdownMenu.Label className="project-choice-label">
+                          对话所属项目
+                        </DropdownMenu.Label>
+                        <DropdownMenu.RadioGroup
+                          value={projectId || ""}
+                          onValueChange={(id) => void changeProject(id || null)}
+                        >
+                          {[{ id: "", name: "未加入项目" }, ...projects].map(
+                            (item) => (
+                              <DropdownMenu.RadioItem
+                                key={item.id}
+                                value={item.id}
+                                disabled={
+                                  busy ||
+                                  submitting ||
+                                  uploading ||
+                                  movingProject
+                                }
+                              >
+                                <Folder size={14} />
+                                <span>{item.name}</span>
+                                <DropdownMenu.ItemIndicator>
+                                  <Check size={14} />
+                                </DropdownMenu.ItemIndicator>
+                              </DropdownMenu.RadioItem>
+                            ),
+                          )}
+                        </DropdownMenu.RadioGroup>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                  {projectId && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onProjectOpen?.(projectId)}
+                      >
+                        项目概览
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onLibrary?.(projectId)}
+                      >
+                        <Library size={14} />
+                        资料库
+                      </button>
+                    </>
+                  )}
+                  {!conversationId && pinNew && (
+                    <span className="chat-project-pin">
+                      <Pin size={13} />
+                      发送后置顶
+                    </span>
+                  )}
+                  {movingProject && <span role="status">正在移动…</span>}
+                </div>
+              )}
+              <div className="composer-attachments" ref={previewTarget} />
+              <Textarea
+                id="chat-message"
+                ref={composer}
+                aria-label="发送给XiaoXi的消息"
+                value={draft}
+                onChange={(e) => changeDraft(e.target.value)}
+                placeholder={
+                  busy && run?.task_id
+                    ? "补充当前任务要求…"
+                    : modelReady
+                      ? empty
+                        ? "今天有什么灵感，随心输入"
+                        : "输入消息…"
+                      : "连接模型后开始对话"
+                }
+                rows={2}
+                disabled={submitting || stopping}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    !e.shiftKey &&
+                    !e.nativeEvent.isComposing
+                  ) {
+                    e.preventDefault();
+                    if (modelReady) void send();
                   }
-                >
-                  <button
-                    className="composer-thinking"
-                    aria-label="思考模式"
-                    aria-pressed={thinkingEnabled}
+                }}
+              />
+              <div className="composer-bottom">
+                <div className="composer-tools">
+                  {!restrictedFiles && (
+                    <ImagesInput
+                      allowFiles
+                      allowFolders
+                      hideTrigger
+                      pickerRef={attachmentPicker}
+                      dropTarget={dropTarget}
+                      previewTarget={previewTarget}
+                      scopeKey={`${conversationId || "new"}:${attachmentBatch}`}
+                      images={images}
+                      onChange={changeImages}
+                      disabled={submitting || stopping || !modelReady}
+                      onError={setError}
+                      onUploading={setUploading}
+                    />
+                  )}
+                  <DropdownMenu.Root
+                    modal={false}
+                    open={composerMenuOpen}
+                    onOpenChange={setComposerMenuOpen}
+                  >
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        className="composer-add-trigger"
+                        aria-label="更多功能"
+                        title="添加附件、MCP 工具和技能"
+                      >
+                        <Plus size={19} />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        className="model-menu composer-add-menu"
+                        aria-label="更多功能"
+                        align="start"
+                        side="top"
+                        sideOffset={8}
+                        collisionPadding={16}
+                      >
+                        <DropdownMenu.Item
+                          className="model-menu-item composer-add-menu-item"
+                          disabled={busy || submitting}
+                          onSelect={() => {
+                            setComposerMenuOpen(false);
+                            void api<FileSession>("/file-sessions", "POST")
+                              .then(async (value) => {
+                                await refresh();
+                                onConversation(value.conversation_id);
+                              })
+                              .catch((e: Error) => setError(e.message));
+                          }}
+                        >
+                          受限文件任务
+                        </DropdownMenu.Item>
+                        {!restrictedFiles && (
+                          <>
+                            <DropdownMenu.Item
+                              className="model-menu-item composer-add-menu-item"
+                              disabled={submitting || stopping || !modelReady}
+                              onSelect={() => attachmentPicker.current?.click()}
+                            >
+                              <ImagePlus size={16} />
+                              添加文件或图片
+                            </DropdownMenu.Item>
+                            <ToolboxMenu
+                              asSubmenu
+                              onSettings={() => {
+                                setComposerMenuOpen(false);
+                                onAction("tools");
+                              }}
+                            />
+                            <SkillsMenu
+                              asSubmenu
+                              onSettings={() => {
+                                setComposerMenuOpen(false);
+                                onAction("skills");
+                              }}
+                            />
+                          </>
+                        )}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                  <Hint
+                    label={
+                      thinkingControl === "none"
+                        ? "此模型未配置思考开关"
+                        : thinkingControl === "always"
+                          ? "此模型始终开启思考"
+                          : thinkingEnabled
+                            ? "关闭思考模式"
+                            : "开启思考模式"
+                    }
+                  >
+                    <button
+                      className="composer-thinking"
+                      aria-label="思考模式"
+                      aria-pressed={thinkingEnabled}
+                      disabled={
+                        busy ||
+                        thinkingControl === "none" ||
+                        thinkingControl === "always"
+                      }
+                      onClick={() => {
+                        setThinking(!thinking);
+                        storeModelPreference(
+                          conversationId,
+                          selected?.key || "",
+                          !thinking,
+                        );
+                      }}
+                    >
+                      <Sparkles size={15} aria-hidden="true" />
+                      <span>
+                        {thinkingControl === "always" ? "始终思考" : "思考"}
+                      </span>
+                    </button>
+                  </Hint>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        className="composer-model"
+                        aria-label="选择模型"
+                        disabled={busy}
+                      >
+                        <span>{selected?.model.name || "选择模型"}</span>
+                        <ChevronDown size={13} />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        className="model-menu"
+                        align="start"
+                        sideOffset={8}
+                        collisionPadding={16}
+                      >
+                        <DropdownMenu.Label className="model-menu-label">
+                          模型
+                        </DropdownMenu.Label>
+                        {choices
+                          .filter((x) => x.profile.key_configured)
+                          .map((choice) => (
+                            <DropdownMenu.Item
+                              key={choice.key}
+                              className="model-menu-item model-choice"
+                              onSelect={() => {
+                                setModelKey(choice.key);
+                                setThinking(false);
+                                storeModelPreference(
+                                  conversationId,
+                                  choice.key,
+                                  false,
+                                );
+                              }}
+                            >
+                              <span>
+                                <strong>{choice.model.name}</strong>
+                                <small>
+                                  {choice.profile.label}
+                                  {choice.profile.id ===
+                                    settings.default_provider &&
+                                  choice.model.name ===
+                                    choice.profile.default_model
+                                    ? " · 默认"
+                                    : ""}
+                                </small>
+                              </span>
+                              {selected?.key === choice.key && (
+                                <Check size={15} />
+                              )}
+                            </DropdownMenu.Item>
+                          ))}
+                        {!choices.some((x) => x.profile.key_configured) && (
+                          <div className="model-menu-current">尚未连接模型</div>
+                        )}
+                        <DropdownMenu.Separator className="model-menu-separator" />
+                        <DropdownMenu.Item
+                          className="model-menu-item"
+                          onSelect={() => onAction("settings")}
+                        >
+                          <Settings2 size={15} />
+                          连接与设置
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                </div>
+                <div className="composer-submit">
+                  <Button
+                    aria-label={showStop ? "停止生成" : "发送消息"}
+                    size="icon"
                     disabled={
-                      busy ||
-                      thinkingControl === "none" ||
-                      thinkingControl === "always"
+                      submitting ||
+                      movingProject ||
+                      stopping ||
+                      (showStop ? !run : uploading || !modelReady || !hasDraft)
                     }
                     onClick={() => {
-                      setThinking(!thinking);
-                      storeModelPreference(
-                        conversationId,
-                        selected?.key || "",
-                        !thinking,
-                      );
+                      if (showStop) void stop();
+                      else void send();
                     }}
                   >
-                    <Sparkles size={15} aria-hidden="true" />
-                    <span>
-                      {thinkingControl === "always" ? "始终思考" : "思考"}
-                    </span>
-                  </button>
-                </Hint>
-                <DropdownMenu.Root>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      className="composer-model"
-                      aria-label="选择模型"
-                      disabled={busy}
-                    >
-                      <span>{selected?.model.name || "选择模型"}</span>
-                      <ChevronDown size={13} />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                      className="model-menu"
-                      align="start"
-                      sideOffset={8}
-                      collisionPadding={16}
-                    >
-                      <DropdownMenu.Label className="model-menu-label">
-                        模型
-                      </DropdownMenu.Label>
-                      {choices
-                        .filter((x) => x.profile.key_configured)
-                        .map((choice) => (
-                          <DropdownMenu.Item
-                            key={choice.key}
-                            className="model-menu-item model-choice"
-                            onSelect={() => {
-                              setModelKey(choice.key);
-                              setThinking(false);
-                              storeModelPreference(
-                                conversationId,
-                                choice.key,
-                                false,
-                              );
-                            }}
-                          >
-                            <span>
-                              <strong>{choice.model.name}</strong>
-                              <small>
-                                {choice.profile.label}
-                                {choice.profile.id ===
-                                  settings.default_provider &&
-                                choice.model.name ===
-                                  choice.profile.default_model
-                                  ? " · 默认"
-                                  : ""}
-                              </small>
-                            </span>
-                            {selected?.key === choice.key && (
-                              <Check size={15} />
-                            )}
-                          </DropdownMenu.Item>
-                        ))}
-                      {!choices.some((x) => x.profile.key_configured) && (
-                        <div className="model-menu-current">尚未连接模型</div>
-                      )}
-                      <DropdownMenu.Separator className="model-menu-separator" />
-                      <DropdownMenu.Item
-                        className="model-menu-item"
-                        onSelect={() => onAction("settings")}
-                      >
-                        <Settings2 size={15} />
-                        连接与设置
-                      </DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Root>
-              </div>
-              <div className="composer-submit">
-                <Button
-                  aria-label={showStop ? "停止生成" : "发送消息"}
-                  size="icon"
-                  disabled={
-                    submitting ||
-                    movingProject ||
-                    stopping ||
-                    (showStop ? !run : uploading || !modelReady || !hasDraft)
-                  }
-                  onClick={() => {
-                    if (showStop) void stop();
-                    else void send();
-                  }}
-                >
-                  {showStop ? <Square size={15} /> : <ArrowUp size={19} />}
-                </Button>
+                    {showStop ? <Square size={15} /> : <ArrowUp size={19} />}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
+          {empty && !restrictedFiles && (
+            <NewChatStarters
+              onPrompt={chooseStarter}
+              onLearning={() => onAction("learning")}
+              disabled={submitting || stopping || movingProject}
+            />
+          )}
         </div>
-        {empty && (
-          <NewChatStarters
-            onPrompt={chooseStarter}
-            onLearning={() => onAction("learning")}
-            disabled={submitting || stopping || movingProject}
-          />
-        )}
       </div>
-    </div>
+    </RestrictedFileContext.Provider>
   );
 }

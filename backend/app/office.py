@@ -303,6 +303,10 @@ async def read_image(raw, media_type, run_id=None, question=""):
     from . import model_profiles, provider
     from .db import Settings
     from .complex_tasks import add_usage
+    from . import restricted_files
+
+    if run_id:
+        restricted_files.guard_run(run_id, "read_local_file")
 
     with Session() as db:
         run = db.get(Run, run_id) if run_id else None
@@ -400,8 +404,12 @@ async def _generate(run_id, conversation_id, operation, name, format, **kwargs):
         if len(existing) >= 20:
             raise ValueError("一次任务最多生成 20 个文件")
     blocks = kwargs.get("blocks", [])
+    from . import restricted_files
+    limited = restricted_files.restricted(conversation_id)
     for b in blocks:
         if b.get("kind") == "image":
+            if limited:
+                raise ValueError("受限文件任务暂不支持引用聊天或项目图片生成文档")
             key = b.get("file_id", "")
             with Session() as db:
                 image = db.get(Attachment, key)

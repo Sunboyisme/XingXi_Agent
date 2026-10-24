@@ -1,5 +1,6 @@
 import { DropdownMenu } from "radix-ui";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
+import { RestrictedFileContext, proposeFileSave } from "@/lib/restrictedFiles";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   Download,
@@ -91,11 +92,14 @@ export function FileCard({
   file,
   upload = false,
   compact = false,
+  previewOnly = false,
 }: {
   file: Pick<Artifact, "id" | "name">;
   upload?: boolean;
   compact?: boolean;
+  previewOnly?: boolean;
 }) {
+  const restricted = useContext(RestrictedFileContext);
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState("");
@@ -126,10 +130,16 @@ export function FileCard({
     };
   }, [open, prefix, file.id, page, retry]);
   async function save(as: boolean) {
+    if (previewOnly) return;
     setSaving(true);
     setError("");
     setNotice("");
     try {
+      if (restricted) {
+        await proposeFileSave(restricted, file.id);
+        setNotice("保存申请已加入上方文件任务面板，请选择位置并确认");
+        return;
+      }
       if (isTauri()) {
         if (as) {
           const saved = await invoke<boolean>("save_office_file", {
@@ -175,7 +185,7 @@ export function FileCard({
         <FileText size={23} />
         <div className="office-file-copy">
           <strong>{file.name}</strong>
-          {!compact && (
+          {!compact && !previewOnly && (
             <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>
           )}
         </div>
@@ -194,14 +204,14 @@ export function FileCard({
           {!compact && (
             <button
               disabled={saving}
-              aria-label={`下载 ${file.name}`}
+              aria-label={`${restricted ? "申请保存" : "下载"} ${file.name}`}
               onClick={() => void save(false)}
             >
               <Download size={14} />
-              下载
+              {restricted ? "申请保存" : "下载"}
             </button>
           )}
-          {!compact && isTauri() && (
+          {!compact && !previewOnly && !restricted && isTauri() && (
             <button
               disabled={saving}
               aria-label={`另存为 ${file.name}`}
@@ -211,7 +221,7 @@ export function FileCard({
               另存为
             </button>
           )}
-          {compact && (
+          {compact && !previewOnly && (
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button type="button" aria-label={`更多操作 ${file.name}`}>
@@ -351,9 +361,11 @@ export function FileCard({
                 </button>
               </>
             )}
-            <button disabled={saving} onClick={() => void save(isTauri())}>
-              {isTauri() ? "另存为" : "下载文件"}
-            </button>
+            {!previewOnly && (
+              <button disabled={saving} onClick={() => void save(isTauri())}>
+                {restricted ? "申请保存" : isTauri() ? "另存为" : "下载文件"}
+              </button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

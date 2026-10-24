@@ -68,6 +68,23 @@ async fn pick_project_workspace(initial_path: Option<String>) -> Result<Option<S
 }
 
 #[tauri::command]
+async fn pick_restricted_files(folder: bool) -> Result<Vec<String>, String> {
+    let dialog = rfd::AsyncFileDialog::new().set_title("选择受限文件任务的资料（下一步确认授权）");
+    if folder {
+        Ok(dialog.pick_folder().await.into_iter().map(|f| f.path().to_string_lossy().into_owned()).collect())
+    } else {
+        Ok(dialog.pick_files().await.unwrap_or_default().into_iter().map(|f| f.path().to_string_lossy().into_owned()).collect())
+    }
+}
+
+#[tauri::command]
+async fn pick_restricted_save_target(name: String) -> Result<Option<String>, String> {
+    let safe: String = name.chars().filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c)).take(180).collect();
+    Ok(rfd::AsyncFileDialog::new().set_title("选择新文件位置（返回小夕后确认保存，不覆盖原文件）")
+        .set_file_name(safe).save_file().await.map(|f| f.path().to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
 async fn save_data_export(
     app: tauri::AppHandle,
     state: tauri::State<'_, Backend>,
@@ -448,6 +465,8 @@ fn main() {
             drop_files::read_dropped_files,
             quit_app,
             pick_project_workspace,
+            pick_restricted_files,
+            pick_restricted_save_target,
             save_data_export,
             save_office_file,
             download_office_file,

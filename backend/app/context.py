@@ -190,7 +190,7 @@ def search_history(conversation_id: str, query: str, role: str = "all", *, proje
         conversation = db.get(Conversation, conversation_id)
         if project and (not conversation or not conversation.project_id):
             return []
-        scope = select(Conversation.id).where(Conversation.project_id == conversation.project_id, Conversation.profile_id == PROFILE_ID) if project else [conversation_id]
+        scope = select(Conversation.id).where(Conversation.project_id == conversation.project_id, Conversation.profile_id == PROFILE_ID, Conversation.restricted_files.is_(False)) if project else [conversation_id]
         statement = select(Message).where(
             Message.profile_id == PROFILE_ID,
             Message.conversation_id.in_(scope),
