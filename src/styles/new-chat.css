@@ -158,3 +158,8 @@
     min-height: 44px;
   }
 }
+
+:root[data-theme="warm-dark"] .composer textarea::placeholder {
+  color: #c9bba9;
+  opacity: 1;
+}

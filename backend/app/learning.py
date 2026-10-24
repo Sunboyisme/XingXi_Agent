@@ -135,6 +135,7 @@ async def teach(state: TutorState):
         LessonContent,
         TUTOR_RULES
         + "\n本次只教当前知识点，使用中文 Markdown，清晰解释、最小示例和一个具体练习。不要直接给出练习答案。"
+        "所有需要用户回答或提交的事项必须使用 Markdown 有序列表（1.、2.、3.）逐项编号，一个问题对应一个序号；不要使用无序列表，也不要把多个独立问题藏在同一句话里。检查标准按相同序号对应题目。"
         "练习所需能力必须符合已提供的基础和前置知识；基础未知或零基础时先讲概念与用途，给无需编程或专业经验也能开始的小步骤，不直接要求复杂代码。",
         text,
         on_partial=(lambda fields: emit(state["run_id"], "learning_content", {
@@ -237,6 +238,7 @@ async def assess(state: TutorState):
         "第一次答错或不完整就结束这一题的补答：explanation用一两句话指出最关键的问题；reference_answer直接给完整答案并解释原因；next_exercise换一道更简单、只需回答一个要点的同知识点新题，next_criteria给对应标准。禁止反复要求用户补两句、填空补齐、重写原答案，禁止追加原题未要求的细节。"
         "若上轮已给新题，本轮必须评判新题；若仍错，给答案后进一步降低新题难度，可改为二选一。通过时简短肯定并建议继续下个知识点，不强行加题。"
         "explanation、reference_answer、next_exercise各司其职，不重复同一内容；next_step保持一句话，不复述题目或缺口清单。使用短段落和自然对话，不输出评审报告。"
+        "next_exercise中需要用户回答的每个问题使用 Markdown 有序列表逐项编号，即使只有一题也从1.开始；参考答案按对应序号解释。"
         "passed只表示有充分证据完成练习；讨论不代表通过。evidence说明实际看到的材料，不声称运行代码、计算或现场观察。历史附件只有编号时不能假装看到了图片内容。",
         text,
         submission.get("attachment_ids", []),

@@ -1,7 +1,6 @@
-import { Tabs } from "radix-ui";
 import { SoftSelect } from "./ui/soft-select";
 import { DetailDialog } from "./ui/detail-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { DateTimePicker } from "./DateTimePicker";
 import { Button } from "./ui/button";
@@ -114,6 +113,54 @@ export function UsageCosts() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
+  const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
+  const [priceError, setPriceError] = useState("");
+  const priceForm = useRef<HTMLFormElement>(null);
+  const records = useRef<HTMLDivElement>(null);
+  const recordScroll = useRef<{
+    element: HTMLElement;
+    top: number;
+    left: number;
+  } | null>(null);
+  const rateFields =
+    kind === "images"
+      ? [{ key: "image", label: "图片单价", required: true }]
+      : [
+          { key: "input", label: "输入单价", required: true },
+          ...(kind === "tokens"
+            ? [{ key: "output", label: "输出单价", required: true }]
+            : []),
+          { key: "cached", label: "缓存读取", required: false },
+          { key: "cache_write", label: "缓存写入", required: false },
+        ];
+  function changeView(next: string) {
+    if (next === view) return;
+    const element = records.current?.closest<HTMLElement>(".page-body");
+    if (element)
+      recordScroll.current = {
+        element,
+        top: element.scrollTop,
+        left: element.scrollLeft,
+      };
+    setView(next);
+  }
+  useLayoutEffect(() => {
+    const saved = recordScroll.current;
+    if (saved) {
+      saved.element.scrollTop = saved.top;
+      saved.element.scrollLeft = saved.left;
+      recordScroll.current = null;
+    }
+  }, [view]);
+  function clearPriceError(key: string) {
+    setPriceErrors((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setPriceError("");
+    setNotice("");
+  }
   const selected = models[Number(selection)];
   useEffect(() => {
     let live = true;
@@ -161,6 +208,8 @@ export function UsageCosts() {
   function choose(value: string) {
     setSelection(value);
     setNotice("");
+    setPriceErrors({});
+    setPriceError("");
     const model = models[Number(value)];
     if (!model || !value) {
       setRates({});
@@ -178,12 +227,38 @@ export function UsageCosts() {
   }
   async function savePrice() {
     if (!selected || !selection || saving) return;
-    setSaving(true);
-    setError("");
+    const issues: Record<string, string> = {};
+    if (!/^[A-Z]{3}$/.test(currency.trim()))
+      issues.currency = "请填写三位币种代码，例如 CNY 或 USD。";
+    for (const field of rateFields) {
+      const value = (rates[field.key] || "").trim();
+      if (!value) {
+        if (field.required)
+          issues[field.key] = `请填写${field.label}；免费请填 0。`;
+      } else if (
+        !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value) ||
+        !Number.isFinite(Number(value)) ||
+        Number(value) > 1_000_000_000
+      )
+        issues[field.key] = "请输入 0 至 10 亿之间的有效单价。";
+    }
+    setPriceErrors(issues);
+    setPriceError("");
     setNotice("");
+    if (Object.keys(issues).length) {
+      requestAnimationFrame(() =>
+        priceForm.current
+          ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+          ?.focus(),
+      );
+      return;
+    }
+    setSaving(true);
     try {
       const configured = Object.fromEntries(
-        Object.entries(rates).filter(([, value]) => value.trim() !== ""),
+        Object.entries(rates)
+          .filter(([, value]) => value.trim() !== "")
+          .map(([key, value]) => [key, value.trim()]),
       );
       const allowed =
         kind === "images"
@@ -191,19 +266,22 @@ export function UsageCosts() {
           : kind === "embedding"
             ? ["input", "cached", "cache_write"]
             : ["input", "output", "cached", "cache_write"];
-      await api("/usage/prices", "POST", {
+      const saved = await api<Price>("/usage/prices", "POST", {
         ...selected,
         kind,
-        currency,
+        currency: currency.trim(),
         image_size: imageSize.trim(),
         rates: Object.fromEntries(
           Object.entries(configured).filter(([key]) => allowed.includes(key)),
         ),
       });
       setNotice("价格已保存，从后续调用生效；历史调用的价格与费用保持原记录。");
-      setRevision((value) => value + 1);
+      setPrices((current) => [
+        saved,
+        ...current.filter((price) => price.id !== saved.id),
+      ]);
     } catch (cause) {
-      setError((cause as Error).message);
+      setPriceError((cause as Error).message);
     } finally {
       setSaving(false);
     }
@@ -278,7 +356,6 @@ export function UsageCosts() {
         </Button>
       </div>
       {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
       {busy && <p role="status">正在读取用量…</p>}
       {report && (
         <>
@@ -330,259 +407,338 @@ export function UsageCosts() {
               <a href="#usage-pricing">配置模型单价</a>
             </div>
           )}
-          <Tabs.Root
-            value={view}
-            onValueChange={setView}
-            className="usage-records"
-          >
-            <Tabs.List className="content-view-tabs" aria-label="用量记录视图">
-              <Tabs.Trigger value="summary">模型汇总</Tabs.Trigger>
-              <Tabs.Trigger value="calls">
-                调用明细 <span>{report.total_calls}</span>
-              </Tabs.Trigger>
-              <Tabs.Trigger value="history">
-                历史记录 <span>{report.historical_count}</span>
-              </Tabs.Trigger>
-            </Tabs.List>
-            <Tabs.Content value="summary">
-              <section className="usage-section">
-                <header>
-                  <h3>模型用量汇总</h3>
-                  <p>按连接、模型与用途分组</p>
-                </header>
-                <div className="usage-table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        {[
-                          "连接 / 模型",
-                          "用途",
-                          "调用",
-                          "输入 Token",
-                          "输出 Token",
-                          "缓存读 / 写",
-                          "图片",
-                          "已知估算费用",
-                          "未知",
-                        ].map((name) => (
-                          <th scope="col" key={name}>
-                            {name}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.groups.map((row, index) => (
-                        <tr
-                          key={`${row.provider_id}-${row.model_name}-${row.purpose}-${index}`}
-                        >
-                          <td className="usage-model">
-                            <strong>{row.provider_label}</strong>
-                            <small>{row.model_name}</small>
-                          </td>
-                          <td>{purposes[row.purpose] || row.purpose}</td>
-                          <td>{row.calls}</td>
-                          <td>
-                            {row.input_tokens.toLocaleString()}
-                            {row.unknown_input_calls > 0 && (
-                              <small> + {row.unknown_input_calls} 次未知</small>
-                            )}
-                          </td>
-                          <td>
-                            {row.output_tokens.toLocaleString()}
-                            {row.unknown_output_calls > 0 && (
-                              <small>
-                                {" "}
-                                + {row.unknown_output_calls} 次未知
-                              </small>
-                            )}
-                          </td>
-                          <td>
-                            {row.cached_tokens.toLocaleString()}
-                            {row.unknown_cached_calls > 0 && (
-                              <small>
-                                （{row.unknown_cached_calls} 次未知）
-                              </small>
-                            )}{" "}
-                            / {row.cache_write_tokens.toLocaleString()}
-                            {row.unknown_cache_write_calls > 0 && (
-                              <small>
-                                （{row.unknown_cache_write_calls} 次未知）
-                              </small>
-                            )}
-                          </td>
-                          <td>
-                            {row.kind === "images" ? (
-                              <>
-                                {row.image_count}
-                                {row.unknown_image_calls > 0 && (
-                                  <small>
-                                    {" "}
-                                    + {row.unknown_image_calls} 次未知
-                                  </small>
-                                )}
-                              </>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td>
-                            {row.currency && row.known_calls > 0
-                              ? `${row.currency} ${amount(row.known_cost)}`
-                              : "未知"}
-                          </td>
-                          <td>
-                            <span
-                              className={
-                                row.unknown_calls
-                                  ? "usage-unknown-badge"
-                                  : "muted"
-                              }
-                            >
-                              {row.unknown_calls}
-                            </span>
-                          </td>
+          <div className="usage-records" ref={records}>
+            <div className="usage-records-heading">
+              <h3>用量记录</h3>
+              <span>按连接、模型与时间查看</span>
+            </div>
+            <div
+              className="usage-record-tabs"
+              role="tablist"
+              aria-label="用量记录视图"
+            >
+              {[
+                { value: "summary", label: "模型汇总", count: null },
+                {
+                  value: "calls",
+                  label: "调用明细",
+                  count: report.total_calls,
+                },
+                {
+                  value: "history",
+                  label: "历史记录",
+                  count: report.historical_count,
+                },
+              ].map((item, index, items) => (
+                <button
+                  type="button"
+                  role="tab"
+                  key={item.value}
+                  id={`usage-tab-${item.value}`}
+                  aria-selected={view === item.value}
+                  aria-controls={`usage-panel-${item.value}`}
+                  tabIndex={view === item.value ? 0 : -1}
+                  onMouseDown={(event) => {
+                    if (event.button === 0) {
+                      event.preventDefault();
+                      event.currentTarget.focus({ preventScroll: true });
+                    }
+                  }}
+                  onClick={() => changeView(item.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                        event.key,
+                      )
+                    )
+                      return;
+                    event.preventDefault();
+                    const next =
+                      event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? items.length - 1
+                          : (index +
+                              (event.key === "ArrowRight"
+                                ? 1
+                                : items.length - 1)) %
+                            items.length;
+                    changeView(items[next].value);
+                    document
+                      .getElementById(`usage-tab-${items[next].value}`)
+                      ?.focus({ preventScroll: true });
+                  }}
+                >
+                  {item.label}
+                  {item.count !== null && <span>{item.count}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="usage-record-body">
+              <div
+                className="usage-record-panel"
+                role="tabpanel"
+                id="usage-panel-summary"
+                aria-labelledby="usage-tab-summary"
+                hidden={view !== "summary"}
+              >
+                <section className="usage-section">
+                  <header>
+                    <h3>模型用量汇总</h3>
+                    <p>按连接、模型与用途分组</p>
+                  </header>
+                  <div className="usage-table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          {[
+                            "连接 / 模型",
+                            "用途",
+                            "调用",
+                            "输入 Token",
+                            "输出 Token",
+                            "缓存读 / 写",
+                            "图片",
+                            "已知估算费用",
+                            "未知",
+                          ].map((name) => (
+                            <th scope="col" key={name}>
+                              {name}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {!report.groups.length && (
-                  <p className="muted">所选日期暂无逐次调用记录。</p>
-                )}
-              </section>
-            </Tabs.Content>
-            <Tabs.Content value="calls">
-              <section className="usage-section">
-                <header>
-                  <h3>调用明细</h3>
-                  <p>逐次查看模型用量、请求状态与费用依据</p>
-                </header>
-                <div className="usage-table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        {[
-                          "时间",
-                          "连接 / 模型",
-                          "用途 / 状态",
-                          "输入 / 输出 Token",
-                          "缓存读 / 写",
-                          "图片",
-                          "估算费用",
-                        ].map((name) => (
-                          <th scope="col" key={name}>
-                            {name}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.calls.map((row) => (
-                        <tr key={row.id}>
-                          <td>
-                            {new Date(row.created_at).toLocaleString("zh-CN")}
-                          </td>
-                          <td className="usage-model">
-                            <strong>{row.provider_label}</strong>
-                            <small>{row.model_name}</small>
-                          </td>
-                          <td>
-                            {purposes[row.purpose] || row.purpose}
-                            <br />
-                            {states[row.status] || row.status}
-                          </td>
-                          <td>
-                            {row.input_tokens ?? "未知"} /{" "}
-                            {row.output_tokens ?? "未知"}
-                          </td>
-                          <td>
-                            {row.cached_tokens ?? "—"} /{" "}
-                            {row.cache_write_tokens ?? "—"}
-                          </td>
-                          <td>{row.image_count ?? "—"}</td>
-                          <td>
-                            {row.estimated_cost !== null ? (
-                              `${row.price_snapshot.currency} ${amount(row.estimated_cost)}`
-                            ) : (
-                              <span title={row.unknown_reason}>
-                                未知
-                                <br />
-                                <small>{row.unknown_reason}</small>
+                      </thead>
+                      <tbody>
+                        {report.groups.map((row, index) => (
+                          <tr
+                            key={`${row.provider_id}-${row.model_name}-${row.purpose}-${index}`}
+                          >
+                            <td className="usage-model">
+                              <strong>{row.provider_label}</strong>
+                              <small>{row.model_name}</small>
+                            </td>
+                            <td>{purposes[row.purpose] || row.purpose}</td>
+                            <td>{row.calls}</td>
+                            <td>
+                              {row.input_tokens.toLocaleString()}
+                              {row.unknown_input_calls > 0 && (
+                                <small>
+                                  {" "}
+                                  + {row.unknown_input_calls} 次未知
+                                </small>
+                              )}
+                            </td>
+                            <td>
+                              {row.output_tokens.toLocaleString()}
+                              {row.unknown_output_calls > 0 && (
+                                <small>
+                                  {" "}
+                                  + {row.unknown_output_calls} 次未知
+                                </small>
+                              )}
+                            </td>
+                            <td>
+                              {row.cached_tokens.toLocaleString()}
+                              {row.unknown_cached_calls > 0 && (
+                                <small>
+                                  （{row.unknown_cached_calls} 次未知）
+                                </small>
+                              )}{" "}
+                              / {row.cache_write_tokens.toLocaleString()}
+                              {row.unknown_cache_write_calls > 0 && (
+                                <small>
+                                  （{row.unknown_cache_write_calls} 次未知）
+                                </small>
+                              )}
+                            </td>
+                            <td>
+                              {row.kind === "images" ? (
+                                <>
+                                  {row.image_count}
+                                  {row.unknown_image_calls > 0 && (
+                                    <small>
+                                      {" "}
+                                      + {row.unknown_image_calls} 次未知
+                                    </small>
+                                  )}
+                                </>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td>
+                              {row.currency && row.known_calls > 0
+                                ? `${row.currency} ${amount(row.known_cost)}`
+                                : "未知"}
+                            </td>
+                            <td>
+                              <span
+                                className={
+                                  row.unknown_calls
+                                    ? "usage-unknown-badge"
+                                    : "muted"
+                                }
+                              >
+                                {row.unknown_calls}
                               </span>
-                            )}
-                          </td>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {!report.groups.length && (
+                    <p className="muted">所选日期暂无逐次调用记录。</p>
+                  )}
+                </section>
+              </div>
+              <div
+                className="usage-record-panel"
+                role="tabpanel"
+                id="usage-panel-calls"
+                aria-labelledby="usage-tab-calls"
+                hidden={view !== "calls"}
+              >
+                <section className="usage-section">
+                  <header>
+                    <h3>调用明细</h3>
+                    <p>逐次查看模型用量、请求状态与费用依据</p>
+                  </header>
+                  <div className="usage-table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          {[
+                            "时间",
+                            "连接 / 模型",
+                            "用途 / 状态",
+                            "输入 / 输出 Token",
+                            "缓存读 / 写",
+                            "图片",
+                            "估算费用",
+                          ].map((name) => (
+                            <th scope="col" key={name}>
+                              {name}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                  <Button
-                    variant="outline"
-                    disabled={!offset || busy}
-                    onClick={() => setOffset(Math.max(0, offset - 100))}
-                  >
-                    上一页
-                  </Button>
-                  <span>第 {Math.floor(offset / 100) + 1} 页</span>
-                  <Button
-                    variant="outline"
-                    disabled={!report.has_more || busy}
-                    onClick={() => setOffset(offset + 100)}
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </section>
-            </Tabs.Content>
-            <Tabs.Content value="history">
-              <section className="usage-section">
-                <header>
-                  <h3>历史不完整用量</h3>
-                  <p>
-                    旧记录仅保留总 Token，以下展示最近{" "}
-                    {report.historical.length} 条，不推算模型、输入输出或费用。
-                  </p>
-                </header>
-                <div className="usage-table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th scope="col">时间</th>
-                        <th scope="col">总 Token</th>
-                        <th scope="col">费用状态</th>
-                        <th scope="col">原因</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.historical.map((row) => (
-                        <tr key={row.id}>
-                          <td>
-                            <time dateTime={row.created_at}>
+                      </thead>
+                      <tbody>
+                        {report.calls.map((row) => (
+                          <tr key={row.id}>
+                            <td>
                               {new Date(row.created_at).toLocaleString("zh-CN")}
-                            </time>
-                          </td>
-                          <td>{row.total_tokens.toLocaleString("zh-CN")}</td>
-                          <td>
-                            <span className="usage-unknown-badge">未知</span>
-                          </td>
-                          <td>
-                            {row.unknown_reason || "旧记录缺少模型与详细用量"}
-                          </td>
+                            </td>
+                            <td className="usage-model">
+                              <strong>{row.provider_label}</strong>
+                              <small>{row.model_name}</small>
+                            </td>
+                            <td>
+                              {purposes[row.purpose] || row.purpose}
+                              <br />
+                              {states[row.status] || row.status}
+                            </td>
+                            <td>
+                              {row.input_tokens ?? "未知"} /{" "}
+                              {row.output_tokens ?? "未知"}
+                            </td>
+                            <td>
+                              {row.cached_tokens ?? "—"} /{" "}
+                              {row.cache_write_tokens ?? "—"}
+                            </td>
+                            <td>{row.image_count ?? "—"}</td>
+                            <td>
+                              {row.estimated_cost !== null ? (
+                                `${row.price_snapshot.currency} ${amount(row.estimated_cost)}`
+                              ) : (
+                                <span title={row.unknown_reason}>
+                                  未知
+                                  <br />
+                                  <small>{row.unknown_reason}</small>
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                    <Button
+                      variant="outline"
+                      disabled={!offset || busy}
+                      onClick={() => setOffset(Math.max(0, offset - 100))}
+                    >
+                      上一页
+                    </Button>
+                    <span>第 {Math.floor(offset / 100) + 1} 页</span>
+                    <Button
+                      variant="outline"
+                      disabled={!report.has_more || busy}
+                      onClick={() => setOffset(offset + 100)}
+                    >
+                      下一页
+                    </Button>
+                  </div>
+                </section>
+              </div>
+              <div
+                className="usage-record-panel"
+                role="tabpanel"
+                id="usage-panel-history"
+                aria-labelledby="usage-tab-history"
+                hidden={view !== "history"}
+              >
+                <section className="usage-section">
+                  <header>
+                    <h3>历史不完整用量</h3>
+                    <p>
+                      旧记录仅保留总 Token，以下展示最近{" "}
+                      {report.historical.length}{" "}
+                      条，不推算模型、输入输出或费用。
+                    </p>
+                  </header>
+                  <div className="usage-table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">时间</th>
+                          <th scope="col">总 Token</th>
+                          <th scope="col">费用状态</th>
+                          <th scope="col">原因</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {!report.historical.length && (
-                  <p className="history-empty">
-                    所选日期内没有不完整的历史用量记录。
-                  </p>
-                )}
-              </section>
-            </Tabs.Content>
-          </Tabs.Root>
+                      </thead>
+                      <tbody>
+                        {report.historical.map((row) => (
+                          <tr key={row.id}>
+                            <td>
+                              <time dateTime={row.created_at}>
+                                {new Date(row.created_at).toLocaleString(
+                                  "zh-CN",
+                                )}
+                              </time>
+                            </td>
+                            <td>{row.total_tokens.toLocaleString("zh-CN")}</td>
+                            <td>
+                              <span className="usage-unknown-badge">未知</span>
+                            </td>
+                            <td>
+                              {row.unknown_reason || "旧记录缺少模型与详细用量"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {!report.historical.length && (
+                    <p className="history-empty">
+                      所选日期内没有不完整的历史用量记录。
+                    </p>
+                  )}
+                </section>
+              </div>
+            </div>
+          </div>
         </>
       )}
       <section className="usage-section usage-pricing" id="usage-pricing">
@@ -594,16 +750,19 @@ export function UsageCosts() {
           请填写服务商对应的价格。空白表示未配置，零表示你明确配置免费。缓存单价留空时按普通输入价估算；填写后若服务商未返回缓存用量，则费用显示未知。不同币种分别汇总。
         </p>
         <form
+          ref={priceForm}
+          noValidate
+          className="usage-price-form"
           onSubmit={(event) => {
             event.preventDefault();
             void savePrice();
           }}
-          style={{ display: "grid", gap: 14, maxWidth: 720 }}
         >
           <div className="usage-model-field">
             <label htmlFor="usage-model">连接与模型</label>
             <SoftSelect
               id="usage-model"
+              disabled={saving}
               label="连接与模型"
               value={selection}
               onValueChange={choose}
@@ -621,9 +780,14 @@ export function UsageCosts() {
                   <label htmlFor="usage-billing">计价方式</label>
                   <SoftSelect
                     id="usage-billing"
+                    disabled={saving}
                     label="计价方式"
                     value={kind}
-                    onValueChange={setKind}
+                    onValueChange={(value) => {
+                      setKind(value);
+                      setPriceErrors({});
+                      setPriceError("");
+                    }}
                     options={[
                       selected.kind === "embedding"
                         ? { value: "embedding", label: "每百万输入 Token" }
@@ -634,68 +798,105 @@ export function UsageCosts() {
                     ]}
                   />
                 </div>
-                <label>
+                <label htmlFor="usage-currency">
                   币种
                   <input
+                    id="usage-currency"
+                    disabled={saving}
+                    type="text"
+                    aria-invalid={Boolean(priceErrors.currency)}
+                    aria-describedby={
+                      priceErrors.currency ? "usage-currency-error" : undefined
+                    }
                     value={currency}
                     maxLength={3}
-                    onChange={(event) =>
-                      setCurrency(event.target.value.toUpperCase())
-                    }
+                    onChange={(event) => {
+                      setCurrency(event.target.value.toUpperCase());
+                      clearPriceError("currency");
+                    }}
                     placeholder="CNY"
-                    required
                   />
+                  {priceErrors.currency && (
+                    <span
+                      className="price-field-error"
+                      id="usage-currency-error"
+                    >
+                      {priceErrors.currency}
+                    </span>
+                  )}
                 </label>
                 {selected.kind === "images" && (
                   <label>
                     图片尺寸
                     <input
                       value={imageSize}
+                      disabled={saving}
+                      maxLength={40}
                       onChange={(event) => setImageSize(event.target.value)}
                       placeholder="留空适用于全部尺寸"
                     />
                   </label>
                 )}
               </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 12,
-                }}
-              >
-                {(kind === "images"
-                  ? [["image", "每张图片单价"]]
-                  : [
-                      ["input", "输入单价 / 百万 Token"],
-                      ...(kind === "tokens"
-                        ? [["output", "输出单价 / 百万 Token"]]
-                        : []),
-                      ["cached", "缓存读取单价（可选）"],
-                      ["cache_write", "缓存写入单价（可选）"],
-                    ]
-                ).map(([key, title]) => (
-                  <label key={key}>
-                    {title}
-                    <input
-                      type="number"
-                      min="0"
-                      max="1000000000"
-                      step="any"
-                      value={rates[key] || ""}
-                      required={
-                        key === "input" || key === "output" || key === "image"
+              <div className="usage-price-grid">
+                {rateFields.map((field) => (
+                  <div className="usage-rate-field" key={field.key}>
+                    <label htmlFor={`usage-rate-${field.key}`}>
+                      <span>{field.label}</span>
+                      <small>{field.required ? "必填" : "可选"}</small>
+                    </label>
+                    <div
+                      className={`usage-price-input ${priceErrors[field.key] ? "is-invalid" : ""}`}
+                    >
+                      <span>{currency || "CNY"}</span>
+                      <input
+                        id={`usage-rate-${field.key}`}
+                        type="text"
+                        inputMode="decimal"
+                        maxLength={40}
+                        value={rates[field.key] || ""}
+                        placeholder={field.required ? "0.00" : "沿用输入单价"}
+                        disabled={saving}
+                        aria-invalid={Boolean(priceErrors[field.key])}
+                        aria-describedby={`usage-rate-${field.key}-help`}
+                        onChange={(event) => {
+                          setRates((value) => ({
+                            ...value,
+                            [field.key]: event.target.value,
+                          }));
+                          clearPriceError(field.key);
+                        }}
+                      />
+                    </div>
+                    <p
+                      id={`usage-rate-${field.key}-help`}
+                      className={
+                        priceErrors[field.key]
+                          ? "price-field-error"
+                          : "usage-price-unit"
                       }
-                      onChange={(event) =>
-                        setRates((value) => ({
-                          ...value,
-                          [key]: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
+                    >
+                      {priceErrors[field.key] ||
+                        (kind === "images" ? "每张图片" : "每百万 Token")}
+                    </p>
+                  </div>
                 ))}
               </div>
+              {Object.keys(priceErrors).length > 0 && (
+                <p className="price-error-summary" role="alert">
+                  请修正标出的项目后再保存。
+                </p>
+              )}
+              {priceError && (
+                <p className="price-error-summary" role="alert">
+                  {priceError}
+                </p>
+              )}
+              {notice && (
+                <p className="price-save-notice" role="status">
+                  {notice}
+                </p>
+              )}
               <div>
                 <Button type="submit" disabled={saving}>
                   {saving ? "正在保存…" : "保存价格"}

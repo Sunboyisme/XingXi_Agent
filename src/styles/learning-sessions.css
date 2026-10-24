@@ -278,3 +278,71 @@
     padding: 20px;
   }
 }
+
+.markdown.numbered-exercise ol {
+  list-style: decimal outside;
+  padding-left: 1.8em;
+  margin: 18px 0;
+}
+.markdown.numbered-exercise li {
+  padding-left: 8px;
+  margin: 12px 0;
+}
+.markdown.numbered-exercise li::marker {
+  color: var(--ui-color-action);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.lesson-hint-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-top: 1px solid var(--ui-color-line);
+  padding-top: 20px;
+  margin-top: 22px;
+}
+.lesson-hint-entry > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.lesson-hint-entry > div > svg {
+  color: var(--ui-color-action);
+  flex-shrink: 0;
+}
+.lesson-hint-entry span {
+  display: grid;
+  gap: 4px;
+}
+.lesson-hint-entry strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ui-color-heading);
+}
+.lesson-hint-entry small {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.lesson-hint-steps {
+  padding-left: 24px;
+  list-style: decimal outside;
+}
+.lesson-hint-steps li {
+  padding: 0 0 16px 6px;
+  font-size: 14px;
+}
+.lesson-hint-steps li::marker {
+  color: var(--ui-color-action);
+  font-weight: 600;
+}
+.lesson-hint-steps .markdown {
+  font-size: 14px;
+  line-height: 1.8;
+}
+@media (max-width: 600px) {
+  .lesson-hint-entry {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

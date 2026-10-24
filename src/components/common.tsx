@@ -1,5 +1,12 @@
 import { RemotePicture } from "./AnswerPresentation";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -52,9 +59,11 @@ export function Hint({
 export const Markdown = memo(function Markdown({
   children,
   runId,
+  numberedLists = false,
 }: {
   children: string;
   runId?: string;
+  numberedLists?: boolean;
 }) {
   // React treats these renderers as component types. Recreating them on each
   // token or scroll update remounts pictures and collapses their loaded height.
@@ -67,11 +76,22 @@ export const Markdown = memo(function Markdown({
           <img src={src} alt={alt || "图片"} loading="lazy" />
         ),
       a: ({ node: _node, ...props }) => <ExternalLink {...props} />,
+      ...(numberedLists
+        ? {
+            ul: ({
+              children,
+              className,
+            }: {
+              children?: ReactNode;
+              className?: string;
+            }) => <ol className={className}>{children}</ol>,
+          }
+        : {}),
     }),
-    [runId],
+    [runId, numberedLists],
   );
   return (
-    <div className="markdown">
+    <div className={`markdown${numberedLists ? " numbered-exercise" : ""}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {children}
       </ReactMarkdown>

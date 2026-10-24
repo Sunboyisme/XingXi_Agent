@@ -11,6 +11,8 @@ export function CreationPage({
   busy,
   children,
   actions,
+  className = "",
+  footerNote,
 }: {
   title: string;
   description: string;
@@ -19,13 +21,15 @@ export function CreationPage({
   busy?: boolean;
   children: ReactNode;
   actions: ReactNode;
+  className?: string;
+  footerNote?: string;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     heading.current?.focus();
   }, []);
   return (
-    <section className="creation-page" aria-label={title}>
+    <section className={`creation-page ${className}`} aria-label={title}>
       <div className="creation-page-scroll">
         <div className="creation-page-inner">
           <Button
@@ -37,7 +41,7 @@ export function CreationPage({
             <ArrowLeft size={16} />
             {backLabel}
           </Button>
-          <header>
+          <header className="creation-page-heading">
             <h1 ref={heading} tabIndex={-1}>
               {title}
             </h1>
@@ -47,7 +51,10 @@ export function CreationPage({
         </div>
       </div>
       <footer className="creation-page-footer">
-        <div>{actions}</div>
+        <div>
+          {footerNote && <p className="creation-footer-note">{footerNote}</p>}
+          {actions}
+        </div>
       </footer>
     </section>
   );

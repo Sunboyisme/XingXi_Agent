@@ -6,13 +6,13 @@ import {
   BookOpen,
   Check,
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   ArrowUp,
   Compass,
   FileQuestion,
   GraduationCap,
   Loader2,
+  Lightbulb,
   Plus,
   PanelLeftClose,
   PanelLeftOpen,
@@ -135,7 +135,6 @@ export function LearningPage({
     conflict: draftConflict,
     resolveConflict: resolveDraftConflict,
   } = useLearningDraft(nodeId, lesson, { session, onError: setError });
-  const [hints, setHints] = useState(false);
   const [answerExpanded, setAnswerExpanded] = useState(false);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [removedGoalIds, setRemovedGoalIds] = useState<Set<string>>(
@@ -322,7 +321,6 @@ export function LearningPage({
     setTurns([]);
     setAnswerExpanded(false);
     setLearningStream(null);
-    setHints(false);
     if (nodeId)
       Promise.all([
         api<Lesson | null>(
@@ -577,7 +575,7 @@ export function LearningPage({
           foundation,
           use_beginner_defaults: useBeginnerDefaults,
           outcome,
-          weekly_minutes: weeklyMinutes ? Number(weeklyMinutes) : null,
+          weekly_minutes: weeklyMinutes.trim() ? Number(weeklyMinutes) : null,
           target_date: targetDate || null,
         },
       );
@@ -691,6 +689,11 @@ export function LearningPage({
         evidence?: string;
       }
     | undefined;
+  const weeklyMinutesInvalid =
+    Boolean(weeklyMinutes.trim()) &&
+    (!/^\d+$/.test(weeklyMinutes.trim()) ||
+      Number(weeklyMinutes) < 1 ||
+      Number(weeklyMinutes) > 10080);
   const lessonMaterial = lesson ? (
     <>
       {" "}
@@ -702,25 +705,34 @@ export function LearningPage({
             <h2>现在轮到你试一试</h2>
           </div>
         </div>
-        <Markdown>{lesson.exercise}</Markdown>
+        <Markdown numberedLists>{lesson.exercise}</Markdown>
         <div className="exercise-criteria">
           <strong>检查标准</strong>
-          <p>{lesson.criteria}</p>
+          <Markdown numberedLists>{lesson.criteria}</Markdown>
         </div>
         {lesson.hints.length > 0 && (
-          <>
-            <button className="text-button" onClick={() => setHints(!hints)}>
-              {hints ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              需要一点提示
-            </button>
-            {hints && (
-              <ul className="hint-list">
-                {lesson.hints.map((hint, i) => (
-                  <li key={i}>{hint}</li>
+          <div className="lesson-hint-entry">
+            <div>
+              <Lightbulb size={18} />
+              <span>
+                <strong>需要一点思路？</strong>
+                <small>先看提示，再试着自己回答。</small>
+              </span>
+            </div>
+            <DetailDialog
+              title="练习提示"
+              label="查看提示"
+              description="这些思路帮助你开始，不会替代你的实际回答。"
+            >
+              <ol className="lesson-hint-steps">
+                {lesson.hints.map((hint, index) => (
+                  <li key={index}>
+                    <Markdown>{hint}</Markdown>
+                  </li>
                 ))}
-              </ul>
-            )}
-          </>
+              </ol>
+            </DetailDialog>
+          </div>
         )}
       </section>{" "}
     </>
@@ -737,6 +749,8 @@ export function LearningPage({
       )}
       {open ? (
         <CreationPage
+          className="learning-goal-creation"
+          footerNote="填写主题与基础即可开始，时间安排之后也能调整。"
           title={editingGoalId ? "调整学习目标" : "你想学什么？"}
           description={
             editingGoalId
@@ -759,10 +773,7 @@ export function LearningPage({
                 disabled={
                   !title.trim() ||
                   busy ||
-                  (Boolean(weeklyMinutes) &&
-                    (!Number.isInteger(Number(weeklyMinutes)) ||
-                      Number(weeklyMinutes) < 1 ||
-                      Number(weeklyMinutes) > 10080)) ||
+                  weeklyMinutesInvalid ||
                   (!useBeginnerDefaults &&
                     (!objective.trim() || !foundation.trim()))
                 }
@@ -779,98 +790,131 @@ export function LearningPage({
           }
         >
           {error && <ErrorNotice message={error} />}
-          <div className="form-field">
-            <Label htmlFor="goal-title">学习主题</Label>
-            <Input
-              id="goal-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例如：家常菜、养猫、前端开发、某款游戏"
-            />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="goal-objective">你希望学到什么程度</Label>
-            <Textarea
-              id="goal-objective"
-              value={objective}
-              onChange={(e) => setObjective(e.target.value)}
-              rows={3}
-              placeholder="例如：能独立做出三道日常晚餐，知道如何安排步骤。"
-            />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="goal-foundation">目前的基础与相关背景</Label>
-            <Textarea
-              id="goal-foundation"
-              value={foundation}
-              onChange={(e) => setFoundation(e.target.value)}
-              rows={3}
-              placeholder="已经会什么，在哪些地方容易卡住？"
-            />
-          </div>
-          <label className="learning-beginner-choice">
-            <input
-              type="checkbox"
-              checked={useBeginnerDefaults}
-              onChange={(event) => setUseBeginnerDefaults(event.target.checked)}
-            />
-            不确定怎么填写，按零基础入门安排未填写的部分
-          </label>
-
-          <section className="plain-section">
-            <header>
-              <h2>更多安排</h2>
-              <p>成果、时间与日期可按需填写。</p>
-            </header>
-            <div className="creation-optional-body">
-              {" "}
+          <div className="learning-goal-form">
+            <section
+              className="learning-goal-main"
+              aria-labelledby="goal-direction-heading"
+            >
+              <header className="goal-form-section-heading">
+                <span>01</span>
+                <div>
+                  <h2 id="goal-direction-heading">学习方向</h2>
+                  <p>你想做成什么，现在从哪里开始。</p>
+                </div>
+              </header>
               <div className="form-field">
-                <Label htmlFor="goal-outcome">希望做出的具体成果（可选）</Label>
-                <Textarea
-                  id="goal-outcome"
-                  rows={2}
-                  value={outcome}
-                  onChange={(event) => setOutcome(event.target.value)}
-                  placeholder="例如：独立完成一份销售数据汇总表。"
+                <Label htmlFor="goal-title">想学什么</Label>
+                <Input
+                  id="goal-title"
+                  value={title}
+                  maxLength={200}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="例如：养猫、家常菜、前端开发"
                 />
               </div>
-              <div className="learning-goal-options">
-                <div className="form-field">
-                  <Label htmlFor="goal-weekly-minutes">
-                    每周可用分钟（可选）
-                  </Label>
+              <div className="form-field">
+                <Label htmlFor="goal-objective">希望学会后能做什么</Label>
+                <Textarea
+                  id="goal-objective"
+                  value={objective}
+                  onChange={(event) => setObjective(event.target.value)}
+                  rows={3}
+                  placeholder="例如：能照顾好刚到家的猫，知道每天要做什么。"
+                />
+              </div>
+              <div className="form-field">
+                <Label htmlFor="goal-foundation">目前的基础</Label>
+                <Textarea
+                  id="goal-foundation"
+                  value={foundation}
+                  onChange={(event) => setFoundation(event.target.value)}
+                  rows={3}
+                  placeholder="例如：第一次养猫，家里已经有一只猫。"
+                />
+              </div>
+              <button
+                type="button"
+                className={`learning-default-choice ${useBeginnerDefaults ? "is-selected" : ""}`}
+                aria-pressed={useBeginnerDefaults}
+                onClick={() => setUseBeginnerDefaults((value) => !value)}
+              >
+                <span className="learning-choice-indicator">
+                  {useBeginnerDefaults && <Check size={14} />}
+                </span>
+                <span>
+                  <strong>还不确定？先按零基础安排</strong>
+                  <small>未填写的目标与基础由 XiaoXi 按入门方向补充。</small>
+                </span>
+              </button>
+            </section>
+            <aside
+              className="learning-goal-preferences"
+              aria-labelledby="goal-pace-heading"
+            >
+              <header className="goal-form-section-heading">
+                <span>02</span>
+                <div>
+                  <h2 id="goal-pace-heading">按你的节奏</h2>
+                  <p>以下可选，之后也可以调整。</p>
+                </div>
+              </header>
+              <div className="form-field">
+                <Label htmlFor="goal-outcome">想完成的小成果</Label>
+                <Textarea
+                  id="goal-outcome"
+                  rows={3}
+                  value={outcome}
+                  onChange={(event) => setOutcome(event.target.value)}
+                  placeholder="例如：整理一份适合我家猫的日常照护清单。"
+                />
+              </div>
+              <div className="form-field">
+                <Label htmlFor="goal-weekly-minutes">每周愿意投入多久</Label>
+                <div className="goal-time-input">
                   <Input
                     id="goal-weekly-minutes"
-                    type="number"
-                    min={1}
-                    max={10080}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
                     value={weeklyMinutes}
                     onChange={(event) => setWeeklyMinutes(event.target.value)}
-                    placeholder="例如：120"
+                    placeholder="120"
+                    aria-describedby={
+                      weeklyMinutesInvalid
+                        ? "goal-time-error"
+                        : "goal-time-unit"
+                    }
+                    aria-invalid={weeklyMinutesInvalid}
                   />
+                  <span id="goal-time-unit">分钟 / 周</span>
                 </div>
-                <div className="form-field">
-                  <Label htmlFor="goal-target-date">目标日期（可选）</Label>
-                  <DateTimePicker
-                    id="goal-target-date"
-                    dateOnly
-                    label="目标日期"
-                    value={targetDate}
-                    onChange={setTargetDate}
-                  />
-                  {targetDate && (
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setTargetDate("")}
-                    >
-                      清除日期
-                    </button>
-                  )}
-                </div>
+                {weeklyMinutesInvalid && (
+                  <p className="goal-field-error" id="goal-time-error">
+                    请填写 1 至 10080 的整数分钟，或留空。
+                  </p>
+                )}
               </div>
-            </div>
-          </section>
+              <div className="form-field">
+                <Label htmlFor="goal-target-date">希望什么时候达成</Label>
+                <DateTimePicker
+                  id="goal-target-date"
+                  dateOnly
+                  label="目标日期"
+                  value={targetDate}
+                  onChange={setTargetDate}
+                />
+                {targetDate && (
+                  <button
+                    type="button"
+                    className="text-button goal-clear-date"
+                    onClick={() => setTargetDate("")}
+                  >
+                    清除日期
+                  </button>
+                )}
+              </div>
+            </aside>
+          </div>
         </CreationPage>
       ) : !goal ? (
         <>
@@ -1239,7 +1283,7 @@ export function LearningPage({
                             {learningStream.fields.exercise && (
                               <>
                                 <h2>现在轮到你试一试</h2>
-                                <Markdown>
+                                <Markdown numberedLists>
                                   {learningStream.fields.exercise}
                                 </Markdown>
                               </>
@@ -1247,7 +1291,7 @@ export function LearningPage({
                             {learningStream.fields.criteria && (
                               <>
                                 <h3>检查标准</h3>
-                                <Markdown>
+                                <Markdown numberedLists>
                                   {learningStream.fields.criteria}
                                 </Markdown>
                               </>
@@ -1303,7 +1347,7 @@ export function LearningPage({
                               {learningStream.fields.next_exercise ? (
                                 <>
                                   <h4>换一道试试</h4>
-                                  <Markdown>
+                                  <Markdown numberedLists>
                                     {learningStream.fields.next_exercise}
                                   </Markdown>
                                 </>

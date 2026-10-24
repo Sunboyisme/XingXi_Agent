@@ -20,6 +20,13 @@ const labels: Record<string, string> = {
   conversations: "对话",
   messages: "消息",
   memories: "记忆",
+  learning_sessions: "学习会话",
+  usage_calls: "模型调用",
+  usage_prices: "模型单价",
+  projects: "项目",
+  project_materials: "项目资料",
+  plan_day_orders: "日程排序",
+  office_files: "办公文件",
   memory_vectors: "向量",
   reminders: "提醒时间",
   calendar_events: "计划",
@@ -118,7 +125,7 @@ export function DataSettings() {
               {Object.entries(data.counts).map(([name, count]) => (
                 <div key={name}>
                   <strong>{count}</strong>
-                  <span>{labels[name] || name}</span>
+                  <span>{labels[name] || "其他记录"}</span>
                 </div>
               ))}
             </div>
@@ -252,7 +259,7 @@ export function DataSettings() {
                 {Object.entries(preview.counts).map(([name, count]) => (
                   <div key={name}>
                     <strong>{count}</strong>
-                    <span>{labels[name] || name}</span>
+                    <span>{labels[name] || "其他记录"}</span>
                   </div>
                 ))}
               </div>

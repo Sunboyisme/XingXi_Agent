@@ -777,7 +777,7 @@ class CoursePlan(BaseModel):
 
 class LessonContent(BaseModel):
     content: str = Field(min_length=1)
-    exercise: str = Field(min_length=1)
+    exercise: str = Field(min_length=1, description="需要用户回答的要求按1.、2.、3.的Markdown有序列表逐项列出，一个问题对应一个序号。")
     hints: list[str]
     criteria: str = Field(min_length=1)
 

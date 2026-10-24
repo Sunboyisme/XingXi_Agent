@@ -21,7 +21,7 @@ function FeedbackReply({ value }: { value: Record<string, unknown> }) {
       {Boolean(value.next_exercise) ? (
         <>
           <h4>换一道试试</h4>
-          <Markdown>{String(value.next_exercise)}</Markdown>
+          <Markdown numberedLists>{String(value.next_exercise)}</Markdown>
         </>
       ) : (
         Boolean(value.next_step) && (
