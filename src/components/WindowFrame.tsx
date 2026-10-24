@@ -21,6 +21,8 @@ export function WindowFrame({
   unread = 0,
   reminder = false,
   sidebarAvailable = true,
+  sidebarLabel = "侧栏",
+  sidebarControls = "chat-sidebar",
   menuActions,
 }: {
   children: ReactNode;
@@ -30,6 +32,8 @@ export function WindowFrame({
   unread?: number;
   reminder?: boolean;
   sidebarAvailable?: boolean;
+  sidebarLabel?: string;
+  sidebarControls?: string;
   menuActions?: AppMenuActions;
 }) {
   const native = isTauri();
@@ -77,12 +81,12 @@ export function WindowFrame({
           XiaoXi
         </span>
         {sidebarAvailable && (
-          <Hint label={collapsed ? "展开侧栏" : "收起侧栏"}>
+          <Hint label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}>
             <button
               className="sidebar-toggle"
-              aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+              aria-label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}
               aria-expanded={!collapsed}
-              aria-controls="chat-sidebar"
+              aria-controls={sidebarControls}
               disabled={!onToggle}
               onClick={onToggle}
             >

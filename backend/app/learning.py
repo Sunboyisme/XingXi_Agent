@@ -154,7 +154,7 @@ async def teach(state: TutorState):
         LessonContent,
         TUTOR_RULES
         + "\n本次只教当前知识点，使用中文 Markdown，清晰解释、最小示例和一个具体练习。不要直接给出练习答案。"
-        "所有需要用户回答或提交的事项必须使用 Markdown 有序列表（1.、2.、3.）逐项编号，一个问题对应一个序号；不要使用无序列表，也不要把多个独立问题藏在同一句话里。检查标准按相同序号对应题目。"
+        "所有需要用户回答或提交的事项必须使用 Markdown 有序列表（1.、2.、3.）逐项编号，一个问题对应一个序号；不要使用无序列表，也不要把多个独立问题藏在同一句话里。检查标准只放入criteria，不在content、exercise或hints泄露答案或评分标准。"
         "练习所需能力必须符合已提供的基础和前置知识；基础未知或零基础时先讲概念与用途，给无需编程或专业经验也能开始的小步骤，不直接要求复杂代码。"
         "本节练习只问一个核心问题，用户能在当前对话中用一小段回答完成；不要同时索要多份清单、多个布置或连续多日记录。旧检查标准过大时缩小为一个代表性判断，并输出相应criteria；其他内容列为可选课后实践，不是通关门槛。",
         text,
@@ -289,7 +289,7 @@ async def assess(state: TutorState):
         result["response_type"] = "discussion"
         result["passed"] = False
     if finish_requested or (not allow_followup and not result["passed"]):
-        result["next_step"] = "本节可以结束，点击“结束本节，下一节”继续；未掌握的内容留作复习。"
+        result["next_step"] = "可以点击“完成本章”继续；未掌握的内容留作复习。"
     with Session() as db:
         lesson = db.get(Lesson, state["lesson_id"])
         node = db.get(KnowledgeNode, lesson.node_id)

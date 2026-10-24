@@ -159,6 +159,8 @@ def list_continuations():
 
 
 def start_session(db, goal, value, row=None):
+    from .learning_workflows import assert_open
+    assert_open(goal.id)
     ensure_idle(db, goal.id)
     row = row or unfinished(db, goal.id)
     node = current_node(db, goal, value.node_id or (row.node_id if row else None))
@@ -272,15 +274,22 @@ def pause(session_id: str):
 
 
 @router.post("/learning/sessions/{session_id}/end", response_model=s.LearningSessionRead)
-def end(session_id: str):
+async def end(session_id: str):
+    from .learning_workflows import locks, closing_goals, stop_learning_runs
     with Session() as db:
-        row = require(db, LearningSession, session_id)
-        ensure_idle(db, row.goal_id)
-        if row.status != "ended":
-            row.status = "ended"
-            row.ended_at = now()
-            db.commit()
-        return read_session(db, row, details=True)
+        goal_id = require(db, LearningSession, session_id).goal_id
+    async with locks[f"end:{goal_id}"]:
+        closing_goals.add(goal_id)
+        try:
+            await stop_learning_runs(goal_id)
+            with Session() as db:
+                row = require(db, LearningSession, session_id)
+                if row.status != "ended":
+                    row.status, row.ended_at = "ended", now()
+                    db.commit()
+                return read_session(db, row, details=True)
+        finally:
+            closing_goals.discard(goal_id)
 
 
 @router.put("/learning/sessions/{session_id}/draft", response_model=s.LearningSessionRead)

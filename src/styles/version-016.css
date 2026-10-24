@@ -17,47 +17,6 @@
   padding-top: 16px;
   border-top: 1px solid var(--ui-color-line);
 }
-.memory-normalization-dialog[data-slot="dialog-content"] {
-  display: flex;
-  flex-direction: column;
-  width: min(760px, calc(100vw - 32px));
-  max-width: 760px;
-  max-height: calc(100dvh - 48px);
-}
-.memory-normalization-list {
-  min-height: 0;
-  overflow-y: auto;
-  display: grid;
-  gap: 12px;
-}
-.memory-normalization-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 14px;
-}
-.memory-normalization-item > [data-slot="checkbox"] {
-  flex-shrink: 0;
-  margin-top: 3px;
-}
-.memory-normalization-item > span {
-  min-width: 0;
-}
-.memory-normalization-item p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 4px 0 10px;
-}
-.memory-normalization-item p:last-child {
-  margin-bottom: 0;
-}
-.memory-normalization-item small,
-.memory-normalization-notice {
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-}
 .model-dialog-status:not(:empty) {
   display: grid;
   align-items: center;

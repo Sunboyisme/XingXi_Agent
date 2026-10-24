@@ -162,7 +162,7 @@ def test_previous_export_schema_can_be_upgraded_in_staging(client, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_failed_repractice_reopens_completed_course(monkeypatch):
+async def test_failed_repractice_retains_coverage_and_marks_gap(monkeypatch):
     with db.Session() as session:
         goal = db.Goal(title="课程", objective="掌握", foundation="基础", status="completed")
         session.add(goal)
@@ -175,9 +175,9 @@ async def test_failed_repractice_reopens_completed_course(monkeypatch):
         session.commit()
         goal_id, node_id, lesson_id = goal.id, node.id, lesson.id
     async def feedback(*_, **kwargs):
-        return schemas.Feedback(passed=False, explanation="仍需练习", strengths=[], gaps=["缺口"], next_step="重练", evidence="文字")
+        return schemas.Feedback(passed=False, explanation="仍需练习", strengths=[], gaps=["缺口"], next_step="重练", evidence="文字", reference_answer="参考做法")
     monkeypatch.setattr(provider, "ask_json", feedback)
     await learning.assess({"node_id": node_id, "lesson_id": lesson_id, "submission": {"submission_id": db.uid(), "answer": "作答"}})
     with db.Session() as session:
-        assert session.get(db.Goal, goal_id).status == "active"
+        assert session.get(db.Goal, goal_id).status == "completed"
         assert session.get(db.KnowledgeNode, node_id).status == "needs_practice"

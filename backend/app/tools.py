@@ -220,7 +220,7 @@ def builtin_tools(run_id: str, conversation_id: str):
         replaces_id: str = "",
         source_quotes: list[memory.SourceQuote] | None = None,
     ) -> str:
-        """整理长期记忆。普通记忆的 evidence 逐字引用当前用户消息。用户本轮明确要求总结并记住此前信息时，设 explicit_request=true，evidence 引用本轮保存要求；先 search_conversation_history 找到历史用户原文，将各段 message_id 和逐字 quote 放入 source_quotes（最多12段），再准确总结为 content。不要求用户重新发送已有资料，不用助手建议、网页或推测补充事实。普通稳定偏好按设置保存；私密信息 risk=sensitive、推测 risk=inferred，未明确授权时等待确认；临时信息 risk=temporary 不自动保存。纠正已有信息先查记忆并传 replaces_id。"""
+        """整理长期记忆。普通记忆的 evidence 逐字引用当前用户消息。用户本轮明确要求总结并记住此前信息时，设 explicit_request=true，evidence 引用本轮保存要求；先 search_conversation_history 找到历史用户原文，将各段 message_id 和逐字 quote 放入 source_quotes（最多12段），再准确总结为 content。content 使用简洁陈述，去掉记住等命令语，优先用用户作主语；保留否定、时间和不确定性。不要求用户重新发送已有资料，不用助手建议、网页或推测补充事实。普通稳定偏好按设置保存；私密信息 risk=sensitive、推测 risk=inferred，未明确授权时等待确认；临时信息 risk=temporary 不自动保存。纠正已有信息先查记忆并传 replaces_id。"""
         result = memory.save_from_chat(
             run_id,
             conversation_id,

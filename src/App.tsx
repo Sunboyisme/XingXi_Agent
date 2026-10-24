@@ -1,3 +1,4 @@
+import { flushLearningDrafts } from "@/lib/learningLifecycle";
 import {
   lazy,
   Suspense,
@@ -18,7 +19,7 @@ import {
   Settings2,
   X,
 } from "lucide-react";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Tooltip } from "radix-ui";
@@ -58,7 +59,7 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 );
-import { ConfirmDelete, ErrorNotice } from "./components/common";
+import { ConfirmDelete, ErrorNotice, Toast } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
 import { WindowFrame } from "./components/WindowFrame";
 import { SidebarResize } from "./components/SidebarResize";
@@ -135,6 +136,30 @@ export function App() {
     localStorage.setItem("bai-sidebar-width", String(value));
   }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [learningSidebar, setLearningSidebar] = useState({ available: false, expanded: false });
+  const learningClosing = useRef(false);
+  useEffect(() => {
+    const update = (event: Event) => setLearningSidebar((event as CustomEvent).detail);
+    window.addEventListener("xiaoxi-learning-outline-state", update);
+    return () => window.removeEventListener("xiaoxi-learning-outline-state", update);
+  }, []);
+  useEffect(() => {
+    if (!isTauri() || new URLSearchParams(location.search).get("view") === "reminder") return;
+    const unlisten = listen<boolean>("xiaoxi-close-learning", async (event) => {
+      if (learningClosing.current) return;
+      learningClosing.current = true;
+      try {
+        await flushLearningDrafts();
+        await api("/learning/sessions/end-all", "POST");
+        window.dispatchEvent(new Event("xiaoxi-learning-ended"));
+        await invoke("finish_learning_close", { quit: event.payload });
+      } catch (cause) {
+        setError(`结束学习未完成，窗口已保留：${(cause as Error).message}`);
+        await getCurrentWindow().show(); await getCurrentWindow().setFocus();
+      } finally { learningClosing.current = false; }
+    });
+    return () => { void unlisten.then((stop) => stop()); };
+  }, []);
   const [page, setPage] = useState<Page>("chat");
   const [calendarEventId, setCalendarEventId] = useState<string>();
   const [planAgenda, setPlanAgenda] = useState<PendingAgenda>();
@@ -599,9 +624,11 @@ export function App() {
     );
   return (
     <WindowFrame
-      collapsed={sidebarCollapsed}
-      sidebarAvailable={page === "chat"}
-      onToggle={page === "chat" ? toggleSidebar : undefined}
+      collapsed={page === "learning" ? !learningSidebar.expanded : sidebarCollapsed}
+      sidebarAvailable={page === "chat" || (page === "learning" && learningSidebar.available)}
+      sidebarLabel={page === "learning" ? "课程目录" : "侧栏"}
+      sidebarControls={page === "learning" ? "course-outline" : "chat-sidebar"}
+      onToggle={page === "chat" ? toggleSidebar : page === "learning" ? () => window.dispatchEvent(new Event("xiaoxi-toggle-learning-outline")) : undefined}
       menuActions={{
         newChat: startNewChat,
         newLearning: () => navigate("learning", true),
@@ -613,6 +640,7 @@ export function App() {
       onReminders={() => setNotificationOpen(true)}
       unread={unread}
     >
+      {error && <Toast tone="error" message={error} onClose={() => setError("")} />}
       <div
         className={`app-shell ${sidebarCollapsed || page !== "chat" ? "sidebar-collapsed" : ""}`}
         style={
@@ -855,7 +883,7 @@ export function App() {
             <DialogHeader>
               <DialogTitle>你的个人空间</DialogTitle>
               <DialogDescription>
-                XiaoXi · 0.1.7{import.meta.env.DEV ? " 开发版" : ""}
+                XiaoXi · 0.1.8{import.meta.env.DEV ? " 开发版" : ""}
               </DialogDescription>
             </DialogHeader>
             <div className="about-copy">

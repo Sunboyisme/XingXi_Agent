@@ -282,6 +282,7 @@ export function ModelPricing({ onBack }: { onBack: () => void }) {
                   </label>
                 )}
               </div>
+              {kind !== "images" && <p className="usage-cache-help">缓存读取指命中服务商缓存的输入用量，缓存写入指建立缓存的输入用量。是否单列由服务商决定；不清楚可留空，估算时沿用输入单价。</p>}
               <div className="usage-price-grid">
                 {rateFields.map((field) => (
                   <div className="usage-rate-field" key={field.key}>

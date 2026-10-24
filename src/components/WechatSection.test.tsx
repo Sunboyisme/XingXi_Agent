@@ -80,5 +80,6 @@ test("turning on reminders is explicit and delivery acceptance is qualified", as
       reminders_enabled: true,
     }),
   );
-  expect(screen.getByText("微信接口已接受")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /最近投递/ }));
+  expect(await screen.findByText("微信接口已接受")).toBeTruthy();
 });

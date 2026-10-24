@@ -1263,14 +1263,14 @@ export function CalendarPage({
                 <div className="plan-occurrence-content">
                   {eventButton(event, dayList)}
                 </div>
-                <Hint label={isRepeating(event) ? "取消本次安排" : "删除计划"}>
+                <Hint label={isRepeating(event) ? "删除单日计划安排" : "删除计划"}>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     disabled={busy}
                     className="plan-agenda-delete"
-                    aria-label={`${isRepeating(event) ? "取消本次" : "删除"} ${event.title}`}
+                    aria-label={`${isRepeating(event) ? "删除单日计划" : "删除"} ${event.title}`}
                     onClick={() =>
                       isRepeating(event)
                         ? setCancelling(event)
@@ -1695,30 +1695,6 @@ export function CalendarPage({
               )}
             </fieldset>
             <DialogFooter>
-              {editing && editing.status !== "ended" && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      if (await complete(editing)) setEditor(false);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  <Check size={15} />
-                  {["completed", "cancelled"].includes(editing.status)
-                    ? editing.recurrence !== "none"
-                      ? "恢复本次"
-                      : "恢复事项"
-                    : editing.recurrence !== "none"
-                      ? "完成本次"
-                      : "完成事项"}
-                </Button>
-              )}
               {editing &&
                 isRepeating(editing) &&
                 editing.status === "planned" && (
@@ -1732,7 +1708,7 @@ export function CalendarPage({
                     }}
                   >
                     <X size={15} />
-                    取消本次
+                    删除单日计划
                   </Button>
                 )}
               {editing && (
@@ -1743,7 +1719,7 @@ export function CalendarPage({
                   disabled={busy}
                 >
                   <Trash2 size={15} />
-                  {editing.recurrence !== "none" ? "结束整个系列" : "删除"}
+                  {editing.recurrence !== "none" ? "删除整个计划" : "删除"}
                 </Button>
               )}
               <Button
@@ -1760,9 +1736,9 @@ export function CalendarPage({
       </Dialog>
       <ConfirmDelete
         open={Boolean(cancelling)}
-        title="取消这一次安排？"
-        description="仅取消所选这一次及其提醒，其他日期继续按原规则执行。取消后可在当天事项中恢复本次。"
-        label="取消本次"
+        title="删除这一天的计划？"
+        description="仅取消所选这一次及其提醒，其他日期继续按原规则执行。删除后可在当天事项中恢复本次。"
+        label="删除单日计划"
         cancelLabel="保留本次"
         error={error}
         onClose={() => setCancelling(null)}
@@ -1781,7 +1757,7 @@ export function CalendarPage({
             setDayList(day);
             setAgendaTab("repeat");
             setAgendaNotice(
-              `已取消本次「${cancelling.title}」，可点击恢复按钮恢复。`,
+              `已删除单日计划「${cancelling.title}」，可点击恢复按钮恢复。`,
             );
             await Promise.all([
               load(),
@@ -1796,7 +1772,7 @@ export function CalendarPage({
         open={Boolean(deleting)}
         title={
           deleting?.recurrence !== "none"
-            ? "结束这个重复系列？"
+            ? "删除整个重复计划？"
             : "删除这项计划？"
         }
         description={
@@ -1806,11 +1782,11 @@ export function CalendarPage({
         }
         note={
           deleting?.recurrence !== "none"
-            ? "如果只想完成这一次，请返回计划并使用「完成本次」。"
+            ? "仅删除某一天请使用「删除单日计划」，已完成历史会保留。"
             : undefined
         }
         cancelLabel={deleting?.recurrence !== "none" ? "保留系列" : "取消"}
-        label={deleting?.recurrence !== "none" ? "结束系列" : "删除计划"}
+        label={deleting?.recurrence !== "none" ? "删除整个计划" : "删除计划"}
         error={error}
         onClose={() => setDeleting(null)}
         onConfirm={async () => {

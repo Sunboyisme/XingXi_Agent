@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Tabs } from "radix-ui";
-import { BellPlus, History, Pause, Settings2, Square } from "lucide-react";
+import { BellPlus, History, Pause, Settings2, Square, RotateCcw, Check } from "lucide-react";
+import type { Review } from "@/lib/learningWorkflows";
 import { api, type Goal } from "@/lib/api";
 import { type LearningSession, learningDate } from "@/lib/learningSessions";
 import { Button } from "./ui/button";
@@ -29,6 +30,9 @@ export function LearningSessionPanel({
   onEnd,
   onEdit,
   onReviewReminder,
+  onReview,
+  ending = false,
+  onComplete,
 }: {
   goal: Goal;
   session: LearningSession | null;
@@ -37,11 +41,15 @@ export function LearningSessionPanel({
   onEnd: () => void;
   onEdit: () => void;
   onReviewReminder?: () => void;
+  onReview: () => void;
+  ending?: boolean;
+  onComplete?: () => void;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<LearningSession[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [selected, setSelected] = useState<LearningSession | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [error, setError] = useState("");
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -94,10 +102,12 @@ export function LearningSessionPanel({
     setLoadingDetail(true);
     setError("");
     setSelected(null);
-    api<LearningSession>(`/learning/sessions/${selectedId}`)
-      .then((value) => {
+    Promise.all([api<LearningSession>(`/learning/sessions/${selectedId}`),
+      api<Review[]>(`/learning/reviews?goal_id=${goal.id}&session_id=${selectedId}`)])
+      .then(([value, savedReviews]) => {
         if (detailRequest.current === request) {
           setSelected(value);
+          setReviews(savedReviews);
           detailPane.current?.scrollTo({ top: 0 });
         }
       })
@@ -125,6 +135,12 @@ export function LearningSessionPanel({
       <Button
         variant="ghost"
         size="sm"
+        onClick={onReview}
+        disabled={busy}
+      ><RotateCcw size={14} />复习</Button>
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onReviewReminder}
         disabled={busy || !onReviewReminder}
       >
@@ -143,12 +159,13 @@ export function LearningSessionPanel({
       <Button
         size="sm"
         variant="ghost"
-        disabled={busy || !hasSession}
+        disabled={ending || !hasSession}
         onClick={onEnd}
       >
         <Square size={13} />
-        结束本次
+        {ending ? "正在结束…" : "结束学习"}
       </Button>
+      {onComplete && <Button size="sm" variant="outline" disabled={busy || ending} onClick={onComplete}><Check size={14} />完成本章</Button>}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="learning-history-dialog">
           <DialogHeader>
@@ -243,7 +260,12 @@ export function LearningSessionPanel({
                     </Tabs.List>
                     <Tabs.Content value="conversation">
                       <LearningConversation turns={selected.turns} />
-                      {!selected.turns.length && (
+                      {reviews.map((review) => <section className="learning-history-review" key={review.id}>
+                        <h3>复习 · {review.source.node_title}</h3><Markdown numberedLists>{review.exercise}</Markdown>
+                        <LearningConversation turns={review.turns} />
+                        {review.draft.answer && <><h4>未提交草稿</h4><Markdown>{review.draft.answer}</Markdown></>}
+                      </section>)}
+                      {!selected.turns.length && !reviews.length && (
                         <p className="history-empty">
                           本次还没有提交练习或开始对话。
                         </p>

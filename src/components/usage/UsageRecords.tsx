@@ -14,13 +14,13 @@ import { SoftSelect } from "../ui/soft-select";
 import { DetailDialog } from "../ui/detail-dialog";
 
 type View = "summary" | "calls" | "history";
-function Metric({ value, unknown = 0 }: { value: number; unknown?: number }) {
+function Metric({ value, unknown = 0, calls = 0 }: { value: number; unknown?: number; calls?: number }) {
   return (
     <>
-      {value.toLocaleString("zh-CN")}
+      {unknown > 0 && unknown === calls ? "—" : value.toLocaleString("zh-CN")}
       {unknown > 0 && (
         <small title={`${unknown} 次调用未返回此项用量`}>
-          （{unknown} 未知）
+          （{unknown} 次未返回）
         </small>
       )}
     </>
@@ -90,7 +90,7 @@ function SummaryTable({ groups }: { groups: UsageGroup[] }) {
             "缓存读 / 写",
             "图片",
             "已知费用",
-            "未知",
+            "费用待定调用（次）",
           ].map((label) => (
             <th scope="col" key={label}>
               {label}
@@ -118,23 +118,27 @@ function SummaryTable({ groups }: { groups: UsageGroup[] }) {
               <Metric
                 value={row.input_tokens}
                 unknown={row.unknown_input_calls}
+                calls={row.calls}
               />
             </td>
             <td>
               <Metric
                 value={row.output_tokens}
                 unknown={row.unknown_output_calls}
+                calls={row.calls}
               />
             </td>
             <td>
               <Metric
                 value={row.cached_tokens}
                 unknown={row.unknown_cached_calls}
+                calls={row.calls}
               />{" "}
               /{" "}
               <Metric
                 value={row.cache_write_tokens}
                 unknown={row.unknown_cache_write_calls}
+                calls={row.calls}
               />
             </td>
             <td>
@@ -142,6 +146,7 @@ function SummaryTable({ groups }: { groups: UsageGroup[] }) {
                 <Metric
                   value={row.image_count}
                   unknown={row.unknown_image_calls}
+                calls={row.calls}
                 />
               ) : (
                 "—"
@@ -152,7 +157,7 @@ function SummaryTable({ groups }: { groups: UsageGroup[] }) {
                 ? `${row.currency} ${formatUsageAmount(row.known_cost)}`
                 : "未知"}
             </td>
-            <td>{row.unknown_calls || "—"}</td>
+            <td title="未计入费用总额的调用次数；可在调用明细查看缺少单价或用量的原因">{row.unknown_calls || "—"}</td>
           </tr>
         ))}
       </tbody>

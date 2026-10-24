@@ -3,14 +3,12 @@ import { useEffect, useState } from "react";
 import {
   Bookmark,
   ArrowUpRight,
-  WandSparkles,
   Pencil,
   Plus,
   Search,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "./ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -60,73 +58,6 @@ export function MemoryPage({
   const [changingMode, setChangingMode] = useState(false);
   const [detailId, setDetailId] = useState("");
   const detail = memories.find((value) => value.id === detailId);
-  type Normalization = {
-    id: string;
-    revision: number;
-    before: string;
-    after: string;
-  };
-  const [normalizationOpen, setNormalizationOpen] = useState(false);
-  const [proposals, setProposals] = useState<Normalization[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [memoryNotice, setMemoryNotice] = useState("");
-  async function previewNormalization() {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const values = await api<Normalization[]>(
-        "/memories/normalization-preview",
-      );
-      setProposals(values);
-      setSelected(new Set(values.map((value) => value.id)));
-      setNormalizationOpen(true);
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function applyNormalization() {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    const failed: Normalization[] = [];
-    const errors: string[] = [];
-    let saved = 0;
-    for (const proposal of proposals.filter((value) =>
-      selected.has(value.id),
-    )) {
-      const original = memories.find((value) => value.id === proposal.id);
-      try {
-        if (!original) throw new Error("这条记忆已不存在，请刷新后重试。");
-        await api(`/memories/${proposal.id}`, "PUT", {
-          content: proposal.after,
-          category: original.category,
-          source: original.source,
-          state: "confirmed",
-          revision: proposal.revision,
-        });
-        saved++;
-      } catch (cause) {
-        failed.push(proposal);
-        errors.push((cause as Error).message);
-      }
-    }
-    setProposals(failed);
-    setSelected(new Set(failed.map((value) => value.id)));
-    setMemoryNotice(
-      `已整理 ${saved} 条记忆${failed.length ? `，${failed.length} 条未保存，请刷新后重新预览` : ""}。`,
-    );
-    if (!failed.length) setNormalizationOpen(false);
-    try {
-      await refresh();
-    } catch {
-      errors.push("列表暂未刷新，已保存的修改仍然有效。");
-    }
-    setError([...new Set(errors)].join("；"));
-    setBusy(false);
-  }
   async function changeMode(mode: Settings["memory_mode"]) {
     if (changingMode) return;
     setChangingMode(true);
@@ -205,11 +136,6 @@ export function MemoryPage({
         </Button>
       </div>
       {error && <ErrorNotice message={error} />}
-      {memoryNotice && (
-        <p className="memory-normalization-notice" role="status">
-          {memoryNotice}
-        </p>
-      )}
       {candidates.length > 0 && (
         <section className="candidate-section">
           <h2>
@@ -231,15 +157,6 @@ export function MemoryPage({
           />
         </div>
         <div className="memory-toolbar-actions">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => void previewNormalization()}
-          >
-            <WandSparkles size={15} />
-            一键整理表述
-          </Button>
           <RetrievalDebugger />
           <label className="memory-mode-control">
             <span>保存方式</span>
@@ -367,65 +284,6 @@ export function MemoryPage({
               </DialogFooter>
             </>
           )}
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={normalizationOpen}
-        onOpenChange={(value) => {
-          if (!busy) setNormalizationOpen(value);
-        }}
-      >
-        <DialogContent className="memory-normalization-dialog">
-          <DialogHeader>
-            <DialogTitle>整理记忆表述</DialogTitle>
-            <DialogDescription>
-              清理命令语，保留事实、原话和来源。勾选要保存的修改，不会调用模型。
-            </DialogDescription>
-          </DialogHeader>
-          {error && <ErrorNotice message={error} />}
-          <div className="memory-normalization-list">
-            {proposals.length ? (
-              proposals.map((proposal) => (
-                <label className="memory-normalization-item" key={proposal.id}>
-                  <Checkbox
-                    checked={selected.has(proposal.id)}
-                    disabled={busy}
-                    onCheckedChange={(checked) =>
-                      setSelected((previous) => {
-                        const next = new Set(previous);
-                        if (checked === true) next.add(proposal.id);
-                        else next.delete(proposal.id);
-                        return next;
-                      })
-                    }
-                  />
-                  <span>
-                    <small>整理前</small>
-                    <p>{proposal.before}</p>
-                    <small>整理后</small>
-                    <p>{proposal.after}</p>
-                  </span>
-                </label>
-              ))
-            ) : (
-              <p className="muted">当前没有需要整理的表述。</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setNormalizationOpen(false)}
-            >
-              关闭
-            </Button>
-            <Button
-              disabled={busy || !selected.size}
-              onClick={() => void applyNormalization()}
-            >
-              {busy ? "正在保存…" : `保存所选 ${selected.size} 条`}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={open} onOpenChange={setOpen}>

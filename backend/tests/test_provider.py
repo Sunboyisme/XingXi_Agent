@@ -19,7 +19,7 @@ async def test_invalid_json_repaired_once_and_never_saved(monkeypatch):
             )
 
     model = Model()
-    monkeypatch.setattr(provider, "model", lambda *_: model)
+    monkeypatch.setattr(provider, "model", lambda *_, **__: model)
     value = await provider.ask_json(schemas.LessonContent, "test", "test")
     assert model.calls == 2 and value.content == "解释"
     with db.Session() as session:
@@ -36,7 +36,7 @@ async def test_invalid_json_fails_after_one_repair(monkeypatch):
             return AIMessage(content="{}")
 
     model = Model()
-    monkeypatch.setattr(provider, "model", lambda *_: model)
+    monkeypatch.setattr(provider, "model", lambda *_, **__: model)
     with pytest.raises(ValueError, match="模型返回的结构不符合要求"):
         await provider.ask_json(schemas.LessonContent, "test", "test")
     assert model.calls == 2

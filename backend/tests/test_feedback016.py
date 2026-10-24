@@ -117,7 +117,7 @@ def test_project_retrieval_only_includes_own_memories_and_global_preferences():
             session.add(db.Memory(project_id=project, category=category, content=text, source="用户", state="confirmed"))
         session.commit()
     result, trace = asyncio.run(retrieval.retrieve_detailed("课程时长", project_id=first.id))
-    assert {item["content"] for item in result} == {"课程时长甲项目", "课程时长个人偏好"}
+    assert {item["content"] for item in result} == {"课程时长甲项目", "课程时长个人偏好", "课程时长全局事实"}
     assert all("乙项目" not in item["content"] for item in trace["candidates"])
 
 

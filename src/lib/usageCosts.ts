@@ -46,6 +46,8 @@ export type UsageGroup = UsageModel & {
 };
 export type UsageReport = {
   total_calls: number;
+  total_tokens: number | null;
+  unknown_token_calls: number;
   unknown_calls: number;
   currencies: Record<string, string>;
   groups: UsageGroup[];
@@ -62,6 +64,7 @@ export type UsageReport = {
   }[];
 };
 export const usagePurposes: Record<string, string> = {
+  input_suggestion: "输入建议",
   chat: "聊天",
   learning: "学习",
   complex_task: "复杂任务",

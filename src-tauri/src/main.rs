@@ -46,7 +46,17 @@ fn backend_config(state: tauri::State<'_, Backend>) -> Result<Connection, String
 
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
-    app.exit(0);
+    let _ = app.emit("xiaoxi-close-learning", true);
+}
+
+#[tauri::command]
+fn finish_learning_close(app: tauri::AppHandle, quit: bool) -> Result<(), String> {
+    if quit {
+        app.exit(0);
+        Ok(())
+    } else {
+        app.get_webview_window("main").ok_or("主窗口不存在")?.hide().map_err(|error| error.to_string())
+    }
 }
 
 #[tauri::command]
@@ -464,6 +474,7 @@ fn main() {
             backend_config,
             drop_files::read_dropped_files,
             quit_app,
+            finish_learning_close,
             pick_project_workspace,
             pick_restricted_files,
             pick_restricted_save_target,
@@ -609,7 +620,7 @@ fn main() {
                         open_main(app);
                         let _ = app.emit("bai-tray-action", event.id.as_ref());
                     }
-                    "quit" => app.exit(0),
+                    "quit" => { let _ = app.emit("xiaoxi-close-learning", true); },
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -703,7 +714,7 @@ fn main() {
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = window.hide();
+                    let _ = window.emit("xiaoxi-close-learning", false);
                 }
             }
         })

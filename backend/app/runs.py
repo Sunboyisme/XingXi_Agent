@@ -59,7 +59,8 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
                 from .usage_cost import scope
                 with Session() as db:
                     source = db.get(Run, run_id)
-                    purpose = "learning" if source.kind in {"course", "lesson", "assessment"} else "complex_task" if source.task_id else "chat"
+                    from .learning_public import LEARNING_KINDS
+                    purpose = "learning" if source.kind in LEARNING_KINDS else "complex_task" if source.task_id else "chat"
                 with scope(run_id=run_id, purpose=purpose):
                     result = await operation()
             with Session() as db:

@@ -464,6 +464,15 @@ async def _generate(run_id, conversation_id, operation, name, format, **kwargs):
     }
 
 
+def markdown_preview(raw):
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("gb18030")
+    return {"kind": "markdown", "content": text[:400000], "truncated": len(text) > 400000,
+            "notice": "Markdown 内容预览；下载可获取原文件"}
+
+
 async def preview_artifact(key, page=1):
     path, row = artifacts.file_record(key)
     raw = path.read_bytes()
@@ -472,6 +481,8 @@ async def preview_artifact(key, page=1):
         raise ValueError("预览文件超过 20 MB，仍可下载原文件")
     if extension == ".pdf":
         return await worker("pdf_page", data=base64.b64encode(raw).decode(), page=page)
+    if extension == ".md":
+        return markdown_preview(raw)
     result = await worker(
         "parse",
         data=base64.b64encode(raw).decode(),

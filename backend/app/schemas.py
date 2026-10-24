@@ -269,13 +269,6 @@ class WechatTestMessage(BaseModel):
     request_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
 
 
-class MemoryNormalizationRead(BaseModel):
-    id: str
-    revision: int
-    before: str
-    after: str
-
-
 class WechatOptions(BaseModel):
     enabled: bool
     reminders_enabled: bool = False
@@ -560,7 +553,6 @@ class NodeRead(RecordRead):
     objective: str
     prerequisites: list[str]
     exercise_type: str
-    criteria: str
     status: str
     review_at: str | None
 
@@ -584,10 +576,15 @@ class LessonRead(RecordRead):
     content: str
     exercise: str
     hints: list[str]
-    criteria: str
     feedback: dict
     state: str
     session_id: str | None = None
+
+    @field_validator("feedback")
+    @classmethod
+    def public_feedback(cls, value):
+        from .learning_public import public
+        return public(value)
 
 
 class LearningTurnRead(RecordRead):
@@ -597,6 +594,12 @@ class LearningTurnRead(RecordRead):
     attachment_ids: list[str]
     feedback: dict
     session_id: str | None = None
+
+    @field_validator("feedback")
+    @classmethod
+    def public_feedback(cls, value):
+        from .learning_public import public
+        return public(value)
 
 
 class Submission(BaseModel):

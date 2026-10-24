@@ -1,20 +1,12 @@
-import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { FolderOpen, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, FolderOpen, RefreshCw, Trash2, Upload, CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
 import { api, fetchApi, type Conversation, type Project } from "@/lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
 import { CreationPage } from "./CreationPage";
-import { ConfirmDelete, ErrorNotice } from "./common";
+import { ConfirmDelete, ErrorNotice, Hint } from "./common";
 import { FileCard } from "./OfficeFiles";
 import { Picture } from "./ImageAttachments";
 import "@/styles/projects-workspace.css";
@@ -43,6 +35,14 @@ export function materialStatus(item: ProjectMaterial) {
       : item.file_status === "failed"
         ? item.error || "解析失败"
         : "正在解析…";
+}
+
+function MaterialState({ item }: { item: ProjectMaterial }) {
+  const label = materialStatus(item);
+  return <Hint label={label}><span className="project-material-state" data-state={item.file_status} role="img" aria-label={`资料状态：${label}`} tabIndex={0}>
+    {item.file_status === "ready" ? <CheckCircle2 size={15} />
+      : ["queued", "parsing"].includes(item.file_status) ? <Loader2 size={15} className="spin" /> : <CircleAlert size={15} />}
+  </span></Hint>;
 }
 
 export function ProjectManagement({
@@ -88,14 +88,15 @@ export function ProjectManagement({
   const editorSequence = useRef(0);
   const handledRequest = useRef<ProjectManagementRequest | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const current = conversations.find((item) => item.id === currentId);
   const libraryRef = useRef(library);
   libraryRef.current = library;
   const editorOpen = editing !== undefined;
 
   useEffect(() => {
-    onEditorOpenChange?.(editorOpen);
-  }, [editorOpen, onEditorOpenChange]);
+    onEditorOpenChange?.(editorOpen || Boolean(library));
+  }, [editorOpen, library, onEditorOpenChange]);
   useEffect(() => {
     if (!request) {
       editorSequence.current++;
@@ -107,6 +108,7 @@ export function ProjectManagement({
     if (!request || request === handledRequest.current || busy) return;
     const project = projects.find((item) => item.id === request.id);
     if (request.action !== "create" && !project) return;
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     handledRequest.current = request;
     editorSequence.current++;
     sequence.current++;
@@ -269,6 +271,13 @@ export function ProjectManagement({
     });
   }
 
+  function removeAction(item: ProjectMaterial) {
+    return !batch && <Button size="sm" variant="ghost" disabled={busy}
+      aria-label={`移除项目资料 ${item.name}`} onClick={() => void remove([item.id])}>
+      <Trash2 size={13} />移除
+    </Button>;
+  }
+
   return (
     <>
       {error && !editorOpen && !library && !deleting && !confirmBatch && (
@@ -279,7 +288,7 @@ export function ProjectManagement({
       {editorOpen && (
         <CreationPage
           title={editing ? "编辑项目" : "新建项目"}
-          description="为一件事留一个专属空间，把相关对话与资料放在一起。"
+          description="一个项目的专属空间，相关的对话和资料都会作为 XiaoXi 的参考内容。"
           backLabel="返回"
           onBack={closeEditor}
           busy={busy}
@@ -397,24 +406,16 @@ export function ProjectManagement({
           });
         }}
       />
-      <Dialog
-        open={Boolean(library)}
-        onOpenChange={(open) => {
-          if (!open && !busy) {
-            sequence.current++;
-            setLibrary(null);
-            setSelected([]);
-            setConfirmBatch(false);
-          }
-        }}
-      >
-        <DialogContent className="project-library project-library-shared">
-          <DialogHeader>
-            <DialogTitle>{library?.name} · 项目资料</DialogTitle>
-            <DialogDescription>
-              保存独立副本，同项目聊天可读取；删除原聊天不会删除这里的资料。
-            </DialogDescription>
-          </DialogHeader>
+      {library && <section className="project-library-page" aria-label="项目资料库">
+          <header className="project-library-page-header">
+            <Button variant="ghost" disabled={busy} onClick={() => {
+              sequence.current++; setLibrary(null); setSelected([]); setConfirmBatch(false);
+              requestAnimationFrame(() => returnFocus.current?.focus({ preventScroll: true }));
+            }}><ArrowLeft size={16} />返回</Button>
+            <h1>{library.name} · 项目资料</h1>
+            <p>保存独立副本，同项目对话可读取。</p>
+          </header>
+          <div className="project-library project-library-shared">
           <div className="project-library-actions">
             <input
               ref={fileInput}
@@ -528,28 +529,17 @@ export function ProjectManagement({
                     <div className="project-image-material">
                       <Picture id={item.file_id} name={item.name} />
                       <span>{item.name}</span>
+                      <MaterialState item={item} />
+                      {removeAction(item)}
                     </div>
                   ) : (
                     <FileCard
                       file={{ id: item.file_id, name: item.name }}
                       upload
+                      status={<MaterialState item={item} />}
+                      trailingAction={removeAction(item)}
                     />
                   )}
-                  <div className="project-material-meta">
-                    <span>{materialStatus(item)}</span>
-                    {!batch && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        aria-label={`移除项目资料 ${item.name}`}
-                        onClick={() => void remove([item.id])}
-                      >
-                        <Trash2 size={13} />
-                        移除
-                      </Button>
-                    )}
-                  </div>
                 </div>
               </article>
             ))}
@@ -559,16 +549,7 @@ export function ProjectManagement({
           </div>
           {sourceError && <p role="status">{sourceError}</p>}
           {sources.length > 0 && (
-            <DetailDialog
-              title="从当前聊天加入资料"
-              label={
-                <>
-                  <FolderOpen size={14} />
-                  从当前聊天加入
-                </>
-              }
-              className="project-source-files"
-            >
+            <section className="project-source-files"><h2>从当前聊天加入资料</h2>
               {sources.map((item) => (
                 <div key={item.id}>
                   <span>{item.name}</span>
@@ -593,10 +574,10 @@ export function ProjectManagement({
                   </Button>
                 </div>
               ))}
-            </DetailDialog>
+            </section>
           )}
-        </DialogContent>
-      </Dialog>
+          </div>
+      </section>}
       <ConfirmDelete
         open={confirmBatch}
         title={`移除选中的 ${selected.length} 项资料？`}

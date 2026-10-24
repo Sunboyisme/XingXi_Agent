@@ -800,23 +800,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/memories/normalization-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Memory Normalization Preview */
-        get: operations["memory_normalization_preview_api_v1_memories_normalization_preview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/memories/{memory_id}": {
         parameters: {
             query?: never;
@@ -2090,6 +2073,228 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/learning/intakes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Intake */
+        post: operations["create_intake_api_v1_learning_intakes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/intakes/{intake_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Intake */
+        get: operations["get_intake_api_v1_learning_intakes__intake_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/intakes/{intake_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Intake Draft */
+        put: operations["intake_draft_api_v1_learning_intakes__intake_id__draft_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/intakes/{intake_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Intake Summary */
+        put: operations["intake_summary_api_v1_learning_intakes__intake_id__summary_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/intakes/{intake_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Intake Message */
+        post: operations["intake_message_api_v1_learning_intakes__intake_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/intakes/{intake_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Intake */
+        post: operations["confirm_intake_api_v1_learning_intakes__intake_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Reviews */
+        get: operations["list_reviews_api_v1_learning_reviews_get"];
+        put?: never;
+        /** Create Review */
+        post: operations["create_review_api_v1_learning_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Review */
+        get: operations["get_review_api_v1_learning_reviews__review_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/reviews/{review_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Review Draft */
+        put: operations["review_draft_api_v1_learning_reviews__review_id__draft_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/reviews/{review_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Review */
+        post: operations["submit_review_api_v1_learning_reviews__review_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/reviews/{review_id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End Review */
+        post: operations["end_review_api_v1_learning_reviews__review_id__end_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/learning/sessions/end-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End All Sessions */
+        post: operations["end_all_sessions_api_v1_learning_sessions_end_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/input-suggestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Input Suggestion */
+        post: operations["input_suggestion_api_v1_conversations__conversation_id__input_suggestion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2704,8 +2909,6 @@ export interface components {
             exercise: string;
             /** Hints */
             hints: string[];
-            /** Criteria */
-            criteria: string;
             /** Feedback */
             feedback: {
                 [key: string]: unknown;
@@ -2850,17 +3053,6 @@ export interface components {
             state: "confirmed" | "candidate";
             /** Revision */
             revision?: number | null;
-        };
-        /** MemoryNormalizationRead */
-        MemoryNormalizationRead: {
-            /** Id */
-            id: string;
-            /** Revision */
-            revision: number;
-            /** Before */
-            before: string;
-            /** After */
-            after: string;
         };
         /** MemoryRead */
         MemoryRead: {
@@ -3007,8 +3199,6 @@ export interface components {
             prerequisites: string[];
             /** Exercise Type */
             exercise_type: string;
-            /** Criteria */
-            criteria: string;
             /** Status */
             status: string;
             /** Review At */
@@ -3980,6 +4170,121 @@ export interface components {
         WechatVerify: {
             /** Code */
             code: string;
+        };
+        /** ComposerHintRead */
+        ComposerHintRead: {
+            /** Placeholder */
+            placeholder?: string | null;
+        };
+        /** IntakeDraft */
+        IntakeDraft: {
+            /**
+             * Answer
+             * @default
+             */
+            answer: string;
+            /** Revision */
+            revision: number;
+        };
+        /** IntakeForm */
+        IntakeForm: {
+            /** Summary */
+            summary: {
+                [key: string]: string;
+            };
+        };
+        /** IntakeMessage */
+        IntakeMessage: {
+            /** Message Id */
+            message_id: string;
+            /** Content */
+            content: string;
+            /**
+             * Use Beginner Defaults
+             * @default false
+             */
+            use_beginner_defaults: boolean;
+        };
+        /** IntakeRead */
+        IntakeRead: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Messages */
+            messages: {
+                [key: string]: unknown;
+            }[];
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+            /** Draft */
+            draft: string;
+            /** Draft Revision */
+            draft_revision: number;
+            /** Status */
+            status: string;
+            /** Goal Id */
+            goal_id: string | null;
+            /** Active Run Id */
+            active_run_id: string | null;
+        };
+        /** ReviewCreate */
+        ReviewCreate: {
+            /** Goal Id */
+            goal_id: string;
+            /** Session Id */
+            session_id?: string | null;
+        };
+        /** ReviewDraft */
+        ReviewDraft: {
+            /**
+             * Answer
+             * @default
+             */
+            answer: string;
+            /** Attachment Ids */
+            attachment_ids?: string[];
+            /** Revision */
+            revision: number;
+        };
+        /** ReviewRead */
+        ReviewRead: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Session Id */
+            session_id: string | null;
+            /** Node Id */
+            node_id: string;
+            /** Source */
+            source: {
+                [key: string]: unknown;
+            };
+            /** Exercise */
+            exercise: string;
+            /** Turns */
+            turns: {
+                [key: string]: unknown;
+            }[];
+            /** Draft */
+            draft: {
+                [key: string]: unknown;
+            };
+            /** Draft Revision */
+            draft_revision: number;
+            /** Status */
+            status: string;
+            /** Active Run Id */
+            active_run_id: string | null;
         };
     };
     responses: never;
@@ -5778,26 +6083,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    memory_normalization_preview_api_v1_memories_normalization_preview_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemoryNormalizationRead"][];
                 };
             };
         };
@@ -8550,6 +8835,445 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_intake_api_v1_learning_intakes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeRead"];
+                };
+            };
+        };
+    };
+    get_intake_api_v1_learning_intakes__intake_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intake_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    intake_draft_api_v1_learning_intakes__intake_id__draft_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intake_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    intake_summary_api_v1_learning_intakes__intake_id__summary_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intake_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeForm"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    intake_message_api_v1_learning_intakes__intake_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intake_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeMessage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_intake_api_v1_learning_intakes__intake_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                intake_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reviews_api_v1_learning_reviews_get: {
+        parameters: {
+            query: {
+                goal_id: string;
+                session_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_review_api_v1_learning_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_api_v1_learning_reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_draft_api_v1_learning_reviews__review_id__draft_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_review_api_v1_learning_reviews__review_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Submission"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_review_api_v1_learning_reviews__review_id__end_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_all_sessions_api_v1_learning_sessions_end_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    input_suggestion_api_v1_conversations__conversation_id__input_suggestion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComposerHintRead"];
                 };
             };
             /** @description Validation Error */

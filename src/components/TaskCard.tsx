@@ -2,6 +2,7 @@ import { DetailDialog } from "./ui/detail-dialog";
 import { useState } from "react";
 import {
   Check,
+  ArrowRight,
   ChevronDown,
   Circle,
   ClipboardList,
@@ -175,6 +176,62 @@ export function TaskCard({
               </ul>
             </div>
           )}
+        </div>
+      )}
+      {task.artifacts.length > 0 && (
+        <div className="complex-task-files">
+          <button
+            type="button"
+            className="task-files-toggle"
+            aria-expanded={filesOpen}
+            aria-controls={`task-files-${task.id}`}
+            onClick={() => setFilesOpen((value) => !value)}
+          >
+            <Files size={17} aria-hidden="true" />
+            <span>
+              <strong>
+                任务成果{" "}
+                <span className="task-files-count">{files.length}</span>
+              </strong>
+              <small>
+                {currentCount} 份当前成果
+                {files.length > currentCount
+                  ? ` · ${files.length - currentCount} 份历史成果`
+                  : ""}
+              </small>
+            </span>
+            <ChevronDown size={15} className="task-chevron" />
+          </button>
+          {filesOpen && (
+            <div className="task-artifact-list" id={`task-files-${task.id}`}>
+              {files.map((file) => (
+                <article
+                  className="task-artifact"
+                  data-current={file.current}
+                  key={file.id}
+                >
+                  <small className="task-artifact-version">
+                    {file.current ? "当前成果" : "历史成果"} · 第{" "}
+                    {file.task_revision} 版
+                  </small>
+                  {file.image ? (
+                    <>
+                      <ArtifactPicture artifact={file} />
+                      <ArtifactDownload artifact={file} />
+                    </>
+                  ) : (
+                    <FileCard file={file} />
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {error && <p role="alert">{error}</p>}
+      {(task.operations.length > 0 || (task.status === "paused" && onResume)) && (
+        <footer className="complex-task-footer">
+          <div className="complex-task-secondary-actions">
           {task.operations.length > 0 && (
             <DetailDialog
               title="实际操作记录"
@@ -246,68 +303,18 @@ export function TaskCard({
               ))}
             </DetailDialog>
           )}
-        </div>
-      )}
-      {task.artifacts.length > 0 && (
-        <div className="complex-task-files">
-          <button
-            type="button"
-            className="task-files-toggle"
-            aria-expanded={filesOpen}
-            aria-controls={`task-files-${task.id}`}
-            onClick={() => setFilesOpen((value) => !value)}
-          >
-            <Files size={17} aria-hidden="true" />
-            <span>
-              <strong>
-                任务成果{" "}
-                <span className="task-files-count">{files.length}</span>
-              </strong>
-              <small>
-                {currentCount} 份当前成果
-                {files.length > currentCount
-                  ? ` · ${files.length - currentCount} 份历史成果`
-                  : ""}
-              </small>
-            </span>
-            <ChevronDown size={15} className="task-chevron" />
-          </button>
-          {filesOpen && (
-            <div className="task-artifact-list" id={`task-files-${task.id}`}>
-              {files.map((file) => (
-                <article
-                  className="task-artifact"
-                  data-current={file.current}
-                  key={file.id}
-                >
-                  <small className="task-artifact-version">
-                    {file.current ? "当前成果" : "历史成果"} · 第{" "}
-                    {file.task_revision} 版
-                  </small>
-                  {file.image ? (
-                    <>
-                      <ArtifactPicture artifact={file} />
-                      <ArtifactDownload artifact={file} />
-                    </>
-                  ) : (
-                    <FileCard file={file} />
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      {error && <p role="alert">{error}</p>}
+          </div>
       {task.status === "paused" && onResume && (
         <Button
           size="sm"
-          variant="ghost"
+          variant="default"
           disabled={busy || saving}
           onClick={() => onResume(task.id)}
         >
-          继续任务
+          继续任务<ArrowRight size={14} />
         </Button>
+      )}
+        </footer>
       )}
     </section>
   );

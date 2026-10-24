@@ -5,17 +5,12 @@ import {
   ArrowRight,
   BookOpen,
   Check,
-  ChevronDown,
-  ChevronUp,
-  ArrowUp,
   Compass,
   FileQuestion,
   GraduationCap,
   Loader2,
   Lightbulb,
   Plus,
-  PanelLeftClose,
-  PanelLeftOpen,
   RotateCcw,
   SkipForward,
   Sparkles,
@@ -49,12 +44,10 @@ import {
 import {
   EmptyState,
   ErrorNotice,
-  ImagesInput,
   Markdown,
   nodeStatus,
   ConfirmDelete,
   Toast,
-  Hint,
 } from "./common";
 import { BaiAvatar } from "./BaiAvatar";
 import {
@@ -62,6 +55,10 @@ import {
   LearningPendingReply,
 } from "./LearningConversation";
 import { LearningSessionPanel } from "./LearningSessionPanel";
+import { LearningComposer } from "./LearningComposer";
+import { LearningIntakePage } from "./LearningIntakePage";
+import { LearningReviewPanel } from "./LearningReviewPanel";
+import { flushLearningDrafts } from "@/lib/learningLifecycle";
 
 export function LearningPage({
   goals,
@@ -152,13 +149,14 @@ export function LearningPage({
     setAnswer,
     images,
     setImages,
-    saving: savingDraft,
     flush: flushDraft,
     clearIfUnchanged: clearSubmittedDraft,
     conflict: draftConflict,
     resolveConflict: resolveDraftConflict,
   } = useLearningDraft(nodeId, lesson, { session, onError: setError });
-  const [answerExpanded, setAnswerExpanded] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const finishingSection = useRef(false);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [removedGoalIds, setRemovedGoalIds] = useState<Set<string>>(
     () => new Set(),
@@ -176,8 +174,16 @@ export function LearningPage({
     media.addEventListener("change", resize);
     return () => media.removeEventListener("change", resize);
   }, []);
+  useEffect(() => {
+    const toggle = () => setOutlineOpen((value) => !value);
+    window.addEventListener("xiaoxi-toggle-learning-outline", toggle);
+    return () => window.removeEventListener("xiaoxi-toggle-learning-outline", toggle);
+  }, []);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("xiaoxi-learning-outline-state", { detail: { available: Boolean(goalId && !open), expanded: outlineOpen } }));
+    return () => { window.dispatchEvent(new CustomEvent("xiaoxi-learning-outline-state", { detail: { available: false, expanded: false } })); };
+  }, [goalId, open, outlineOpen]);
   const answerDropTarget = useRef<HTMLDivElement>(null);
-  const answerPreviewTarget = useRef<HTMLDivElement>(null);
   const watch = useRef<AbortController | null>(null);
   const activeNode = useRef(nodeId);
   activeNode.current = nodeId;
@@ -226,6 +232,11 @@ export function LearningPage({
     setUseBeginnerDefaults(false);
     setOpen(true);
   }
+  useEffect(() => {
+    const ended = () => { watch.current?.abort(); setBusy(false); setRun(null); setReviewOpen(false); setPendingReply(null); setLearningStream(null); void reloadContinuity().catch((cause: Error) => setError(cause.message)); };
+    window.addEventListener("xiaoxi-learning-ended", ended);
+    return () => window.removeEventListener("xiaoxi-learning-ended", ended);
+  }, []);
   async function reloadContinuity(targetGoal = selectedGoalId.current) {
     if (!targetGoal) return;
     const request = ++continuityVersion.current;
@@ -350,7 +361,6 @@ export function LearningPage({
     let live = true;
     setLesson(null);
     setTurns([]);
-    setAnswerExpanded(false);
     setLearningStream(null);
     if (nodeId)
       Promise.all([
@@ -402,16 +412,19 @@ export function LearningPage({
   }
   async function changeSession(action: "pause" | "end") {
     const saved = sessionRef.current;
-    if (!saved || busy || sessionBusy || uploading) return;
+    if (!saved || (busy && action !== "end") || sessionBusy || uploading) return;
     setSessionBusy(true);
     setError("");
     try {
-      await flushDraft();
+      await flushLearningDrafts();
       const updated = await api<LearningSession>(
         `/learning/sessions/${saved.id}/${action}`,
         "POST",
       );
       if (selectedGoalId.current !== saved.goal_id) return;
+      if (action === "end") {
+        watch.current?.abort(); setBusy(false); setRun(null); setPendingReply(null); setLearningStream(null); setReviewOpen(false);
+      }
       setSession(updated);
       await reloadContinuity(saved.goal_id);
       setNotice(
@@ -469,7 +482,8 @@ export function LearningPage({
     }
   }
   async function finishSection() {
-    if (!node || !lesson || busy || sessionBusy || uploading) return;
+    if (!node || !lesson || busy || sessionBusy || uploading || finishingSection.current) return;
+    finishingSection.current = true;
     const targetGoal = goalId;
     setSessionBusy(true);
     setError("");
@@ -491,11 +505,13 @@ export function LearningPage({
           setSession(ended);
         }
         await reloadContinuity(targetGoal);
-        setNotice("课程已学完，未通过的练习保留为待复习内容。");
+        setGoalId(""); setNodeId(""); setSession(null);
+        setNotice("课程已学完，未掌握的内容保留为待复习内容。");
       }
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
+      finishingSection.current = false;
       setSessionBusy(false);
     }
   }
@@ -545,7 +561,7 @@ export function LearningPage({
           const submitted = submittedDrafts.current.get(value.id);
           if (submitted) clearSubmittedDraft(submitted);
           submittedDrafts.current.delete(value.id);
-          setAnswerExpanded(true);
+
         }
       }
     }
@@ -635,7 +651,7 @@ export function LearningPage({
           const active = values.find((x) =>
             ["queued", "running"].includes(x.status),
           );
-          if (active) void track(active, nodeId || undefined);
+          if (active && !["learning_review", "review_assessment"].includes(active.kind)) void track(active, nodeId || undefined);
         })
         .catch(() => {});
     return () => {
@@ -798,10 +814,6 @@ export function LearningPage({
           </div>
         </div>
         <Markdown numberedLists>{lesson.exercise}</Markdown>
-        <div className="exercise-criteria">
-          <strong>检查标准</strong>
-          <Markdown numberedLists>{lesson.criteria}</Markdown>
-        </div>
         {lesson.hints.length > 0 && (
           <div className="lesson-hint-entry">
             <div>
@@ -829,13 +841,8 @@ export function LearningPage({
       </section>{" "}
     </>
   ) : null;
-  const passedCount =
-    goal?.nodes.filter((value) => value.status === "passed").length ?? 0;
   const studiedCount =
     goal?.nodes.filter((value) => isStudied(value.status)).length ?? 0;
-  const courseFinished = Boolean(
-    goal?.nodes.length && studiedCount === goal.nodes.length,
-  );
   return (
     <div
       className={`learning-page ${open ? "is-editing" : goal ? "has-course" : "page-content"}`}
@@ -844,7 +851,11 @@ export function LearningPage({
       {error && (
         <Toast tone="error" message={error} onClose={() => setError("")} />
       )}
-      {open ? (
+      {open && !editingGoalId ? (
+        <LearningIntakePage onBack={() => setOpen(false)} onCreated={async (id) => {
+          const value = await api<Goal>(`/learning/goals/${id}`); await refresh(); setOpen(false); selectGoal(value);
+        }} />
+      ) : open ? (
         <CreationPage
           className="learning-goal-creation"
           footerNote="填写主题与基础即可开始，时间安排之后也能调整。"
@@ -906,7 +917,7 @@ export function LearningPage({
                   value={title}
                   maxLength={200}
                   onChange={(event) => setTitle(event.target.value)}
-                  placeholder="例如：养猫、家常菜、前端开发"
+                  placeholder="描述你想掌握的知识或技能"
                 />
               </div>
               <div className="form-field">
@@ -916,7 +927,7 @@ export function LearningPage({
                   value={objective}
                   onChange={(event) => setObjective(event.target.value)}
                   rows={3}
-                  placeholder="例如：能照顾好刚到家的猫，知道每天要做什么。"
+                  placeholder="描述学会后希望具备的能力"
                 />
               </div>
               <div className="form-field">
@@ -926,7 +937,7 @@ export function LearningPage({
                   value={foundation}
                   onChange={(event) => setFoundation(event.target.value)}
                   rows={3}
-                  placeholder="例如：第一次养猫，家里已经有一只猫。"
+                  placeholder="说说已有经验，以及还不熟悉的地方"
                 />
               </div>
               <button
@@ -962,7 +973,7 @@ export function LearningPage({
                   rows={3}
                   value={outcome}
                   onChange={(event) => setOutcome(event.target.value)}
-                  placeholder="例如：整理一份适合我家猫的日常照护清单。"
+                  placeholder="描述你希望完成的一项小成果"
                 />
               </div>
               <div className="form-field">
@@ -1137,7 +1148,7 @@ export function LearningPage({
                 </div>
                 <h2>你想学的，都可以从这里开始。</h2>
                 <p>
-                  做饭、养猫、游戏、编程……
+                  从你想掌握的知识或技能开始。
                   <br />
                   告诉XiaoXi你的目标与基础，它会陪你一步一步学。
                 </p>
@@ -1177,29 +1188,16 @@ export function LearningPage({
                 <ArrowLeft size={15} />
                 所有学习目标
               </button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="outline-toggle"
-                aria-label={outlineOpen ? "收起课程目录" : "展开课程目录"}
-                aria-expanded={outlineOpen}
-                aria-controls="course-outline"
-                onClick={() => setOutlineOpen(!outlineOpen)}
-              >
-                {outlineOpen ? (
-                  <PanelLeftClose size={17} />
-                ) : (
-                  <PanelLeftOpen size={17} />
-                )}
-                <span>目录</span>
-              </Button>
             </div>
             <LearningSessionPanel
               goal={goal}
               session={session}
-              busy={busy || sessionBusy || uploading}
+              busy={busy || sessionBusy || uploading || reviewBusy}
+              ending={sessionBusy}
+              onReview={() => { void flushDraft().then(() => setReviewOpen(true)).catch((cause: Error) => setError(cause.message)); }}
               onPause={() => void changeSession("pause")}
               onEnd={() => void changeSession("end")}
+              onComplete={node && lesson && !reviewOpen ? () => void finishSection() : undefined}
               onEdit={() => openGoalEditor(goal)}
               onReviewReminder={
                 node && lesson ? () => void reviewReminder() : undefined
@@ -1207,8 +1205,8 @@ export function LearningPage({
             />
             <div className="course-progress">
               <span>
-                进度 <strong>{studiedCount}</strong> / {goal.nodes.length} ·{" "}
-                {passedCount} 练习通过
+                进度 <strong>{studiedCount}</strong> / {goal.nodes.length}
+
               </span>
               <div
                 className="progress-track"
@@ -1247,10 +1245,11 @@ export function LearningPage({
                     <button
                       className={`outline-node ${nodeId === value.id ? "active" : ""}`}
                       aria-current={nodeId === value.id ? "step" : undefined}
-                      disabled={busy || sessionBusy}
-                      onClick={() => void switchNode(value)}
+                      disabled={busy || sessionBusy || reviewBusy}
+                      onClick={() => { setReviewOpen(false); void switchNode(value); }}
                     >
-                      <span className={`node-symbol ${value.status}`}>
+                      <span title={nodeStatus[value.status]} className={`node-symbol ${value.status}`}>
+                        <span className="sr-only">{nodeStatus[value.status]}</span>
                         {value.status === "passed" ? (
                           <Check size={13} />
                         ) : value.status === "skipped" ? (
@@ -1261,9 +1260,7 @@ export function LearningPage({
                       </span>
                       <span>
                         {value.title}
-                        {value.status !== "not_started" && (
-                          <small>{nodeStatus[value.status]}</small>
-                        )}
+
                       </span>
                     </button>
                   </div>
@@ -1279,7 +1276,8 @@ export function LearningPage({
                 删除学习目标
               </Button>
             </aside>
-            <div className="lesson-content" ref={answerDropTarget}>
+            {reviewOpen && <LearningReviewPanel goalId={goal.id} onBack={() => setReviewOpen(false)} refresh={async () => { await refresh(); await reloadContinuity(goal.id); }} onBusy={setReviewBusy} />}
+            <div className="lesson-content" ref={answerDropTarget} hidden={reviewOpen}>
               <div
                 className="lesson-scroll"
                 ref={lessonScroll}
@@ -1329,7 +1327,7 @@ export function LearningPage({
                         {run?.kind === "course"
                           ? "正在建立知识框架"
                           : run?.kind === "assessment"
-                            ? "XiaoXi 正在思考"
+                            ? "正在分析中，请稍后…"
                             : "正在准备教学"}
                         <button
                           disabled={!run || stopping}
@@ -1399,14 +1397,6 @@ export function LearningPage({
                                 </Markdown>
                               </>
                             )}
-                            {learningStream.fields.criteria && (
-                              <>
-                                <h3>检查标准</h3>
-                                <Markdown numberedLists>
-                                  {learningStream.fields.criteria}
-                                </Markdown>
-                              </>
-                            )}
                             {learningStream.fields.next_step && (
                               <Markdown>
                                 {learningStream.fields.next_step}
@@ -1422,17 +1412,10 @@ export function LearningPage({
                       {lesson &&
                       !(busy && learningStream?.stage === "lesson") ? (
                         <>
-                          {turns.length === 0 ? (
-                            lessonMaterial
-                          ) : (
-                            <DetailDialog
-                              title="讲解与练习"
-                              label="查看讲解与原练习"
-                              className="lesson-reference"
-                            >
-                              {lessonMaterial}
-                            </DetailDialog>
-                          )}
+                          <article id="learning-original-lesson" className="learning-original-lesson">
+                            <span className="message-name">XiaoXi</span>{lessonMaterial}
+                          </article>
+                          {turns.length > 0 && <button className="text-button learning-return-to-lesson" onClick={() => lessonScroll.current?.scrollTo({ top: 0, behavior: "smooth" })}>回看讲解与原练习</button>}
 
                           <LearningConversation
                             turns={turns}
@@ -1489,153 +1472,12 @@ export function LearningPage({
                   ) : null}
                 </div>
               </div>
-              {node && lesson && (
-                <div className="learning-section-navigation">
-                  <div>
-                    <strong>
-                      {courseFinished
-                        ? "本课程学习已结束"
-                        : `第 ${node.ordinal + 1} / ${goal.nodes.length} 节`}
-                    </strong>
-                    <span>
-                      {courseFinished
-                        ? `${goal.nodes.filter((value) => value.status === "needs_practice").length} 节待复习，可随时从目录回看`
-                        : "本节可以结束了，未掌握的内容会留作复习。"}
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy || sessionBusy || uploading}
-                    onClick={() =>
-                      void (courseFinished ? leaveGoal() : finishSection())
-                    }
-                  >
-                    {courseFinished
-                      ? "返回学习目标"
-                      : nextNode
-                        ? "结束本节，下一节"
-                        : "完成本课程"}
-                    <ArrowRight size={15} />
-                  </Button>
-                </div>
-              )}
               {node &&
                 lesson &&
                 ["awaiting_submission", "reviewed"].includes(lesson.state) && (
-                  <section
-                    className={`exercise-answer-dock ${answerExpanded ? "is-expanded" : "is-collapsed"}`}
-                    aria-label="练习作答区"
-                  >
-                    <button
-                      type="button"
-                      className="exercise-answer-toggle"
-                      aria-expanded={answerExpanded}
-                      aria-controls="exercise-answer-body"
-                      onClick={() => setAnswerExpanded((value) => !value)}
-                    >
-                      <span>
-                        {lesson.state === "reviewed" ? "继续对话" : "作答"}
-                        {(answer.trim() || images.length > 0) && (
-                          <small>
-                            {savingDraft ? "保存草稿中…" : "已保留草稿"}
-                          </small>
-                        )}
-                      </span>
-                      {answerExpanded ? (
-                        <ChevronDown size={15} />
-                      ) : (
-                        <ChevronUp size={15} />
-                      )}
-                    </button>
-                    <div
-                      id="exercise-answer-body"
-                      className="exercise-answer-body"
-                      hidden={!answerExpanded}
-                    >
-                      <div
-                        ref={answerPreviewTarget}
-                        className="exercise-answer-images"
-                      />
-                      <div className="exercise-answer-composer">
-                        <Textarea
-                          id="exercise-answer"
-                          aria-label="练习回答"
-                          rows={2}
-                          value={answer}
-                          onChange={(e) => setAnswer(e.target.value)}
-                          onKeyDown={(event) => {
-                            if (
-                              event.key !== "Enter" ||
-                              event.nativeEvent.isComposing ||
-                              event.keyCode === 229
-                            )
-                              return;
-                            event.preventDefault();
-                            if (event.ctrlKey || event.metaKey) {
-                              const input = event.currentTarget;
-                              const start = input.selectionStart,
-                                end = input.selectionEnd;
-                              setAnswer(
-                                answer.slice(0, start) +
-                                  "\n" +
-                                  answer.slice(end),
-                              );
-                              requestAnimationFrame(() => {
-                                input.setSelectionRange(start + 1, start + 1);
-                              });
-                            } else if (
-                              !busy &&
-                              !uploading &&
-                              (answer.trim() || images.length)
-                            )
-                              void submit();
-                          }}
-                          placeholder={
-                            lesson.state === "reviewed"
-                              ? "继续提问，或补充你的理解和练习结果…"
-                              : "写下你的理解、操作结果或代码…"
-                          }
-                          disabled={busy}
-                        />
-                        <div className="exercise-submit">
-                          <ImagesInput
-                            key={lesson.id}
-                            scopeKey={lesson.id}
-                            dropTarget={answerDropTarget}
-                            previewTarget={answerPreviewTarget}
-                            previewMode="names"
-                            images={images}
-                            onChange={(values) => {
-                              setImages(values);
-                              if (values.length) setAnswerExpanded(true);
-                            }}
-                            disabled={busy}
-                            onError={setError}
-                            onUploading={setUploading}
-                          />
-                          <Hint label={busy ? "XiaoXi 正在思考" : "发送回答"}>
-                            <Button
-                              size="icon"
-                              aria-label={busy ? "XiaoXi 正在思考" : "发送回答"}
-                              disabled={
-                                busy ||
-                                uploading ||
-                                (!answer.trim() && !images.length)
-                              }
-                              onClick={() => void submit()}
-                            >
-                              {busy ? (
-                                <Loader2 size={16} className="spin" />
-                              ) : (
-                                <ArrowUp size={18} />
-                              )}
-                            </Button>
-                          </Hint>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
+                  <LearningComposer answer={answer} onAnswer={setAnswer} images={images} onImages={setImages}
+                    busy={busy || sessionBusy} uploading={uploading} onUploading={setUploading}
+                    onError={setError} onSubmit={() => void submit()} scopeKey={lesson.id} />
                 )}
             </div>
           </div>

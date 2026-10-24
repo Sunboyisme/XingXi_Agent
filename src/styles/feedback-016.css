@@ -408,15 +408,6 @@
   padding: 12px 0;
   border-bottom: 1px solid var(--ui-color-line);
 }
-.project-material-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--ui-color-text-muted);
-}
 .project-image-material {
   display: flex;
   gap: 12px;

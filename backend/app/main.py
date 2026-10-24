@@ -15,7 +15,9 @@ from langgraph.types import Command
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
-from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, restricted_files
+from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, restricted_files, learning_workflows
+from .learning_public import LEARNING_KINDS, public as public_learning
+from . import composer_suggestions
 from . import (
     agent,
     data_transfer,
@@ -85,6 +87,7 @@ async def lifespan(app: FastAPI):
         app.state.wechat = wechat.WechatChannel()
         app.state.wechat.start()
         yield
+        await composer_suggestions.close()
         await app.state.wechat.close()
         await skills.close()
         await office.close()
@@ -99,7 +102,7 @@ async def lifespan(app: FastAPI):
         await mcp_service.manager.close()
 
 
-app = FastAPI(title="XiaoXi API", version="0.1.7", lifespan=lifespan)
+app = FastAPI(title="XiaoXi API", version="0.1.8", lifespan=lifespan)
 
 
 # Pydantic's default response includes the rejected input, including credentials.
@@ -186,11 +189,14 @@ def settings_read(db):
 
 
 def create_run(db, kind, conversation_id=None, goal_id=None, *, commit=True):
+    if kind in LEARNING_KINDS:
+        learning_workflows.assert_open(goal_id)
     query = select(store.Run).where(store.Run.status.in_(["queued", "running"]))
     query = (
         query.where(store.Run.conversation_id == conversation_id)
         if conversation_id
-        else query.where(store.Run.goal_id == goal_id)
+        else query.where(store.Run.goal_id == goal_id) if goal_id
+        else query.where(store.Run.kind == kind, store.Run.conversation_id.is_(None))
     )
     if db.scalar(query):
         raise HTTPException(409, "当前还有任务正在执行，请等待或停止后重试。")
@@ -205,7 +211,7 @@ def create_run(db, kind, conversation_id=None, goal_id=None, *, commit=True):
 
 @app.get("/api/v1/health")
 def health():
-    return {"service": "bai-agent", "version": "0.1.7"}
+    return {"service": "bai-agent", "version": "0.1.8"}
 
 
 from fastapi import APIRouter
@@ -818,7 +824,8 @@ def retry_action(db, run):
 
 def run_read(db, run):
     task = db.get(store.ComplexTask, run.task_id) if run.task_id else None
-    return s.RunRead.model_validate(run).model_copy(update={"retry_action": retry_action(db, run), "task_status": task.status if task else None})
+    return s.RunRead.model_validate(run).model_copy(update={"retry_action": retry_action(db, run), "task_status": task.status if task else None,
+        "result": public_learning(run.result) if run.kind in LEARNING_KINDS else run.result})
 
 
 @router.get("/runs/{run_id}", response_model=s.RunRead)
@@ -863,7 +870,8 @@ async def run_events(
                 ).all()
             for event in events:
                 cursor = event.id
-                yield f"id: {event.id}\ndata: {json.dumps({'kind': event.kind, 'data': event.data}, ensure_ascii=False)}\n\n"
+                data = public_learning(event.data) if run.kind in LEARNING_KINDS else event.data
+                yield f"id: {event.id}\ndata: {json.dumps({'kind': event.kind, 'data': data}, ensure_ascii=False)}\n\n"
             if run.status not in ("queued", "running"):
                 break
             if not events:
@@ -936,6 +944,7 @@ async def delete_goal(goal_id: str, request: Request, stop: bool = False, db=Dep
     threads = list(db.scalars(select(store.Lesson.graph_thread_id).where(store.Lesson.id.in_(lesson_ids))))
     image_ids = set()
     image_ids.update(learning_sessions.draft_attachment_ids(db, goal_id))
+    image_ids.update(learning_workflows.review_attachment_ids(db, goal_id))
     for ids in db.scalars(select(store.Attempt.attachment_ids).where(store.Attempt.lesson_id.in_(lesson_ids))):
         image_ids.update(ids)
     run_ids = select(store.Run.id).where(store.Run.goal_id == goal_id)
@@ -949,6 +958,7 @@ async def delete_goal(goal_id: str, request: Request, stop: bool = False, db=Dep
     for ids in db.scalars(select(store.Attempt.attachment_ids)):
         referenced.update(ids)
     referenced.update(learning_sessions.draft_attachment_ids(db))
+    referenced.update(learning_workflows.review_attachment_ids(db))
     image_ids.difference_update(referenced)
     db.execute(delete(store.Attachment).where(store.Attachment.id.in_(image_ids)))
     db.commit()
@@ -1086,7 +1096,7 @@ def complete_learning_section(node_id: str, db=Depends(database)):
     learning_sessions.ensure_idle(db, node.goal_id)
     if not learning_sessions.latest_lesson(db, node.id):
         raise HTTPException(409, "请先查看本节讲解，再结束本节学习")
-    if node.status not in ("passed", "skipped"):
+    if node.status not in ("passed", "skipped", "needs_practice"):
         node.status = "needs_practice"
         node.review_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(timespec="microseconds")
     goal = item(db, store.Goal, node.goal_id)
@@ -1110,16 +1120,6 @@ def add_memory(value: s.MemoryCreate, db=Depends(database)):
     db.add(record)
     db.commit()
     return record
-
-
-@router.get("/memories/normalization-preview", response_model=list[s.MemoryNormalizationRead])
-def memory_normalization_preview(db=Depends(database)):
-    result = []
-    for record in db.scalars(select(store.Memory).where(store.Memory.profile_id == PROFILE_ID, store.Memory.state == "confirmed").order_by(store.Memory.updated_at.desc())):
-        normalized = memory.normalize_content(record.content)
-        if normalized != record.content:
-            result.append({"id": record.id, "revision": record.revision, "before": record.content, "after": normalized})
-    return result
 
 
 @router.put("/memories/{memory_id}", response_model=s.MemoryRead)
@@ -1336,6 +1336,8 @@ async def uploaded_file_preview(file_id: str, page: int = 1):
     info=office.describe(file_id)
     if info["file_status"] not in {"ready","partial"}:
         raise HTTPException(409,info["error"] or "文件尚未解析完成")
+    if Path(info["name"]).suffix.lower() == ".md":
+        return office.markdown_preview((office.root()/f"{file_id}.bin").read_bytes())
     with store.Session() as db:
         detail=db.get(store.OfficeFile,file_id)
         if info["media_type"] != "application/pdf":
@@ -1417,6 +1419,8 @@ router.include_router(restricted_files.router(auth))
 router.include_router(features.router)
 router.include_router(projects.router)
 router.include_router(learning_sessions.router)
+router.include_router(learning_workflows.router)
 router.include_router(learning_handoff.router)
 router.include_router(usage_cost.router)
+router.include_router(composer_suggestions.router)
 app.include_router(router)

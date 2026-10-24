@@ -148,6 +148,13 @@ export function UsageCosts() {
                 </strong>
                 <p>所选日期内的调用总数</p>
               </div>
+              <div className="usage-stat">
+                <span>总计 Token 数</span>
+                <strong>{report.total_tokens?.toLocaleString("zh-CN") ?? "—"}</strong>
+                <p>{report.unknown_token_calls > 0
+                  ? `${report.unknown_token_calls} 次调用未返回完整用量，仅合计已知值`
+                  : "所选日期的已记录用量，含去重后的旧记录"}</p>
+              </div>
               <div className="usage-stat usage-stat-cost">
                 <span>已知估算费用</span>
                 {Object.entries(report.currencies).length ? (
@@ -162,22 +169,10 @@ export function UsageCosts() {
                 )}
                 <p>仅统计价格与用量齐全的调用</p>
               </div>
-              <div className="usage-stat">
-                <span>费用待确定</span>
-                <strong>
-                  {report.unknown_calls.toLocaleString("zh-CN")}
-                  <small>次</small>
-                </strong>
-                <p>
-                  {report.unknown_calls
-                    ? "缺少单价或服务商未返回完整用量"
-                    : "当前记录的费用均可估算"}
-                </p>
-              </div>
             </div>
             {report.unknown_calls > 0 && (
               <p className="usage-unknown-note">
-                未知费用未计入总额，可在“模型单价”中配置，或点击明细中的“未知”查看原因。
+                {report.unknown_calls} 次调用费用待定，尚未计入费用总额。缺少调用时的单价或完整用量时无法估算，可查看调用明细中的原因。
               </p>
             )}
           </>

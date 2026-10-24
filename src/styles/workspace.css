@@ -538,7 +538,7 @@ body,
   box-shadow: 0 0 0 3px rgb(188 141 115 / 10%);
 }
 [data-slot="input"]:focus-visible,
-textarea:not(#chat-message):focus-visible,
+textarea:not(#chat-message):not(.learning-message-input):focus-visible,
 .soft-select:focus-visible {
   outline: none;
   outline-offset: 0;

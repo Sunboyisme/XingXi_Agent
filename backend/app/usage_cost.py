@@ -466,7 +466,13 @@ def report(start_date: date | None = None, end_date: date | None = None,
                       for row in db.scalars(select(Run).where(Run.profile_id == config.PROFILE_ID,
                           Run.created_at >= start_at, Run.created_at < end_at).order_by(Run.created_at.desc()))
                       if row.id not in covered and row.usage.get("total_tokens")]
+        totals = [row.total_tokens if row.total_tokens is not None else
+                  row.input_tokens + row.output_tokens if row.input_tokens is not None and row.output_tokens is not None
+                  else None for row in rows]
+        known_totals = [value for value in totals if value is not None] + [row["total_tokens"] for row in historical]
         return {"start_date": str(start_date), "end_date": str(end_date), "total_calls": len(rows),
+            "total_tokens": sum(known_totals) if known_totals or not rows else None,
+            "unknown_token_calls": sum(value is None for value in totals),
             "unknown_calls": sum(row.estimated_cost is None for row in rows),
             "currencies": {key: format(value, "f") for key, value in currencies.items()},
             "groups": list(groups.values()), "calls": [read_call(row) for row in rows[offset:offset + limit]],

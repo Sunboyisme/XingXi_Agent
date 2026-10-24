@@ -25,7 +25,7 @@ function FeedbackReply({ value }: { value: Record<string, unknown> }) {
         </>
       ) : (
         Boolean(value.next_step) && (
-          <Markdown>{String(value.next_step)}</Markdown>
+          <Markdown>{String(value.next_step).replaceAll("结束本节，下一节", "完成本章")}</Markdown>
         )
       )}
       {!discussion && Boolean(value.evidence) && (
@@ -72,7 +72,7 @@ export function LearningPendingReply({
         <FeedbackReply value={fields} />
       ) : (
         <p className="learning-stream-status" role="status">
-          {busy ? "正在思考，回复将逐步显示…" : "本次回复未完成，草稿已保留。"}
+          {busy ? "正在分析中，请稍后…" : "本次回复未完成，草稿已保留。"}
         </p>
       )}
       {!busy && Boolean(fields.explanation) && (
@@ -84,7 +84,7 @@ export function LearningPendingReply({
   );
 }
 
-function LearningExchange({ turn }: { turn: LearningTurn }) {
+function LearningExchange({ turn }: { turn: Pick<LearningTurn, "id" | "answer" | "attachment_ids" | "feedback"> }) {
   return (
     <div className="learning-exchange">
       <div className="learning-user-reply">
@@ -108,7 +108,7 @@ export const LearningConversation = memo(function LearningConversation({
   turns,
   fallback,
 }: {
-  turns: LearningTurn[];
+  turns: Pick<LearningTurn, "id" | "answer" | "attachment_ids" | "feedback">[];
   fallback?: Record<string, unknown>;
 }) {
   const [visibleCount, setVisibleCount] = useState(6);

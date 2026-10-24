@@ -33,7 +33,6 @@ test("the separate answer dock accepts dropped images and submits them without t
     goal_id: "g1",
     objective: "理解方向",
     exercise_type: "drawing",
-    criteria: "方向正确",
     review_at: null,
     title: "知识点",
     module: "模块",
@@ -60,7 +59,6 @@ test("the separate answer dock accepts dropped images and submits them without t
     node_id: node.id,
     content: "教学内容",
     exercise: "画出你的理解",
-    criteria: "方向正确",
     hints: [],
     feedback: {},
     state: "awaiting_submission",
@@ -69,6 +67,8 @@ test("the separate answer dock accepts dropped images and submits them without t
   mocks.api.mockImplementation(async (path: string) =>
     path.endsWith("/lesson")
       ? { ...lesson, id: path.includes("n2") ? "l2" : "l1" }
+      : path.endsWith("/sessions")
+        ? { id: "s1", goal_id: "g1", node_id: "n1", status: "active", draft_revision: 0, draft: { node_id: "n1", lesson_id: "l1", answer: "", attachment_ids: [] } }
       : path.endsWith("/submit")
         ? { id: "assessment", status: "queued" }
         : [],
@@ -93,7 +93,7 @@ test("the separate answer dock accepts dropped images and submits them without t
   );
   const dock = await screen.findByRole("region", { name: "练习作答区" });
   expect(dock.closest(".lesson-scroll")).toBeNull();
-  expect(screen.queryByRole("textbox", { name: "练习回答" })).toBeNull();
+  expect(screen.getByRole("textbox", { name: "练习回答" })).toBeVisible();
   fireEvent.drop(dock, {
     dataTransfer: {
       types: ["Files"],
@@ -106,10 +106,6 @@ test("the separate answer dock accepts dropped images and submits them without t
     "answer.png",
   );
   expect(dock.querySelector(".attachment-draft img")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /作答/ }));
-  expect(screen.queryByRole("button", { name: "移除 answer.png" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /作答/ }));
-  expect(screen.getByRole("button", { name: "移除 answer.png" })).toBeVisible();
   expect(mocks.fetchApi).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "发送回答" }));
   await waitFor(() =>

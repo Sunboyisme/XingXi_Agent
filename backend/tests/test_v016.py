@@ -93,18 +93,15 @@ def test_memory_normalization_preserves_qualifications(before, after):
     assert memory.normalize_content(after) == after
 
 
-def test_memory_preview_is_read_only_and_selected_edit_checks_revision(client):
+def test_removed_memory_preview_and_manual_edit_checks_revision(client):
     with db.Session() as session:
         record = db.Memory(content="记一下我喜欢打羽毛球", category="preference", source="原会话",
                            evidence="记一下我喜欢打羽毛球", state="confirmed")
         session.add(record)
         session.commit()
         key, revision = record.id, record.revision
-    preview = client.get("/api/v1/memories/normalization-preview").json()
-    assert preview == [{"id": key, "revision": revision, "before": "记一下我喜欢打羽毛球", "after": "用户喜欢打羽毛球"}]
-    with db.Session() as session:
-        assert session.get(db.Memory, key).content == preview[0]["before"]
-    payload = {"content": preview[0]["after"], "category": "preference", "source": "原会话", "state": "confirmed", "revision": revision}
+    assert client.get("/api/v1/memories/normalization-preview").status_code in {404, 405}
+    payload = {"content": "用户喜欢打羽毛球", "category": "preference", "source": "原会话", "state": "confirmed", "revision": revision}
     assert client.put(f"/api/v1/memories/{key}", json=payload).status_code == 200
     assert client.put(f"/api/v1/memories/{key}", json=payload).status_code == 409
     with db.Session() as session:

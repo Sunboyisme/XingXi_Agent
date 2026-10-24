@@ -341,6 +341,32 @@ class Attempt(Record, Base):
     session_id: Mapped[str | None] = mapped_column(ForeignKey("learning_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
 
 
+class LearningIntake(Record, Base):
+    __tablename__ = "learning_intakes"
+    messages: Mapped[list] = mapped_column(JSON, default=list)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    draft: Mapped[str] = mapped_column(Text, default="")
+    draft_revision: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    goal_id: Mapped[str | None] = mapped_column(ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
+    active_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class LearningReview(Record, Base):
+    __tablename__ = "learning_reviews"
+    goal_id: Mapped[str] = mapped_column(ForeignKey("goals.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("learning_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+    node_id: Mapped[str] = mapped_column(ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), index=True)
+    source: Mapped[dict] = mapped_column(JSON, default=dict)
+    exercise: Mapped[str] = mapped_column(Text, default="")
+    criteria: Mapped[str] = mapped_column(Text, default="")
+    turns: Mapped[list] = mapped_column(JSON, default=list)
+    draft: Mapped[dict] = mapped_column(JSON, default=dict)
+    draft_revision: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="preparing")
+    active_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
 class Memory(Record, Base):
     __tablename__ = "memories"
     project_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)

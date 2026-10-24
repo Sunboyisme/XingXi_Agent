@@ -12,6 +12,12 @@ def reply(body):
     user = str(
         next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     )
+    if '"title": "IntakeResult"' in system:
+        details = json.JSONDecoder().raw_decode(user)[0]
+        complete = len([message for message in details["messages"] if message["role"] == "user"]) > 1
+        return {"content": json.dumps({"title": "HTML隔离验收", "objective": "理解页面结构", "foundation": "零基础" if complete else "", "question": "你目前有什么基础？"}, ensure_ascii=False)}
+    if '"title": "ReviewQuestion"' in system:
+        return {"content": json.dumps({"exercise": "1. main 标签的作用是什么？", "criteria": "说明main表示页面主内容"}, ensure_ascii=False)}
     if "office-contract" in user:
         used = [call["function"]["name"] for message in messages for call in message.get("tool_calls", [])]
         tool_results = [json.loads(message["content"]) for message in messages if message.get("role")=="tool"]
@@ -67,6 +73,7 @@ def reply(body):
                 {
                     "passed": passed,
                     "explanation": "测试反馈：已依据提交的文字检查。",
+                    "reference_answer": "参考答案：给出一个具体例子。" if not passed else "",
                     "strengths": ["提交了具体回答"] if passed else [],
                     "gaps": [] if passed else ["缺少具体例子"],
                     "next_step": "继续下一知识点" if passed else "补充例子后再练习",

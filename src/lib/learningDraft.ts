@@ -1,3 +1,4 @@
+import { registerLearningFlush } from "./learningLifecycle";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type Attachment, type Lesson } from "./api";
 import { draftImages, type LearningDraftOptions, type LearningSession } from "./learningSessions";
@@ -142,6 +143,8 @@ export function useLearningDraft(nodeId: string, lesson: Lesson | null, options?
     const session = options?.session;
     if (session) revisions.current.set(session.id, Math.max(revisions.current.get(session.id) || 0, session.draft_revision));
   }, [options?.session?.id, options?.session?.draft_revision]);
+
+  useEffect(() => registerLearningFlush(flush), []);
 
   function persistLocal(draft: Draft) {
     if (!draft.lessonId) return;

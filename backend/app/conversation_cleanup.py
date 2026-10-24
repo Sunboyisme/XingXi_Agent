@@ -34,6 +34,8 @@ def remove(db, conversation):
         referenced.update(ids)
     from .learning_sessions import draft_attachment_ids
     referenced.update(draft_attachment_ids(db))
+    from .learning_workflows import review_attachment_ids
+    referenced.update(review_attachment_ids(db))
     attachment_ids.difference_update(referenced)
     db.execute(delete(Attachment).where(Attachment.id.in_(attachment_ids)))
     db.commit()

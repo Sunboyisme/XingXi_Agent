@@ -1,3 +1,5 @@
+import { resizeMessageInput } from "@/lib/composerSize";
+import { useComposerPlaceholder } from "@/lib/useComposerPlaceholder";
 import {
   useCallback,
   useEffect,
@@ -276,24 +278,6 @@ function clearChatDraft(conversationId: string | null) {
   }
 }
 
-function resizeMessageInput(input: HTMLTextAreaElement) {
-  const scrollTop = input.scrollTop;
-  input.style.height = "auto";
-  const style = getComputedStyle(input);
-  const minHeight = Number.parseFloat(style.minHeight) || 64;
-  const maxHeight = Number.parseFloat(style.maxHeight) || 120;
-  if (!input.scrollHeight) return;
-  const height = Math.min(Math.max(input.scrollHeight, minHeight), maxHeight);
-  input.style.height = `${height}px`;
-  if (
-    document.activeElement === input &&
-    input.selectionEnd === input.value.length
-  ) {
-    input.scrollTop = input.scrollHeight;
-  } else {
-    input.scrollTop = scrollTop;
-  }
-}
 
 function ReplyActivity({
   reasoning,
@@ -399,6 +383,7 @@ export function ChatPage({
   const thinkingEnabled =
     thinkingControl === "always" || (thinkingControl !== "none" && thinking);
   const [messages, setMessages] = useState<Message[]>([]);
+  const contextualPlaceholder = useComposerPlaceholder(conversationId, messages, settings);
   const [initialDraft] = useState(() => readChatDraft(conversationId));
   const [draft, setDraft] = useState(initialDraft?.text || "");
   const [images, setImages] = useState<Attachment[]>(
@@ -1816,13 +1801,13 @@ export function ChatPage({
                 value={draft}
                 onChange={(e) => changeDraft(e.target.value)}
                 placeholder={
-                  busy && run?.task_id
+                  contextualPlaceholder || (busy && run?.task_id
                     ? "补充当前任务要求…"
                     : modelReady
                       ? empty
                         ? "今天有什么灵感，随心输入"
                         : "输入消息…"
-                      : "连接模型后开始对话"
+                      : "连接模型后开始对话")
                 }
                 rows={2}
                 disabled={submitting || stopping}

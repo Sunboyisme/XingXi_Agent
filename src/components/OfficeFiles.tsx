@@ -1,5 +1,5 @@
 import { DropdownMenu } from "radix-ui";
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState, useContext, type ReactNode } from "react";
 import { RestrictedFileContext, proposeFileSave } from "@/lib/restrictedFiles";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
@@ -22,9 +22,11 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { Picture } from "./ImageAttachments";
+import { Markdown } from "./common";
 
 type Preview = {
   kind: string;
+  content?: string;
   parts?: { source: string; text: string; cells?: string[] }[];
   tables?: { name: string; rows: string[][] }[];
   warnings?: string[];
@@ -93,11 +95,15 @@ export function FileCard({
   upload = false,
   compact = false,
   previewOnly = false,
+  status,
+  trailingAction,
 }: {
   file: Pick<Artifact, "id" | "name">;
   upload?: boolean;
   compact?: boolean;
   previewOnly?: boolean;
+  status?: ReactNode;
+  trailingAction?: ReactNode;
 }) {
   const restricted = useContext(RestrictedFileContext);
   const [open, setOpen] = useState(false);
@@ -184,7 +190,7 @@ export function FileCard({
       >
         <FileText size={23} />
         <div className="office-file-copy">
-          <strong>{file.name}</strong>
+          {status ? <div className="office-file-name"><strong title={file.name}>{file.name}</strong>{status}</div> : <strong>{file.name}</strong>}
           {!compact && !previewOnly && (
             <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>
           )}
@@ -254,6 +260,7 @@ export function FileCard({
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
           )}
+          {trailingAction}
         </div>
         {error && !open && <p role="alert">{error}</p>}
         {notice && <p role="status">{notice}</p>}
@@ -277,6 +284,9 @@ export function FileCard({
                 <p>{error}，原文件仍可下载。</p>
                 <button onClick={() => setRetry((v) => v + 1)}>重试预览</button>
               </div>
+            ) : preview?.kind === "markdown" ? (
+              <><Markdown>{preview.content || ""}</Markdown>
+              {preview.truncated && <p>预览内容较长，已截断；下载可查看完整文件。</p>}</>
             ) : preview?.kind === "pdf" ? (
               <img
                 className="office-pdf-page"

@@ -20,7 +20,7 @@ LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
                 "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes",
                 "file_sessions", "file_save_requests", "file_audits"}
 COUNTS = {"conversations": "对话", "messages": "消息", "memories": "记忆",
-          "learning_sessions": "学习会话", "usage_calls": "模型调用", "usage_prices": "计价配置",
+          "learning_sessions": "学习会话", "learning_intakes": "目标访谈", "learning_reviews": "复习记录", "usage_calls": "模型调用", "usage_prices": "计价配置",
           "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
           "memory_vectors": "向量", "reminders": "提醒时间", "goals": "学习目标",
           "attachments": "附件", "office_files": "办公资料", "calendar_events": "计划", "plan_occurrences": "单次状态记录", "plan_segments": "重复规则调整", "artifacts": "工具产物", "complex_tasks": "复杂任务"}
@@ -176,9 +176,9 @@ def upgrade_portable_schema(stage):
     with connect(incoming_path) as incoming, connect(root() / "bai.sqlite") as current:
         revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
         head = current.execute("SELECT version_num FROM alembic_version").fetchone()
-        if revision == head or head != ("0024",):
+        if revision == head or head not in {("0023",), ("0024",)}:
             return
-        if revision not in {(f"{number:04d}",) for number in range(16, 24)}:
+        if revision not in {(f"{number:04d}",) for number in range(16, int(head[0]))}:
             return
         if incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]:
             raise ValueError("导入数据包含不支持的结构")

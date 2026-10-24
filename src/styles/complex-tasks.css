@@ -224,3 +224,12 @@
     flex-basis: calc(100% - 60px);
   }
 }
+
+/* Separate the completion requirements from the task's action hierarchy. */
+.complex-task-criteria { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--ui-color-line); }
+.complex-task-criteria > h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--ui-color-heading); }
+.complex-task-criteria > ul { margin: 0; padding-left: 20px; display: grid; gap: 7px; line-height: 1.8; }
+.complex-task-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--ui-color-line); }
+.complex-task-secondary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.complex-task-footer > button { margin-left: auto; min-height: 36px; padding-inline: 16px; }
+.complex-task-footer .detail-view-trigger { background: transparent; box-shadow: none; }
