@@ -15,7 +15,7 @@ from langgraph.types import Command
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
-from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts
+from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost
 from . import (
     agent,
     data_transfer,
@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
     data_transfer.recover_interrupted()
     store.migrate()
     data_transfer.apply_pending()
+    usage_cost.recover_interrupted()
     office.recover_uploads()
     complex_tasks.recover()
     skills.ensure_builtin()
@@ -328,7 +329,7 @@ async def test_embedding():
     if not value.get("model") or not secret_get("embedding"):
         raise HTTPException(400, "请先保存 Embedding 模型与密钥。")
     try:
-        vector = retrieval.checked(await retrieval.client(value).aembed_query("连接测试"))
+        vector = retrieval.checked(await retrieval.client(value, purpose="connection_test").aembed_query("连接测试"))
         return {"ok": True, "dimensions": len(vector)}
     except Exception:
         raise HTTPException(400, "Embedding 连接失败，请检查地址、模型和密钥。") from None
@@ -572,15 +573,22 @@ def messages(conversation_id: str, db=Depends(database)):
     run_details = {row.id: row for row in db.execute(select(store.Run.id, store.Run.status, store.Run.task_id).where(
         store.Run.conversation_id == conversation_id,
     )).all()}
+    learning_cards = set(db.scalars(select(store.RunEvent.run_id).join(store.Run, store.Run.id == store.RunEvent.run_id).where(
+        store.Run.conversation_id == conversation_id, store.RunEvent.kind == "learning_continuation")))
     return [s.MessageRead.model_validate(record).model_copy(update={
         "run_status": run_details[record.run_id].status if record.run_id in run_details else None,
         "task_id": run_details[record.run_id].task_id if record.run_id in run_details else None,
+        "has_learning_continuation": record.run_id in learning_cards,
     }) for record in records]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=s.RunRead)
 async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(database)):
     conversation = item(db, store.Conversation, conversation_id)
+    try:
+        local_references = local_files.validate_references(value.local_references, len(value.attachment_ids))
+    except (ValueError, OSError) as error:
+        raise HTTPException(400, str(error)) from None
     active = db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id,
         store.Run.status.in_(["queued", "running"])))
     if active:
@@ -593,7 +601,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
             raise HTTPException(400, provider.safe_error(error))
         office.claim(db, value.attachment_ids, conversation_id)
         message = store.Message(conversation_id=conversation_id, role="user",
-            content=value.content, attachment_ids=value.attachment_ids)
+            content=value.content, attachment_ids=value.attachment_ids, local_references=local_references)
         db.add(message)
         db.flush()
         complex_tasks.queue_message(db, task, message)
@@ -614,6 +622,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
             role="user",
             content=value.content,
             attachment_ids=value.attachment_ids,
+            local_references=local_references,
         )
     db.add(message)
     db.flush()
@@ -622,7 +631,10 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
         conversation.title = value.content[:30]
     conversation.updated_at = store.now()
     db.commit()
-    runs.launch(run.id, lambda: agent.chat(run.id, conversation_id))
+    async def operation():
+        handoff = None if value.attachment_ids or local_references else await learning_handoff.handle(run.id, conversation_id, value.content)
+        return handoff if handoff is not None else await agent.chat(run.id, conversation_id)
+    runs.launch(run.id, operation)
     return run
 
 
@@ -869,7 +881,7 @@ def create_goal(value: s.GoalCreate, db=Depends(database)):
     details, missing = learning.goal_intake(value.title, value.objective, value.foundation, value.use_beginner_defaults)
     if missing:
         raise HTTPException(422, "请先补充" + "、".join(missing) + "，或明确选择按零基础入门安排。")
-    goal = store.Goal(**details)
+    goal = store.Goal(**details, **learning_sessions.goal_options(value))
     db.add(goal)
     db.commit()
     return goal_read(db, goal)
@@ -888,7 +900,7 @@ async def plan_course(goal_id: str, db=Depends(database)):
     ):
         raise HTTPException(409, "已有课程，不会覆盖当前进度")
     run = create_run(db, "course", goal_id=goal_id)
-    runs.launch(run.id, lambda: learning.generate_course(goal_id))
+    runs.launch(run.id, lambda: learning.generate_course(goal_id, run.id))
     return run
 
 
@@ -915,6 +927,7 @@ async def delete_goal(goal_id: str, request: Request, stop: bool = False, db=Dep
     lesson_ids = select(store.Lesson.id).join(store.KnowledgeNode, store.KnowledgeNode.id == store.Lesson.node_id).where(store.KnowledgeNode.goal_id == goal_id)
     threads = list(db.scalars(select(store.Lesson.graph_thread_id).where(store.Lesson.id.in_(lesson_ids))))
     image_ids = set()
+    image_ids.update(learning_sessions.draft_attachment_ids(db, goal_id))
     for ids in db.scalars(select(store.Attempt.attachment_ids).where(store.Attempt.lesson_id.in_(lesson_ids))):
         image_ids.update(ids)
     run_ids = select(store.Run.id).where(store.Run.goal_id == goal_id)
@@ -927,6 +940,7 @@ async def delete_goal(goal_id: str, request: Request, stop: bool = False, db=Dep
         referenced.update(ids)
     for ids in db.scalars(select(store.Attempt.attachment_ids)):
         referenced.update(ids)
+    referenced.update(learning_sessions.draft_attachment_ids(db))
     image_ids.difference_update(referenced)
     db.execute(delete(store.Attachment).where(store.Attachment.id.in_(image_ids)))
     db.commit()
@@ -957,8 +971,9 @@ def get_lesson(node_id: str, db=Depends(database)):
 
 
 @router.post("/learning/nodes/{node_id}/lesson", response_model=s.RunRead)
-async def teach_node(node_id: str, request: Request, db=Depends(database)):
+async def teach_node(node_id: str, request: Request, value: s.LearningLessonRequest | None = None, db=Depends(database)):
     node = item(db, store.KnowledgeNode, node_id)
+    learning_sessions.validate_session(db, value.session_id if value else None, node)
     previous = db.scalar(
         select(store.Lesson)
         .where(store.Lesson.node_id == node_id)
@@ -971,7 +986,7 @@ async def teach_node(node_id: str, request: Request, db=Depends(database)):
 
     async def operation():
         await request.app.state.tutor.ainvoke(
-            {"node_id": node_id, "lesson_id": lesson_id, "run_id": run.id},
+            {"node_id": node_id, "lesson_id": lesson_id, "run_id": run.id, "session_id": value.session_id if value else None},
             config={"configurable": {"thread_id": lesson_id}},
         )
         return {"lesson_id": lesson_id, "node_id": node_id}
@@ -999,18 +1014,19 @@ async def submit(
     except Exception as error:
         raise HTTPException(400, provider.safe_error(error))
     node = item(db, store.KnowledgeNode, lesson.node_id)
+    learning_sessions.validate_session(db, value.session_id, node, lesson.id)
     run = create_run(db, "assessment", goal_id=node.goal_id)
     followup = lesson.state == "reviewed"
 
     async def operation():
         if followup:
             result = await learning.assess({"run_id": run.id, "node_id": node.id,
-                "lesson_id": lesson_id, "submission": value.model_dump()})
+                "lesson_id": lesson_id, "submission": value.model_dump(), "session_id": value.session_id})
             return {"lesson_id": lesson_id, "node_id": node.id, **result}
         # Failed assessment leaves a checkpoint at the assessment node, not a new interrupt.
         config = {"configurable": {"thread_id": lesson.graph_thread_id}}
         state = await request.app.state.tutor.aget_state(config)
-        await request.app.state.tutor.aupdate_state(config, {"run_id": run.id})
+        await request.app.state.tutor.aupdate_state(config, {"run_id": run.id, "session_id": value.session_id})
         command = (
             Command(resume=value.model_dump())
             if "await_submission" in state.next
@@ -1380,4 +1396,7 @@ async def wechat_disconnect(request: Request):
 
 router.include_router(features.router)
 router.include_router(projects.router)
+router.include_router(learning_sessions.router)
+router.include_router(learning_handoff.router)
+router.include_router(usage_cost.router)
 app.include_router(router)

@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Loader2,
   Save,
+  MoreHorizontal,
 } from "lucide-react";
 import { api, fetchApi, type Artifact, type Attachment } from "@/lib/api";
 import { Button } from "./ui/button";
@@ -88,9 +89,11 @@ export function DownloadResultDialog({
 export function FileCard({
   file,
   upload = false,
+  compact = false,
 }: {
   file: Pick<Artifact, "id" | "name">;
   upload?: boolean;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -165,11 +168,11 @@ export function FileCard({
   }
   return (
     <>
-      <div className="office-file-card">
+      <div className={`office-file-card${compact ? " office-file-card-compact" : ""}`}>
         <FileText size={23} />
         <div className="office-file-copy">
           <strong>{file.name}</strong>
-          <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>
+          {!compact && <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>}
         </div>
         <div className="office-file-actions">
           <button
@@ -183,15 +186,15 @@ export function FileCard({
             <Eye size={14} />
             预览
           </button>
-          <button
+          {!compact && <button
             disabled={saving}
             aria-label={`下载 ${file.name}`}
             onClick={() => void save(false)}
           >
             <Download size={14} />
             下载
-          </button>
-          {isTauri() && (
+          </button>}
+          {!compact && isTauri() && (
             <button
               disabled={saving}
               aria-label={`另存为 ${file.name}`}
@@ -200,6 +203,15 @@ export function FileCard({
               <Save size={14} />
               另存为
             </button>
+          )}
+          {compact && (
+            <details className="project-file-more">
+              <summary aria-label={`更多操作 ${file.name}`}><MoreHorizontal size={16} /></summary>
+              <div>
+                <button disabled={saving} onClick={() => void save(false)}><Download size={14} />下载</button>
+                {isTauri() && <button disabled={saving} onClick={() => void save(true)}><Save size={14} />另存为</button>}
+              </div>
+            </details>
           )}
         </div>
         {error && !open && <p role="alert">{error}</p>}

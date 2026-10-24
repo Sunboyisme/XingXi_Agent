@@ -67,6 +67,56 @@ def _mention_pattern(path):
     )
 
 
+def validate_references(paths, attachment_count=0):
+    if len(paths) + attachment_count > 4:
+        raise ValueError("每次最多提交 4 个文件、图片或文件夹")
+    values = []
+    for value in paths:
+        path = local_path(value)
+        resolved = path.resolve(strict=True)
+        local_path(str(resolved))
+        if resolved != Path(os.path.abspath(path)) or not resolved.is_dir():
+            raise ValueError("请提供实际存在的本地文件夹，不支持目录链接")
+        if not any(item["path"] == str(resolved) for item in values):
+            values.append({"path": str(resolved), "name": resolved.name or str(resolved), "active": True})
+    return values
+
+
+def references_context(run_id, conversation_id):
+    with Session() as db:
+        source = task_context.user_message(db, run_id, conversation_id)
+        if not source:
+            return ""
+        ordinal = select(MESSAGE_ORDER).where(Message.id == source.id).correlate(None).scalar_subquery()
+        records = db.scalars(select(Message).where(
+            Message.conversation_id == conversation_id, Message.role == "user",
+            Message.profile_id == PROFILE_ID,
+            or_(Message.created_at < source.created_at,
+                and_(Message.created_at == source.created_at, MESSAGE_ORDER <= ordinal)),
+        )).all()
+        paths = list(dict.fromkeys(ref["path"] for row in records for ref in (row.local_references or [])
+                                  if ref.get("active") and ref.get("path")))
+    if not paths:
+        return ""
+    return "\n当前聊天用户明确提供的只读文件夹（按需scan_local_folder/read_local_file，不要整体读取）：\n" + "\n".join(paths) + "\n" + NOTICE
+
+
+def _directory_permission(requested, value):
+    root = local_path(value)
+    absolute_root = Path(os.path.abspath(root))
+    if not Path(os.path.abspath(requested)).is_relative_to(absolute_root):
+        return None
+    resolved_root = root.resolve(strict=True)
+    local_path(str(resolved_root))
+    if resolved_root != absolute_root or not resolved_root.is_dir():
+        raise ValueError("引用的文件夹已经失效或变成链接，请重新提供文件夹")
+    resolved = requested.resolve(strict=True)
+    local_path(str(resolved))
+    if resolved.is_relative_to(resolved_root):
+        return resolved
+    return None
+
+
 def authorize(value, run_id, conversation_id):
     requested = local_path(value)
     candidates = [(scope, _mention_pattern(scope)) for scope in (requested, *requested.parents)]
@@ -74,18 +124,25 @@ def authorize(value, run_id, conversation_id):
         chat = db.get(Conversation, conversation_id) if conversation_id else None
         project = db.get(Project, chat.project_id) if chat and chat.profile_id == PROFILE_ID and chat.project_id else None
         if project and project.profile_id == PROFILE_ID and project.workspace_path:
-            root = local_path(project.workspace_path).resolve(strict=True)
-            local_path(str(root))
-            resolved = requested.resolve(strict=True)
-            local_path(str(resolved))
-            if root != Path(os.path.abspath(project.workspace_path)):
-                raise ValueError("项目工作目录已变为链接，请在项目设置中重新选择实际路径")
-            if root.is_dir() and resolved.is_relative_to(root):
-                return resolved
+            permitted = _directory_permission(requested, project.workspace_path)
+            if permitted is not None:
+                return permitted
         source = task_context.user_message(db, run_id, conversation_id)
         if source is None:
             raise ValueError("当前聊天没有可核对的用户路径，请先在聊天中提供文件或文件夹的完整路径")
         ordinal = select(MESSAGE_ORDER).where(Message.id == source.id).correlate(None).scalar_subquery()
+        submitted = db.scalars(select(Message).where(
+            Message.conversation_id == conversation_id, Message.profile_id == PROFILE_ID,
+            Message.role == "user", or_(Message.created_at < source.created_at,
+                and_(Message.created_at == source.created_at, MESSAGE_ORDER <= ordinal)),
+        ))
+        for record in submitted:
+            for reference in record.local_references or []:
+                if not reference.get("active") or not reference.get("path"):
+                    continue
+                permitted = _directory_permission(requested, reference["path"])
+                if permitted is not None:
+                    return permitted
         texts = db.scalars(select(Message.content).where(
             Message.conversation_id == conversation_id,
             Message.profile_id == PROFILE_ID, Message.role == "user",

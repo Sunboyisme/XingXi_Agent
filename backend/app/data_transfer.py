@@ -19,6 +19,7 @@ LIMIT = 512 * 1024 * 1024
 LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
                 "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes"}
 COUNTS = {"conversations": "对话", "messages": "消息", "memories": "记忆",
+          "learning_sessions": "学习会话", "usage_calls": "模型调用", "usage_prices": "计价配置",
           "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
           "memory_vectors": "向量", "reminders": "提醒时间", "goals": "学习目标",
           "attachments": "附件", "office_files": "办公资料", "calendar_events": "计划", "plan_occurrences": "单次状态记录", "plan_segments": "重复规则调整", "artifacts": "工具产物", "complex_tasks": "复杂任务"}
@@ -79,6 +80,7 @@ def create_archive():
             for table in LOCAL_TABLES:
                 connection.execute(f'DELETE FROM "{table}"')
             connection.execute("UPDATE projects SET workspace_path=''")
+            clear_local_references(connection)
             connection.commit()
             connection.execute("VACUUM")
             revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
@@ -119,10 +121,52 @@ def create_archive():
     return {"name": name, "path": str(target), "counts": values}
 
 
+def clear_local_references(connection):
+    for key, raw in connection.execute("SELECT id, local_references FROM messages WHERE local_references <> '[]'").fetchall():
+        refs = json.loads(raw or "[]")
+        connection.execute("UPDATE messages SET local_references=? WHERE id=?", (
+            json.dumps([{"name": item.get("name", "文件夹"), "path": "", "active": False} for item in refs], ensure_ascii=False), key))
+
+
+def upgrade_portable_schema(stage):
+    """Verify a known predecessor against trusted migrations before upgrading its staging copy."""
+    from alembic import command
+    from alembic.config import Config
+    incoming_path = stage / "bai.sqlite"
+    with connect(incoming_path) as incoming, connect(root() / "bai.sqlite") as current:
+        revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
+        head = current.execute("SELECT version_num FROM alembic_version").fetchone()
+        if revision == head or head != ("0023",):
+            return
+        if revision not in {(f"{number:04d}",) for number in range(16, 23)}:
+            return
+        if incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]:
+            raise ValueError("导入数据包含不支持的结构")
+        incoming_schema = schema(incoming)
+    def settings_for(path):
+        settings = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        settings.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "migrations"))
+        settings.set_main_option("sqlalchemy.url", ("sqlite:///" + path.as_posix()).replace("%", "%%"))
+        return settings
+    with tempfile.TemporaryDirectory(dir=stage) as temporary:
+        reference = Path(temporary) / "reference.sqlite"
+        command.upgrade(settings_for(reference), revision[0])
+        with connect(reference) as trusted:
+            if incoming_schema != schema(trusted):
+                raise ValueError("旧版数据结构不兼容，未执行升级")
+    command.upgrade(settings_for(incoming_path), head[0])
+    manifest_path = stage / "manifest.json"
+    manifest = json.loads(manifest_path.read_text("utf-8"))
+    manifest["source_schema"] = manifest.get("schema", revision[0])
+    manifest["schema"] = head[0]
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), "utf-8")
+
+
 def validate(stage):
     manifest = json.loads((stage / "manifest.json").read_text("utf-8"))
     if manifest.get("format") != "xiaoxi-data" or manifest.get("version") != 1:
         raise ValueError("不是 XiaoXi 数据文件")
+    upgrade_portable_schema(stage)
     with connect(stage / "bai.sqlite") as incoming, connect(root() / "bai.sqlite") as current:
         incoming.execute("PRAGMA trusted_schema=OFF")
         incoming_schema, current_schema = schema(incoming), schema(current)
@@ -206,6 +250,7 @@ def validate(stage):
             raise ValueError("数据库校验失败")
         # A portable archive cannot grant filesystem access on another machine.
         incoming.execute("UPDATE projects SET workspace_path=''")
+        clear_local_references(incoming)
         values = counts(incoming)
         ids = [row[0] for row in incoming.execute("SELECT id FROM attachments")]
         documents = {row[0] for row in incoming.execute("SELECT id FROM office_files")}

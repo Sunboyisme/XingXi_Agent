@@ -12,6 +12,7 @@ import { SkillsSettings } from "./SkillsSettings";
 import { DataSettings } from "./DataSettings";
 import { ScriptRuntimeSettings } from "./ScriptRuntimeSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { UsageCosts } from "./UsageCosts";
 
 function ConnectionSettings({
   settings,
@@ -40,7 +41,8 @@ export type SettingsTab =
   | "skills"
   | "runtimes"
   | "memories"
-  | "data";
+  | "data"
+  | "costs";
 export function SettingsPage({
   settings,
   onSaved,
@@ -79,6 +81,7 @@ export function SettingsPage({
             ["tools", "工具"],
             ["skills", "技能"],
             ["runtimes", "脚本环境"],
+            ["costs", "费用"],
             ["memories", "记忆"],
             ["data", "数据"],
           ] as const
@@ -101,6 +104,7 @@ export function SettingsPage({
                   "tools",
                   "skills",
                   "runtimes",
+                  "costs",
                   "memories",
                   "data",
                 ];
@@ -135,6 +139,7 @@ export function SettingsPage({
           <AppearanceSettings />
         </div>
       )}
+      {tab === "costs" && <div id="settings-panel-costs" role="tabpanel" aria-labelledby="settings-tab-costs"><UsageCosts /></div>}
       <div
         id="settings-panel-connections"
         role="tabpanel"

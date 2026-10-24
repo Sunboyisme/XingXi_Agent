@@ -1,0 +1,12 @@
+.usage-costs h2,
+.usage-costs h3 { margin-bottom: 10px; }
+.usage-costs label { display: grid; gap: 7px; font-size: 13px; color: var(--ui-color-text-muted); }
+.usage-costs input,
+.usage-costs select { min-height: 38px; padding: 8px 10px; border: 1px solid var(--ui-color-line); border-radius: 9px; color: var(--ui-color-text); background: var(--ui-color-surface); min-width: 0; }
+.usage-costs select { max-width: 100%; }
+.usage-costs summary { cursor: pointer; padding: 8px 0; }
+.usage-costs table { font-size: 12px; }
+.usage-costs td small { display: inline-block; max-width: 300px; white-space: normal; }
+.usage-costs p { line-height: 1.7; }
+.usage-costs input:focus-visible,
+.usage-costs select:focus-visible { outline: 2px solid var(--ui-color-focus); outline-offset: 2px; }

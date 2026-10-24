@@ -6,12 +6,14 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Integer,
+    Index,
     String,
     Text,
     UniqueConstraint,
     create_engine,
     event,
     literal_column,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -102,6 +104,7 @@ class Message(Record, Base):
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)
     attachment_ids: Mapped[list] = mapped_column(JSON, default=list)
+    local_references: Mapped[list] = mapped_column(JSON, default=list)
     provider_context: Mapped[dict] = mapped_column(JSON, default=dict)
     reasoning: Mapped[str] = mapped_column(Text, default="")
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
@@ -139,6 +142,39 @@ class Run(Record, Base):
     model_config: Mapped[dict] = mapped_column(JSON, default=dict)
     task_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     source_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class UsagePrice(Record, Base):
+    __tablename__ = "usage_prices"
+    provider_id: Mapped[str] = mapped_column(String(200))
+    provider_label: Mapped[str] = mapped_column(String(200), default="")
+    model_name: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(30), default="tokens")
+    currency: Mapped[str] = mapped_column(String(10), default="CNY")
+    image_size: Mapped[str] = mapped_column(String(40), default="")
+    rates: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class UsageCall(Record, Base):
+    __tablename__ = "usage_calls"
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    provider_id: Mapped[str] = mapped_column(String(200))
+    provider_label: Mapped[str] = mapped_column(String(200), default="")
+    model_name: Mapped[str] = mapped_column(String(200))
+    purpose: Mapped[str] = mapped_column(String(40), default="chat")
+    kind: Mapped[str] = mapped_column(String(30), default="tokens")
+    status: Mapped[str] = mapped_column(String(30), default="started")
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cached_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cache_write_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_size: Mapped[str] = mapped_column(String(40), default="")
+    price_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    estimated_cost: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    unknown_reason: Mapped[str] = mapped_column(String(300), default="")
+    finished_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class ComplexTask(Record, Base):
@@ -201,6 +237,9 @@ class Goal(Record, Base):
     title: Mapped[str] = mapped_column(String(200))
     objective: Mapped[str] = mapped_column(Text, default="")
     foundation: Mapped[str] = mapped_column(Text, default="")
+    outcome: Mapped[str] = mapped_column(Text, default="")
+    weekly_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="draft")
     course_version: Mapped[int] = mapped_column(Integer, default=1)
     current_node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -222,6 +261,28 @@ class KnowledgeNode(Record, Base):
     review_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
+class LearningSession(Record, Base):
+    __tablename__ = "learning_sessions"
+    __table_args__ = (Index("uq_learning_session_open_goal", "goal_id", unique=True,
+                            sqlite_where=text("status <> 'ended'"),
+                            postgresql_where=text("status <> 'ended'")),)
+    goal_id: Mapped[str] = mapped_column(ForeignKey("goals.id", ondelete="CASCADE"), index=True)
+    node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lesson_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    target_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    gaps: Mapped[list] = mapped_column(JSON, default=list)
+    next_step: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[str] = mapped_column(String(40), default=now)
+    paused_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ended_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_studied_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    visited_node_ids: Mapped[list] = mapped_column(JSON, default=list)
+    drafts: Mapped[dict] = mapped_column(JSON, default=dict)
+    draft_revision: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Lesson(Record, Base):
     __tablename__ = "lessons"
     node_id: Mapped[str] = mapped_column(
@@ -234,6 +295,7 @@ class Lesson(Record, Base):
     feedback: Mapped[dict] = mapped_column(JSON, default=dict)
     graph_thread_id: Mapped[str] = mapped_column(String(100), unique=True)
     state: Mapped[str] = mapped_column(String(30), default="awaiting_submission")
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("learning_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
 
 
 class Attempt(Record, Base):
@@ -245,6 +307,7 @@ class Attempt(Record, Base):
     answer: Mapped[str] = mapped_column(Text)
     attachment_ids: Mapped[list] = mapped_column(JSON, default=list)
     feedback: Mapped[dict] = mapped_column(JSON, default=dict)
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("learning_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
 
 
 class Memory(Record, Base):

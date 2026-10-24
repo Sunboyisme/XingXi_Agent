@@ -1,4 +1,6 @@
 import { Hint } from "./common";
+import { useNativeDrop, nativeFile } from "@/lib/nativeDrop";
+import { isTauri } from "@tauri-apps/api/core";
 import {
   type ReactNode,
   useCallback,
@@ -80,6 +82,8 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
+  const nativeTarget = useRef<HTMLElement>(null);
+  useNativeDrop(nativeTarget, (files) => inspect(files.map((file) => ({ file: nativeFile(file), path: file.relative_path }))), setError, true, busy);
   const importBusy = useRef(false);
   const zip = useRef<HTMLInputElement>(null),
     directory = useRef<HTMLInputElement>(null);
@@ -148,8 +152,10 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
   }
   return (
     <section
+      ref={nativeTarget}
       className={`skills-settings ${dragging ? "skills-dragging" : ""}`}
       onDragEnter={(event) => {
+        if (isTauri()) return;
         if (event.dataTransfer.types.includes("Files")) {
           event.preventDefault();
           dragDepth.current++;
@@ -157,12 +163,14 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
         }
       }}
       onDragOver={(event) => {
+        if (isTauri()) return;
         if (event.dataTransfer.types.includes("Files")) {
           event.preventDefault();
           event.dataTransfer.dropEffect = busy ? "none" : "copy";
         }
       }}
       onDragLeave={(event) => {
+        if (isTauri()) return;
         if (
           event.dataTransfer.types.includes("Files") &&
           --dragDepth.current <= 0
@@ -172,6 +180,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
         }
       }}
       onDrop={(event) => {
+        if (isTauri()) return;
         event.preventDefault();
         dragDepth.current = 0;
         setDragging(false);

@@ -44,7 +44,8 @@ def valid(row, memory, value):
     )
 
 
-def client(value):
+def client(value, *, purpose="embedding"):
+    from .usage_cost import MeteredAsyncClient, metadata
     return OpenAIEmbeddings(
         base_url=value["url"],
         model=value["model"],
@@ -53,6 +54,8 @@ def client(value):
         max_retries=0,
         request_timeout=10,
         chunk_size=32,
+        http_async_client=MeteredAsyncClient(
+            usage_metadata=metadata(value, kind="embedding", purpose=purpose), timeout=10),
     )
 
 

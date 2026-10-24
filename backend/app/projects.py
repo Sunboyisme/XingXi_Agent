@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from PIL import Image, ImageOps
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select
 
 from . import artifacts, config, office, schemas as s
@@ -317,6 +318,31 @@ async def add_material(project_id: str, value: s.ProjectMaterialCreate):
         return save_material(project_id, name, value_path.read_bytes(), value.file_id)
     except (ValueError, OSError, Image.DecompressionBombError):
         raise HTTPException(422, "原文件缺失或格式不可用，请核对后重新上传") from None
+
+
+class MaterialBatchRemove(BaseModel):
+    material_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+@router.post("/projects/{project_id}/materials/batch-remove")
+def remove_materials(project_id: str, value: MaterialBatchRemove):
+    keys = set(value.material_ids)
+    with Session() as db:
+        require(db, project_id)
+        rows = list(db.scalars(select(ProjectMaterial).where(
+            ProjectMaterial.id.in_(keys), ProjectMaterial.project_id == project_id,
+            ProjectMaterial.profile_id == config.PROFILE_ID)))
+        if len(rows) != len(keys):
+            raise HTTPException(409, "所选资料已改变或不属于当前项目，请刷新后重新选择；未移除任何资料。")
+        files = [row.file_id for row in rows]
+        # Project uploads are independent copies; delete only the selected copy
+        # records in one transaction. Original chat attachments are untouched.
+        for row in rows:
+            db.delete(row)
+        db.execute(delete(Attachment).where(Attachment.id.in_(files),
+                                          Attachment.profile_id == config.PROFILE_ID))
+        db.commit()
+    return {"deleted": len(keys), "cleanup_pending": unlink_files(files)}
 
 
 @router.delete("/projects/{project_id}/materials/{material_id}")

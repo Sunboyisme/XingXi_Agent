@@ -86,7 +86,7 @@ class CompatibleChatModel(ChatOpenAI):
         return value
 
 
-def model(config=None) -> ChatOpenAI:
+def model(config=None, *, usage_purpose=None) -> ChatOpenAI:
     if config is None:
         from .task_context import current
         execution = current.get()
@@ -119,8 +119,16 @@ def model(config=None) -> ChatOpenAI:
             max_retries=1,
             extra_body=extra or None,
             use_responses_api=False,
+            stream_usage=True,
+            http_async_client=_metered_client(config, enabled, usage_purpose),
             **options,
         )
+
+
+def _metered_client(value, thinking=False, purpose=None):
+    from .usage_cost import MeteredAsyncClient, metadata
+    return MeteredAsyncClient(usage_metadata=metadata(value, purpose=purpose),
+        timeout=180 if thinking else 75, follow_redirects=True)
 
 
 def supported_attachments(attachment_ids, config):
@@ -177,7 +185,7 @@ async def ask_json(
     schema: type[BaseModel], instructions: str, text: str, attachment_ids=None,
     *, model_config=None, on_partial=None, on_usage=None, image_data=None,
 ) -> BaseModel:
-    llm = model(model_config)
+    llm = model(model_config, usage_purpose="image_reading" if image_data else None)
     messages = [
         SystemMessage(
             content=instructions

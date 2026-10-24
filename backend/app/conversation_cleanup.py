@@ -32,6 +32,8 @@ def remove(db, conversation):
         referenced.update(ids)
     for ids in db.scalars(select(Attempt.attachment_ids)):
         referenced.update(ids)
+    from .learning_sessions import draft_attachment_ids
+    referenced.update(draft_attachment_ids(db))
     attachment_ids.difference_update(referenced)
     db.execute(delete(Attachment).where(Attachment.id.in_(attachment_ids)))
     db.commit()

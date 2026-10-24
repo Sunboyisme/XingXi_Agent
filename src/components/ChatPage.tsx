@@ -54,6 +54,7 @@ import { BaiAvatar } from "./BaiAvatar";
 import { NewChatStarters, NewChatWelcome } from "./NewChatWelcome";
 import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
+import { LearningHandoffCards } from "./LearningHandoffCards";
 import {
   MemoryReview,
   MemorySavedNotice,
@@ -927,18 +928,21 @@ export function ChatPage({
     observer.observe(target);
     return () => observer.disconnect();
   }, [conversationId, empty, scheduleFollowLatest]);
-  async function send(edited?: Pick<Message, "content" | "attachment_ids">) {
+  async function send(edited?: Pick<Message, "content" | "attachment_ids" | "local_references">) {
     const text = edited ? edited.content : draft;
     const attachmentIds = edited
       ? edited.attachment_ids
-      : images.map((x) => x.id);
+      : images.filter((x) => !x.local_path).map((x) => x.id);
+    const localReferences = edited
+      ? (edited.local_references || []).filter((item) => item.active).map((item) => String(item.path))
+      : images.filter((x) => x.local_path).map((x) => x.local_path!);
     const supplement = busy && Boolean(run?.task_id);
     if (
       actionLock.current ||
       moveProjectLock.current ||
       (busy && !run) ||
       uploading ||
-      (!text.trim() && !attachmentIds.length)
+      (!text.trim() && !attachmentIds.length && !localReferences.length)
     )
       return false;
     actionLock.current = true;
@@ -975,6 +979,7 @@ export function ChatPage({
       const value = await api<Run>(`/conversations/${id}/messages`, "POST", {
         content: text.trim() || "请根据上传的附件帮助我分析。",
         attachment_ids: attachmentIds,
+        local_references: localReferences,
         model_selection: selected
           ? {
               provider_id: selected.profile.id,
@@ -1375,12 +1380,14 @@ export function ChatPage({
                               uploading ||
                               !modelReady ||
                               (!editedText.trim() &&
-                                !value.attachment_ids.length)
+                                !value.attachment_ids.length &&
+                                !(value.local_references || []).some((item) => item.active))
                             }
                             onClick={() =>
                               void send({
                                 content: editedText,
                                 attachment_ids: value.attachment_ids,
+                                local_references: value.local_references,
                               })
                             }
                           >
@@ -1458,6 +1465,7 @@ export function ChatPage({
                         />
                       )}
 
+                    {value.role === "assistant" && value.run_id && value.has_learning_continuation && <LearningHandoffCards runId={value.run_id} status={value.run_status} />}
                     {value.attachment_ids.length > 0 && (
                       <div className="message-pictures">
                         {value.attachment_ids.map((id) => (
@@ -1466,6 +1474,12 @@ export function ChatPage({
                       </div>
                     )}
                     {value.role === "user" && editingMessageId !== value.id && (
+                      <>
+                      {!!value.local_references?.length && <div className="message-local-folders">
+                        {value.local_references.map((reference, index) => <div className="local-folder-chip" key={index} title={String(reference.path || "需要重新关联")}>
+                          <Folder size={16} /><span>{String(reference.name || "文件夹")}</span><small>{reference.active ? "只读" : "需要重新关联"}</small>
+                        </div>)}
+                      </div>}
                       <UserMessageActions
                         content={value.content}
                         disabled={busy || uploading}
@@ -1474,6 +1488,7 @@ export function ChatPage({
                           setEditedText(value.content);
                         }}
                       />
+                      </>
                     )}
                   </div>
                 </article>
@@ -1746,6 +1761,7 @@ export function ChatPage({
               <div className="composer-tools">
                 <ImagesInput
                   allowFiles
+                  allowFolders
                   hideTrigger
                   pickerRef={attachmentPicker}
                   dropTarget={dropTarget}

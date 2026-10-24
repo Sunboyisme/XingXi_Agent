@@ -260,7 +260,7 @@ def builtin_tools(run_id: str, conversation_id: str):
                 goal_id, planning_id = goal.id, planning.id
             with _PENDING_LEARNING_GOALS_LOCK:
                 _PENDING_LEARNING_GOALS.pop(conversation_id, None)
-            runs.launch(planning_id, lambda: learning.generate_course(goal_id))
+            runs.launch(planning_id, lambda: learning.generate_course(goal_id, planning_id))
             await runs.tasks[planning_id]
             with Session() as db:
                 planning = db.get(Run, planning_id)
@@ -385,16 +385,9 @@ def builtin_tools(run_id: str, conversation_id: str):
     @tool
     def learning_goals() -> str:
         """查询用户的学习主题和当前进度。开始新学习前了解目标与相关基础；同主题已有目标时先询问是否继续，避免重复创建。"""
-        with Session() as db:
-            result = [
-                {
-                    "id": x.id,
-                    "title": x.title,
-                    "status": x.status,
-                    "current_node_id": x.current_node_id,
-                }
-                for x in db.scalars(select(Goal).limit(20))
-            ]
+        from .learning_sessions import list_continuations
+        result = list_continuations()
+        emit(run_id, "learning_continuation", {"cards": result})
         return json.dumps(result, ensure_ascii=False)
 
     return [

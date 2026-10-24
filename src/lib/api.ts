@@ -47,13 +47,15 @@ export type ComplexTask = {
   }[];
   result: { content?: string };
 };
-export type Goal = Schemas["GoalRead"];
+export type Goal = Omit<Schemas["GoalRead"], "outcome" | "weekly_minutes" | "target_date"> & {
+  outcome?: string; weekly_minutes?: number | null; target_date?: string | null;
+};
 export type Node = Schemas["NodeRead"];
 export type Lesson = Schemas["LessonRead"];
 export type LearningTurn = Schemas["LearningTurnRead"];
 export type Memory = Schemas["MemoryRead"];
 export type Notification = Schemas["NotificationRead"];
-export type Attachment = Schemas["AttachmentRead"];
+export type Attachment = Schemas["AttachmentRead"] & { local_path?: string };
 export type RunEvent = { kind: string; data: Record<string, unknown> };
 
 let connection: { url: string; token: string } | undefined;

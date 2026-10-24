@@ -2,6 +2,7 @@
 
 mod backend_port;
 mod window_layout;
+mod drop_files;
 
 use serde::Serialize;
 #[cfg(windows)]
@@ -441,8 +442,10 @@ fn main() {
         }))
         .plugin(tauri_plugin_notification::init())
         .manage(backend)
+        .manage(drop_files::DroppedPaths::default())
         .invoke_handler(tauri::generate_handler![
             backend_config,
+            drop_files::read_dropped_files,
             quit_app,
             pick_project_workspace,
             save_data_export,
@@ -673,6 +676,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                if let Ok(mut allowed) = window.state::<drop_files::DroppedPaths>().0.lock() {
+                    *allowed = paths.iter().cloned().collect();
+                }
+            }
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();

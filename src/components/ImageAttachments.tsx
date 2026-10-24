@@ -5,7 +5,9 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { ImagePlus, Loader2, RotateCw, X, FileText } from "lucide-react";
+import { ImagePlus, Loader2, RotateCw, X, FileText, Folder } from "lucide-react";
+import { useNativeDrop, nativeFile } from "@/lib/nativeDrop";
+import { isTauri } from "@tauri-apps/api/core";
 import { Dialog, Tooltip } from "radix-ui";
 import { createPortal } from "react-dom";
 import {
@@ -146,6 +148,7 @@ export function ImagesInput({
   scopeKey = "default",
   pickerRef,
   hideTrigger = false,
+  allowFolders = false,
 }: {
   images: Attachment[];
   onChange: (values: Attachment[]) => void;
@@ -159,10 +162,12 @@ export function ImagesInput({
   scopeKey?: string;
   pickerRef?: RefObject<HTMLInputElement | null>;
   hideTrigger?: boolean;
+  allowFolders?: boolean;
 }) {
   const [pending, setPending] = useState<Pending[]>([]);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const pendingRef = useRef<Pending[]>([]);
+  const nativeReading = useRef(false);
   const localFileInput = useRef<HTMLInputElement>(null);
   const fileInput = pickerRef ?? localFileInput;
   const imagesRef = useRef(images);
@@ -177,11 +182,12 @@ export function ImagesInput({
     pendingRef.current = values;
     setPending(values);
     callbacks.current.onUploading?.(
-      values.some((x) => x.uploading || (allowFiles && Boolean(x.error))),
+      nativeReading.current || values.some((x) => x.uploading || (allowFiles && Boolean(x.error))),
     );
   }
   function reset() {
     generation.current++;
+    nativeReading.current = false;
     pendingRef.current.forEach((x) => URL.revokeObjectURL(x.url));
     pendingRef.current = [];
     fingerprints.current.clear();
@@ -211,6 +217,7 @@ export function ImagesInput({
         value = item.serverId
           ? await api<Attachment>(`/files/${item.serverId}/retry`, "POST")
           : await uploadFile(item.file);
+        if (generation.current !== epoch || !pendingRef.current.some((x) => x.key === item.key)) return;
         const id = value.id;
         update(
           pendingRef.current.map((x) =>
@@ -256,7 +263,8 @@ export function ImagesInput({
   function addFiles(files: File[]) {
     if (disabledRef.current) return;
     for (const file of files) {
-      const key = `${file.name}:${file.size}:${file.lastModified}`;
+      const origin = (file as File & { nativePath?: string }).nativePath || file.name;
+      const key = `${origin}:${file.size}:${file.lastModified}`;
       if (fingerprints.current.has(key)) continue;
       const imageFile = isImageFile(file);
       const documentFile = allowFiles && isDocumentFile(file);
@@ -296,12 +304,30 @@ export function ImagesInput({
   }
   const addRef = useRef(addFiles);
   addRef.current = addFiles;
+  const nativeTarget = useRef<HTMLElement | null>(null);
+  nativeTarget.current = dropTarget?.current ?? null;
+  useNativeDrop(dropTarget ?? nativeTarget, (files) => {
+    for (const file of files) {
+      if (!file.directory) { addRef.current([nativeFile(file)]); continue; }
+      if (!allowFolders) { callbacks.current.onError("这里不支持文件夹，请添加文件"); continue; }
+      if (imagesRef.current.some((item) => item.local_path === file.path)) continue;
+      if (imagesRef.current.length + pendingRef.current.length >= 4) { callbacks.current.onError("每次最多提交 4 个附件"); break; }
+      const folder: Attachment = { id: `folder:${crypto.randomUUID()}`, name: file.name, local_path: file.path,
+        media_type: "inode/directory", width: 0, height: 0, size: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        file_status: "ready", error: "", warnings: [], parts: 0 };
+      imagesRef.current = [...imagesRef.current, folder];
+      callbacks.current.onChange(imagesRef.current);
+    }
+  }, onError, false, disabled, scopeKey, (value) => {
+    nativeReading.current = value;
+    callbacks.current.onUploading?.(value || pendingRef.current.some((item) => item.uploading || (allowFiles && Boolean(item.error))));
+  });
   useEffect(() => {
     const target = dropTarget?.current;
     if (!target) return;
     let depth = 0;
     const fileDrag = (event: DragEvent) =>
-      Array.from(event.dataTransfer?.types || []).includes("Files");
+      !isTauri() && Array.from(event.dataTransfer?.types || []).includes("Files");
     const enter = (event: DragEvent) => {
       if (fileDrag(event)) {
         event.preventDefault();
@@ -327,7 +353,9 @@ export function ImagesInput({
         event.preventDefault();
         depth = 0;
         target.classList.remove("image-drag-over");
-        addRef.current(Array.from(event.dataTransfer?.files || []));
+        const folders = Array.from(event.dataTransfer?.items || []).some((item) => item.webkitGetAsEntry?.()?.isDirectory);
+        if (folders) callbacks.current.onError("文件夹只读引用请使用桌面端拖入");
+        else addRef.current(Array.from(event.dataTransfer?.files || []));
       }
     };
     const paste = (event: ClipboardEvent) => {
@@ -358,7 +386,9 @@ export function ImagesInput({
       >
         {images.map((image) => (
           <div className="attachment-draft" key={image.id}>
-            {image.file_status ? (
+            {image.local_path ? (
+              <div className="file-attachment-icon" title={image.local_path}><Folder size={24} /><span>只读文件夹</span></div>
+            ) : image.file_status ? (
               <div className="file-attachment-icon">
                 <FileText size={24} />
                 <span>
@@ -371,6 +401,7 @@ export function ImagesInput({
               )
             )}
             <small>{image.name}</small>
+            {image.local_path && <small className="local-folder-path" title={image.local_path}>{image.local_path}</small>}
             {!!image.warnings?.length && (
               <span className="file-attachment-warning">有解析提示</span>
             )}

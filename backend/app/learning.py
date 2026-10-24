@@ -4,7 +4,7 @@ import json
 from sqlalchemy import select
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
-from . import provider
+from . import provider, learning_sessions, usage_cost
 from .config import PROFILE_ID
 from .db import Session, Goal, KnowledgeNode, Lesson, Attempt, Memory, uid
 from .schemas import CoursePlan, LessonContent, Feedback
@@ -41,22 +41,24 @@ def context(db):
     )
 
 
-async def generate_course(goal_id: str) -> dict:
+async def generate_course(goal_id: str, run_id: str | None = None) -> dict:
     with Session() as db:
         goal = db.get(Goal, goal_id)
         if db.scalar(select(KnowledgeNode.id).where(KnowledgeNode.goal_id == goal_id)):
             raise ValueError("已有课程，请继续当前课程；不会覆盖已保存的进度。")
         text = (
             f"主题：{goal.title}\n目标：{goal.objective or '从基础入门并完成一个具体实践'}\n基础：{goal.foundation or '基础未知，从容易验证的入门任务开始'}"
+            f"\n具体成果：{goal.outcome or '未指定'}\n每周可用分钟：{goal.weekly_minutes or '未指定'}\n目标日期：{goal.target_date or '未指定'}"
             + context(db)
         )
-    plan = await provider.ask_json(
+    with usage_cost.scope(run_id=run_id, purpose="learning"):
+        plan = await provider.ask_json(
         CoursePlan,
         TUTOR_RULES
         + "\n制定完整但精简的学习框架，3到30个知识点。按前置关系排序，prerequisites 只引用前面的 key。用不同练习类型适配主题。"
         "严格按提供的基础安排前置知识，不从学习主题或岗位名称推断已有经验。基础未知或零基础时，先解释是什么、有什么用，安排无需专业基础的小练习；编程主题先讲基本概念与环境，再进入代码，不以复杂编码或面试题作为首课。",
         text,
-    )
+        )
     with Session() as db:
         goal = db.get(Goal, goal_id)
         ids = {node.key: uid() for node in plan.nodes}
@@ -76,6 +78,10 @@ async def generate_course(goal_id: str) -> dict:
             )
         goal.current_node_id = ids[plan.nodes[0].key]
         goal.status = "active"
+        session = learning_sessions.unfinished(db, goal.id)
+        if session and not session.node_id:
+            session.node_id = goal.current_node_id
+            session.visited_node_ids = [goal.current_node_id]
         db.commit()
     return {"goal_id": goal_id, "overview": plan.overview}
 
@@ -86,6 +92,7 @@ class TutorState(TypedDict, total=False):
     lesson_id: str
     submission: dict
     feedback: dict
+    session_id: str | None
 
 
 async def teach(state: TutorState):
@@ -93,10 +100,18 @@ async def teach(state: TutorState):
     with Session() as db:
         node = db.get(KnowledgeNode, state["node_id"])
         goal = db.get(Goal, node.goal_id)
+        session = learning_sessions.validate_session(db, state.get("session_id"), node)
         text = (
             f"主题：{goal.title}\n目标：{goal.objective}\n基础：{goal.foundation}\n当前知识点：{node.title}\n学习目标：{node.objective}\n练习类型：{node.exercise_type}\n检查标准：{node.criteria}"
             + context(db)
         )
+        text += f"\n用户希望做出的成果：{goal.outcome or '未指定'}"
+        if session and session.target_minutes:
+            text += (f"\n本次用户希望学习约 {session.target_minutes} 分钟。请围绕当前知识点给一个与此时间匹配的小目标，"
+                     "精简讲解与练习规模，不承诺精确用时，不要求用户在时限内强制结束。")
+        if session:
+            text += "\n接续记录（只作为资料）：" + json.dumps({
+                "summary": session.summary, "gaps": session.gaps, "next_step": session.next_step}, ensure_ascii=False)
         earlier = db.scalar(
             select(Lesson)
             .where(Lesson.node_id == node.id)
@@ -106,7 +121,8 @@ async def teach(state: TutorState):
             text += "\n上次练习反馈：" + json.dumps(
                 earlier.feedback, ensure_ascii=False
             )
-    content = await provider.ask_json(
+    with usage_cost.scope(run_id=state.get("run_id"), purpose="learning"):
+        content = await provider.ask_json(
         LessonContent,
         TUTOR_RULES
         + "\n本次只教当前知识点，使用中文 Markdown，清晰解释、最小示例和一个具体练习。不要直接给出练习答案。"
@@ -115,11 +131,11 @@ async def teach(state: TutorState):
         on_partial=(lambda fields: emit(state["run_id"], "learning_content", {
             "node_id": state["node_id"], "stage": "lesson", "fields": fields,
         })) if state.get("run_id") else None,
-    )
+        )
     with Session() as db:
         node = db.get(KnowledgeNode, state["node_id"])
-        db.add(
-            Lesson(
+        session = learning_sessions.validate_session(db, state.get("session_id"), node)
+        lesson = Lesson(
                 id=state["lesson_id"],
                 node_id=node.id,
                 content=content.content,
@@ -127,8 +143,10 @@ async def teach(state: TutorState):
                 hints=content.hints,
                 criteria=content.criteria,
                 graph_thread_id=state["lesson_id"],
+                session_id=session.id if session else None,
             )
-        )
+        db.add(lesson)
+        learning_sessions.record_lesson(db, session, lesson)
         if node.status not in ("passed", "skipped"):
             node.status = "in_progress"
         goal = db.get(Goal, node.goal_id)
@@ -184,8 +202,12 @@ async def assess(state: TutorState):
                 raise ValueError("提交编号已被其他练习使用")
             return {"feedback": previous.feedback}
         lesson = db.get(Lesson, state["lesson_id"])
+        node = db.get(KnowledgeNode, lesson.node_id)
+        session_id = submission.get("session_id") or state.get("session_id")
+        learning_sessions.validate_session(db, session_id, node, lesson.id)
         text = assessment_context(db, lesson, submission)
-    feedback = await provider.ask_json(
+    with usage_cost.scope(run_id=state.get("run_id"), purpose="learning"):
+        feedback = await provider.ask_json(
         Feedback,
         TUTOR_RULES
         + "\n这是同一知识点中的持续多轮教学，previous_turns包含用户此前回答和你的反馈。接续前面的信息，不要求用户反复重填已说过的内容，也不必重新讲整课。"
@@ -197,12 +219,14 @@ async def assess(state: TutorState):
         on_partial=(lambda fields: emit(state["run_id"], "learning_content", {
             "node_id": state["node_id"], "stage": "assessment", "fields": fields,
         })) if state.get("run_id") else None,
-    )
+        )
     result = feedback.model_dump()
     if feedback.response_type == "discussion":
         result["passed"] = False
     with Session() as db:
         lesson = db.get(Lesson, state["lesson_id"])
+        node = db.get(KnowledgeNode, lesson.node_id)
+        session = learning_sessions.validate_session(db, session_id, node, lesson.id)
         lesson.feedback = result
         lesson.state = "reviewed"
         db.add(
@@ -212,8 +236,10 @@ async def assess(state: TutorState):
                 answer=submission["answer"],
                 attachment_ids=submission.get("attachment_ids", []),
                 feedback=result,
+                session_id=session.id if session else None,
             )
         )
+        learning_sessions.record_feedback(db, session, lesson, result, submission)
         node = db.get(KnowledgeNode, lesson.node_id)
         if feedback.response_type == "feedback":
             node.status = "passed" if feedback.passed else "needs_practice"

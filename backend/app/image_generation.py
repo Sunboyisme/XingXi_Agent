@@ -108,7 +108,9 @@ async def request_image(value, api_key, prompt, progress=None):
 
     await advance("submit")
     try:
-        async with httpx.AsyncClient(
+        from .usage_cost import MeteredAsyncClient, metadata
+        async with MeteredAsyncClient(
+            usage_metadata=metadata(value, kind="images", purpose="image_generation" if progress else "connection_test"),
             timeout=httpx.Timeout(IMAGE_REQUEST_TIMEOUT_SECONDS, connect=15),
             trust_env=False,
         ) as client:

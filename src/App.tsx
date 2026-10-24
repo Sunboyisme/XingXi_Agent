@@ -14,6 +14,7 @@ import {
   CircleHelp,
   Loader2,
   MessageCircle,
+  Folder,
   Settings2,
   X,
 } from "lucide-react";
@@ -61,13 +62,12 @@ import { ConfirmDelete, ErrorNotice } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
 import { WindowFrame } from "./components/WindowFrame";
 import { SidebarResize } from "./components/SidebarResize";
-import {
-  ProjectSidebar,
-  type ProjectPanelRequest,
-} from "./components/ProjectSidebar";
+import { ProjectSidebar } from "./components/ProjectSidebar";
 import { ProjectOverview } from "./components/ProjectOverview";
+import { ProjectsPage } from "./components/ProjectsPage";
+import { ProjectManagement, type ProjectManagementRequest } from "./components/ProjectManagement";
 
-type Page = "chat" | "learning" | "plans" | "settings";
+type Page = "chat" | "projects" | "learning" | "plans" | "settings";
 const pages: {
   id: Page;
   label: string;
@@ -77,6 +77,11 @@ const pages: {
     id: "chat",
     label: "对话",
     icon: MessageCircle,
+  },
+  {
+    id: "projects",
+    label: "项目",
+    icon: Folder,
   },
   {
     id: "learning",
@@ -144,7 +149,16 @@ export function App() {
     null,
   );
   const [projectPanelRequest, setProjectPanelRequest] =
-    useState<ProjectPanelRequest | null>(null);
+    useState<ProjectManagementRequest | null>(null);
+  const [learningOpenRequest, setLearningOpenRequest] = useState<{ goalId: string; sessionId?: string; key: number }>();
+  useEffect(() => {
+    const open = (event: Event) => {
+      setLearningOpenRequest((event as CustomEvent).detail);
+      setPage("learning");
+    };
+    window.addEventListener("xiaoxi-open-learning", open);
+    return () => window.removeEventListener("xiaoxi-open-learning", open);
+  }, []);
   const [projectRevision, setProjectRevision] = useState(0);
   const [newChatPinned, setNewChatPinned] = useState(false);
   const selectedConversation = conversations.find(
@@ -162,6 +176,14 @@ export function App() {
       action,
       key: (previous?.key || 0) + 1,
     }));
+  }
+  function openProject(id: string, saved?: Project) {
+    if (saved) setProjects((items) => items.some((item) => item.id === saved.id)
+      ? items.map((item) => item.id === saved.id ? saved : item)
+      : [...items, saved]);
+    navigate("projects");
+    setProjectOverviewId(id);
+    setActiveProjectId(id);
   }
   function openConversation(
     conversation: Conversation,
@@ -314,6 +336,10 @@ export function App() {
   }, [settings?.timezone]);
   function navigate(value: string, create = false) {
     if (value === "reminders" || value === "calendar") value = "plans";
+    // Top-level navigation must never inherit the selected project detail.
+    // Project links use openProject explicitly; chat links keep their existing
+    // conversation selection while returning to the actual conversation view.
+    if (value === "chat" || value === "projects") setProjectOverviewId(null);
     if (
       value === "memories" ||
       value === "tools" ||
@@ -655,21 +681,17 @@ export function App() {
               visible={page === "chat" && !sidebarCollapsed}
               conversations={conversations}
               projects={projects}
-              currentId={overviewProject ? null : conversationId}
-              projectId={overviewProject?.id || resolvedProjectId}
+              currentId={conversationId}
+              projectId={resolvedProjectId}
               onNew={(id, pinned) => {
                 setActiveProjectId(id);
                 setFocusMessageId(null);
                 startNewChat();
                 setNewChatPinned(Boolean(pinned));
               }}
-              onProject={(id) => {
-                setActiveProjectId(id);
-                setProjectOverviewId(id);
-                navigate("chat");
-              }}
+              onProject={openProject}
               onOpen={openConversation}
-              request={projectPanelRequest}
+              onManage={setProjectPanelRequest}
               onLibraryChange={() => setProjectRevision((value) => value + 1)}
               onDelete={setDeleting}
               refresh={refresh}
@@ -688,12 +710,16 @@ export function App() {
                 </p>
               }
             >
-              {page === "chat" && overviewProject && (
+              {page === "projects" && !overviewProject && <ProjectsPage projects={projects} conversations={conversations}
+                onOpen={openProject}
+                onCreate={() => setProjectPanelRequest({ id: null, action: "create", key: Date.now() })} />}
+              {page === "projects" && overviewProject && (
                 <ProjectOverview
                   key={overviewProject.id}
                   project={overviewProject}
                   conversations={conversations}
                   revision={projectRevision}
+                  onBack={() => { setProjectOverviewId(null); navigate("projects"); }}
                   onNew={() => {
                     setActiveProjectId(overviewProject.id);
                     startNewChat();
@@ -707,7 +733,7 @@ export function App() {
                   }
                 />
               )}
-              {page === "chat" && !overviewProject && (
+              {page === "chat" && (
                 <ChatPage
                   key={chatKey}
                   conversationId={conversationId}
@@ -723,7 +749,7 @@ export function App() {
                         ),
                       );
                   }}
-                  onProjectOpen={(id) => setProjectOverviewId(id)}
+                  onProjectOpen={openProject}
                   onLibrary={(id) => openProjectPanel(id, "library")}
                   focusMessageId={focusMessageId}
                   onMessageFocused={() => setFocusMessageId(null)}
@@ -751,6 +777,8 @@ export function App() {
                   refresh={refresh}
                   onSettings={() => navigate("settings")}
                   createRequested={createKey}
+                  openRequest={learningOpenRequest}
+                  onOpenHandled={() => setLearningOpenRequest(undefined)}
                 />
               )}{" "}
               {page === "plans" && (
@@ -789,6 +817,16 @@ export function App() {
               )}
             </Suspense>
           </div>
+          <ProjectManagement projects={projects} conversations={conversations} currentId={conversationId}
+            request={projectPanelRequest} refresh={refresh}
+            onProject={openProject}
+            onDeleted={(id) => {
+              setProjects((items) => items.filter((item) => item.id !== id));
+              setConversations((items) => items.map((item) => item.project_id === id ? { ...item, project_id: null } : item));
+              if (projectOverviewId === id) setProjectOverviewId(null);
+              if (activeProjectId === id) setActiveProjectId(null);
+            }}
+            onLibraryChange={() => setProjectRevision((value) => value + 1)} />
         </main>
         <NotificationsPanel
           open={notificationOpen}

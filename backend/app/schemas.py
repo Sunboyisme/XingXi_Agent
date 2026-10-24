@@ -366,10 +366,12 @@ class MessageRead(RecordRead):
     role: str
     content: str
     attachment_ids: list[str]
+    local_references: list[dict] = Field(default_factory=list)
     reasoning: str = ""
     run_id: str | None = None
     run_status: str | None = None
     task_id: str | None = None
+    has_learning_continuation: bool = False
 
 
 class ImageGenerationWrite(BaseModel):
@@ -480,6 +482,7 @@ class RetrievalRead(BaseModel):
 class ChatInput(BaseModel):
     content: str = Field(min_length=1, max_length=30000)
     attachment_ids: list[str] = Field(default_factory=list, max_length=4)
+    local_references: list[str] = Field(default_factory=list, max_length=4)
     model_selection: ModelSelection | None = None
 
 
@@ -529,6 +532,23 @@ class GoalCreate(BaseModel):
     objective: str = Field(default="", max_length=4000)
     foundation: str = Field(default="", max_length=4000)
     use_beginner_defaults: bool = False
+    outcome: str = Field(default="", max_length=4000)
+    weekly_minutes: int | None = Field(default=None, ge=1, le=10080)
+    target_date: str | None = None
+
+    @field_validator("target_date")
+    @classmethod
+    def valid_target_date(cls, value):
+        if value is None or value == "":
+            return None
+        if len(value) != 10:
+            raise ValueError("目标日期须为 YYYY-MM-DD")
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+
+
+class GoalUpdate(GoalCreate):
+    pass
 
 
 class NodeRead(RecordRead):
@@ -549,6 +569,9 @@ class GoalRead(RecordRead):
     title: str
     objective: str
     foundation: str
+    outcome: str = ""
+    weekly_minutes: int | None = None
+    target_date: str | None = None
     status: str
     course_version: int
     current_node_id: str | None
@@ -563,6 +586,7 @@ class LessonRead(RecordRead):
     criteria: str
     feedback: dict
     state: str
+    session_id: str | None = None
 
 
 class LearningTurnRead(RecordRead):
@@ -571,12 +595,65 @@ class LearningTurnRead(RecordRead):
     answer: str
     attachment_ids: list[str]
     feedback: dict
+    session_id: str | None = None
 
 
 class Submission(BaseModel):
     submission_id: str = Field(min_length=1, max_length=100)
     answer: str = Field(max_length=30000)
     attachment_ids: list[str] = Field(default_factory=list, max_length=4)
+    session_id: str | None = None
+
+
+class LearningSessionStart(BaseModel):
+    node_id: str | None = None
+    target_minutes: int | None = Field(default=None, ge=1, le=480)
+
+
+class LearningLessonRequest(BaseModel):
+    session_id: str | None = None
+
+
+class LearningDraftWrite(BaseModel):
+    node_id: str | None = None
+    lesson_id: str | None = None
+    answer: str = Field(default="", max_length=30000)
+    attachment_ids: list[str] = Field(default_factory=list, max_length=4)
+    revision: int | None = Field(default=None, ge=0)
+
+
+class LearningSessionRead(RecordRead):
+    goal_id: str
+    node_id: str | None
+    lesson_id: str | None
+    target_minutes: int | None
+    status: Literal["active", "paused", "ended"]
+    summary: str
+    gaps: list[str]
+    next_step: str
+    started_at: str
+    paused_at: str | None
+    ended_at: str | None
+    last_studied_at: str | None
+    visited_node_ids: list[str]
+    draft: dict
+    draft_revision: int
+    turns: list[LearningTurnRead] = Field(default_factory=list)
+
+
+class LearningContinuationRead(BaseModel):
+    goal_id: str
+    goal_title: str
+    goal_status: str
+    node_id: str | None
+    node_title: str
+    lesson_id: str | None
+    session_id: str | None
+    status: str
+    summary: str
+    gaps: list[str]
+    next_step: str
+    last_studied_at: str | None
 
 
 class MemoryCreate(BaseModel):
