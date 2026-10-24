@@ -181,6 +181,18 @@ def user_content(text: str, attachment_ids: list[str] | None = None, config=None
         return content if image_ids else "\n".join(part["text"] for part in content)
 
 
+def message_text(content):
+    """Read visible text from compatible providers' string or content-block chunks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(part if isinstance(part, str) else part.get("text", "")
+                       for part in content if isinstance(part, str) or
+                       (isinstance(part, dict) and part.get("type") in ("text", "text_delta", "output_text")
+                        and isinstance(part.get("text"), str)))
+    return ""
+
+
 async def ask_json(
     schema: type[BaseModel], instructions: str, text: str, attachment_ids=None,
     *, model_config=None, on_partial=None, on_usage=None, image_data=None,
@@ -196,24 +208,28 @@ async def ask_json(
     ]
     for attempt in range(2):
         if on_partial:
-            raw, last_update = "", 0.0
+            raw, last_update, last_fields = "", 0.0, {}
             on_partial({})
             response = None
             async for chunk in llm.astream(messages):
                 response = chunk if response is None else response + chunk
-                if isinstance(chunk.content, str):
-                    raw += chunk.content
-                if time.monotonic() - last_update >= 0.15:
-                    on_partial(partial_json_strings(raw, schema.model_fields))
+                raw += message_text(chunk.content)
+                if time.monotonic() - last_update >= 0.08:
+                    fields = partial_json_strings(raw, schema.model_fields)
+                    if fields != last_fields:
+                        on_partial(fields)
+                        last_fields = fields
                     last_update = time.monotonic()
-            on_partial(partial_json_strings(raw, schema.model_fields))
+            fields = partial_json_strings(raw, schema.model_fields)
+            if fields != last_fields:
+                on_partial(fields)
             if response is None:
                 raise ValueError("模型未返回文字，请重试。")
             response = AIMessage(content=response.content, additional_kwargs=response.additional_kwargs,
                                  usage_metadata=getattr(response, "usage_metadata", None))
         else:
             response = await llm.ainvoke(messages)
-            raw = response.content if isinstance(response.content, str) else json.dumps(response.content, ensure_ascii=False)
+            raw = message_text(response.content)
         if on_usage:
             on_usage(getattr(response, "usage_metadata", None) or {})
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())

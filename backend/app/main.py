@@ -861,10 +861,11 @@ async def run_events(
                 break
             if not events:
                 yield ": keepalive\n\n"
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.08)
 
     return StreamingResponse(
-        stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"}
     )
 
 
@@ -1067,11 +1068,22 @@ def skip_node(node_id: str, db=Depends(database)):
     ):
         lesson.state = "skipped"
     goal = item(db, store.Goal, node.goal_id)
-    nodes = db.scalars(
-        select(store.KnowledgeNode).where(store.KnowledgeNode.goal_id == node.goal_id)
-    ).all()
-    if all(n.status in ("passed", "skipped") for n in nodes):
-        goal.status = "completed"
+    learning.update_goal_progress(db, goal)
+    db.commit()
+    return node
+
+
+@router.post("/learning/nodes/{node_id}/complete", response_model=s.NodeRead)
+def complete_learning_section(node_id: str, db=Depends(database)):
+    node = item(db, store.KnowledgeNode, node_id)
+    learning_sessions.ensure_idle(db, node.goal_id)
+    if not learning_sessions.latest_lesson(db, node.id):
+        raise HTTPException(409, "请先查看本节讲解，再结束本节学习")
+    if node.status not in ("passed", "skipped"):
+        node.status = "needs_practice"
+        node.review_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(timespec="microseconds")
+    goal = item(db, store.Goal, node.goal_id)
+    learning.update_goal_progress(db, goal)
     db.commit()
     return node
 

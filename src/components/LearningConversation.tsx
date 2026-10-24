@@ -20,7 +20,7 @@ function FeedbackReply({ value }: { value: Record<string, unknown> }) {
       )}
       {Boolean(value.next_exercise) ? (
         <>
-          <h4>换一道试试</h4>
+          <h4>再试一题（可选）</h4>
           <Markdown numberedLists>{String(value.next_exercise)}</Markdown>
         </>
       ) : (
@@ -36,6 +36,49 @@ function FeedbackReply({ value }: { value: Record<string, unknown> }) {
         >
           <Markdown>{String(value.evidence)}</Markdown>
         </DetailDialog>
+      )}
+    </div>
+  );
+}
+
+export function LearningPendingReply({
+  answer,
+  attachmentIds,
+  fields,
+  busy,
+}: {
+  answer?: string;
+  attachmentIds: string[];
+  fields: Record<string, string>;
+  busy: boolean;
+}) {
+  return (
+    <div className="learning-exchange learning-live-reply" aria-busy={busy}>
+      {(answer || attachmentIds.length > 0) && (
+        <div className="learning-user-reply">
+          <span className="message-name">你</span>
+          {answer && <Markdown>{answer}</Markdown>}
+          {!!attachmentIds.length && (
+            <div className="message-pictures">
+              {attachmentIds.map((id) => (
+                <Picture key={id} id={id} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <span className="message-name">XiaoXi</span>
+      {fields.explanation ? (
+        <FeedbackReply value={fields} />
+      ) : (
+        <p className="learning-stream-status" role="status">
+          {busy ? "正在思考，回复将逐步显示…" : "本次回复未完成，草稿已保留。"}
+        </p>
+      )}
+      {!busy && Boolean(fields.explanation) && (
+        <p className="learning-stream-status">
+          回复已中断，以上为收到的文字；正式记录暂未确认，草稿已保留。
+        </p>
       )}
     </div>
   );

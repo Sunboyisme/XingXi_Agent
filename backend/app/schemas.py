@@ -783,22 +783,22 @@ class LessonContent(BaseModel):
 
 
 class Feedback(BaseModel):
+    explanation: str = Field(description="首先输出可直接展示给用户的简短解答或反馈，再输出其他字段。")
     response_type: Literal["feedback", "discussion"] = "feedback"
     passed: bool
-    explanation: str
     strengths: list[str]
     gaps: list[str]
     next_step: str
     evidence: str
     reference_answer: str = Field(default="", description="练习未通过或用户求助时，直接给出当前题的完整参考答案与简短原因，不要求反复补填。")
-    next_exercise: str = Field(default="", description="练习未通过时必填：同一知识点的一道更简单的新题，只考一个要点，不重复原题。")
+    next_exercise: str = Field(default="", description="仅在本节尚未给过巩固题且用户愿意继续时，可给一道可选的小题；否则留空。")
     next_criteria: str = Field(default="", description="与新题配套的简明判断标准；不沿用原题中已不相关的要求。")
 
     @model_validator(mode="after")
-    def require_replacement_exercise(self):
+    def validate_feedback(self):
         if bool(self.next_exercise.strip()) != bool(self.next_criteria.strip()):
             raise ValueError("新题和新题判断标准必须配套返回")
         if self.response_type == "feedback" and not self.passed:
-            if not all(value.strip() for value in (self.reference_answer, self.next_exercise, self.next_criteria)):
-                raise ValueError("练习未通过时必须返回参考答案、新题和新题标准")
+            if not self.reference_answer.strip():
+                raise ValueError("练习未通过时必须直接给参考答案")
         return self

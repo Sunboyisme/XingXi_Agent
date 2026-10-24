@@ -34,8 +34,12 @@
   gap: 2px;
   margin-left: auto;
 }
-.learning-session-toolbar > .muted {
-  font-size: 11px;
+.learning-session-toolbar > button {
+  transition: none;
+}
+.learning-session-toolbar > button:disabled {
+  opacity: 1;
+  color: var(--ui-color-text-muted);
 }
 .course-header-compact {
   flex-wrap: wrap;
@@ -67,6 +71,40 @@
   font-size: 15px;
   line-height: 1.8;
   overflow-wrap: anywhere;
+}
+.learning-live-reply {
+  margin-top: 30px;
+}
+.learning-stream-status {
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  padding: 12px 0;
+}
+.learning-section-navigation {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 30px;
+  border-top: 1px solid var(--ui-color-line);
+}
+.learning-section-navigation > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  font-size: 13px;
+}
+.learning-section-navigation span {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .learning-section-navigation {
+    padding: 10px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }
 .learning-assistant-reply h4 {
   font-size: 14px;

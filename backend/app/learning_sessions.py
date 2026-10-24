@@ -137,6 +137,8 @@ def continuation(db, goal):
         summary = f"上次停在：{node.title}" if node and lesson else "还没有开始本目标的学习。"
     if not next_step:
         next_step = "继续当前练习或提问。" if lesson else "从当前知识点开始一个小任务。" if node else "先生成学习框架。"
+    if goal.status == "completed":
+        next_step = "本课程学习已结束，可从目录回看讲解或复习尚未通过的练习。"
     last_attempt = db.scalar(select(Attempt).join(Lesson, Attempt.lesson_id == Lesson.id)
         .join(KnowledgeNode, KnowledgeNode.id == Lesson.node_id)
         .where(KnowledgeNode.goal_id == goal.id, Attempt.profile_id == PROFILE_ID)

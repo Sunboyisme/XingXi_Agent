@@ -47,8 +47,13 @@ export type ComplexTask = {
   }[];
   result: { content?: string };
 };
-export type Goal = Omit<Schemas["GoalRead"], "outcome" | "weekly_minutes" | "target_date"> & {
-  outcome?: string; weekly_minutes?: number | null; target_date?: string | null;
+export type Goal = Omit<
+  Schemas["GoalRead"],
+  "outcome" | "weekly_minutes" | "target_date"
+> & {
+  outcome?: string;
+  weekly_minutes?: number | null;
+  target_date?: string | null;
 };
 export type Node = Schemas["NodeRead"];
 export type Lesson = Schemas["LessonRead"];
@@ -119,19 +124,26 @@ export async function readEvents(
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const dispatch = (block: string) => {
+    const data = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).replace(/^ /, ""))
+      .join("\n");
+    if (data.trim()) onEvent(JSON.parse(data));
+  };
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let index: number;
-      while ((index = buffer.indexOf("\n\n")) !== -1) {
-        const block = buffer.slice(0, index);
-        buffer = buffer.slice(index + 2);
-        const data = block
-          .split("\n")
-          .find((line) => line.startsWith("data: "));
-        if (data) onEvent(JSON.parse(data.slice(6)));
+      buffer += decoder.decode(value, { stream: !done });
+      let boundary: RegExpExecArray | null;
+      while ((boundary = /\r?\n\r?\n/.exec(buffer))) {
+        dispatch(buffer.slice(0, boundary.index));
+        buffer = buffer.slice(boundary.index + boundary[0].length);
+      }
+      if (done) {
+        if (buffer.trim()) dispatch(buffer);
+        break;
       }
     }
   } finally {

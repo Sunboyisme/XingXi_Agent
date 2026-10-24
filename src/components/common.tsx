@@ -270,7 +270,7 @@ export function ConfirmDelete({
 export const nodeStatus: Record<string, string> = {
   not_started: "未开始",
   in_progress: "进行中",
-  needs_practice: "待巩固",
+  needs_practice: "已学 · 待复习",
   passed: "练习通过",
   skipped: "已跳过 · 尚未验证",
 };

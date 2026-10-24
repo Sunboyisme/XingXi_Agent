@@ -25,7 +25,6 @@ export function LearningSessionPanel({
   goal,
   session,
   busy,
-  savingDraft,
   onPause,
   onEnd,
   onEdit,
@@ -34,7 +33,6 @@ export function LearningSessionPanel({
   goal: Goal;
   session: LearningSession | null;
   busy: boolean;
-  savingDraft: boolean;
   onPause: () => void;
   onEnd: () => void;
   onEdit: () => void;
@@ -124,36 +122,33 @@ export function LearningSessionPanel({
         <History size={14} />
         学习记录
       </Button>
-      {onReviewReminder && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onReviewReminder}
-          disabled={busy}
-        >
-          <BellPlus size={14} />
-          复习提醒
-        </Button>
-      )}
-      {hasSession && (
-        <>
-          {session?.status === "active" && (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={onPause}>
-              <Pause size={14} />
-              暂停
-            </Button>
-          )}
-          <Button size="sm" variant="ghost" disabled={busy} onClick={onEnd}>
-            <Square size={13} />
-            结束本次
-          </Button>
-        </>
-      )}
-      {savingDraft && (
-        <span className="muted" role="status">
-          保存草稿…
-        </span>
-      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onReviewReminder}
+        disabled={busy || !onReviewReminder}
+      >
+        <BellPlus size={14} />
+        复习提醒
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={busy || session?.status !== "active"}
+        onClick={onPause}
+      >
+        <Pause size={14} />
+        暂停
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={busy || !hasSession}
+        onClick={onEnd}
+      >
+        <Square size={13} />
+        结束本次
+      </Button>
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="learning-history-dialog">
           <DialogHeader>

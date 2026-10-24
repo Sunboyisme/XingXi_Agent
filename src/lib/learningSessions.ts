@@ -6,6 +6,10 @@ export type LearningGoalDetails = Goal & {
   target_date?: string | null;
 };
 
+export function isStudied(status: string) {
+  return ["passed", "needs_practice", "skipped"].includes(status);
+}
+
 export type SessionDraft = {
   node_id: string | null;
   lesson_id: string | null;
@@ -55,10 +59,24 @@ export type LearningDraftOptions = {
   onError: (message: string) => void;
 };
 
-export function draftImages(ids: string[], local: Attachment[] = []): Attachment[] {
-  return ids.map((id) => local.find((item) => item.id === id) || ({ id, name: "已保存的练习图片" } as Attachment));
+export function draftImages(
+  ids: string[],
+  local: Attachment[] = [],
+): Attachment[] {
+  return ids.map(
+    (id) =>
+      local.find((item) => item.id === id) ||
+      ({ id, name: "已保存的练习图片" } as Attachment),
+  );
 }
 
 export function learningDate(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "尚未开始";
+  return value
+    ? new Date(value).toLocaleString("zh-CN", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "尚未开始";
 }

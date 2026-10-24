@@ -44,6 +44,7 @@ import {
   type LearningGoalDetails,
   type LearningSession,
   learningDate,
+  isStudied,
 } from "@/lib/learningSessions";
 import {
   EmptyState,
@@ -56,7 +57,10 @@ import {
   Hint,
 } from "./common";
 import { BaiAvatar } from "./BaiAvatar";
-import { LearningConversation } from "./LearningConversation";
+import {
+  LearningConversation,
+  LearningPendingReply,
+} from "./LearningConversation";
 import { LearningSessionPanel } from "./LearningSessionPanel";
 
 export function LearningPage({
@@ -124,6 +128,25 @@ export function LearningPage({
     stage: string;
     fields: Record<string, string>;
   } | null>(null);
+  const [pendingReply, setPendingReply] = useState<{
+    nodeId: string;
+    answer: string;
+    attachmentIds: string[];
+  } | null>(null);
+  const lessonScroll = useRef<HTMLDivElement>(null);
+  const followReply = useRef(false);
+  useEffect(() => {
+    if (!followReply.current) return;
+    const frame = requestAnimationFrame(() => {
+      const viewport = lessonScroll.current;
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [learningStream, pendingReply, turns, busy]);
+  useEffect(() => {
+    followReply.current = false;
+    setPendingReply(null);
+  }, [nodeId]);
   const {
     answer,
     setAnswer,
@@ -161,6 +184,14 @@ export function LearningPage({
   const selectedGoal = availableGoals.find((x) => x.id === goalId);
   const goal = selectedGoal || null;
   const node = goal?.nodes.find((x) => x.id === nodeId);
+  const nextNode =
+    goal?.nodes.find(
+      (value) =>
+        value.ordinal > (node?.ordinal ?? -1) && !isStudied(value.status),
+    ) ||
+    goal?.nodes.find(
+      (value) => value.id !== nodeId && !isStudied(value.status),
+    );
   const pinnedLessonId =
     session?.id === pinnedSession.current?.id && session?.node_id === nodeId
       ? session?.lesson_id
@@ -394,32 +425,74 @@ export function LearningPage({
       setSessionBusy(false);
     }
   }
+  async function moveToNode(value: Node) {
+    await flushDraft();
+    pinnedSession.current = null;
+    continuityVersion.current += 1;
+    const previous = sessionRef.current;
+    if (previous && previous.status !== "ended") {
+      const moved = await api<LearningSession>(
+        `/learning/sessions/${previous.id}/resume`,
+        "POST",
+        {
+          node_id: value.id,
+        },
+      );
+      const updated =
+        previous.status === "paused"
+          ? await api<LearningSession>(
+              `/learning/sessions/${previous.id}/pause`,
+              "POST",
+            )
+          : moved;
+      if (selectedGoalId.current !== previous.goal_id) return;
+      setSession(updated);
+    }
+    setNodeId(value.id);
+    if (
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 1099px)").matches
+    )
+      setOutlineOpen(false);
+    if (goal) await reloadContinuity(goal.id);
+  }
   async function switchNode(value: Node) {
     if (busy || sessionBusy || uploading || nodeId === value.id) return;
     setSessionBusy(true);
     setError("");
     try {
+      await moveToNode(value);
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+  async function finishSection() {
+    if (!node || !lesson || busy || sessionBusy || uploading) return;
+    const targetGoal = goalId;
+    setSessionBusy(true);
+    setError("");
+    try {
       await flushDraft();
-      const previous = sessionRef.current;
-      if (previous && previous.status !== "ended") {
-        await api(`/learning/sessions/${previous.id}/pause`, "POST");
-        await api(`/learning/sessions/${previous.id}/resume`, "POST", {
-          node_id: value.id,
-        });
-        const paused = await api<LearningSession>(
-          `/learning/sessions/${previous.id}/pause`,
-          "POST",
-        );
-        if (selectedGoalId.current !== previous.goal_id) return;
-        setSession(paused);
+      await api(`/learning/nodes/${node.id}/complete`, "POST");
+      await refresh();
+      if (selectedGoalId.current !== targetGoal) return;
+      if (nextNode) {
+        await moveToNode(nextNode);
+      } else {
+        const currentSession = sessionRef.current;
+        if (currentSession && currentSession.status !== "ended") {
+          const ended = await api<LearningSession>(
+            `/learning/sessions/${currentSession.id}/end`,
+            "POST",
+          );
+          if (selectedGoalId.current !== targetGoal) return;
+          setSession(ended);
+        }
+        await reloadContinuity(targetGoal);
+        setNotice("课程已学完，未通过的练习保留为待复习内容。");
       }
-      setNodeId(value.id);
-      if (
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(max-width: 1099px)").matches
-      )
-        setOutlineOpen(false);
-      if (goal) await reloadContinuity(goal.id);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -451,7 +524,6 @@ export function LearningPage({
     signal: AbortSignal,
     targetNode?: string,
   ) {
-    await refresh();
     if (signal.aborted) return;
     if (value.status === "failed") setError(value.error || "本次执行未完成");
     const target =
@@ -465,6 +537,10 @@ export function LearningPage({
       if (activeNode.current === target) {
         setLesson(latest);
         setTurns(history);
+        if (value.status === "completed") {
+          setPendingReply(null);
+          setLearningStream(null);
+        }
         if (value.status === "completed" && value.kind === "assessment") {
           const submitted = submittedDrafts.current.get(value.id);
           if (submitted) clearSubmittedDraft(submitted);
@@ -473,8 +549,13 @@ export function LearningPage({
         }
       }
     }
-    await reloadContinuity(selectedGoalId.current);
+    const updates = await Promise.allSettled([
+      refresh(),
+      reloadContinuity(selectedGoalId.current),
+    ]);
     if (signal.aborted) return;
+    if (updates.some((result) => result.status === "rejected"))
+      setError("回复记录已读取，课程或会话状态暂未刷新，请稍后重新进入。");
     setRun(value);
     setBusy(false);
   }
@@ -526,11 +607,14 @@ export function LearningPage({
     try {
       const stopped = await api<Run>(`/runs/${run.id}/cancel`, "POST");
       if (!isCurrent()) return;
+      controller?.abort();
+      watch.current = null;
+      stopLock.current = false;
+      setStopping(false);
       setRun(stopped);
       setBusy(false);
-      setLearningStream(null);
       void refresh().catch(() => {
-        if (isCurrent())
+        if (selectedGoalId.current === targetGoal)
           setError("学习任务已停止，进度暂未刷新，请重新进入学习页查看。");
       });
     } catch (error) {
@@ -632,6 +716,13 @@ export function LearningPage({
     const submittedAnswer = answer;
     const submittedImages = images;
     setError("");
+    followReply.current = true;
+    setPendingReply({
+      nodeId: node.id,
+      answer: submittedAnswer,
+      attachmentIds: submittedImages.map((item) => item.id),
+    });
+    setLearningStream(null);
     setBusy(true);
     try {
       const saved = await ensureSession(node.id);
@@ -655,6 +746,7 @@ export function LearningPage({
     } catch (error) {
       setError((error as Error).message);
       setBusy(false);
+      setPendingReply(null);
     }
   }
   async function reviewReminder() {
@@ -739,6 +831,11 @@ export function LearningPage({
   ) : null;
   const passedCount =
     goal?.nodes.filter((value) => value.status === "passed").length ?? 0;
+  const studiedCount =
+    goal?.nodes.filter((value) => isStudied(value.status)).length ?? 0;
+  const courseFinished = Boolean(
+    goal?.nodes.length && studiedCount === goal.nodes.length,
+  );
   return (
     <div
       className={`learning-page ${open ? "is-editing" : goal ? "has-course" : "page-content"}`}
@@ -933,6 +1030,9 @@ export function LearningPage({
                 const passed = value.nodes.filter(
                   (x) => x.status === "passed",
                 ).length;
+                const studied = value.nodes.filter((x) =>
+                  isStudied(x.status),
+                ).length;
                 return (
                   <article className="goal-card-row" key={value.id}>
                     <button
@@ -976,20 +1076,20 @@ export function LearningPage({
                     <div className="goal-row-progress">
                       <span>
                         {value.nodes.length
-                          ? `${passed} / ${value.nodes.length} 练习通过`
+                          ? `进度 ${studied} / ${value.nodes.length} · ${passed} 练习通过`
                           : "等待规划"}
                       </span>
                       <div
                         className="progress-track"
                         role="progressbar"
-                        aria-label={`${value.title} 的练习进度`}
-                        aria-valuenow={passed}
+                        aria-label={`${value.title} 的学习进度`}
+                        aria-valuenow={studied}
                         aria-valuemin={0}
                         aria-valuemax={Math.max(1, value.nodes.length)}
                       >
                         <span
                           style={{
-                            width: `${value.nodes.length ? (passed / value.nodes.length) * 100 : 0}%`,
+                            width: `${value.nodes.length ? (studied / value.nodes.length) * 100 : 0}%`,
                           }}
                         />
                       </div>
@@ -1098,7 +1198,6 @@ export function LearningPage({
               goal={goal}
               session={session}
               busy={busy || sessionBusy || uploading}
-              savingDraft={savingDraft}
               onPause={() => void changeSession("pause")}
               onEnd={() => void changeSession("end")}
               onEdit={() => openGoalEditor(goal)}
@@ -1108,19 +1207,20 @@ export function LearningPage({
             />
             <div className="course-progress">
               <span>
-                <strong>{passedCount}</strong> / {goal.nodes.length} 练习通过
+                进度 <strong>{studiedCount}</strong> / {goal.nodes.length} ·{" "}
+                {passedCount} 练习通过
               </span>
               <div
                 className="progress-track"
                 role="progressbar"
-                aria-label="课程练习进度"
-                aria-valuenow={passedCount}
+                aria-label="课程学习进度"
+                aria-valuenow={studiedCount}
                 aria-valuemin={0}
                 aria-valuemax={Math.max(1, goal.nodes.length)}
               >
                 <span
                   style={{
-                    width: `${goal.nodes.length ? (passedCount / goal.nodes.length) * 100 : 0}%`,
+                    width: `${goal.nodes.length ? (studiedCount / goal.nodes.length) * 100 : 0}%`,
                   }}
                 />
               </div>
@@ -1180,7 +1280,18 @@ export function LearningPage({
               </Button>
             </aside>
             <div className="lesson-content" ref={answerDropTarget}>
-              <div className="lesson-scroll">
+              <div
+                className="lesson-scroll"
+                ref={lessonScroll}
+                onScroll={(event) => {
+                  const viewport = event.currentTarget;
+                  followReply.current =
+                    viewport.scrollHeight -
+                      viewport.scrollTop -
+                      viewport.clientHeight <
+                    96;
+                }}
+              >
                 <div className="lesson-inner">
                   {draftConflict && (
                     <div className="learning-draft-conflict" role="alert">
@@ -1327,38 +1438,18 @@ export function LearningPage({
                             turns={turns}
                             fallback={feedback}
                           />
-                          {busy && learningStream?.stage === "assessment" && (
-                            <div
-                              className="learning-live-reply learning-assistant-reply"
-                              aria-live="polite"
-                            >
-                              <span className="message-name">XiaoXi</span>
-                              <Markdown>
-                                {learningStream.fields.explanation || ""}
-                              </Markdown>
-                              {learningStream.fields.reference_answer && (
-                                <>
-                                  <h4>参考答案</h4>
-                                  <Markdown>
-                                    {learningStream.fields.reference_answer}
-                                  </Markdown>
-                                </>
-                              )}
-                              {learningStream.fields.next_exercise ? (
-                                <>
-                                  <h4>换一道试试</h4>
-                                  <Markdown numberedLists>
-                                    {learningStream.fields.next_exercise}
-                                  </Markdown>
-                                </>
-                              ) : (
-                                learningStream.fields.next_step && (
-                                  <Markdown>
-                                    {learningStream.fields.next_step}
-                                  </Markdown>
-                                )
-                              )}
-                            </div>
+                          {(pendingReply?.nodeId === nodeId ||
+                            learningStream?.stage === "assessment") && (
+                            <LearningPendingReply
+                              answer={pendingReply?.answer}
+                              attachmentIds={pendingReply?.attachmentIds || []}
+                              fields={
+                                learningStream?.stage === "assessment"
+                                  ? learningStream.fields
+                                  : {}
+                              }
+                              busy={busy}
+                            />
                           )}
                         </>
                       ) : busy &&
@@ -1398,6 +1489,37 @@ export function LearningPage({
                   ) : null}
                 </div>
               </div>
+              {node && lesson && (
+                <div className="learning-section-navigation">
+                  <div>
+                    <strong>
+                      {courseFinished
+                        ? "本课程学习已结束"
+                        : `第 ${node.ordinal + 1} / ${goal.nodes.length} 节`}
+                    </strong>
+                    <span>
+                      {courseFinished
+                        ? `${goal.nodes.filter((value) => value.status === "needs_practice").length} 节待复习，可随时从目录回看`
+                        : "本节可以结束了，未掌握的内容会留作复习。"}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || sessionBusy || uploading}
+                    onClick={() =>
+                      void (courseFinished ? leaveGoal() : finishSection())
+                    }
+                  >
+                    {courseFinished
+                      ? "返回学习目标"
+                      : nextNode
+                        ? "结束本节，下一节"
+                        : "完成本课程"}
+                    <ArrowRight size={15} />
+                  </Button>
+                </div>
+              )}
               {node &&
                 lesson &&
                 ["awaiting_submission", "reviewed"].includes(lesson.state) && (
@@ -1415,7 +1537,9 @@ export function LearningPage({
                       <span>
                         {lesson.state === "reviewed" ? "继续对话" : "作答"}
                         {(answer.trim() || images.length > 0) && (
-                          <small>已保留草稿</small>
+                          <small>
+                            {savingDraft ? "保存草稿中…" : "已保留草稿"}
+                          </small>
                         )}
                       </span>
                       {answerExpanded ? (
