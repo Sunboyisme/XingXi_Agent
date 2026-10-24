@@ -87,13 +87,3 @@ async def tick() -> None:
                         occurrence, reminder.recurrence, reminder.timezone, current
                     )
             db.commit()
-
-
-def invalidate_notifications(db, reminder_id):
-    for note in db.scalars(
-        select(Notification).where(
-            Notification.reminder_id == reminder_id,
-            Notification.status.in_(["pending", "presented", "snoozed"]),
-        )
-    ):
-        note.status = "cancelled"

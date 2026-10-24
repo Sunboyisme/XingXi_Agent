@@ -216,14 +216,6 @@
   border-radius: 16px;
   background: var(--ui-color-bg);
 }
-.learning-conversation .feedback-box {
-  margin-top: 8px;
-}
-.learning-conversation .feedback-box.discussion {
-  padding: 8px 0;
-  background: transparent;
-  border: 0;
-}
 .learning-live-reply {
   margin-top: 18px;
 }
@@ -235,18 +227,9 @@
   flex: 1;
   min-width: 0;
 }
-.sidebar-group-toggle.sidebar-label {
-  width: 100%;
-}
 .sidebar-group-toggle svg[data-collapsed="true"] {
   transform: rotate(-90deg);
 }
-.project-section-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.project-section-actions [data-slot="button"],
 .project-running-state {
   width: 26px;
   height: 26px;
@@ -343,14 +326,6 @@
   align-items: center;
   justify-content: space-between;
 }
-.project-section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 15px 8px 4px;
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-}
 .project-heading {
   display: flex;
   align-items: center;
@@ -387,10 +362,6 @@
 .project-chat-list {
   margin-left: 12px;
 }
-.sidebar-unfiled {
-  width: 100%;
-  text-align: left;
-}
 .project-menu {
   z-index: 80;
   min-width: 165px;
@@ -418,12 +389,6 @@
 }
 .project-menu .danger {
   color: var(--ui-color-danger);
-}
-.project-editor label {
-  display: grid;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--ui-color-text-muted);
 }
 .project-library[data-slot="dialog-content"],
 .chat-search-dialog[data-slot="dialog-content"] {

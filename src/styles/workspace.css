@@ -247,16 +247,6 @@ body,
   right: 10px;
   top: 8px;
 }
-.navigation-rail .nav-count {
-  display: block;
-  position: absolute;
-  top: 1px;
-  right: 0;
-  margin: 0;
-  min-width: 16px;
-  padding: 0 4px;
-  font-size: 10px;
-}
 .chat-sidebar {
   width: 224px;
   min-width: 0;
@@ -315,14 +305,6 @@ body,
   margin: 0;
   overflow-y: auto;
 }
-.chat-sidebar .sidebar-label {
-  padding: 0 10px;
-  margin-bottom: 12px;
-  font-size: 12px;
-}
-.chat-sidebar .sidebar-label span {
-  opacity: 0.65;
-}
 .chat-sidebar .conversation-link > button:first-child {
   padding: 10px;
   line-height: 1.5;
@@ -335,19 +317,12 @@ body,
 .app-topbar {
   justify-content: space-between;
 }
-.topbar-right {
-  margin-left: auto;
-}
 .welcome > div:last-child {
   min-width: 0;
 }
 .welcome h1 {
   font-size: clamp(24px, 3vw, 34px);
   margin: 0;
-}
-.welcome .welcome-avatar {
-  width: 100%;
-  height: 100%;
 }
 .chat-main.is-empty .composer-area {
   margin-bottom: 40px;
@@ -509,10 +484,6 @@ body,
   }
   .welcome {
     gap: 18px;
-  }
-  .welcome-buddy {
-    width: 76px;
-    height: 76px;
   }
 }
 @media (max-width: 760px) {
@@ -816,18 +787,6 @@ textarea:not(#chat-message):focus-visible,
   background: var(--appearance-soft-surface, #fdfaf6);
   border-color: var(--appearance-border, #dfcdbc);
 }
-.connection-card-main {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-}
 .connection-symbol {
   display: inline-flex;
   align-items: center;
@@ -858,14 +817,6 @@ textarea:not(#chat-message):focus-visible,
 .connection-card-meta {
   font-size: 12px;
   color: var(--ui-color-text-muted);
-}
-.connection-card-models {
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .default-badge {
   font-size: 10px;
@@ -912,22 +863,6 @@ textarea:not(#chat-message):focus-visible,
 .connection-empty > span:last-child {
   font-size: 12px;
   color: var(--ui-color-text-muted);
-}
-.connection-default {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  border-top: 1px solid var(--line-subtle);
-  margin-top: 22px;
-  padding-top: 20px;
-}
-.connection-default > label {
-  flex-shrink: 0;
-  font-size: 13px;
-}
-.connection-default > .soft-select {
-  width: min(420px, 75%);
 }
 .connection-notice {
   display: flex;
@@ -1018,18 +953,8 @@ textarea:not(#chat-message):focus-visible,
     width: 36px;
     height: 36px;
   }
-  .connection-card-main {
-    gap: 10px;
-  }
   .connection-state {
     font-size: 10px;
-  }
-  .connection-default {
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .connection-default > .soft-select {
-    width: 100%;
   }
 }
 
@@ -1214,21 +1139,6 @@ textarea:not(#chat-message):focus-visible,
   color: var(--appearance-muted, #8a7c66);
   font-size: 12px;
 }
-.embedding-enable {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 16px 0;
-  font-size: 13px;
-}
-.embedding-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
-}
-.embedding-actions > span,
 .embedding-index-error {
   font-size: 12px;
   color: var(--appearance-muted, #8a7c66);
@@ -1348,9 +1258,6 @@ textarea:not(#chat-message):focus-visible,
 .connection-config-dialog label {
   font-size: 12px;
 }
-.connection-config-dialog .embedding-enable {
-  margin: 0;
-}
 .wechat-config-dialog .wechat-section {
   padding: 0;
   border: 0;
@@ -1373,34 +1280,6 @@ textarea:not(#chat-message):focus-visible,
 }
 .retrieval-query [data-slot="input"] {
   min-width: 0;
-}
-.retrieval-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-.retrieval-metrics span {
-  background: var(--appearance-pressed-surface, #f4eee4);
-  border-radius: 7px;
-  padding: 5px 9px;
-  color: var(--appearance-muted, #7d705e);
-  font-size: 11px;
-}
-.retrieval-original-query {
-  font-size: 14px;
-  line-height: 1.7;
-  margin: 0 0 9px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 140px;
-  overflow: auto;
-}
-.retrieval-index-info,
-.retrieval-fallback {
-  font-size: 12px;
-  color: var(--appearance-muted, #8b7b65);
-  margin: 8px 0;
 }
 .retrieval-candidates {
   display: grid;
@@ -1435,13 +1314,6 @@ textarea:not(#chat-message):focus-visible,
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.retrieval-scores {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  font-size: 11px;
-  color: var(--appearance-muted, #8f8471);
-}
 .retrieval-candidate details {
   margin-top: 12px;
   font-size: 11px;
@@ -1470,9 +1342,6 @@ textarea:not(#chat-message):focus-visible,
   font-size: 13px;
   color: var(--appearance-muted, #968975);
 }
-.chat-retrieval {
-  margin: 8px 40px 12px;
-}
 .retrieval-entry {
   color: var(--appearance-muted, #93816b);
   font-size: 12px;
@@ -1493,18 +1362,6 @@ textarea:not(#chat-message):focus-visible,
 }
 
 /* Compact answer actions and a calendar matching the application. */
-.reminder-list {
-  display: grid;
-  gap: 14px;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.reminder-list .reminder-row {
-  border: 0;
-  border-radius: 22px;
-}
 .answer-actions {
   display: flex;
   align-items: center;
@@ -1544,9 +1401,6 @@ textarea:not(#chat-message):focus-visible,
 .answer-tools-dialog .tool-record-list {
   margin: 0;
   padding: 0;
-}
-.interrupted-actions {
-  margin: 8px 40px;
 }
 .datetime-trigger {
   display: flex;
@@ -1747,9 +1601,6 @@ textarea:not(#chat-message):focus-visible,
   }
   .datetime-trigger > span {
     white-space: normal;
-  }
-  .reminder-list {
-    gap: 12px;
   }
 }
 .data-settings {

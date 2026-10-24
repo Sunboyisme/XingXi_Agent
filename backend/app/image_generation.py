@@ -315,7 +315,8 @@ def _execution(run_id):
     return attempts, images
 
 
-def _receipt(run_id, *, include_success):
+def result_receipt(run_id):
+    """Report only tool-backed images that exist in this run's local storage."""
     attempts, images = _execution(run_id)
     if not attempts:
         return ""
@@ -336,8 +337,6 @@ def _receipt(run_id, *, include_success):
         if not any(isinstance(item, dict) and item.get("id") in saved_ids
                    for item in result.get("artifacts", [])) and not (result.get("error") or media_errors):
             missing_result = True
-    if images and not include_success and not errors and not missing_result:
-        return ""
     lines = []
     if images:
         names = "、".join(image["name"].replace("\n", " ") for image in images)
@@ -351,16 +350,6 @@ def _receipt(run_id, *, include_success):
     if missing_result:
         lines.extend(["", "没有真实图片的请求不能确认为生成成功；服务端结果尚未确认，未自动重新提交。"])
     return "\n".join(lines)
-
-
-def failure_receipt(run_id):
-    """Keep the actual image failure visible instead of a vague model refusal."""
-    return _receipt(run_id, include_success=False)
-
-
-def result_receipt(run_id):
-    """Report only tool-backed images that exist in this run's local storage."""
-    return _receipt(run_id, include_success=True)
 
 
 def verify_reply(run_id, text, request=""):

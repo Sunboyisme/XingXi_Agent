@@ -64,9 +64,6 @@
 .chat-main.is-empty .composer-area {
   max-width: 988px;
 }
-.welcome-description {
-  color: var(--ui-color-text-muted);
-}
 
 .appearance-settings {
   padding-top: 8px;

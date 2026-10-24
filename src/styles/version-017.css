@@ -156,7 +156,6 @@
   font-size: 12px;
 }
 .chat-project-context button,
-.chat-project-picker,
 .chat-project-pin {
   display: inline-flex;
   align-items: center;
@@ -411,13 +410,6 @@
   gap: 7px;
   color: var(--ui-color-text-muted);
   font-size: 13px;
-}
-.project-overview-description {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-width: 760px;
-  color: var(--ui-color-text-muted);
-  line-height: 1.8;
 }
 .project-overview-actions {
   display: flex;

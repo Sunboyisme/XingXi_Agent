@@ -6,12 +6,12 @@ from datetime import date
 
 from fastapi import HTTPException
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 
 from . import plans as calendar, plan_targets
 from . import skills
-from .db import MESSAGE_ORDER, Message, Session
+from .db import Session
 
 _PENDING_PLAN_PROPOSALS: dict[str, dict] = {}
 _PENDING_PLAN_PROPOSALS_LOCK = threading.Lock()

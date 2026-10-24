@@ -87,21 +87,8 @@
   transform-origin: center;
   animation: bai-avatar-blink 7.8s ease-in-out infinite;
 }
-.welcome-buddy .bai-avatar-eyes {
-  animation-delay: -2.1s;
-}
 .bai-avatar[data-motion="thinking"] .bai-avatar-float {
   animation: bai-avatar-think 2.6s ease-in-out infinite;
-}
-.brand-avatar:is(:hover, :focus-visible)
-  .bai-avatar:not([data-motion="still"])
-  .bai-avatar-response {
-  transform: translateY(-1px) rotate(-5deg) scale(1.04);
-}
-.brand-avatar:active
-  .bai-avatar:not([data-motion="still"])
-  .bai-avatar-response {
-  transform: translateY(1px) scale(1.04, 0.94);
 }
 @keyframes bai-avatar-breathe {
   0%,
@@ -153,10 +140,5 @@
   }
   .bai-avatar[data-motion] .bai-avatar-eye[data-eye="right"] {
     transform: var(--bai-eye-rest-right, translate(51.5px, 36px)) !important;
-  }
-  .brand-avatar:is(:hover, :focus-visible, :active)
-    .bai-avatar:not([data-motion="still"])
-    .bai-avatar-response {
-    transform: none;
   }
 }

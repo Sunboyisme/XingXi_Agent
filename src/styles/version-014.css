@@ -1397,10 +1397,6 @@ body:has(.reminder-popup),
   margin: 0;
 }
 
-.exercise-answer-dock .exercise-answer-label {
-  margin: 0;
-}
-
 .exercise-answer-images .attachment-drafts {
   margin: 0;
   padding: 0;

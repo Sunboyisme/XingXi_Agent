@@ -60,11 +60,6 @@
   border-radius: 0;
 }
 
-.disclosure-chevron {
-  flex-shrink: 0;
-  transition: transform 150ms;
-}
-
 .answer-sources > div {
   margin-top: 2px;
   border-left: 2px solid var(--ui-color-line);
@@ -189,8 +184,7 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.holiday-label b,
-.holiday-mark {
+.holiday-label b {
   flex-shrink: 0;
   border-radius: 4px;
   padding: 0 3px;
@@ -201,27 +195,9 @@
 .holiday-label.work {
   color: var(--ui-color-text-muted);
 }
-.holiday-label.work b,
-.holiday-mark.work {
+.holiday-label.work b {
   background: var(--appearance-pressed-surface, #eeeae5);
   color: var(--ui-color-text-muted);
-}
-.holiday-mark {
-  margin-left: 4px;
-  color: var(--appearance-accent, #ad6249);
-}
-.plan-reminder-time {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-left: 24px;
-}
-.plan-reminder-time > label {
-  font-size: 13px;
-  white-space: nowrap;
-}
-.plan-reminder-time > input {
-  width: 140px;
 }
 .calendar-editor form > [data-slot="dialog-footer"] {
   flex-wrap: wrap;

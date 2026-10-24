@@ -8,10 +8,3 @@ export function dateTime(value: string) {
     timeZone: "Asia/Shanghai",
   }).format(new Date(value));
 }
-export function localDateTime(value: string) {
-  const date = new Date(value);
-  // The v0.1 UI displays and schedules reminders in Asia/Shanghai.
-  return new Date(date.getTime() + 8 * 3600000)
-    .toISOString()
-    .slice(0, 16);
-}

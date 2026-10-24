@@ -4,6 +4,7 @@ import { XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { Button } from "@/components/ui/button";
+import { useDialogFocus } from "./useDialogFocus";
 
 function Dialog({
   ...props
@@ -21,12 +22,6 @@ function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
-}
-
-function DialogClose({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Close>) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
 function DialogOverlay({
@@ -55,7 +50,7 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
-  const returnFocus = React.useRef<HTMLElement | null>(null);
+  const focus = useDialogFocus({ onOpenAutoFocus, onCloseAutoFocus });
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -66,20 +61,7 @@ function DialogContent({
           className,
         )}
         {...props}
-        onOpenAutoFocus={(event) => {
-          returnFocus.current =
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement
-              : null;
-          onOpenAutoFocus?.(event);
-        }}
-        onCloseAutoFocus={(event) => {
-          onCloseAutoFocus?.(event);
-          if (!event.defaultPrevented && returnFocus.current?.isConnected) {
-            event.preventDefault();
-            returnFocus.current.focus();
-          }
-        }}
+        {...focus}
       >
         {children}
         {showCloseButton && (
@@ -161,13 +143,10 @@ function DialogDescription({
 
 export {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
   DialogTrigger,
 };

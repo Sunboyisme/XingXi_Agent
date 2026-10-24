@@ -15,25 +15,6 @@ def tool_events(run_id):
         ).order_by(RunEvent.id)))
 
 
-def created_plans(events):
-    plans = {}
-    for event in events:
-        data = event.data
-        result = data.get("result")
-        if data.get("status") != "completed":
-            continue
-        if data.get("tool_id") == "create_plans" and isinstance(result, list):
-            for plan in result:
-                if isinstance(plan, dict) and plan.get("id"):
-                    plans[plan["id"]] = plan
-        elif data.get("tool_id") in {"update_plan", "action_plan"} and isinstance(result, dict):
-            if result.get("id") in plans:
-                plans[result["id"]] = result
-        elif data.get("tool_id") == "delete_plan" and isinstance(result, dict) and result.get("deleted"):
-            plans.pop(data.get("arguments", {}).get("plan_id"), None)
-    return [plan for plan in plans.values() if plan.get("status") != "deleted"]
-
-
 def plan_time(plan):
     if plan.get("all_day"):
         start = date.fromisoformat(plan["start"])
@@ -125,11 +106,6 @@ def facts_receipt(facts):
 
 def execution_receipt(events):
     return facts_receipt(operation_facts(events))
-
-
-def creation_receipt(events):
-    plans = created_plans(events)
-    return _receipt(plans, f"已写入日历，共 {len(plans)} 项计划。")
 
 
 def existing_receipt(events):

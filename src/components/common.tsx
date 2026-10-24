@@ -24,7 +24,6 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 export { ImagesInput, Picture } from "./ImageAttachments";
-import { api } from "@/lib/api";
 import { ExternalLink } from "./ExternalLink";
 import { RestrictedFileContext } from "@/lib/restrictedFiles";
 
@@ -284,16 +283,3 @@ export const nodeStatus: Record<string, string> = {
   passed: "练习通过",
   skipped: "已跳过 · 尚未验证",
 };
-
-export async function remove(
-  path: string,
-  refresh: () => Promise<void> | void,
-  onError: (message: string) => void,
-) {
-  try {
-    await api(path, "DELETE");
-    await refresh();
-  } catch (error) {
-    onError((error as Error).message);
-  }
-}
