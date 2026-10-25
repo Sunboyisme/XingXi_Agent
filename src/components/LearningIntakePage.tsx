@@ -23,6 +23,8 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
   const [date, setDate] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const stopLock = useRef(false);
   const [run, setRun] = useState<Run | null>(null);
   const controller = useRef<AbortController | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
@@ -84,7 +86,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
   async function send(content = row ? draft.answer : initialAnswer, beginner = false, messageId: string = crypto.randomUUID()) {
     if (sending.current || busy || loading || !content.trim()) return;
     sending.current = true;
-    setBusy(true); setError("");
+    setBusy(true); setRun(null); setError("");
     try {
       if (!row) {
         const saved = await api<Intake>("/learning/intakes", "POST", { content, message_id: messageId, creation_id: creationId.current });
@@ -102,7 +104,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
   async function confirm() {
     if (!row || busy || sending.current || minutesInvalid) return;
     sending.current = true;
-    setBusy(true); setError("");
+    setBusy(true); setRun(null); setError("");
     try {
       await draft.flush(); await flushForm();
       const value = await api<Run>(`/learning/intakes/${row.id}/confirm`, "POST", { ...summary, outcome,
@@ -112,9 +114,11 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
     finally { sending.current = false; }
   }
   async function stop() {
-    if (!run) return;
-    try { await api(`/runs/${run.id}/cancel`, "POST"); controller.current?.abort(); setBusy(false); if (row) await reload(row.id); }
+    if (!run || stopLock.current) return;
+    stopLock.current = true; setStopping(true); setError("");
+    try { const done = await api<Run>(`/runs/${run.id}/cancel`, "POST"); controller.current?.abort(); setRun(done); setBusy(false); if (row) await reload(row.id); }
     catch (cause) { setError((cause as Error).message); }
+    finally { stopLock.current = false; setStopping(false); }
   }
   const ready = Boolean(row && ["ready", "confirmed"].includes(row.status));
   const lastUser = row?.messages.filter((item) => item.role === "user").at(-1);
@@ -130,7 +134,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
       {row?.messages.map((message, index) => <article key={index} className={message.role === "user" ? "learning-user-reply" : "learning-intake-reply"}>
         <span className="message-name">{message.role === "user" ? "你" : "XiaoXi"}</span><Markdown>{message.content}</Markdown><KnowledgeSources sources={message.knowledge_sources} />
       </article>)}
-      {busy && <p className="learning-stream-status" role="status"><Loader2 size={15} className="spin" />{run?.kind === "course" ? "正在生成学习路线…" : "正在分析中，请稍后…"}<Button variant="ghost" size="sm" onClick={() => void stop()} disabled={!run}><Square size={13} />停止</Button></p>}
+      {busy && <p className="learning-stream-status" role="status"><Loader2 size={15} className="spin" />{run?.kind === "course" ? "正在生成学习路线…" : "正在分析中，请稍后…"}{row?.goal_id && <Button variant="ghost" size="sm" onClick={() => void stop()} disabled={!run || stopping}><Square size={13} />{stopping ? "正在停止…" : "停止"}</Button>}</p>}
       {!busy && run?.status === "failed" && lastUser && !row?.goal_id && <Button variant="outline" onClick={() => void send(lastUser.content, false, lastUser.message_id)}>重试上次回答</Button>}
       {ready && <section className="learning-intake-summary" aria-label="学习目标摘要">
         <h2>你的学习目标</h2>
@@ -154,6 +158,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
       {row && !ready && !busy && row.messages.length > 1 && <Button variant="outline" size="sm" onClick={() => void send("我明确选择按零基础入门安排，未说明的目标采用入门小实践。", true)}>先按零基础入门安排</Button>}
     </div>
     {!row?.goal_id && <LearningComposer answer={row ? draft.answer : initialAnswer} onAnswer={row ? draft.setAnswer : setInitialAnswer} busy={busy || loading} onError={setError}
+      onStop={busy && run && ["queued", "running"].includes(run.status) ? () => void stop() : undefined} stopping={stopping}
       onSubmit={() => void send()} scopeKey={row?.id || "intake"} label="学习目标对话" placeholder="告诉 XiaoXi 你的想法…" />}
   </div>;
 }

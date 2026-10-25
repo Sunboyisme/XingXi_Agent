@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { Power } from "lucide-react";
+import {
+  setGeneralPreferences,
+  useGeneralPreferences,
+} from "@/lib/generalPreferences";
 import { ErrorNotice } from "./common";
 
 type Autostart = { enabled: boolean; supported: boolean; reason: string };
 export function GeneralSettings() {
+  const preferences = useGeneralPreferences();
   const [value, setValue] = useState<Autostart>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -31,17 +35,13 @@ export function GeneralSettings() {
   }, []);
   return (
     <section className="general-settings">
-      <header>
-        <Power size={20} />
-        <div>
-          <h2>启动</h2>
-          <p>设置 XiaoXi 的启动方式。</p>
-        </div>
-      </header>
       <div className="general-setting-row">
         <div>
           <strong>开机自启</strong>
-          <p>{value?.reason || "登录 Windows 后自动打开 XiaoXi。"}</p>
+          <p>
+            {value?.reason ||
+              "登录 Windows 后在系统托盘运行，双击托盘图标打开窗口。"}
+          </p>
         </div>
         <label className="module-toggle">
           <input
@@ -63,6 +63,46 @@ export function GeneralSettings() {
           <span>
             {busy ? "正在更新…" : value?.enabled ? "已开启" : "已关闭"}
           </span>
+        </label>
+      </div>
+      <div className="general-setting-row">
+        <div>
+          <label htmlFor="send-shortcut">
+            <strong>发送快捷键</strong>
+          </label>
+          <p>用于对话和学习输入框；Shift + Enter 始终换行。</p>
+        </div>
+        <select
+          id="send-shortcut"
+          className="soft-select"
+          value={preferences.sendShortcut}
+          onChange={(event) =>
+            setGeneralPreferences({
+              sendShortcut:
+                event.target.value === "mod-enter" ? "mod-enter" : "enter",
+            })
+          }
+        >
+          <option value="enter">Enter 发送</option>
+          <option value="mod-enter">Ctrl / ⌘ + Enter 发送</option>
+        </select>
+      </div>
+      <div className="general-setting-row">
+        <div>
+          <strong>聊天输入建议</strong>
+          <p>根据最近的对话生成输入提示，会使用默认模型并计入用量。</p>
+        </div>
+        <label className="module-toggle">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="聊天输入建议"
+            checked={preferences.inputSuggestions}
+            onChange={(event) =>
+              setGeneralPreferences({ inputSuggestions: event.target.checked })
+            }
+          />
+          <span>{preferences.inputSuggestions ? "已开启" : "已关闭"}</span>
         </label>
       </div>
       {error && <ErrorNotice message={error} />}

@@ -1307,12 +1307,11 @@ export function LearningPage({
                           : run?.kind === "assessment"
                             ? "正在分析中，请稍后…"
                             : "正在准备教学"}
-                        <button
-                          disabled={!run || stopping}
-                          onClick={() => void stopLearning()}
-                        >
-                          {stopping ? "正在停止…" : "停止"}
-                        </button>
+                        {!(node && lesson && ["awaiting_submission", "reviewed"].includes(lesson.state)) && (
+                          <button disabled={!run || stopping} onClick={() => void stopLearning()}>
+                            {stopping ? "正在停止…" : "停止"}
+                          </button>
+                        )}
                       </span>
                     )}
                   </div>
@@ -1454,6 +1453,7 @@ export function LearningPage({
                 lesson &&
                 ["awaiting_submission", "reviewed"].includes(lesson.state) && (
                   <LearningComposer answer={answer} onAnswer={setAnswer} images={images} onImages={setImages}
+                    onStop={busy && run && ["queued", "running"].includes(run.status) ? () => void stopLearning() : undefined} stopping={stopping}
                     busy={busy || sessionBusy} uploading={uploading} onUploading={setUploading}
                     onError={setError} onSubmit={() => void submit()} scopeKey={lesson.id} />
                 )}

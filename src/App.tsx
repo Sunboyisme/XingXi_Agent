@@ -11,6 +11,8 @@ import {
   Bell,
   LibraryBig,
   Calendar,
+  ChevronDown,
+  ChevronUp,
   BookOpen,
   type LucideIcon,
   CircleHelp,
@@ -21,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { setGeneralPreferences, useGeneralPreferences } from "@/lib/generalPreferences";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Tooltip } from "radix-ui";
@@ -131,6 +134,7 @@ function NavigationTooltip({
 }
 
 export function App() {
+  const { navigationCollapsed, sendShortcut } = useGeneralPreferences();
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("bai-sidebar-width"));
     return Number.isFinite(saved) && saved >= 180 ? Math.min(saved, 420) : 224;
@@ -677,7 +681,7 @@ export function App() {
                 onClick={startNewChat}
               />
               <nav className="main-navigation" aria-label="主导航">
-                {pages.map((value) => (
+                {pages.filter((value) => !navigationCollapsed || value.id === "chat").map((value) => (
                   <NavigationTooltip key={value.id} label={value.label}>
                     <button
                       className={page === value.id ? "active" : ""}
@@ -689,6 +693,13 @@ export function App() {
                     </button>
                   </NavigationTooltip>
                 ))}
+                <NavigationTooltip label={navigationCollapsed ? "展开功能栏" : "收起功能栏"}>
+                  <button className="navigation-collapse" aria-label={navigationCollapsed ? "展开功能栏" : "收起功能栏"}
+                    aria-expanded={!navigationCollapsed}
+                    onClick={() => setGeneralPreferences({ navigationCollapsed: !navigationCollapsed })}>
+                    {navigationCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                  </button>
+                </NavigationTooltip>
               </nav>
               <div className="sidebar-footer">
                 <NavigationTooltip label="连接与设置">
@@ -931,7 +942,7 @@ export function App() {
                 ["对话 / 学习 / 计划", "Ctrl+1 / 2 / 3"],
                 ["连接与设置", "Ctrl+,"],
                 ["打开快捷键", "F1"],
-                ["发送消息", "Enter"],
+                ["发送消息", sendShortcut === "enter" ? "Enter" : "Ctrl / ⌘ + Enter"],
                 ["输入框换行", "Shift+Enter"],
               ].map(([label, keys]) => (
                 <div key={label}>

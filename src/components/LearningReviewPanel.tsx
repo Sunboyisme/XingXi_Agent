@@ -12,6 +12,8 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
 }) {
   const [row, setRow] = useState<Review | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const stopLock = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [run, setRun] = useState<Run | null>(null);
@@ -37,7 +39,7 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
     finally { if (!own.signal.aborted) setBusy(false); }
   }
   async function open(live = () => true) {
-    setBusy(true); setError("");
+    setBusy(true); setRun(null); setError("");
     try {
       const value = await api<Run>("/learning/reviews", "POST", { goal_id: goalId });
       const id = String(value.result.review_id || "");
@@ -49,7 +51,7 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
   useEffect(() => { let live = true; void open(() => live); return () => { live = false; controller.current?.abort(); }; }, [goalId]);
   async function submit() {
     if (!row || busy || uploading) return;
-    setBusy(true); setError("");
+    setBusy(true); setRun(null); setError("");
     try {
       await draft.flush();
       const value = await api<Run>(`/learning/reviews/${row.id}/submit`, "POST", { submission_id: crypto.randomUUID(), answer: draft.answer, attachment_ids: draft.images.map((item) => item.id) });
@@ -65,9 +67,11 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
     try { await draft.flush(); onBack(); } catch (cause) { setError((cause as Error).message); }
   }
   async function stop() {
-    if (!run) return;
-    try { await api(`/runs/${run.id}/cancel`, "POST"); controller.current?.abort(); setBusy(false); setFields({}); if (row) setRow(await api(`/learning/reviews/${row.id}`)); }
+    if (!run || stopLock.current) return;
+    stopLock.current = true; setStopping(true); setError("");
+    try { const done = await api<Run>(`/runs/${run.id}/cancel`, "POST"); controller.current?.abort(); setRun(done); setBusy(false); setFields({}); if (row) setRow(await api(`/learning/reviews/${row.id}`)); }
     catch (cause) { setError((cause as Error).message); }
+    finally { stopLock.current = false; setStopping(false); }
   }
   return <section className="learning-review-panel" aria-label="学习复习">
     <header className="learning-review-heading"><div><span>复习</span><h2>{row?.source.node_title || "回顾之前学过的内容"}</h2></div>
@@ -78,11 +82,12 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
         <LearningConversation turns={row.turns} />
         {busy && run?.kind === "review_assessment" && <LearningPendingReply answer={draft.answer} attachmentIds={draft.images.map((image) => image.id)} fields={fields} busy />}
       </>}
-      {busy && <p className="learning-stream-status" role="status">正在分析中，请稍后…<Button size="sm" variant="ghost" onClick={() => void stop()} disabled={!run}><Square size={12} />停止</Button></p>}
+      {busy && <p className="learning-stream-status" role="status">正在分析中，请稍后…{!row?.exercise && <Button size="sm" variant="ghost" onClick={() => void stop()} disabled={!run || stopping}><Square size={12} />{stopping ? "正在停止…" : "停止"}</Button>}</p>}
       {!busy && error && (!row || !row.exercise) && <Button variant="outline" onClick={() => void open()}>重新读取复习</Button>}
       {Boolean(row?.turns.length) && !busy && <div className="learning-review-actions"><Button variant="outline" onClick={() => void next()}><RotateCcw size={15} />再来一题</Button><Button variant="ghost" onClick={() => void back()}>返回课程</Button></div>}
     </div>
     {row?.exercise && <LearningComposer answer={draft.answer} onAnswer={draft.setAnswer} images={draft.images} onImages={draft.setImages}
+      onStop={busy && run && ["queued", "running"].includes(run.status) ? () => void stop() : undefined} stopping={stopping}
       scopeKey={row.id} busy={busy} uploading={uploading} onUploading={setUploading} onError={setError} onSubmit={() => void submit()} />}
   </section>;
 }

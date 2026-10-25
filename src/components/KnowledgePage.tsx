@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  Clock3,
   Download,
   FileText,
   Folder,
@@ -11,13 +16,14 @@ import {
   Search,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { api, fetchApi } from "@/lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ConfirmDelete, ErrorNotice, Markdown, Toast } from "./common";
 import { DownloadResultDialog, type DownloadedFile } from "./OfficeFiles";
-import { KnowledgeSources, type KnowledgeSource } from "./KnowledgeSources";
+import type { KnowledgeSource } from "./KnowledgeSources";
 
 type Document = {
   id: string;
@@ -54,12 +60,31 @@ function FileTree({
   prefix = "",
   selected,
   onSelect,
+  onDelete,
+  busy,
 }: {
   documents: Document[];
   prefix?: string;
   selected?: string;
   onSelect: (value: Document) => void;
+  onDelete: (label: string, rows: Document[]) => void;
+  busy: boolean;
 }) {
+  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const selectedPath = documents.find(
+    (row) => row.id === selected,
+  )?.relative_path;
+  useEffect(() => {
+    if (selectedPath)
+      setClosed(
+        (previous) =>
+          new Set(
+            [...previous].filter(
+              (name) => !selectedPath.startsWith(`${prefix}${name}/`),
+            ),
+          ),
+      );
+  }, [selectedPath, prefix]);
   const folders = new Map<string, Document[]>();
   const files: Document[] = [];
   for (const doc of documents) {
@@ -73,35 +98,100 @@ function FileTree({
   }
   return (
     <ul className="knowledge-tree">
-      {[...folders].map(([name, rows]) => (
-        <li key={name}>
-          <details open>
-            <summary>
-              <Folder size={15} />
-              {name}
-            </summary>
-            <FileTree
-              documents={rows}
-              prefix={`${prefix}${name}/`}
-              selected={selected}
-              onSelect={onSelect}
-            />
-          </details>
-        </li>
-      ))}
-      {files.map((doc) => (
-        <li key={doc.id}>
-          <button
-            aria-current={selected === doc.id ? "true" : undefined}
-            onClick={() => onSelect(doc)}
-            title={doc.relative_path}
-          >
-            <FileText size={15} />
-            <span>{doc.relative_path.slice(prefix.length)}</span>
-            <small>{statusLabels[doc.status] || doc.status}</small>
-          </button>
-        </li>
-      ))}
+      {[...folders]
+        .sort(([a], [b]) => a.localeCompare(b, "zh-CN"))
+        .map(([name, rows]) => (
+          <li key={name}>
+            <div className="knowledge-tree-row">
+              <button
+                className="knowledge-file-select"
+                aria-expanded={!closed.has(name)}
+                title={`${prefix}${name}`}
+                onClick={() =>
+                  setClosed((previous) => {
+                    const next = new Set(previous);
+                    if (next.has(name)) next.delete(name);
+                    else next.add(name);
+                    return next;
+                  })
+                }
+              >
+                {closed.has(name) ? (
+                  <ChevronRight size={13} />
+                ) : (
+                  <ChevronDown size={13} />
+                )}
+                <Folder size={15} />
+                <span>{name}</span>
+                <small aria-label={`${rows.length} 个文件`}>
+                  {rows.length}
+                </small>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="knowledge-row-delete"
+                disabled={busy}
+                aria-label={`删除文件夹 ${prefix}${name}`}
+                title="删除文件夹中的知识库副本"
+                onClick={() => onDelete(`${prefix}${name}`, rows)}
+              >
+                <Trash2 size={14} />
+              </Button>
+            </div>
+            {!closed.has(name) && (
+              <FileTree
+                documents={rows}
+                prefix={`${prefix}${name}/`}
+                selected={selected}
+                onSelect={onSelect}
+                onDelete={onDelete}
+                busy={busy}
+              />
+            )}
+          </li>
+        ))}
+      {files
+        .sort((a, b) => a.relative_path.localeCompare(b.relative_path, "zh-CN"))
+        .map((doc) => (
+          <li key={doc.id}>
+            <div className="knowledge-tree-row">
+              <button
+                className="knowledge-file-select"
+                aria-current={selected === doc.id ? "true" : undefined}
+                onClick={() => onSelect(doc)}
+                title={`${doc.relative_path} · ${statusLabels[doc.status] || doc.status} · 导入于 ${doc.created_at}`}
+              >
+                <FileText size={15} />
+                <span>{doc.relative_path.slice(prefix.length)}</span>
+                <span
+                  className={`knowledge-file-status is-${doc.status}`}
+                  role="img"
+                  aria-label={statusLabels[doc.status] || doc.status}
+                >
+                  {doc.status === "ready" ? (
+                    <CheckCircle2 size={13} />
+                  ) : ["queued", "parsing"].includes(doc.status) ? (
+                    <Clock3 size={13} />
+                  ) : (
+                    <CircleAlert size={13} />
+                  )}
+                </span>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="knowledge-row-delete"
+                disabled={busy}
+                aria-label={`删除文件 ${doc.relative_path}`}
+                title="删除知识库副本"
+                onClick={() => onDelete(doc.relative_path, [doc])}
+              >
+                <Trash2 size={14} />
+              </Button>
+            </div>
+          </li>
+        ))}
     </ul>
   );
 }
@@ -125,7 +215,10 @@ export function KnowledgePage({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [updatingConfig, setUpdatingConfig] = useState(false);
-  const [deleting, setDeleting] = useState<Document>();
+  const [deleting, setDeleting] = useState<{
+    label: string;
+    documents: Document[];
+  }>();
   const [downloaded, setDownloaded] = useState<DownloadedFile | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<KnowledgeSource[]>([]);
@@ -243,8 +336,16 @@ export function KnowledgePage({
     if (files.current) files.current.value = "";
     if (folder.current) folder.current.value = "";
   }
-  const current = documents.find((row) => row.id === selected?.id) || selected;
-  const batches = [...new Set(documents.map((row) => row.batch_id))];
+  const current = documents.find((row) => row.id === selected?.id);
+  function selectDocument(row: Document) {
+    setSelected(row);
+    setRelated(undefined);
+    setError("");
+  }
+  function requestDelete(label: string, rows: Document[]) {
+    setError("");
+    setDeleting({ label, documents: rows });
+  }
   return (
     <div className="knowledge-page page-content">
       <div className="page-heading">
@@ -287,113 +388,162 @@ export function KnowledgePage({
       />
       {notice && <Toast message={notice} onClose={() => setNotice("")} />}
       {error && <ErrorNotice message={error} onClose={() => setError("")} />}
-      <section className="knowledge-config">
-        <div>
-          <strong>知识库检索</strong>
-          <p>开启后，对话和学习会按需参考相关片段。</p>
-          <small>
-            {status
-              ? `${status.documents} 个文件 · ${status.chunks} 个片段 · ${status.mode === "hybrid" ? "关键词与语义检索" : "关键词检索"}${status.parsing ? ` · ${status.parsing} 个文件整理中` : ""}${status.indexing ? ` · 语义索引 ${status.indexed}/${status.chunks}` : ""}`
-              : "正在读取知识库…"}
-          </small>
-        </div>
-        <label className="module-toggle">
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="启用知识库检索"
-            checked={status?.enabled || false}
-            aria-busy={updatingConfig}
-            disabled={busy || !status}
-            onChange={(e) => {
-              const enabled = e.target.checked;
-              void perform(async () => {
-                setUpdatingConfig(true);
-                try {
-                  setStatus(
-                    await api<Status>("/knowledge/config", "PUT", { enabled }),
-                  );
-                  setResults([]);
-                  setSearched(false);
-                } finally {
-                  setUpdatingConfig(false);
-                }
-              });
-            }}
-          />
-          <span role="status">
-            {updatingConfig
-              ? "正在更新…"
-              : status?.enabled
-                ? "已开启"
-                : "已关闭"}
-          </span>
-        </label>
-      </section>
-      {status?.error && <ErrorNotice tone="warning" message={status.error} />}
-      <form
-        className="knowledge-search"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void perform(async () => {
-            setResults(
-              await api<KnowledgeSource[]>(
-                `/knowledge/search?query=${encodeURIComponent(query)}`,
-              ),
-            );
-            setSearched(true);
-          });
-        }}
-      >
-        <Input
-          aria-label="搜索知识库"
-          placeholder={
-            status?.enabled ? "搜索知识库中的内容…" : "开启检索后可搜索资料"
-          }
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          disabled={!status?.enabled || busy}
-        />
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={!status?.enabled || busy || !query.trim()}
+      <div className="knowledge-toolbar">
+        <section className="knowledge-config" aria-label="知识库检索设置">
+          <div>
+            <strong>知识库检索</strong>
+            <small>
+              {status
+                ? `${status.documents} 个文件 · ${status.chunks} 个片段 · ${status.mode === "hybrid" ? "关键词与语义检索" : "关键词检索"}${status.parsing ? ` · ${status.parsing} 个文件整理中` : ""}${status.indexing ? ` · 语义索引 ${status.indexed}/${status.chunks}` : ""}`
+                : "正在读取知识库…"}
+            </small>
+          </div>
+          <label className="module-toggle">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label="启用知识库检索"
+              checked={status?.enabled || false}
+              aria-busy={updatingConfig}
+              disabled={busy || !status}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                void perform(async () => {
+                  setUpdatingConfig(true);
+                  try {
+                    setStatus(
+                      await api<Status>("/knowledge/config", "PUT", {
+                        enabled,
+                      }),
+                    );
+                    setResults([]);
+                    setSearched(false);
+                  } finally {
+                    setUpdatingConfig(false);
+                  }
+                });
+              }}
+            />
+            <span role="status">
+              {updatingConfig
+                ? "正在更新…"
+                : status?.enabled
+                  ? "已开启"
+                  : "已关闭"}
+            </span>
+          </label>
+        </section>
+        <form
+          className="knowledge-search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!status?.enabled || !query.trim() || busy) return;
+            void perform(async () => {
+              setResults(
+                await api<KnowledgeSource[]>(
+                  `/knowledge/search?query=${encodeURIComponent(query)}`,
+                ),
+              );
+              setSearched(true);
+            });
+          }}
         >
-          <Search size={16} />
-          搜索
-        </Button>
-      </form>
-      <KnowledgeSources sources={results} />
-      {searched && !results.length && (
-        <p className="module-caption">没有找到相关片段，可换个关键词。</p>
-      )}
+          <Input
+            aria-label="搜索知识库"
+            placeholder={
+              status?.enabled ? "搜索知识库中的内容…" : "开启检索后可搜索资料"
+            }
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            disabled={!status?.enabled || busy}
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={!status?.enabled || busy || !query.trim()}
+          >
+            <Search size={16} />
+            搜索
+          </Button>
+          {searched && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={busy}
+              aria-label="清除搜索，返回资料目录"
+              onClick={() => {
+                setQuery("");
+                setResults([]);
+                setSearched(false);
+              }}
+            >
+              <X size={16} />
+            </Button>
+          )}
+        </form>
+      </div>
+      {status?.error && <ErrorNotice tone="warning" message={status.error} />}
       <div className="knowledge-workspace">
         <aside aria-label="知识库文件">
           <h2>
             <BookOpen size={17} />
-            资料目录
+            {searched
+              ? `搜索结果 · ${results.length}`
+              : `资料目录 · ${documents.length}`}
           </h2>
-          {!documents.length && (
-            <p className="module-empty">导入文件或文件夹，从第一份资料开始。</p>
-          )}
-          {batches.map((batch, index) => (
-            <details key={batch} open className="knowledge-batch">
-              <summary>
-                导入 {index + 1} ·{" "}
-                {documents.filter((row) => row.batch_id === batch).length}{" "}
-                个文件
-              </summary>
-              <FileTree
-                documents={documents.filter((row) => row.batch_id === batch)}
-                selected={selected?.id}
-                onSelect={(row) => {
-                  setSelected(row);
-                  setRelated(undefined);
-                  setError("");
-                }}
-              />
-            </details>
-          ))}
+          <div
+            className="knowledge-directory-scroll"
+            tabIndex={0}
+            aria-label={searched ? "搜索结果列表" : "资料目录列表"}
+          >
+            {searched ? (
+              <>
+                {!results.length && (
+                  <p className="module-empty">
+                    没有找到相关片段，可换个关键词。
+                  </p>
+                )}
+                {results.map((source) => (
+                  <button
+                    key={source.chunk_id}
+                    className="knowledge-search-result"
+                    aria-current={
+                      related?.chunk_id === source.chunk_id ? "true" : undefined
+                    }
+                    onClick={() => {
+                      const row = documents.find(
+                        (doc) => doc.id === source.document_id,
+                      );
+                      if (row) {
+                        selectDocument(row);
+                        setRelated(source);
+                      } else setError("这份知识库文件已移除。");
+                    }}
+                  >
+                    <strong>{source.relative_path}</strong>
+                    <small>{source.locator}</small>
+                    <p>{source.excerpt.slice(0, 180)}</p>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
+                {!documents.length && (
+                  <p className="module-empty">
+                    导入文件或文件夹，从第一份资料开始。
+                  </p>
+                )}
+                <FileTree
+                  documents={documents}
+                  selected={selected?.id}
+                  onSelect={selectDocument}
+                  onDelete={requestDelete}
+                  busy={busy}
+                />
+              </>
+            )}
+          </div>
         </aside>
         <section className="knowledge-preview" aria-label="文件预览">
           {current ? (
@@ -463,9 +613,12 @@ export function KnowledgePage({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="移除知识库文件"
+                    aria-label="删除知识库文件"
+                    title="删除知识库副本"
                     disabled={busy}
-                    onClick={() => setDeleting(current)}
+                    onClick={() =>
+                      requestDelete(current.relative_path, [current])
+                    }
                   >
                     <Trash2 size={16} />
                   </Button>
@@ -514,9 +667,13 @@ export function KnowledgePage({
       </div>
       <ConfirmDelete
         open={Boolean(deleting)}
-        title="移除这份知识库文件？"
-        description="将移除知识库副本和检索索引，本地源文件保留。"
-        label="移除文件"
+        title={
+          deleting?.documents.length === 1
+            ? "删除这份知识库文件？"
+            : "删除文件夹中的资料？"
+        }
+        description={`将删除“${deleting?.label || ""}”的 ${deleting?.documents.length || 0} 份知识库副本和检索索引，本地源文件保留。`}
+        label="确认删除"
         error={error}
         onClose={() => {
           if (!busy) setDeleting(undefined);
@@ -524,15 +681,36 @@ export function KnowledgePage({
         onConfirm={() =>
           perform(async () => {
             if (!deleting) return;
-            await api(`/knowledge/documents/${deleting.id}`, "DELETE");
-            if (selected?.id === deleting.id) {
-              setSelected(undefined);
-              setPreview(undefined);
-              setRelated(undefined);
+            const removed = new Set<string>();
+            try {
+              for (const doc of deleting.documents) {
+                await api(`/knowledge/documents/${doc.id}`, "DELETE");
+                removed.add(doc.id);
+                setDocuments((previous) =>
+                  previous.filter((row) => row.id !== doc.id),
+                );
+                if (selected?.id === doc.id) {
+                  setSelected(undefined);
+                  setPreview(undefined);
+                  setRelated(undefined);
+                }
+              }
+              setDeleting(undefined);
+              setNotice(`已删除 ${removed.size} 份知识库副本`);
+            } finally {
+              setResults([]);
+              setSearched(false);
+              setDeleting((previous) => {
+                if (!previous) return undefined;
+                const remaining = previous.documents.filter(
+                  (doc) => !removed.has(doc.id),
+                );
+                return remaining.length
+                  ? { ...previous, documents: remaining }
+                  : undefined;
+              });
+              await load();
             }
-            setDeleting(undefined);
-            await load();
-            setNotice("已移除知识库文件");
           })
         }
       />

@@ -496,8 +496,10 @@ fn main() {
         url: OnceLock::new(),
     };
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            open_main(app)
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            if !args.iter().any(|arg| arg == "--autostart") {
+                open_main(app);
+            }
         }))
         .plugin(tauri_plugin_notification::init())
         .manage(backend)
@@ -524,11 +526,14 @@ fn main() {
         ])
         .setup(move |app| {
             if !cfg!(debug_assertions) && !app.config().identifier.ends_with(".preview") {
-                app.handle().plugin(tauri_plugin_autostart::Builder::new().app_name("XiaoXi").build())?;
+                app.handle().plugin(tauri_plugin_autostart::Builder::new().app_name("XiaoXi").args(["--autostart"]).build())?;
+                // Refresh an existing registration so upgrades also start in the tray.
+                if app.autolaunch().is_enabled().unwrap_or(false) {
+                    let _ = app.autolaunch().enable();
+                }
             }
             if let Some(window) = app.get_webview_window("main") {
                 window_layout::fit_main_window(&window)?;
-                window.show()?;
             }
             let data_dir = if let Some(folder) = std::env::var_os("BAI_DATA_DIR") {
                 PathBuf::from(folder)
@@ -667,6 +672,13 @@ fn main() {
                     }
                 })
                 .build(app)?;
+            let autostart_in_tray = !cfg!(debug_assertions) && !is_preview
+                && std::env::args().any(|arg| arg == "--autostart");
+            if !autostart_in_tray {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.show()?;
+                }
+            }
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let client = reqwest::blocking::Client::builder()

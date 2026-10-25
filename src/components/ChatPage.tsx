@@ -1,4 +1,5 @@
 import { resizeMessageInput } from "@/lib/composerSize";
+import { isSendShortcut, useGeneralPreferences } from "@/lib/generalPreferences";
 import { useComposerPlaceholder } from "@/lib/useComposerPlaceholder";
 import {
   useCallback,
@@ -384,6 +385,7 @@ export function ChatPage({
     thinkingControl === "always" || (thinkingControl !== "none" && thinking);
   const [messages, setMessages] = useState<Message[]>([]);
   const contextualPlaceholder = useComposerPlaceholder(conversationId, messages, settings);
+  const { sendShortcut } = useGeneralPreferences();
   const [initialDraft] = useState(() => readChatDraft(conversationId));
   const [draft, setDraft] = useState(initialDraft?.text || "");
   const [images, setImages] = useState<Attachment[]>(
@@ -1812,11 +1814,7 @@ export function ChatPage({
                 rows={2}
                 disabled={submitting || stopping}
                 onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    !e.shiftKey &&
-                    !e.nativeEvent.isComposing
-                  ) {
+                  if (isSendShortcut(e, sendShortcut)) {
                     e.preventDefault();
                     if (modelReady) void send();
                   }
