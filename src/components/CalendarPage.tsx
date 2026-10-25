@@ -73,7 +73,7 @@ export function eventsOnDay(
   return eventsBetween(events, day, dateMove(day, 1), zone);
 }
 
-export function eventsBetween(
+function eventsBetween(
   events: CalendarEvent[],
   first: string,
   last: string,

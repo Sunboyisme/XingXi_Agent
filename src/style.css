@@ -254,16 +254,6 @@ textarea::placeholder {
   flex-direction: column;
   padding: var(--ui-space-6) var(--ui-space-4) var(--ui-space-4);
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--ui-space-3);
-  padding: 0 var(--ui-space-2);
-  text-align: left;
-  background: none;
-  border: 0;
-  margin-bottom: var(--ui-space-6);
-}
 .brand-icon {
   height: 40px;
   width: 40px;
@@ -273,24 +263,6 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   box-shadow: var(--ui-shadow-offset);
-}
-.brand strong {
-  display: block;
-  font-size: var(--ui-text-lg);
-  font-weight: 600;
-  color: var(--ui-color-heading);
-}
-.brand strong span {
-  font-size: var(--ui-text-sm);
-  font-weight: 400;
-  margin-left: var(--ui-space-1);
-  color: var(--ui-color-text-muted);
-}
-.brand small {
-  display: block;
-  font-size: var(--ui-text-xs);
-  color: var(--ui-color-text-muted);
-  margin-top: var(--ui-space-1);
 }
 .new-chat-button[data-slot="button"] {
   width: 100%;
@@ -501,11 +473,6 @@ textarea::placeholder {
   gap: var(--ui-space-6);
   margin-bottom: var(--ui-space-6);
 }
-.eyebrow {
-  font-size: var(--ui-text-xs);
-  color: var(--ui-color-text-muted);
-  margin: 0 0 var(--ui-space-2);
-}
 .page-heading h1 {
   font-size: var(--ui-text-xl);
   font-weight: 600;
@@ -707,20 +674,6 @@ textarea::placeholder {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-}
-.welcome {
-  flex-shrink: 0;
-  width: 100%;
-  max-width: 760px;
-  padding: var(--ui-space-4) 0;
-}
-.welcome .eyebrow {
-  margin-bottom: var(--ui-space-1);
-}
-.welcome h1 {
-  font-size: var(--ui-text-xl);
-  font-weight: 600;
-  margin: 0;
 }
 .composer-area {
   padding: var(--ui-space-4) var(--ui-space-8);
@@ -1103,8 +1056,7 @@ textarea::placeholder {
   white-space: pre-wrap;
   margin: 0 0 var(--ui-space-6);
 }
-.candidate-section,
-.notification-list {
+.candidate-section {
   background: var(--ui-color-surface);
   border: 1px solid var(--ui-color-line);
   border-left: 3px solid var(--ui-color-brand);
@@ -1153,16 +1105,6 @@ textarea::placeholder {
   margin-left: var(--ui-space-1);
   font: 400 var(--ui-text-xs)/1.5 var(--ui-font-mono);
 }
-.reminder-row {
-  display: flex;
-  gap: var(--ui-space-4);
-  align-items: center;
-  padding: var(--ui-space-6);
-  border-bottom: 1px solid var(--line-subtle);
-}
-.reminder-row:last-child {
-  border-bottom: 0;
-}
 .complete-circle {
   position: relative;
   height: 24px;
@@ -1187,10 +1129,6 @@ textarea::placeholder {
 .complete-circle:disabled {
   opacity: 0.6;
 }
-.reminder-row.completed h3 {
-  text-decoration: line-through;
-  color: var(--ui-color-text-muted);
-}
 .row-actions {
   display: flex;
   gap: var(--ui-space-1);
@@ -1200,47 +1138,8 @@ textarea::placeholder {
 .row-actions [data-slot="button"] {
   color: var(--ui-color-text-muted);
 }
-.section-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--ui-space-3);
-}
-.section-heading h2 {
-  font-size: var(--ui-text-md);
-  font-weight: 600;
-  margin: 0;
-}
-.section-heading > span {
-  font-size: var(--ui-text-xs);
-  color: var(--ui-color-text-muted);
-}
 
 /* Learning map and reading workspace */
-.goal-card {
-  background: var(--ui-color-surface);
-  border: 1px solid var(--ui-color-line);
-  border-radius: var(--ui-radius-md);
-  padding: var(--ui-space-6);
-  text-align: left;
-  min-width: 0;
-}
-.goal-card:hover {
-  border-color: var(--ui-color-action);
-  background: var(--surface-hover);
-}
-.goal-card h2 {
-  font-size: var(--ui-text-lg);
-  font-weight: 600;
-  margin: 0 0 var(--ui-space-2);
-}
-.goal-card > p {
-  font-size: var(--ui-text-sm);
-  color: var(--ui-color-text-muted);
-  line-height: var(--ui-leading-body);
-  margin: 0 0 var(--ui-space-6);
-  min-height: 40px;
-}
 .progress-track {
   height: 4px;
   background: var(--ui-color-surface-deep);
@@ -1252,69 +1151,6 @@ textarea::placeholder {
   height: 100%;
   background: var(--ui-color-action);
   border-radius: var(--ui-radius-sm);
-}
-.learning-intro {
-  text-align: center;
-  padding: var(--ui-space-8) var(--ui-space-6);
-  background: var(--ui-color-surface);
-  border: 1px solid var(--ui-color-line);
-  border-radius: var(--ui-radius-md);
-}
-.learning-orbit {
-  height: 56px;
-  width: 56px;
-  display: grid;
-  place-items: center;
-  margin: 0 auto var(--ui-space-4);
-  color: var(--ui-color-action);
-  background: var(--ui-color-bg);
-  border-radius: var(--ui-radius-md);
-  border: 1px solid var(--ui-color-line);
-}
-.learning-orbit > span {
-  display: none;
-}
-.learning-orbit svg {
-  width: 32px;
-  height: 32px;
-}
-.learning-intro h2 {
-  font-size: var(--ui-text-lg);
-  font-weight: 600;
-  margin: 0 0 var(--ui-space-3);
-}
-.learning-intro p {
-  font-size: var(--ui-text-md);
-  color: var(--ui-color-text-muted);
-  line-height: var(--ui-leading-body);
-  margin: 0 0 var(--ui-space-6);
-}
-.learning-method {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--ui-space-4);
-  margin-top: var(--ui-space-4);
-}
-.learning-method > div {
-  border: 1px solid var(--ui-color-line);
-  border-radius: var(--ui-radius-md);
-  background: var(--ui-color-surface);
-  padding: var(--ui-space-6);
-}
-.learning-method svg {
-  color: var(--ui-color-action);
-  margin-bottom: var(--ui-space-3);
-}
-.learning-method h3 {
-  font-size: var(--ui-text-md);
-  font-weight: 600;
-  margin: 0 0 var(--ui-space-2);
-}
-.learning-method p {
-  font-size: var(--ui-text-sm);
-  color: var(--ui-color-text-muted);
-  line-height: var(--ui-leading-body);
-  margin: 0;
 }
 .learning-page.has-course {
   height: 100%;
@@ -1503,31 +1339,8 @@ textarea::placeholder {
 .exercise-box .section-title {
   margin-bottom: var(--ui-space-4);
 }
-.exercise-criteria {
-  background: var(--ui-color-bg);
-  border-radius: var(--ui-radius-sm);
-  padding: var(--ui-space-3) var(--ui-space-4);
-  font-size: var(--ui-text-sm);
-  margin: var(--ui-space-4) 0;
-  color: var(--ui-color-text-muted);
-}
-.exercise-criteria strong {
-  color: var(--ui-color-heading);
-  font-weight: 600;
-}
-.exercise-criteria p {
-  margin: var(--ui-space-1) 0 0;
-  line-height: var(--ui-leading-body);
-}
 .exercise-box > .text-button {
   margin: 0 0 var(--ui-space-3);
-}
-.exercise-submit {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--ui-space-3);
-  gap: var(--ui-space-3);
 }
 .about-copy p {
   font-size: var(--ui-text-md);
@@ -1591,13 +1404,6 @@ textarea::placeholder {
   }
 }
 @media (max-width: 1050px) {
-  .learning-method > div {
-    padding: var(--ui-space-4);
-  }
-  .reminder-row {
-    flex-wrap: wrap;
-    padding: var(--ui-space-4);
-  }
   .row-actions {
     margin-left: auto;
   }
@@ -1605,10 +1411,6 @@ textarea::placeholder {
 @media (max-width: 800px) {
   .sidebar {
     width: 184px;
-  }
-  .brand {
-    gap: var(--ui-space-2);
-    padding: 0;
   }
   .brand-icon {
     width: 36px;
@@ -1638,12 +1440,6 @@ textarea::placeholder {
   .composer-submit > span {
     display: none;
   }
-  .welcome {
-    padding: 0;
-  }
-  .learning-method {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .profile small {
     max-width: 110px;
   }
@@ -1661,10 +1457,6 @@ textarea::placeholder {
     border-right: 0;
     border-bottom: 1px solid var(--ui-color-line);
   }
-  .brand {
-    margin: 0;
-  }
-  .brand > div:last-child,
   .new-chat-button[data-slot="button"],
   .conversation-sidebar,
   .profile,
@@ -1720,12 +1512,6 @@ textarea::placeholder {
   .lesson-content {
     padding: var(--ui-space-4);
   }
-  .welcome {
-    padding: var(--ui-space-2) 0;
-  }
-  .welcome h1 {
-    font-size: var(--ui-text-lg);
-  }
   .composer-area {
     padding: var(--ui-space-3) var(--ui-space-4);
   }
@@ -1765,12 +1551,8 @@ textarea::placeholder {
   .settings-section,
   .memory-card,
   .candidate-section,
-  .notification-list,
   .exercise-box {
     padding: var(--ui-space-4);
-  }
-  .reminder-row {
-    gap: var(--ui-space-3);
   }
   .empty-state {
     min-height: 260px;

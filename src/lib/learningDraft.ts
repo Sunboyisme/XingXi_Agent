@@ -6,7 +6,7 @@ import { draftImages, type LearningDraftOptions, type LearningSession } from "./
 type Draft = { nodeId: string; lessonId: string; sessionId: string; answer: string; images: Attachment[]; dirty: boolean };
 const keyFor = (draft: Draft) => draft.sessionId ? `bai-learning-session-draft:${draft.sessionId}:${draft.nodeId}` : `bai-learning-draft:${draft.nodeId}`;
 
-export function clearLearningDraft(nodeId: string, sessionId?: string) {
+function clearLearningDraft(nodeId: string, sessionId?: string) {
   try {
     localStorage.removeItem(`bai-learning-draft:${nodeId}`);
     if (sessionId) localStorage.removeItem(`bai-learning-session-draft:${sessionId}:${nodeId}`);

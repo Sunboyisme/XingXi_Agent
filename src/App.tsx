@@ -731,7 +731,6 @@ export function App() {
               onProject={openProject}
               onOpen={openConversation}
               onManage={setProjectPanelRequest}
-              onLibraryChange={() => setProjectRevision((value) => value + 1)}
               onDelete={setDeleting}
               refresh={refresh}
             />

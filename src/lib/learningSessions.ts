@@ -10,7 +10,7 @@ export function isStudied(status: string) {
   return ["passed", "needs_practice", "skipped"].includes(status);
 }
 
-export type SessionDraft = {
+type SessionDraft = {
   node_id: string | null;
   lesson_id: string | null;
   answer: string;

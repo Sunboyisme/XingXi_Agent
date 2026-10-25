@@ -198,7 +198,6 @@ export function SettingsPage({
           memoryMode={settings.memory_mode}
           refresh={refresh}
           createRequested={createRequested}
-          embedded
         />
       </div>
     </div>

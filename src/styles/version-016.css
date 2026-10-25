@@ -115,10 +115,6 @@
   margin: 0;
   white-space: nowrap;
 }
-.course-header-compact .outline-toggle {
-  padding: 6px 10px;
-  border-radius: 10px;
-}
 .course-header-compact .course-progress {
   min-width: 120px;
   max-width: 190px;
@@ -127,78 +123,6 @@
 .course-header-compact .progress-track {
   margin-top: 5px;
   height: 3px;
-}
-.exercise-answer-dock {
-  display: block;
-  height: auto;
-  max-width: 100%;
-  padding: 6px clamp(16px, 3vw, 40px) 10px;
-  overflow: visible;
-}
-.exercise-answer-toggle {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 30px;
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-  border-radius: 8px;
-}
-.exercise-answer-toggle > span {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.exercise-answer-toggle small {
-  font-size: 10px;
-  opacity: 0.8;
-}
-.exercise-answer-toggle:focus-visible {
-  outline: 2px solid var(--ui-color-action);
-  outline-offset: 2px;
-}
-.exercise-answer-body {
-  display: grid;
-  gap: 6px;
-}
-.exercise-answer-body[hidden] {
-  display: none;
-}
-.exercise-answer-images:empty {
-  display: none;
-}
-.exercise-answer-images {
-  max-height: 72px;
-  overflow-y: auto;
-}
-.exercise-answer-images .attachment-drafts {
-  flex-wrap: wrap;
-}
-.exercise-answer-composer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 16px;
-}
-.exercise-answer-dock textarea {
-  min-height: 54px;
-  height: 54px;
-  max-height: 120px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: 6px 8px;
-  font-size: 13px;
-}
-.exercise-answer-dock .exercise-submit {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
 }
 .wechat-health {
   padding: 14px;
@@ -344,12 +268,5 @@
   }
   .course-header-compact .course-progress {
     min-width: 100px;
-  }
-  .exercise-answer-dock {
-    padding-inline: 12px;
-  }
-  .exercise-answer-composer {
-    gap: 3px;
-    padding: 6px;
   }
 }

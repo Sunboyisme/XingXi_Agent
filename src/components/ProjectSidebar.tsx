@@ -24,10 +24,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
-import {
-  ProjectManagement,
-  type ProjectManagementRequest,
-} from "./ProjectManagement";
+import type { ProjectManagementRequest } from "./ProjectManagement";
 
 type SearchHit = {
   conversation_id: string;
@@ -35,12 +32,6 @@ type SearchHit = {
   title: string;
   snippet: string;
   project_name: string;
-};
-
-export type ProjectPanelRequest = {
-  id: string;
-  action: "library" | "settings";
-  key: number;
 };
 
 function GroupHeading({
@@ -110,8 +101,6 @@ export function ProjectSidebar({
   onDelete,
   refresh,
   visible = true,
-  request,
-  onLibraryChange,
   onManage,
 }: {
   conversations: Conversation[];
@@ -124,9 +113,7 @@ export function ProjectSidebar({
   onDelete: (conversation: Conversation) => void;
   refresh: () => Promise<void>;
   visible?: boolean;
-  request?: ProjectPanelRequest | null;
-  onLibraryChange?: () => void;
-  onManage?: (request: ProjectManagementRequest) => void;
+  onManage: (request: ProjectManagementRequest) => void;
 }) {
   const [collapsed, setCollapsed] = useState<string[]>(() => {
     try {
@@ -195,9 +182,6 @@ export function ProjectSidebar({
   const [error, setError] = useState("");
   const searchSequence = useRef(0);
   const mutationLock = useRef(false);
-  const [management, setManagement] = useState<ProjectManagementRequest | null>(
-    null,
-  );
   const drag = useRef<{
     id: string;
     x: number;
@@ -208,16 +192,12 @@ export function ProjectSidebar({
   const selectedConversation = useRef(currentId);
   selectedConversation.current = currentId;
 
-  useEffect(() => {
-    if (request) setManagement(request);
-  }, [request]);
   function manage(
     action: ProjectManagementRequest["action"],
     id: string | null = null,
   ) {
     const next = { id, action, key: Date.now() + Math.random() };
-    if (onManage) onManage(next);
-    else setManagement(next);
+    onManage(next);
   }
   async function mutate(operation: () => Promise<unknown>) {
     if (mutationLock.current) return;
@@ -647,20 +627,6 @@ export function ProjectSidebar({
           </form>
         </DialogContent>
       </Dialog>
-      {!onManage && (
-        <ProjectManagement
-          projects={projects}
-          conversations={conversations}
-          currentId={currentId}
-          request={management}
-          refresh={refresh}
-          onProject={onProject}
-          onDeleted={(id) => {
-            if (projectId === id) onNew(null);
-          }}
-          onLibraryChange={onLibraryChange}
-        />
-      )}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="chat-search-dialog">
           <DialogHeader>

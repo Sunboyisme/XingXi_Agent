@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
+import { DropdownMenu } from "radix-ui";
 import { SkillsMenu } from "./SkillsMenu";
 
 const apiMock = vi.hoisted(() => vi.fn());
@@ -42,9 +43,16 @@ test("skill menu lists imported skills and persists an enabled switch", async ()
     return [];
   });
   const onSettings = vi.fn();
-  render(<SkillsMenu onSettings={onSettings} />);
-  fireEvent.keyDown(screen.getByRole("button", { name: "技能" }), {
-    key: "ArrowDown",
+  render(
+    <DropdownMenu.Root defaultOpen>
+      <DropdownMenu.Trigger>添加</DropdownMenu.Trigger>
+      <DropdownMenu.Content>
+        <SkillsMenu onSettings={onSettings} />
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>,
+  );
+  fireEvent.keyDown(screen.getByRole("menuitem", { name: "技能" }), {
+    key: "ArrowRight",
   });
   const skill = await screen.findByRole("menuitemcheckbox", {
     name: /笔记整理/,

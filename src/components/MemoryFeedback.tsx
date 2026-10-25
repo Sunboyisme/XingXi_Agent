@@ -12,7 +12,7 @@ export type MemoryNotice = {
   action: string;
 };
 
-export function MemorySource({ memory }: { memory: Memory }) {
+function MemorySource({ memory }: { memory: Memory }) {
   return (
     <DetailDialog
       title="记忆来源"

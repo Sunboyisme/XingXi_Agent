@@ -36,13 +36,11 @@ export function MemoryPage({
   memoryMode,
   refresh,
   createRequested,
-  embedded = false,
 }: {
   memories: Memory[];
   memoryMode: Settings["memory_mode"];
   refresh: () => Promise<void>;
   createRequested?: number;
-  embedded?: boolean;
 }) {
   const [open, setOpen] = useState(Boolean(createRequested));
   useEffect(() => {
@@ -117,11 +115,11 @@ export function MemoryPage({
     (x) => x.state === "confirmed" && x.content.includes(query),
   );
   return (
-    <div className={embedded ? "memory-settings" : "page-content"}>
+    <div className="memory-settings">
       <div className="memory-page-heading">
         <div className="memory-title">
           <div className="memory-title-row">
-            {embedded ? <h2>记忆</h2> : <h1>记忆</h1>}
+            <h2>记忆</h2>
             {memories.length > 0 && (
               <span className="memory-count">{memories.length}</span>
             )}

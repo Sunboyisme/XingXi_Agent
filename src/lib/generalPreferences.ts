@@ -1,6 +1,6 @@
 import { useSyncExternalStore, type KeyboardEvent } from "react";
 
-export const navigationFeatures = [
+const navigationFeatures = [
   "projects",
   "learning",
   "plans",

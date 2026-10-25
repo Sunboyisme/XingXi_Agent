@@ -4,25 +4,12 @@ import { DropdownMenu } from "radix-ui";
 import { api, type Tool } from "@/lib/api";
 import { ToolMenuFrame } from "./ToolMenuFrame";
 
-export function ToolboxMenu({
-  onSettings,
-  open,
-  onOpenChange,
-  restoreFocus = true,
-  asSubmenu = false,
-}: {
-  onSettings: () => void;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  restoreFocus?: boolean;
-  asSubmenu?: boolean;
-}) {
+export function ToolboxMenu({ onSettings }: { onSettings: () => void }) {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState("");
   const [error, setError] = useState("");
-  async function load(open: boolean) {
-    if (!open) return;
+  async function load() {
     setLoading(true);
     setError("");
     try {
@@ -51,12 +38,8 @@ export function ToolboxMenu({
     <ToolMenuFrame
       label="MCP 工具"
       icon={<Layers2 size={15} />}
-      asSubmenu={asSubmenu}
-      open={open}
-      restoreFocus={restoreFocus}
       onOpenChange={(value) => {
-        if (value) void load(true);
-        onOpenChange?.(value);
+        if (value) void load();
       }}
     >
       <DropdownMenu.Label className="model-menu-label">

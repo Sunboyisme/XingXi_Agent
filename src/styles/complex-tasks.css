@@ -191,9 +191,6 @@
   text-align: left;
   overflow-wrap: anywhere;
 }
-.task-artifact .file-card {
-  width: 100%;
-}
 .complex-task-criteria ul {
   margin-top: 6px;
 }

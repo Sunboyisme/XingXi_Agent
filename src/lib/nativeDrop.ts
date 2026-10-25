@@ -2,7 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-export type NativeFile = { path: string; name: string; directory: boolean; relative_path: string; bytes: number[]; last_modified?: number };
+type NativeFile = { path: string; name: string; directory: boolean; relative_path: string; bytes: number[]; last_modified?: number };
 type Target = { element: () => HTMLElement | null; enabled: () => boolean; recursive: boolean; receive: (files: NativeFile[]) => void | Promise<void>; error: (text: string) => void; loading: (value: boolean) => void };
 const targets = new Set<Target>();
 const receiving = new WeakSet<Target>();

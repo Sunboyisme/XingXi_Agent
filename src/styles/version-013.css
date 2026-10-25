@@ -519,14 +519,6 @@
   font-size: 11px;
   color: var(--ui-color-text-muted);
 }
-
-.runtime-row {
-  display: grid;
-  grid-template-columns: 90px 1fr 45px;
-  align-items: center;
-  gap: 12px;
-  margin: 12px 0;
-}
 .skill-detail-dialog[data-slot="dialog-content"] {
   width: min(760px, 92vw);
   max-width: 92vw;

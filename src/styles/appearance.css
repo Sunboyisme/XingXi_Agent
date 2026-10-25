@@ -57,10 +57,6 @@
 .chat-main .message.assistant {
   display: block;
 }
-.chat-main .welcome {
-  align-items: flex-start;
-}
-.welcome,
 .chat-main.is-empty .composer-area {
   max-width: 988px;
 }

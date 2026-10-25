@@ -4,26 +4,13 @@ import { DropdownMenu } from "radix-ui";
 import { api, type Skill } from "@/lib/api";
 import { ToolMenuFrame } from "./ToolMenuFrame";
 
-export function SkillsMenu({
-  onSettings,
-  open,
-  onOpenChange,
-  restoreFocus = true,
-  asSubmenu = false,
-}: {
-  onSettings: () => void;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  restoreFocus?: boolean;
-  asSubmenu?: boolean;
-}) {
+export function SkillsMenu({ onSettings }: { onSettings: () => void }) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState("");
   const [error, setError] = useState("");
 
-  async function load(open: boolean) {
-    if (!open) return;
+  async function load() {
     setLoading(true);
     setError("");
     try {
@@ -62,19 +49,12 @@ export function SkillsMenu({
     <ToolMenuFrame
       label="技能"
       icon={<Puzzle size={15} />}
-      asSubmenu={asSubmenu}
-      open={open}
-      restoreFocus={restoreFocus}
-      triggerClassName="composer-skill-trigger"
       contentClassName="skill-menu"
       onOpenChange={(value) => {
-        if (value) void load(true);
-        onOpenChange?.(value);
+        if (value) void load();
       }}
     >
-      <DropdownMenu.Label className="model-menu-label">
-        技能
-      </DropdownMenu.Label>
+      <DropdownMenu.Label className="model-menu-label">技能</DropdownMenu.Label>
       {loading && (
         <p className="toolbox-notice">
           <Loader2 size={14} className="spin" />

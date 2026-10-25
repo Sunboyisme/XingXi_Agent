@@ -1887,14 +1887,12 @@ export function ChatPage({
                               添加文件或图片
                             </DropdownMenu.Item>
                             <ToolboxMenu
-                              asSubmenu
                               onSettings={() => {
                                 setComposerMenuOpen(false);
                                 onAction("tools");
                               }}
                             />
                             <SkillsMenu
-                              asSubmenu
                               onSettings={() => {
                                 setComposerMenuOpen(false);
                                 onAction("skills");

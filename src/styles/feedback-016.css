@@ -168,43 +168,6 @@
   background: var(--ui-color-surface);
   box-shadow: 0 4px 20px #0002;
 }
-.exercise-answer-composer {
-  border: 0;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--ui-color-bg) 40%, transparent);
-  padding: 5px 8px;
-  align-items: end;
-}
-.exercise-answer-dock textarea {
-  min-height: 40px;
-  height: 40px;
-  max-height: 120px;
-  padding: 8px 4px;
-  border: 0 !important;
-  box-shadow: none !important;
-  outline: none;
-  border-radius: 6px;
-}
-.exercise-answer-composer:focus-within {
-  outline: 1px solid color-mix(in srgb, var(--ui-color-action) 55%, transparent);
-  outline-offset: 2px;
-}
-.exercise-answer-dock .exercise-submit {
-  align-items: center;
-  gap: 5px;
-  padding-bottom: 3px;
-}
-.exercise-answer-dock .exercise-submit [data-slot="button"] {
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0;
-  border-radius: 50%;
-}
-.exercise-answer-dock .exercise-submit svg {
-  width: 16px;
-  height: 16px;
-}
 .learning-conversation {
   display: grid;
   gap: 22px;

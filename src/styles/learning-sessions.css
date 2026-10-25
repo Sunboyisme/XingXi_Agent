@@ -39,8 +39,7 @@
 .course-header-compact {
   flex-wrap: wrap;
 }
-.lesson-inner > .exercise-box,
-.lesson-reference .exercise-box {
+.lesson-inner > .exercise-box {
   background: transparent;
   border: 0;
   border-top: 1px solid var(--ui-color-line);
@@ -74,32 +73,6 @@
   color: var(--ui-color-text-muted);
   font-size: 13px;
   padding: 12px 0;
-}
-.learning-section-navigation {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 30px;
-  border-top: 1px solid var(--ui-color-line);
-}
-.learning-section-navigation > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  font-size: 13px;
-}
-.learning-section-navigation span {
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-}
-@media (max-width: 700px) {
-  .learning-section-navigation {
-    padding: 10px 16px;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
 }
 .learning-assistant-reply h4 {
   font-size: 14px;
