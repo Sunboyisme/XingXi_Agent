@@ -73,7 +73,7 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
     <header className="learning-review-heading"><div><span>复习</span><h2>{row?.source.node_title || "回顾之前学过的内容"}</h2></div>
       <Button size="sm" variant="ghost" disabled={busy || uploading} onClick={() => void back()}><ArrowLeft size={14} />返回课程</Button></header>
     <div className="learning-workflow-scroll" ref={scroll}>
-      {error && <ErrorNotice message={error} />}
+      {error && <ErrorNotice tone={error.includes("还没有可复习") ? "info" : "error"} message={error} />}
       {row && <><p className="muted">{row.source.basis}</p><span className="message-name">XiaoXi</span><Markdown numberedLists>{row.exercise || fields.exercise || ""}</Markdown>
         <LearningConversation turns={row.turns} />
         {busy && run?.kind === "review_assessment" && <LearningPendingReply answer={draft.answer} attachmentIds={draft.images.map((image) => image.id)} fields={fields} busy />}

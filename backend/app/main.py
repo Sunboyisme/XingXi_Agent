@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, restricted_files, learning_workflows
 from .learning_public import LEARNING_KINDS, public as public_learning
-from . import composer_suggestions
+from . import composer_suggestions, todos, knowledge
 from . import (
     agent,
     data_transfer,
@@ -62,6 +62,8 @@ async def lifespan(app: FastAPI):
     skills.ensure_builtin()
     retrieval.last_error = ""
     retrieval_task = asyncio.create_task(retrieval.worker())
+    knowledge.recover()
+    knowledge_task = asyncio.create_task(knowledge.worker())
     mcp_service.manager = mcp_service.MCPManager()
     with store.Session() as db:
         for server in db.scalars(
@@ -91,6 +93,8 @@ async def lifespan(app: FastAPI):
         await app.state.wechat.close()
         await skills.close()
         await office.close()
+        knowledge_task.cancel()
+        await asyncio.gather(knowledge_task, return_exceptions=True)
         retrieval_task.cancel()
         await asyncio.gather(retrieval_task, return_exceptions=True)
         scheduler.shutdown(wait=False)
@@ -1171,7 +1175,7 @@ def legacy_reminder(row):
 
 @router.get("/reminders", response_model=list[s.ReminderRead])
 def reminder_list(db=Depends(database)):
-    return [legacy_reminder(row) for row in db.scalars(select(store.Reminder).where(store.Reminder.status != "removed").order_by(store.Reminder.due_at))]
+    return [legacy_reminder(row) for row in db.scalars(select(store.Reminder).where(store.Reminder.status != "removed", store.Reminder.todo_id.is_(None)).order_by(store.Reminder.due_at))]
 
 
 @router.post("/reminders", response_model=s.ReminderRead)
@@ -1254,6 +1258,10 @@ def snooze_notification(notification_id: str, value: s.NotificationSnooze, db=De
         record = item(db, store.Notification, notification_id)
         if record.status == "cancelled":
             raise HTTPException(409, "这条通知对应的提醒已取消")
+        if record.todo_id:
+            todo = todos.require(db, record.todo_id)
+            if todo.status != "active":
+                raise HTTPException(409, "待办已完成，不能再次提醒")
         if record.plan_id:
             plan = plans.find(db, record.plan_id)
             if plan.status != "planned" or plans.completed(db, plan, record.plan_occurrence_start):
@@ -1423,4 +1431,6 @@ router.include_router(learning_workflows.router)
 router.include_router(learning_handoff.router)
 router.include_router(usage_cost.router)
 router.include_router(composer_suggestions.router)
+router.include_router(todos.router)
+router.include_router(knowledge.router)
 app.include_router(router)

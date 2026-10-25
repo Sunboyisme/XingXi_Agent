@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, update
 
 from . import db as store, learning, learning_sessions as sessions, provider, runs, schemas as s
+from . import knowledge
 from .config import PROFILE_ID
 from .learning_public import LEARNING_KINDS, public
 
@@ -41,6 +42,10 @@ class IntakeMessage(BaseModel):
 class IntakeDraft(BaseModel):
     answer: str = Field(default="", max_length=12000)
     revision: int = Field(ge=0)
+
+
+class IntakeCreate(IntakeMessage):
+    creation_id: str = Field(min_length=1, max_length=100)
 
 
 class IntakeForm(BaseModel):
@@ -112,18 +117,51 @@ def new_run(db, kind, row, key, goal_id=None):
 
 
 @router.post("/learning/intakes", response_model=IntakeRead)
-def create_intake():
+async def create_intake(value: IntakeCreate):
     assert_open()
-    with store.Session() as db:
-        # Reopen an unfinished interview instead of leaving invisible drafts behind.
-        row = db.scalar(select(store.LearningIntake).where(
-            store.LearningIntake.profile_id == PROFILE_ID,
-            store.LearningIntake.status != "confirmed").order_by(store.LearningIntake.updated_at.desc()))
-        if not row:
-            row = store.LearningIntake(messages=[{"role": "assistant", "content": "你想学会什么，或解决什么问题？"}])
+    async with locks["create:" + value.creation_id]:
+        with store.Session() as db:
+            row = db.scalar(select(store.LearningIntake).where(
+                store.LearningIntake.creation_id == value.creation_id,
+                store.LearningIntake.profile_id == PROFILE_ID))
+            if row:
+                first = next((x for x in row.messages if x.get("role") == "user"), {})
+                if first.get("content") != value.content.strip():
+                    raise HTTPException(409, "这次创建请求已经用于另一个学习方向。")
+                return IntakeRead.model_validate(row)
+            if not value.content.strip():
+                raise HTTPException(422, "请先告诉 XiaoXi 你想学什么。")
+            row = store.LearningIntake(creation_id=value.creation_id, messages=[
+                {"role": "assistant", "content": "你想学会什么，或解决什么问题？"},
+                {"role": "user", "content": value.content.strip(), "message_id": value.message_id}])
             db.add(row)
+            db.flush()
+            run = new_run(db, "learning_intake", row, "intake_id")
+            intake_id = row.id
+            runs.launch(run.id, lambda: interview(intake_id, run.id, value.use_beginner_defaults))
+            return IntakeRead.model_validate(row)
+
+
+@router.get("/learning/intakes", response_model=list[IntakeRead])
+def list_intakes():
+    with store.Session() as db:
+        return [IntakeRead.model_validate(row) for row in db.scalars(select(store.LearningIntake).where(
+            store.LearningIntake.profile_id == PROFILE_ID).order_by(store.LearningIntake.created_at.desc()))
+            if any(x.get("role") == "user" for x in row.messages) or row.draft.strip()]
+
+
+@router.delete("/learning/intakes/{intake_id}")
+async def delete_intake(intake_id: str):
+    async with locks[intake_id]:
+        with store.Session() as db:
+            row = sessions.require(db, store.LearningIntake, intake_id)
+            if active_run(db, row):
+                raise HTTPException(409, "请先停止生成，再删除这份草稿。")
+            if row.goal_id:
+                raise HTTPException(409, "已创建课程，请从课程卡片删除。")
+            db.delete(row)
             db.commit()
-        return IntakeRead.model_validate(row)
+            return {"deleted": True}
 
 
 @router.get("/learning/intakes/{intake_id}", response_model=IntakeRead)
@@ -165,6 +203,7 @@ async def interview(intake_id, run_id, beginner):
         text = json.dumps({"messages": row.messages[-40:], "summary": row.summary,
                            "explicit_beginner": beginner}, ensure_ascii=False)
         text += learning.context(db, " ".join(x["content"] for x in row.messages[-6:] if x["role"] == "user"))
+    text += await knowledge.context(text[:4000], run_id)
     result = await provider.ask_json(IntakeResult, learning.TUTOR_RULES + "\n你正在帮助用户建立学习目标。"
         "从真实用户回答及明确的个人背景提取title、objective、foundation，保留已知答案，不猜测经验。"
         "每轮只问一个尚未明确的核心问题，按主题、想具备的能力、目前基础的顺序补齐；已有答案绝不重复追问。"
@@ -182,7 +221,7 @@ async def interview(intake_id, run_id, beginner):
             question = f"请告诉我你的{missing[0]}。"
         row.summary = {**row.summary, **summary}
         row.status = "draft" if missing else "ready"
-        row.messages = [*row.messages, {"role": "assistant", "content": question, "run_id": run_id}]
+        row.messages = [*row.messages, {"role": "assistant", "content": question, "run_id": run_id, "knowledge_sources": knowledge.sources_for_run(run_id)}]
         db.commit()
     return {"intake_id": intake_id}
 
@@ -273,6 +312,7 @@ async def generate_review(review_id, run_id):
         row = sessions.require(db, store.LearningReview, review_id)
         goal = sessions.require(db, store.Goal, row.goal_id)
         text = json.dumps({"goal": goal.title, "foundation": goal.foundation, "source": row.source}, ensure_ascii=False)
+    text += await knowledge.context(text[:4000], run_id)
     result = await provider.ask_json(ReviewQuestion, learning.TUTOR_RULES + "\n根据当前章节的真实讲解和练习记录，"
         "生成一道针对薄弱点的复习题，只问一个核心问题，用1.编号，用户能用一小段回答。"
         "优先处理实际反馈中的缺口。尚未作答时不要说用户答错过，不虚构历史；只有编号的旧图片不代表看过图片。"
@@ -391,6 +431,7 @@ async def assess_review(review_id, run_id, value):
         text = json.dumps({"exercise": row.exercise, "criteria": row.criteria,
             "core_requirements": row.source["node_objective"], "source": row.source,
             "previous_turns": row.turns[-12:], "answer": value.answer}, ensure_ascii=False)
+    text += await knowledge.context(text[:4000], run_id)
     result = await provider.ask_json(s.Feedback, learning.TUTOR_RULES + "\n这是复习对话。"
         "只有用户实际作答充分覆盖本章核心要求和当前题标准时passed=true，并在evidence说明依据。"
         "提问或求助按discussion回答，不代表掌握。答错时简短指出核心问题并提供参考答案，不强制反复补答。"
@@ -399,6 +440,7 @@ async def assess_review(review_id, run_id, value):
         text, value.attachment_ids, on_partial=lambda fields: runs.emit(run_id, "learning_content", {
             "review_id": review_id, "stage": "review_assessment", "fields": public(fields)}))
     feedback = result.model_dump()
+    feedback["knowledge_sources"] = knowledge.sources_for_run(run_id)
     feedback["next_exercise"] = feedback["next_criteria"] = ""
     feedback["passed"] = bool(result.passed and result.response_type == "feedback" and result.evidence.strip())
     with store.Session() as db:

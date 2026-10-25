@@ -18,11 +18,13 @@ export function NotificationsPanel({
   notifications,
   refresh,
   onPlan,
+  onTodo,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   notifications: Notification[];
   refresh: () => Promise<void>;
+  onTodo?: (id: string) => void;
   onPlan: (id: string, occurrence?: string | null) => void;
 }) {
   const [all, setAll] = useState(false);
@@ -100,7 +102,7 @@ export function NotificationsPanel({
             通知
           </DialogTitle>
           <DialogDescription>
-            查看已触发的提醒。「知道了」只标记已读，不会完成计划。
+            查看已触发的提醒。「知道了」只标记已读，不会完成待办或计划。
           </DialogDescription>
         </DialogHeader>
         <div className="segmented">
@@ -146,6 +148,7 @@ export function NotificationsPanel({
                 {note.body && <p>{note.body}</p>}
               </div>
               <div className="notification-actions">
+                {note.todo_id && <Button variant="ghost" size="sm" onClick={() => { onOpenChange(false); onTodo?.(note.todo_id!); }}><ExternalLink size={14} />查看待办</Button>}
                 {note.plan_id && (
                   <Button
                     variant="ghost"

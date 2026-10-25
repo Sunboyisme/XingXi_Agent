@@ -5,7 +5,7 @@ from sqlalchemy import select, func
 import re
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
-from . import provider, learning_sessions, usage_cost
+from . import provider, learning_sessions, usage_cost, knowledge
 from .config import PROFILE_ID
 from .db import Session, Goal, KnowledgeNode, Lesson, Attempt, Memory, uid
 from .schemas import CoursePlan, LessonContent, Feedback
@@ -78,6 +78,7 @@ async def generate_course(goal_id: str, run_id: str | None = None) -> dict:
             f"\n具体成果：{goal.outcome or '未指定'}\n每周可用分钟：{goal.weekly_minutes or '未指定'}\n目标日期：{goal.target_date or '未指定'}"
             + context(db, f"{goal.title} {goal.objective} {goal.foundation}")
         )
+    text += await knowledge.context(f"{goal.title} {goal.objective} {goal.foundation}", run_id)
     with usage_cost.scope(run_id=run_id, purpose="learning"):
         plan = await provider.ask_json(
         CoursePlan,
@@ -149,6 +150,7 @@ async def teach(state: TutorState):
             text += "\n上次练习反馈：" + json.dumps(
                 earlier.feedback, ensure_ascii=False
             )
+    text += await knowledge.context(text[:4000], state.get("run_id"))
     with usage_cost.scope(run_id=state.get("run_id"), purpose="learning"):
         content = await provider.ask_json(
         LessonContent,
@@ -169,6 +171,7 @@ async def teach(state: TutorState):
                 id=state["lesson_id"],
                 node_id=node.id,
                 content=content.content,
+                knowledge_sources=knowledge.sources_for_run(state.get("run_id")),
                 exercise=content.exercise,
                 hints=content.hints,
                 criteria=content.criteria,
@@ -257,6 +260,7 @@ async def assess(state: TutorState):
             "user_wants_to_finish": finish_requested,
             "can_continue_to_next_section": True,
         }, ensure_ascii=False)
+    text += await knowledge.context(text[:4000], state.get("run_id"))
     with usage_cost.scope(run_id=state.get("run_id"), purpose="learning"):
         feedback = await provider.ask_json(
         Feedback,
@@ -281,6 +285,7 @@ async def assess(state: TutorState):
         })) if state.get("run_id") else None,
         )
     result = feedback.model_dump()
+    result["knowledge_sources"] = knowledge.sources_for_run(state.get("run_id"))
     if not allow_followup:
         result["next_exercise"] = result["next_criteria"] = ""
     result["active_exercise"] = result.get("next_exercise") or latest_feedback.get("active_exercise") or latest_feedback.get("next_exercise") or lesson.exercise

@@ -64,6 +64,8 @@ export type UsageReport = {
   }[];
 };
 export const usagePurposes: Record<string, string> = {
+  knowledge_index: "知识库索引",
+  knowledge_query: "知识库检索",
   input_suggestion: "输入建议",
   chat: "聊天",
   learning: "学习",

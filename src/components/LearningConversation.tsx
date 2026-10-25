@@ -1,3 +1,4 @@
+import { KnowledgeSources, type KnowledgeSource } from "./KnowledgeSources";
 import { Button } from "./ui/button";
 import { DetailDialog } from "./ui/detail-dialog";
 import { memo, useState } from "react";
@@ -12,6 +13,7 @@ function FeedbackReply({ value }: { value: Record<string, unknown> }) {
         <span className="learning-passed">这次练习通过了</span>
       )}
       <Markdown>{String(value.explanation || "")}</Markdown>
+      <KnowledgeSources sources={value.knowledge_sources as KnowledgeSource[] | undefined} />
       {Boolean(value.reference_answer) && (
         <>
           <h4>参考答案</h4>

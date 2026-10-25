@@ -1,0 +1,548 @@
+/* Shared feedback and the learning, todo and knowledge workspaces. */
+.app-feedback.error-notice {
+  --feedback-accent: var(--ui-color-danger);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid
+    color-mix(in srgb, var(--feedback-accent) 24%, var(--ui-color-line));
+  border-radius: 12px;
+  background: color-mix(
+    in srgb,
+    var(--feedback-accent) 5%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-text);
+  font-size: 13px;
+  line-height: 1.65;
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+.app-feedback.error-notice.is-info {
+  --feedback-accent: var(--ui-color-text-muted);
+}
+.app-feedback.error-notice.is-success {
+  --feedback-accent: var(--status-success);
+}
+.app-feedback.error-notice.is-warning {
+  --feedback-accent: var(--ui-color-action);
+}
+.app-feedback > svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--feedback-accent);
+}
+.app-feedback .error-notice-text {
+  flex: 1;
+  min-width: 0;
+}
+.app-feedback .error-notice-actions {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.app-feedback .error-notice-actions button {
+  min-height: 28px;
+}
+.app-toast {
+  max-width: min(520px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid var(--ui-color-line);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 15%);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.app-toast.is-error {
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-danger) 30%,
+    var(--ui-color-line)
+  );
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+.app-toast .app-toast-icon {
+  flex-shrink: 0;
+  color: var(--status-success);
+  background: transparent;
+}
+.app-toast.is-error .app-toast-icon {
+  color: var(--ui-color-danger);
+}
+.presentation-notice,
+.toolbox-notice,
+.window-control-error,
+.plan-move-notice {
+  padding: 10px 13px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 10px;
+  background: var(--ui-color-surface);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.learning-home-heading {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.learning-home-heading > .bai-avatar {
+  width: 66px;
+  height: 66px;
+  flex: 0 0 66px;
+}
+.learning-home-heading h1 {
+  font-size: clamp(22px, 2.5vw, 32px);
+  line-height: 1.4;
+}
+.learning-home-heading p {
+  margin: 8px 0 0;
+  color: var(--ui-color-text-muted);
+  font-size: 14px;
+}
+.learning-page .page-heading {
+  align-items: center;
+  gap: 24px;
+  padding: 14px 0 28px;
+}
+.learning-home-empty {
+  padding: 50px 24px;
+  text-align: center;
+  color: var(--ui-color-text-muted);
+  border: 1px dashed var(--ui-color-line);
+  border-radius: 18px;
+}
+.goal-row-progress strong,
+.course-progress strong {
+  color: var(--ui-color-action);
+  font-weight: 650;
+}
+.intake-card {
+  margin-bottom: 14px;
+}
+.learning-generation-action {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.learning-generation-action > span {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ui-color-text-muted);
+  align-self: center;
+}
+.learning-generation-action > .app-feedback {
+  flex-basis: 100%;
+  margin: 0;
+}
+.module-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.module-empty {
+  padding: 30px 16px;
+  color: var(--ui-color-text-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.module-caption {
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.module-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+  font-size: 13px;
+}
+.module-toggle input {
+  appearance: none;
+  position: relative;
+  width: 38px;
+  height: 23px;
+  flex: 0 0 38px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+  background: var(--ui-color-bg);
+  cursor: pointer;
+  transition: background 0.16s;
+}
+.module-toggle input::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--ui-color-text-muted);
+  transition: transform 0.16s;
+}
+.module-toggle input:checked {
+  background: var(--ui-color-action);
+  border-color: var(--ui-color-action);
+}
+.module-toggle input:checked::after {
+  transform: translateX(15px);
+  background: var(--ui-color-on-action);
+}
+.module-toggle input:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.module-toggle input:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 3px;
+}
+.todo-page .plan-toolbar {
+  margin-bottom: 25px;
+  gap: 24px;
+}
+.todo-page .plan-heading p {
+  font-size: 14px;
+  color: var(--ui-color-text-muted);
+  margin: 8px 0 0;
+}
+.todo-filters {
+  margin: 0 0 22px;
+  width: fit-content;
+}
+.todo-list {
+  display: grid;
+  gap: 10px;
+}
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--ui-color-surface);
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+}
+.todo-row-copy {
+  display: grid;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  color: var(--ui-color-text);
+}
+.todo-row-copy > strong {
+  font-size: 16px;
+  font-weight: 550;
+}
+.todo-row-copy > span {
+  white-space: pre-wrap;
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+}
+.todo-row-copy > small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.todo-row.is-completed .todo-row-copy > strong {
+  text-decoration: line-through;
+  color: var(--ui-color-text-muted);
+}
+.todo-editor label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+.todo-editor {
+  gap: 18px;
+}
+.knowledge-page > .page-heading {
+  align-items: center;
+  gap: 16px;
+}
+.knowledge-page > .page-heading p {
+  color: var(--ui-color-text-muted);
+  font-size: 14px;
+  margin-top: 8px;
+}
+.knowledge-config {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 22px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+  margin-bottom: 18px;
+  background: var(--ui-color-surface);
+}
+.knowledge-config strong {
+  font-size: 15px;
+}
+.knowledge-config p {
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+  margin: 6px 0;
+}
+.knowledge-config small {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.knowledge-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  max-width: 680px;
+}
+.knowledge-search > input {
+  flex: 1;
+  min-width: 0;
+}
+.knowledge-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 29%) minmax(0, 1fr);
+  border: 1px solid var(--ui-color-line);
+  border-radius: 18px;
+  min-height: 390px;
+  margin-top: 22px;
+  overflow: hidden;
+}
+.knowledge-workspace > aside {
+  padding: 20px 14px;
+  border-right: 1px solid var(--ui-color-line);
+  min-width: 0;
+}
+.knowledge-workspace h2 {
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.knowledge-workspace > aside > h2 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 8px 14px;
+}
+.knowledge-batch {
+  margin-bottom: 10px;
+}
+.knowledge-batch > summary {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  cursor: pointer;
+}
+.knowledge-tree {
+  padding: 0 0 0 10px;
+  margin: 0;
+  list-style: none;
+}
+.knowledge-tree summary {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 7px 4px;
+  font-size: 13px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.knowledge-tree button {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  width: 100%;
+  padding: 9px 8px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+  background: none;
+  border: none;
+  color: var(--ui-color-text);
+  cursor: pointer;
+}
+.knowledge-tree button > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.knowledge-tree button small {
+  width: 100%;
+  padding-left: 22px;
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+}
+.knowledge-tree svg {
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
+}
+.knowledge-tree button:hover,
+.knowledge-tree button[aria-current="true"] {
+  background: var(--ui-color-surface-deep);
+}
+.knowledge-tree button[aria-current="true"] {
+  color: var(--ui-color-action);
+}
+.knowledge-preview {
+  padding: 22px 26px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.knowledge-preview > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.knowledge-preview > header small {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.knowledge-preview .markdown {
+  font-size: 14px;
+}
+.knowledge-related {
+  padding: 14px 16px;
+  margin: 16px 0 22px;
+  border-left: 3px solid var(--ui-color-action);
+  background: var(--ui-color-surface-deep);
+  border-radius: 0 10px 10px 0;
+}
+.knowledge-related > strong {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+}
+.knowledge-source-list {
+  display: grid;
+  gap: 12px;
+}
+.knowledge-source {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 12px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.knowledge-source small,
+.knowledge-source p {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  line-height: 1.8;
+  margin: 0;
+  white-space: pre-wrap;
+}
+.knowledge-source > span {
+  font-size: 12px;
+  color: var(--ui-color-action);
+}
+.general-settings {
+  border: 1px solid var(--ui-color-line);
+  border-radius: 18px;
+  padding: 26px;
+  background: var(--ui-color-surface);
+}
+.general-settings > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.general-settings h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.general-settings p {
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 7px 0 0;
+}
+.general-setting-row {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 22px;
+  border-top: 1px solid var(--ui-color-line);
+}
+@media (max-width: 1000px) {
+  .learning-home-heading {
+    gap: 12px;
+  }
+  .learning-home-heading > .bai-avatar {
+    width: 50px;
+    height: 50px;
+    flex-basis: 50px;
+  }
+  .learning-page .page-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .knowledge-page > .page-heading,
+  .todo-page .plan-toolbar {
+    flex-wrap: wrap;
+  }
+  .knowledge-workspace {
+    grid-template-columns: minmax(175px, 32%) minmax(0, 1fr);
+  }
+  .knowledge-preview {
+    padding: 18px;
+  }
+}
+@media (max-width: 720px) {
+  .app-feedback.error-notice {
+    flex-wrap: wrap;
+  }
+  .app-feedback .error-notice-actions {
+    margin-left: 27px;
+  }
+  .knowledge-config {
+    align-items: flex-start;
+    padding: 16px;
+    gap: 14px;
+  }
+  .knowledge-preview > header {
+    flex-wrap: wrap;
+  }
+  .todo-row {
+    gap: 6px;
+    padding: 12px 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .module-toggle input,
+  .module-toggle input::after {
+    transition: none;
+  }
+}

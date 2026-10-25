@@ -50,6 +50,7 @@ class Settings(Base):
     model_providers: Mapped[list] = mapped_column(JSON, default=list)
     default_provider: Mapped[str] = mapped_column(String(30), default="custom")
     embedding_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    knowledge_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     image_generation_config: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
@@ -319,6 +320,7 @@ class Lesson(Record, Base):
     node_id: Mapped[str] = mapped_column(
         ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), index=True
     )
+    knowledge_sources: Mapped[list] = mapped_column(JSON, default=list)
     content: Mapped[str] = mapped_column(Text)
     exercise: Mapped[str] = mapped_column(Text)
     hints: Mapped[list] = mapped_column(JSON, default=list)
@@ -343,6 +345,7 @@ class Attempt(Record, Base):
 
 class LearningIntake(Record, Base):
     __tablename__ = "learning_intakes"
+    creation_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     messages: Mapped[list] = mapped_column(JSON, default=list)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     draft: Mapped[str] = mapped_column(Text, default="")
@@ -395,6 +398,45 @@ class MemoryChange(Record, Base):
     undone: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class Todo(Record, Base):
+    __tablename__ = "todos"
+    title: Mapped[str] = mapped_column(String(300))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    reminder_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(100), default="Asia/Shanghai")
+
+
+class KnowledgeDocument(Record, Base):
+    __tablename__ = "knowledge_documents"
+    batch_id: Mapped[str] = mapped_column(String(36), index=True)
+    relative_path: Mapped[str] = mapped_column(Text)
+    storage_name: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column(Integer)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    error: Mapped[str] = mapped_column(Text, default="")
+    warnings: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    document_id: Mapped[str] = mapped_column(ForeignKey("knowledge_documents.id", ondelete="CASCADE"), index=True)
+    ordinal: Mapped[int] = mapped_column(Integer)
+    locator: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+
+
+class KnowledgeVector(Base):
+    __tablename__ = "knowledge_vectors"
+    chunk_id: Mapped[str] = mapped_column(ForeignKey("knowledge_chunks.id", ondelete="CASCADE"), primary_key=True)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    signature: Mapped[str] = mapped_column(String(64))
+    vector: Mapped[list] = mapped_column(JSON)
+
+
 class Reminder(Record, Base):
     __tablename__ = "reminders"
     title: Mapped[str] = mapped_column(String(300))
@@ -404,6 +446,7 @@ class Reminder(Record, Base):
     recurrence: Mapped[str] = mapped_column(String(20), default="none")
     status: Mapped[str] = mapped_column(String(30), default="active")
     plan_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    todo_id: Mapped[str | None] = mapped_column(ForeignKey("todos.id", ondelete="CASCADE"), nullable=True, index=True)
     offset_minutes: Mapped[int] = mapped_column(Integer, default=0)
     position: Mapped[int] = mapped_column(Integer, default=0)
     plan_occurrence_start: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -421,6 +464,7 @@ class Notification(Record, Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")
     overdue: Mapped[bool] = mapped_column(Boolean, default=False)
     plan_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    todo_id: Mapped[str | None] = mapped_column(ForeignKey("todos.id", ondelete="CASCADE"), nullable=True, index=True)
     plan_occurrence_start: Mapped[str | None] = mapped_column(String(40), nullable=True)
     snoozed_until: Mapped[str | None] = mapped_column(String(40), nullable=True)
     generation: Mapped[int] = mapped_column(Integer, default=0)

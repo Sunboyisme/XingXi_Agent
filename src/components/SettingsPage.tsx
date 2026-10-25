@@ -1,3 +1,4 @@
+import { GeneralSettings } from "./GeneralSettings";
 import { useEffect, useState } from "react";
 import { ModelConnections } from "./ModelConnections";
 import { type Settings, type Memory } from "@/lib/api";
@@ -35,6 +36,7 @@ function ConnectionSettings({
 }
 
 export type SettingsTab =
+  | "general"
   | "connections"
   | "appearance"
   | "tools"
@@ -76,6 +78,7 @@ export function SettingsPage({
       <div className="settings-tabs" role="tablist" aria-label="设置分类">
         {(
           [
+            ["general", "常规"],
             ["connections", "连接"],
             ["appearance", "外观"],
             ["tools", "工具"],
@@ -99,6 +102,7 @@ export function SettingsPage({
               ) {
                 event.preventDefault();
                 const tabs: SettingsTab[] = [
+                  "general",
                   "connections",
                   "appearance",
                   "tools",
@@ -130,6 +134,7 @@ export function SettingsPage({
           </button>
         ))}
       </div>
+      {tab === "general" && <div id="settings-panel-general" role="tabpanel" aria-labelledby="settings-tab-general"><GeneralSettings /></div>}
       {tab === "appearance" && (
         <div
           id="settings-panel-appearance"

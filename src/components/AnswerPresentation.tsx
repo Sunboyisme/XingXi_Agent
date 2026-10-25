@@ -1,3 +1,4 @@
+import { KnowledgeSources } from "./KnowledgeSources";
 import { DetailDialog } from "./ui/detail-dialog";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useEffect, useState, useContext } from "react";
@@ -281,6 +282,7 @@ export function AnswerPresentation({
             alt="工具返回的图片"
           />
         ))}
+      <KnowledgeSources sources={value?.knowledge_sources} />
       {!!value?.sources?.length && (
         <DetailDialog
           title="参考网页"

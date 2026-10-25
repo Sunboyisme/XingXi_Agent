@@ -572,6 +572,7 @@ class GoalRead(RecordRead):
 
 
 class LessonRead(RecordRead):
+    knowledge_sources: list[dict] = Field(default_factory=list)
     node_id: str
     content: str
     exercise: str
@@ -732,6 +733,7 @@ class NotificationRead(RecordRead):
     body: str
     status: str
     overdue: bool
+    todo_id: str | None = None
     plan_id: str | None = None
     plan_occurrence_start: str | None = None
     snoozed_until: str | None = None

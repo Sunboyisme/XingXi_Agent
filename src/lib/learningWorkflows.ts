@@ -3,7 +3,7 @@ import { api, type Attachment } from "./api";
 import { registerLearningFlush } from "./learningLifecycle";
 import { draftImages } from "./learningSessions";
 
-export type Intake = { id: string; messages: { role: string; content: string; message_id?: string }[];
+export type Intake = { id: string; messages: { role: string; content: string; message_id?: string; knowledge_sources?: import("@/components/KnowledgeSources").KnowledgeSource[] }[];
   summary: Record<string, string>; draft: string; draft_revision: number;
   status: string; goal_id: string | null; active_run_id: string | null };
 export type Review = { id: string; created_at: string; goal_id: string; session_id: string | null; node_id: string;

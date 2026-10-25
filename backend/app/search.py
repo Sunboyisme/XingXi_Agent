@@ -62,13 +62,28 @@ async def read_webpage(url: str) -> dict:
     key = secret_get("search")
     if not key:
         raise ConfigurationError("尚未配置搜索 API，无法读取网页正文。")
-    async with httpx.AsyncClient(timeout=25) as client:
-        response = await client.post(
-            "https://api.tavily.com/extract", json={"api_key": key, "urls": [url]}
-        )
-        response.raise_for_status()
-        data = response.json()
-        results = data.get("results", [])
-        if not results:
-            return {"url": url, "error": "未获得正文，不可声称已阅读该页面"}
-        return {"url": url, "content": results[0].get("raw_content", "")[:18000]}
+    # One extraction budget belongs to this layer, including transient errors.
+    errors = []
+    async with httpx.AsyncClient(timeout=35) as client:
+        for depth in ("basic", "advanced"):
+            try:
+                response = await client.post("https://api.tavily.com/extract", json={
+                    "api_key": key, "urls": [url], "extract_depth": depth,
+                    "timeout": 10 if depth == "basic" else 25})
+                response.raise_for_status()
+                data = response.json()
+                for item in data.get("results", []):
+                    content = item.get("raw_content", "")
+                    if isinstance(content, str) and content.strip():
+                        return {"url": item.get("url") or url, "content": content[:18000],
+                                "partial": len(content) > 18000, "extraction_depth": depth}
+                errors.extend(str(item.get("error", "正文为空"))[:300] for item in data.get("failed_results", []))
+            except httpx.HTTPStatusError as error:
+                errors.append(f"网页服务返回 HTTP {error.response.status_code}")
+                if error.response.status_code in {401, 403, 429}:
+                    break
+            except (httpx.HTTPError, ValueError):
+                errors.append("网页服务暂时无法连接或响应无效")
+    return {"url": url, "error": "暂时无法读取这个网页的正文，可以换一个来源继续。",
+            "details": errors[-2:], "category": "webpage_unavailable", "retryable": False,
+            "recoverable": True, "read": False}

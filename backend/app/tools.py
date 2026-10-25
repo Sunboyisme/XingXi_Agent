@@ -29,7 +29,7 @@ from . import (
     utilities,
     weather,
 )
-from . import task_context
+from . import task_context, todos
 from .config import PROFILE_ID, secret_get
 from .db import MESSAGE_ORDER, Goal, KnowledgeNode, Message, Run, RunEvent, Session
 from .runs import emit
@@ -60,6 +60,7 @@ TOOL_INFO = {
         False,
     ),
 }
+TOOL_INFO.update(todos.INFO)
 TOOL_INFO.update(feature_tools.INFO)
 TOOL_INFO.update(file_tools.INFO)
 TOOL_INFO.update(image_generation.INFO)
@@ -410,7 +411,7 @@ def builtin_tools(run_id: str, conversation_id: str):
         remember,
         learning_goals,
         create_learning_goal,
-    ] + feature_tools.build(run_id, conversation_id) + file_tools.build(run_id, conversation_id) + image_generation.build(run_id)
+    ] + todos.build(run_id, conversation_id) + feature_tools.build(run_id, conversation_id) + file_tools.build(run_id, conversation_id) + image_generation.build(run_id)
 
 
 def tool_catalog() -> list[dict]:
@@ -508,6 +509,13 @@ def _guard_tool(entry, originals, run_id):
             # Repeating the same rejected parameters cannot repair a request.
             with Session() as db:
                 previous = db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool").order_by(RunEvent.id.desc())).all()
+                if entry["id"] == "read_url":
+                    for event in previous:
+                        if (event.data.get("tool_id") == "read_url" and event.data.get("arguments", {}).get("url") == arguments.get("url")
+                                and event.data.get("status") in {"completed", "error"}):
+                            value = {**event.data.get("result", {}), "cached": True}
+                            status = "error" if value.get("error") else "completed"
+                            return json.dumps(value, ensure_ascii=False)
                 rejected = []
                 for event in previous:
                     if event.data.get("tool_id") != entry["id"]:

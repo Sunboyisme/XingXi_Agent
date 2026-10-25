@@ -19,6 +19,7 @@ from .db import ComplexTask, Message, Run, RunEvent, Session, TaskOperation, Tas
 from .runs import emit
 
 READ_TOOLS = {
+    "list_todos",
     "search_project_history",
     "get_weather", "web_search", "read_url", "calculate", "date_time", "convert_units",
     "search_memories", "search_conversation_history", "learning_goals", "list_plans",
@@ -28,7 +29,7 @@ READ_TOOLS = {
 FILE_TOOLS = {"create_document", "create_spreadsheet", "create_text_file"}
 WRITE_TOOLS = {"remember", "create_plans", "update_plan", "delete_plan", "action_plan", "create_learning_goal"}
 TERMINAL = {"completed", "cancelled"}
-WRITE_TOOLS.add("delete_plans")
+WRITE_TOOLS.update({"delete_plans", "create_todo", "update_todo", "action_todo"})
 
 
 def normalize_formats(values):
@@ -431,7 +432,7 @@ async def guarded(entry, run_id, arguments, operation):
         execution.operation_id = operation_id
         result, status = {}, "failed" if policy in {"read", "file"} else "unknown"
         try:
-            for attempt in range(2 if policy == "read" else 1):
+            for attempt in range(2 if policy == "read" and entry["id"] != "read_url" else 1):
                 result = json.loads(await operation(**arguments))
                 if not isinstance(result, dict):
                     result = {"value": result}
@@ -464,6 +465,10 @@ async def guarded(entry, run_id, arguments, operation):
                 row = db.get(TaskOperation, operation_id)
                 row.status, row.result = status, result
                 db.commit()
+        if status != "completed" and policy == "read" and entry["id"] in {"read_url", "web_search"}:
+            # A failed source is evidence for the agent, not a task-wide stop.
+            # Persist the failed operation and let it choose another source.
+            return json.dumps({**result, "recoverable": True}, ensure_ascii=False)
         if status != "completed":
             reason = str(result.get("error") or result.get("message") or "需要补充信息或确认后继续。")
             if status == "failed" and result.get("not_executed"):

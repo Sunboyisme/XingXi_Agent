@@ -19,7 +19,7 @@ LIMIT = 512 * 1024 * 1024
 LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
                 "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes",
                 "file_sessions", "file_save_requests", "file_audits"}
-COUNTS = {"conversations": "对话", "messages": "消息", "memories": "记忆",
+COUNTS = {"todos": "待办", "knowledge_documents": "知识库文件", "knowledge_chunks": "知识片段", "knowledge_vectors": "知识向量","conversations": "对话", "messages": "消息", "memories": "记忆",
           "learning_sessions": "学习会话", "learning_intakes": "目标访谈", "learning_reviews": "复习记录", "usage_calls": "模型调用", "usage_prices": "计价配置",
           "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
           "memory_vectors": "向量", "reminders": "提醒时间", "goals": "学习目标",
@@ -125,6 +125,7 @@ def create_archive():
             ids = [row[0] for row in connection.execute("SELECT id FROM attachments")]
             documents = {row[0] for row in connection.execute("SELECT id FROM office_files")}
             outputs = [row[0] for row in connection.execute("SELECT storage_name FROM artifacts")]
+            knowledge_files = [row[0] for row in connection.execute("SELECT storage_name FROM knowledge_documents")]
         checkpoint = root() / "checkpoints.sqlite"
         if checkpoint.exists():
             snapshot(checkpoint, stage / "checkpoints.sqlite")
@@ -139,6 +140,13 @@ def create_archive():
                     if not image.is_file():
                         raise HTTPException(409, "有图片文件缺失，请检查数据目录后重试导出。")
                     archive.write(image, f"attachments/files/{attachment_id}.bin" if attachment_id in documents else f"attachments/{attachment_id}.jpg")
+                for storage_name in knowledge_files:
+                    if not re.fullmatch(r"[a-f0-9-]{36}\.bin", storage_name):
+                        raise HTTPException(409, "知识库文件记录无效")
+                    source = config.ATTACHMENTS_DIR / "knowledge" / storage_name
+                    if not source.is_file():
+                        raise HTTPException(409, "知识库原文件缺失，请检查数据目录")
+                    archive.write(source, f"attachments/knowledge/{storage_name}")
                 for storage_name in outputs:
                     if not re.fullmatch(r"[a-f0-9-]{36}\.bin", storage_name):
                         raise HTTPException(409, "工具产物记录无效")
@@ -292,6 +300,9 @@ def validate(stage):
         incoming.execute("UPDATE projects SET workspace_path=''")
         clear_local_references(incoming)
         values = counts(incoming)
+        for (storage_name,) in incoming.execute("SELECT storage_name FROM knowledge_documents"):
+            if not re.fullmatch(r"[a-f0-9-]{36}\.bin", storage_name) or not (stage / "attachments" / "knowledge" / storage_name).is_file():
+                raise ValueError("知识库原文件缺失或记录无效")
         ids = [row[0] for row in incoming.execute("SELECT id FROM attachments")]
         documents = {row[0] for row in incoming.execute("SELECT id FROM office_files")}
         for attachment_id in ids:
@@ -339,7 +350,7 @@ def inspect_archive(source):
             for entry in entries:
                 name = entry.filename
                 if name not in {"manifest.json", "bai.sqlite", "checkpoints.sqlite"} and not re.fullmatch(
-                    r"attachments/(?:[a-f0-9-]{36}\.jpg|(?:artifacts|files)/[a-f0-9-]{36}\.bin)", name
+                    r"attachments/(?:[a-f0-9-]{36}\.jpg|(?:artifacts|files|knowledge)/[a-f0-9-]{36}\.bin)", name
                 ):
                     raise ValueError("压缩包包含不支持的文件")
                 target = stage / name

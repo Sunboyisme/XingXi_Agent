@@ -234,9 +234,13 @@ class SourceRead(BaseModel):
     kind: str
 
 
+from .knowledge import KnowledgeSource
+
+
 class PresentationRead(BaseModel):
     artifacts: list[ArtifactRead]
     sources: list[SourceRead]
+    knowledge_sources: list[KnowledgeSource] = Field(default_factory=list)
     errors: list[str]
     image_urls: list[str] = Field(default_factory=list)
 

@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from .db import CalendarEvent, Notification, Reminder, Session, now
+from .db import CalendarEvent, Notification, Reminder, Session, Todo, now
 from . import plan_recurrence
 from .plans import lock
 
@@ -40,6 +40,11 @@ async def tick() -> None:
                 )
             ).all()
             for reminder in due:
+                if reminder.todo_id:
+                    todo = db.get(Todo, reminder.todo_id)
+                    if not todo or todo.status != "active":
+                        reminder.status = "removed"
+                        continue
                 plan = db.get(CalendarEvent, reminder.plan_id) if reminder.plan_id else None
                 if plan:
                     from .plans import completed
@@ -71,6 +76,7 @@ async def tick() -> None:
                             body=value.notes if plan else reminder.body,
                             overdue=occurrence < STARTED_AT,
                             plan_id=plan.id if plan else None,
+                            todo_id=reminder.todo_id,
                             plan_occurrence_start=reminder.plan_occurrence_start,
                         )
                     )

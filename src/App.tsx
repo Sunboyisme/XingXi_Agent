@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   Bell,
+  LibraryBig,
   Calendar,
   BookOpen,
   type LucideIcon,
@@ -68,7 +69,9 @@ import { ProjectOverview } from "./components/ProjectOverview";
 import { ProjectsPage } from "./components/ProjectsPage";
 import { ProjectManagement, type ProjectManagementRequest } from "./components/ProjectManagement";
 
-type Page = "chat" | "projects" | "learning" | "plans" | "settings";
+type Page = "chat" | "projects" | "learning" | "plans" | "knowledge" | "settings";
+const KnowledgePage = lazy(() => import("./components/KnowledgePage").then((module) => ({ default: module.KnowledgePage })));
+import type { KnowledgeSource } from "./components/KnowledgeSources";
 const pages: {
   id: Page;
   label: string;
@@ -94,6 +97,7 @@ const pages: {
     label: "计划",
     icon: Calendar,
   },
+  { id: "knowledge", label: "知识库", icon: LibraryBig },
 ];
 
 type PendingAgenda = {
@@ -161,9 +165,16 @@ export function App() {
     return () => { void unlisten.then((stop) => stop()); };
   }, []);
   const [page, setPage] = useState<Page>("chat");
+  const [learningHomeKey, setLearningHomeKey] = useState(0);
+  const [openTodoId, setOpenTodoId] = useState<string>();
+  const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource>();
+  useEffect(() => {
+    const open = (event: Event) => { setKnowledgeSource((event as CustomEvent<KnowledgeSource>).detail); setPage("knowledge"); };
+    window.addEventListener("xiaoxi-open-knowledge", open); return () => window.removeEventListener("xiaoxi-open-knowledge", open);
+  }, []);
   const [calendarEventId, setCalendarEventId] = useState<string>();
   const [planAgenda, setPlanAgenda] = useState<PendingAgenda>();
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("connections");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -363,6 +374,7 @@ export function App() {
     };
   }, [settings?.timezone]);
   function navigate(value: string, create = false) {
+    if (value === "learning" && !create) setLearningHomeKey((key) => key + 1);
     setProjectPanelRequest(null);
     if (value === "reminders" || value === "calendar") value = "plans";
     // Top-level navigation must never inherit the selected project detail.
@@ -379,7 +391,7 @@ export function App() {
       setSettingsTab(value);
     } else {
       setPage(value as Page);
-      if (value === "settings") setSettingsTab("connections");
+      if (value === "settings") setSettingsTab("general");
     }
     if (create) setCreateKey(Date.now());
     else setCreateKey(0);
@@ -804,10 +816,10 @@ export function App() {
               )}{" "}
               {page === "learning" && (
                 <LearningPage
-                  key={`learning-${createKey}`}
+                  key={`learning-${createKey}-${learningHomeKey}`}
                   goals={goals}
                   refresh={refresh}
-                  onSettings={() => navigate("settings")}
+                  onSettings={() => { navigate("settings"); setSettingsTab("connections"); }}
                   createRequested={createKey}
                   openRequest={learningOpenRequest}
                   onOpenHandled={() => setLearningOpenRequest(undefined)}
@@ -829,13 +841,16 @@ export function App() {
                     timezone={settings.timezone}
                     refresh={refresh}
                     openEventId={calendarEventId}
+                    openTodoId={openTodoId}
                     onOpened={() => {
+                      setOpenTodoId(undefined);
                       setCalendarEventId(undefined);
                       setPlanAgenda(undefined);
                     }}
                   />
                 </Suspense>
               )}
+              {page === "knowledge" && <KnowledgePage openSource={knowledgeSource} onOpened={() => setKnowledgeSource(undefined)} />}
               {page === "settings" && (
                 <SettingsPage
                   settings={settings}
@@ -865,6 +880,7 @@ export function App() {
           onOpenChange={setNotificationOpen}
           notifications={notifications}
           refresh={refresh}
+          onTodo={(id) => { setOpenTodoId(id); setPage("plans"); }}
           onPlan={(id, occurrence) => {
             openPlan(id, occurrence);
           }}

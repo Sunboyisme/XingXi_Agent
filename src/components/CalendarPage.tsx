@@ -1,3 +1,4 @@
+import { TodoPage } from "./TodoPage";
 import { Hint } from "./common";
 import { PlanAgendaList } from "./PlanAgendaList";
 import {
@@ -96,8 +97,10 @@ export function CalendarPage({
   createRequested,
   openOccurrenceStart,
   openAgenda: requestedAgenda,
+  openTodoId,
 }: {
   timezone?: string;
+  openTodoId?: string;
   refresh: () => Promise<void>;
   openEventId?: string;
   onOpened?: () => void;
@@ -106,6 +109,9 @@ export function CalendarPage({
   openAgenda?: { day: string; tab: "todo" | "repeat" } | null;
 }) {
   const today = zonedInput(new Date().toISOString(), timezone).slice(0, 10);
+  const [todoView, setTodoView] = useState(Boolean(openTodoId));
+  useEffect(() => { if (openTodoId) setTodoView(true); }, [openTodoId]);
+  useEffect(() => { if (openEventId || requestedAgenda || createRequested) setTodoView(false); }, [openEventId, requestedAgenda, createRequested]);
   const [anchor, setAnchor] = useState(today);
   const [view, setView] = useState<"month" | "week">("month");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -222,7 +228,7 @@ export function CalendarPage({
     });
     observer.observe(monthGrid.current);
     return () => observer.disconnect();
-  }, [view, count]);
+  }, [view, count, todoView]);
   const load = useCallback(async () => {
     const sequence = ++requestSequence.current;
     setLoading(true);
@@ -815,6 +821,7 @@ export function CalendarPage({
   const hasWeekRepeats = [...weekRepeats.values()].some(
     (values) => values.length,
   );
+  if (todoView) return <TodoPage timezone={timezone} refresh={refresh} openId={openTodoId} onOpened={onOpened} onCalendar={(value) => { setTodoView(false); setView(value); }} />;
   return (
     <div className="calendar-page page-content">
       {error && !editor && (
@@ -861,6 +868,7 @@ export function CalendarPage({
               role="group"
               aria-label="计划视图"
             >
+              <button aria-pressed="false" onClick={() => setTodoView(true)}>待办</button>
               <button
                 aria-pressed={view === "month"}
                 onClick={() => setView("month")}
@@ -899,7 +907,7 @@ export function CalendarPage({
                     <CalendarPlus size={17} />
                     <span>
                       <strong>普通计划</strong>
-                      <small>安排一次性的待办事项</small>
+                      <small>安排一次性的日历计划</small>
                     </span>
                   </DropdownMenu.Item>
                   <DropdownMenu.Item

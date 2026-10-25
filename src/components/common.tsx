@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AlertCircle, Check, TriangleAlert, X } from "lucide-react";
+import { AlertCircle, Check, Info, TriangleAlert, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,15 +113,17 @@ export function ErrorNotice({
   retry,
   action,
   onClose,
+  tone = "error",
 }: {
   message: string;
   retry?: () => void;
   action?: { label: string; onClick: () => void };
   onClose?: () => void;
+  tone?: "info" | "success" | "warning" | "error";
 }) {
   return (
-    <div className="error-notice" role="alert">
-      <AlertCircle size={17} />
+    <div className={`error-notice app-feedback is-${tone}`} role={tone === "error" ? "alert" : "status"}>
+      {tone === "info" ? <Info size={17} /> : tone === "success" ? <Check size={17} /> : tone === "warning" ? <TriangleAlert size={17} /> : <AlertCircle size={17} />}
       <span className="error-notice-text">{message}</span>
       {(action || retry || onClose) && (
         <span className="error-notice-actions">

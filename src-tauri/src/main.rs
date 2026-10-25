@@ -21,6 +21,7 @@ use tauri::{
     Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
 struct Backend {
     child: Mutex<Option<Child>>,
@@ -148,7 +149,7 @@ async fn save_office_file(
     name: String,
     upload: bool,
 ) -> Result<bool, String> {
-    let bytes = read_office_bytes(&state, &file_id, upload).await?;
+    let bytes = read_office_bytes(&state, &file_id, upload, false).await?;
     let safe_name: String = name
         .chars()
         .filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c))
@@ -175,6 +176,7 @@ async fn read_office_bytes(
     state: &tauri::State<'_, Backend>,
     file_id: &str,
     upload: bool,
+    knowledge: bool,
 ) -> Result<Vec<u8>, String> {
     if file_id.len() != 36 || !file_id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
         return Err("文件编号无效".into());
@@ -191,12 +193,11 @@ async fn read_office_bytes(
             .build()
             .map_err(|_| "无法连接文件服务")?;
         let response = client
-            .get(format!(
-                "{}/{}/{}/content",
-                url,
-                if upload { "files" } else { "artifacts" },
-                file_id
-            ))
+            .get(if knowledge {
+                format!("{url}/knowledge/documents/{file_id}/download")
+            } else {
+                format!("{}/{}/{}/content", url, if upload { "files" } else { "artifacts" }, file_id)
+            })
             .bearer_auth(token.trim())
             .send()
             .map_err(|_| "读取文件失败")?;
@@ -264,6 +265,37 @@ fn download_target(folder: &std::path::Path, name: &str) -> PathBuf {
     folder.join(name)
 }
 
+#[derive(Serialize)]
+struct AutostartState { enabled: bool, supported: bool, reason: String }
+
+#[tauri::command]
+fn get_autostart(app: tauri::AppHandle) -> Result<AutostartState, String> {
+    if cfg!(debug_assertions) || app.config().identifier.ends_with(".preview") {
+        return Ok(AutostartState { enabled: false, supported: false, reason: "开机自启仅安装版可设置，测试版不注册系统启动项。".into() });
+    }
+    let enabled = app.autolaunch().is_enabled().map_err(|_| "无法读取 Windows 自启状态")?;
+    Ok(AutostartState { enabled, supported: true, reason: String::new() })
+}
+
+#[tauri::command]
+fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<AutostartState, String> {
+    if !get_autostart(app.clone())?.supported { return Err("测试版不注册系统启动项".into()); }
+    if enabled { app.autolaunch().enable() } else { app.autolaunch().disable() }
+        .map_err(|_| "更新 Windows 开机自启失败，请检查系统权限")?;
+    get_autostart(app)
+}
+
+#[tauri::command]
+async fn download_knowledge_file(app: tauri::AppHandle, state: tauri::State<'_, Backend>, file_id: String, name: String) -> Result<String, String> {
+    let bytes = read_office_bytes(&state, &file_id, false, true).await?;
+    let safe_name: String = name.chars().filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c)).take(180).collect();
+    let folder = app.path().download_dir().map_err(|_| "找不到下载文件夹")?;
+    std::fs::create_dir_all(&folder).map_err(|_| "无法创建下载文件夹")?;
+    let target = download_target(&folder, &safe_name);
+    write_atomically(target.clone(), bytes).await?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 async fn download_office_file(
     app: tauri::AppHandle,
@@ -272,7 +304,7 @@ async fn download_office_file(
     name: String,
     upload: bool,
 ) -> Result<String, String> {
-    let bytes = read_office_bytes(&state, &file_id, upload).await?;
+    let bytes = read_office_bytes(&state, &file_id, upload, false).await?;
     let safe_name: String = name
         .chars()
         .filter(|c| !c.is_control() && !"<>:\"/\\|?*".contains(*c))
@@ -472,6 +504,9 @@ fn main() {
         .manage(drop_files::DroppedPaths::default())
         .invoke_handler(tauri::generate_handler![
             backend_config,
+            get_autostart,
+            set_autostart,
+            download_knowledge_file,
             drop_files::read_dropped_files,
             quit_app,
             finish_learning_close,
@@ -488,6 +523,9 @@ fn main() {
             restore_window_layout
         ])
         .setup(move |app| {
+            if !cfg!(debug_assertions) && !app.config().identifier.ends_with(".preview") {
+                app.handle().plugin(tauri_plugin_autostart::Builder::new().app_name("XiaoXi").build())?;
+            }
             if let Some(window) = app.get_webview_window("main") {
                 window_layout::fit_main_window(&window)?;
                 window.show()?;

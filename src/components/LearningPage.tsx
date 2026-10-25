@@ -1,3 +1,4 @@
+import { KnowledgeSources } from "./KnowledgeSources";
 import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -5,17 +6,14 @@ import {
   ArrowRight,
   BookOpen,
   Check,
-  Compass,
   FileQuestion,
-  GraduationCap,
   Loader2,
   Lightbulb,
   Plus,
-  RotateCcw,
+  Compass,
   SkipForward,
   Sparkles,
   Settings2,
-  Target,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,6 +56,7 @@ import { LearningSessionPanel } from "./LearningSessionPanel";
 import { LearningComposer } from "./LearningComposer";
 import { LearningIntakePage } from "./LearningIntakePage";
 import { LearningReviewPanel } from "./LearningReviewPanel";
+import type { Intake } from "@/lib/learningWorkflows";
 import { flushLearningDrafts } from "@/lib/learningLifecycle";
 
 export function LearningPage({
@@ -75,9 +74,11 @@ export function LearningPage({
   openRequest?: { goalId: string; sessionId?: string; key: number };
   onOpenHandled?: () => void;
 }) {
-  const [goalId, setGoalId] = useState(
-    () => localStorage.getItem("bai-current-goal") || "",
-  );
+  const [goalId, setGoalId] = useState("");
+  const [intakeId, setIntakeId] = useState<string>();
+  const [intakes, setIntakes] = useState<Intake[]>([]);
+  const [deletingIntake, setDeletingIntake] = useState<Intake | null>(null);
+
   const [nodeId, setNodeId] = useState("");
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [turns, setTurns] = useState<LearningTurn[]>([]);
@@ -91,6 +92,9 @@ export function LearningPage({
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [useBeginnerDefaults, setUseBeginnerDefaults] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (!open) api<Intake[]>("/learning/intakes").then(setIntakes).catch((cause: Error) => setError(cause.message));
+  }, [open, goals]);
   const [notice, setNotice] = useState("");
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -222,6 +226,7 @@ export function LearningPage({
     setError("");
   }
   function openGoalEditor(value?: LearningGoalDetails) {
+    setIntakeId(undefined);
     setEditingGoalId(value?.id || null);
     setTitle(value?.title || "");
     setObjective(value?.objective || "");
@@ -806,6 +811,7 @@ export function LearningPage({
     <>
       {" "}
       <Markdown>{lesson.content}</Markdown>
+      <KnowledgeSources sources={lesson.knowledge_sources as import("./KnowledgeSources").KnowledgeSource[] | undefined} />
       <section className="exercise-box">
         <div className="section-title">
           <FileQuestion size={20} />
@@ -847,12 +853,13 @@ export function LearningPage({
     <div
       className={`learning-page ${open ? "is-editing" : goal ? "has-course" : "page-content"}`}
     >
+      <ConfirmDelete open={Boolean(deletingIntake)} title="删除这份访谈草稿？" description="将删除这个学习方向的访谈与草稿。" label="删除草稿" onClose={() => setDeletingIntake(null)} onConfirm={async () => { if (!deletingIntake) return; try { await api(`/learning/intakes/${deletingIntake.id}`, "DELETE"); setIntakes((items) => items.filter((item) => item.id !== deletingIntake.id)); setDeletingIntake(null); } catch (cause) { setError((cause as Error).message); } }} />
       {notice && <Toast message={notice} onClose={() => setNotice("")} />}
       {error && (
         <Toast tone="error" message={error} onClose={() => setError("")} />
       )}
       {open && !editingGoalId ? (
-        <LearningIntakePage onBack={() => setOpen(false)} onCreated={async (id) => {
+        <LearningIntakePage key={intakeId || "new"} intakeId={intakeId} onBack={() => { setOpen(false); void refresh().catch((cause: Error) => setError(cause.message)); }} onCreated={async (id) => {
           const value = await api<Goal>(`/learning/goals/${id}`); await refresh(); setOpen(false); selectGoal(value);
         }} />
       ) : open ? (
@@ -1028,19 +1035,23 @@ export function LearningPage({
         <>
           <div className="page-heading">
             <div>
-              <h1>学习</h1>
+              <div className="learning-home-heading"><BaiAvatar motion="idle" /><div><h1>一起确定你的学习方向</h1><p>XiaoXi 会帮你规划好适合你的学习路线。</p></div></div>
             </div>
             <Button onClick={() => openGoalEditor()}>
               <Plus size={16} />
-              新的学习目标
+              创建学习
             </Button>
           </div>
+          {intakes.filter((item) => !item.goal_id).map((item) => <article className="goal-card-row intake-card" key={item.id}>
+            <button className="goal-card-main" onClick={() => { setIntakeId(item.id); setEditingGoalId(null); setOpen(true); }}>
+              <span className="goal-row-icon"><BookOpen size={22} /></span><span className="goal-row-content"><strong>{item.summary.title || item.messages.find((m) => m.role === "user")?.content.slice(0, 70) || "未完成的学习方向"}</strong><span>{item.status === "ready" ? "方向已整理，待确认生成路线" : "继续和 XiaoXi 确定学习方向"}</span><small>访谈草稿 · 已自动保存</small></span>
+            </button>
+            <Button variant="ghost" onClick={() => { setIntakeId(item.id); setEditingGoalId(null); setOpen(true); }}>继续完善<ArrowRight size={15} /></Button>
+            <Button size="icon" variant="ghost" aria-label="删除访谈草稿" onClick={() => setDeletingIntake(item)}><Trash2 size={15} /></Button>
+          </article>)}
           {availableGoals.length ? (
             <div className="goal-list">
               {availableGoals.map((value) => {
-                const passed = value.nodes.filter(
-                  (x) => x.status === "passed",
-                ).length;
                 const studied = value.nodes.filter((x) =>
                   isStudied(x.status),
                 ).length;
@@ -1087,7 +1098,7 @@ export function LearningPage({
                     <div className="goal-row-progress">
                       <span>
                         {value.nodes.length
-                          ? `进度 ${studied} / ${value.nodes.length} · ${passed} 练习通过`
+                          ? <>进度 <strong>{studied}</strong> / {value.nodes.length}</>
                           : "等待规划"}
                       </span>
                       <div
@@ -1140,40 +1151,7 @@ export function LearningPage({
             </div>
           ) : (
             <>
-              <div className="learning-intro">
-                <div className="learning-orbit">
-                  <GraduationCap size={43} />
-                  <span />
-                  <span />
-                </div>
-                <h2>你想学的，都可以从这里开始。</h2>
-                <p>
-                  从你想掌握的知识或技能开始。
-                  <br />
-                  告诉XiaoXi你的目标与基础，它会陪你一步一步学。
-                </p>
-                <Button onClick={() => openGoalEditor()}>
-                  <Plus size={16} />
-                  建立第一个学习目标
-                </Button>
-              </div>
-              <div className="learning-method">
-                <div>
-                  <Compass size={21} />
-                  <h3>先有框架</h3>
-                  <p>看清知识全貌和学习顺序。</p>
-                </div>
-                <div>
-                  <Target size={21} />
-                  <h3>每次一小步</h3>
-                  <p>讲解、示例、练习和具体反馈。</p>
-                </div>
-                <div>
-                  <RotateCcw size={21} />
-                  <h3>接着上次学</h3>
-                  <p>保存进度，回补没掌握的地方。</p>
-                </div>
-              </div>
+              {!intakes.some((item) => !item.goal_id) && <p className="learning-home-empty">从一个想法开始，XiaoXi 会陪你把它变成学习路线。</p>}
             </>
           )}
         </>

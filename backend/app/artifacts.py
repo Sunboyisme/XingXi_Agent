@@ -171,6 +171,8 @@ async def image_from_url(run_id, url):
 
 
 def extract_sources(value, read=False):
+    if isinstance(value, dict) and value.get("error"):
+        return []
     found = []
 
     def walk(item, depth=0):
@@ -323,6 +325,10 @@ def presentation(run_id):
             for row in db.scalars(select(Artifact).where(Artifact.run_id == run_id))
         ]
         sources, errors, image_urls = {}, [], []
+        knowledge_sources = {}
+        for event in db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "knowledge_retrieval")):
+            for source in event.data.get("sources", []):
+                knowledge_sources[source["chunk_id"]] = source
         for event in db.scalars(
             select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool")
         ):
@@ -335,6 +341,7 @@ def presentation(run_id):
     return {
         "artifacts": media,
         "sources": list(sources.values()),
+        "knowledge_sources": list(knowledge_sources.values()),
         "errors": list(dict.fromkeys(errors)),
         "image_urls": [
             url

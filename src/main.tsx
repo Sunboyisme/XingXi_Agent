@@ -18,6 +18,7 @@ import "./styles/feedback-016.css";
 import "./styles/version-017.css";
 import "./styles/new-chat.css";
 import "./styles/version-018.css";
+import "./styles/feedback-018.css";
 
 const stopAppearance = initializeAppearance();
 import.meta.hot?.dispose(stopAppearance);
