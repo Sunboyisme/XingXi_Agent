@@ -11,10 +11,7 @@ import {
   Bell,
   LibraryBig,
   Calendar,
-  ChevronDown,
-  ChevronUp,
   BookOpen,
-  type LucideIcon,
   CircleHelp,
   Loader2,
   MessageCircle,
@@ -23,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { setGeneralPreferences, useGeneralPreferences } from "@/lib/generalPreferences";
+import { useGeneralPreferences } from "@/lib/generalPreferences";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Tooltip } from "radix-ui";
@@ -70,21 +67,13 @@ import { SidebarResize } from "./components/SidebarResize";
 import { ProjectSidebar } from "./components/ProjectSidebar";
 import { ProjectOverview } from "./components/ProjectOverview";
 import { ProjectsPage } from "./components/ProjectsPage";
+import { NavigationOverflowMenu, type NavigationFeatureItem } from "./components/NavigationOverflowMenu";
 import { ProjectManagement, type ProjectManagementRequest } from "./components/ProjectManagement";
 
 type Page = "chat" | "projects" | "learning" | "plans" | "knowledge" | "settings";
 const KnowledgePage = lazy(() => import("./components/KnowledgePage").then((module) => ({ default: module.KnowledgePage })));
 import type { KnowledgeSource } from "./components/KnowledgeSources";
-const pages: {
-  id: Page;
-  label: string;
-  icon: LucideIcon;
-}[] = [
-  {
-    id: "chat",
-    label: "对话",
-    icon: MessageCircle,
-  },
+const featurePages: NavigationFeatureItem[] = [
   {
     id: "projects",
     label: "项目",
@@ -102,6 +91,7 @@ const pages: {
   },
   { id: "knowledge", label: "知识库", icon: LibraryBig },
 ];
+const pages = [{ id: "chat" as const, label: "对话", icon: MessageCircle }, ...featurePages];
 
 type PendingAgenda = {
   day: string;
@@ -134,7 +124,7 @@ function NavigationTooltip({
 }
 
 export function App() {
-  const { navigationCollapsed, sendShortcut } = useGeneralPreferences();
+  const { hiddenNavigation } = useGeneralPreferences();
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("bai-sidebar-width"));
     return Number.isFinite(saved) && saved >= 180 ? Math.min(saved, 420) : 224;
@@ -681,7 +671,7 @@ export function App() {
                 onClick={startNewChat}
               />
               <nav className="main-navigation" aria-label="主导航">
-                {pages.filter((value) => !navigationCollapsed || value.id === "chat").map((value) => (
+                {pages.filter((value) => value.id === "chat" || !hiddenNavigation.includes(value.id)).map((value) => (
                   <NavigationTooltip key={value.id} label={value.label}>
                     <button
                       className={page === value.id ? "active" : ""}
@@ -693,13 +683,7 @@ export function App() {
                     </button>
                   </NavigationTooltip>
                 ))}
-                <NavigationTooltip label={navigationCollapsed ? "展开功能栏" : "收起功能栏"}>
-                  <button className="navigation-collapse" aria-label={navigationCollapsed ? "展开功能栏" : "收起功能栏"}
-                    aria-expanded={!navigationCollapsed}
-                    onClick={() => setGeneralPreferences({ navigationCollapsed: !navigationCollapsed })}>
-                    {navigationCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                  </button>
-                </NavigationTooltip>
+                <NavigationOverflowMenu items={featurePages} currentPage={page} onNavigate={navigate} />
               </nav>
               <div className="sidebar-footer">
                 <NavigationTooltip label="连接与设置">
@@ -942,7 +926,7 @@ export function App() {
                 ["对话 / 学习 / 计划", "Ctrl+1 / 2 / 3"],
                 ["连接与设置", "Ctrl+,"],
                 ["打开快捷键", "F1"],
-                ["发送消息", sendShortcut === "enter" ? "Enter" : "Ctrl / ⌘ + Enter"],
+                ["发送消息", "Enter"],
                 ["输入框换行", "Shift+Enter"],
               ].map(([label, keys]) => (
                 <div key={label}>

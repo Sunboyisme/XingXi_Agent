@@ -566,17 +566,95 @@
 .general-setting-row:first-child {
   border-top: 0;
 }
-.general-setting-row > .soft-select {
-  flex-shrink: 0;
-  max-width: 45%;
-}
 .general-setting-row .module-toggle {
   flex-shrink: 0;
 }
-.navigation-rail .main-navigation > .navigation-collapse {
+.navigation-rail .main-navigation > .navigation-more {
   color: var(--ui-color-text-muted);
-  height: 30px;
   margin-top: 2px;
+}
+.navigation-overflow-menu {
+  z-index: 100;
+  width: 248px;
+  max-width: calc(100vw - 24px);
+  max-height: var(--radix-dropdown-menu-content-available-height);
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 16%);
+}
+.navigation-overflow-label {
+  padding: 6px 10px 2px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.navigation-overflow-hint {
+  margin: 0 10px 8px;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.navigation-overflow-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+}
+.navigation-overflow-row:hover,
+.navigation-overflow-row:focus-within,
+.navigation-overflow-row:has([data-current="true"]) {
+  background: var(--ui-color-surface-deep);
+}
+.navigation-overflow-link,
+.navigation-overflow-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 8px;
+  border-radius: 7px;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 14px;
+}
+.navigation-overflow-link[data-current="true"] {
+  color: var(--ui-color-action);
+}
+.navigation-overflow-toggle {
+  justify-content: center;
+  padding-inline: 2px;
+}
+.navigation-visibility-switch {
+  display: block;
+  width: 28px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--ui-color-line);
+}
+.navigation-visibility-switch > span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ui-color-text-muted);
+}
+.navigation-overflow-toggle[data-state="checked"]
+  .navigation-visibility-switch {
+  background: var(--ui-color-action);
+}
+.navigation-overflow-toggle[data-state="checked"]
+  .navigation-visibility-switch
+  > span {
+  transform: translateX(12px);
+  background: var(--ui-color-on-action);
 }
 @media (max-width: 1000px) {
   .learning-home-heading {

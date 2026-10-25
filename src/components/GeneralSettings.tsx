@@ -67,28 +67,6 @@ export function GeneralSettings() {
       </div>
       <div className="general-setting-row">
         <div>
-          <label htmlFor="send-shortcut">
-            <strong>发送快捷键</strong>
-          </label>
-          <p>用于对话和学习输入框；Shift + Enter 始终换行。</p>
-        </div>
-        <select
-          id="send-shortcut"
-          className="soft-select"
-          value={preferences.sendShortcut}
-          onChange={(event) =>
-            setGeneralPreferences({
-              sendShortcut:
-                event.target.value === "mod-enter" ? "mod-enter" : "enter",
-            })
-          }
-        >
-          <option value="enter">Enter 发送</option>
-          <option value="mod-enter">Ctrl / ⌘ + Enter 发送</option>
-        </select>
-      </div>
-      <div className="general-setting-row">
-        <div>
           <strong>聊天输入建议</strong>
           <p>根据最近的对话生成输入提示，会使用默认模型并计入用量。</p>
         </div>

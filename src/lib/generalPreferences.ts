@@ -1,24 +1,33 @@
 import { useSyncExternalStore, type KeyboardEvent } from "react";
 
+export const navigationFeatures = [
+  "projects",
+  "learning",
+  "plans",
+  "knowledge",
+] as const;
+export type NavigationFeature = (typeof navigationFeatures)[number];
+
 type GeneralPreferences = {
-  sendShortcut: "enter" | "mod-enter";
   inputSuggestions: boolean;
-  navigationCollapsed: boolean;
+  hiddenNavigation: NavigationFeature[];
 };
 const storageKey = "xiaoxi-general-preferences-v1";
 const changedEvent = "xiaoxi-general-preferences-changed";
 const defaults: GeneralPreferences = {
-  sendShortcut: "enter",
   inputSuggestions: true,
-  navigationCollapsed: false,
+  hiddenNavigation: [],
 };
 function readPreferences(): GeneralPreferences {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
     return {
-      sendShortcut: saved?.sendShortcut === "mod-enter" ? "mod-enter" : "enter",
       inputSuggestions: saved?.inputSuggestions !== false,
-      navigationCollapsed: saved?.navigationCollapsed === true,
+      hiddenNavigation: Array.isArray(saved?.hiddenNavigation)
+        ? navigationFeatures.filter((id) => saved.hiddenNavigation.includes(id))
+        : saved?.navigationCollapsed === true
+          ? [...navigationFeatures]
+          : [],
     };
   } catch {
     return defaults;
@@ -51,19 +60,16 @@ export function setGeneralPreferences(value: Partial<GeneralPreferences>) {
   }
   window.dispatchEvent(new Event(changedEvent));
 }
-export function isSendShortcut(
-  event: KeyboardEvent<HTMLTextAreaElement>,
-  shortcut: GeneralPreferences["sendShortcut"],
-) {
+export function isSendShortcut(event: KeyboardEvent<HTMLTextAreaElement>) {
   if (
     event.key !== "Enter" ||
     event.shiftKey ||
     event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
     event.nativeEvent.isComposing ||
     event.keyCode === 229
   )
     return false;
-  return shortcut === "mod-enter"
-    ? event.ctrlKey || event.metaKey
-    : !event.ctrlKey && !event.metaKey;
+  return true;
 }

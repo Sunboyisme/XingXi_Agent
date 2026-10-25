@@ -1,10 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { registerLearningFlush } from "@/lib/learningLifecycle";
 import { ArrowUp, Loader2, Square } from "lucide-react";
-import {
-  isSendShortcut,
-  useGeneralPreferences,
-} from "@/lib/generalPreferences";
+import { isSendShortcut } from "@/lib/generalPreferences";
 import type { Attachment } from "@/lib/api";
 import { resizeMessageInput } from "@/lib/composerSize";
 import { Button } from "./ui/button";
@@ -42,7 +39,6 @@ export function LearningComposer({
   placeholder?: string;
   label?: string;
 }) {
-  const { sendShortcut } = useGeneralPreferences();
   const input = useRef<HTMLTextAreaElement>(null);
   const drop = useRef<HTMLDivElement>(null);
   const previews = useRef<HTMLDivElement>(null);
@@ -96,7 +92,7 @@ export function LearningComposer({
           disabled={busy || stopping}
           onChange={(event) => onAnswer(event.target.value)}
           onKeyDown={(event) => {
-            if (!isSendShortcut(event, sendShortcut)) return;
+            if (!isSendShortcut(event)) return;
             event.preventDefault();
             if (
               !busy &&
