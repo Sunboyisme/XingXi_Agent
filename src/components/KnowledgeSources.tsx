@@ -1,4 +1,5 @@
 import { BookOpen } from "lucide-react";
+import { useState } from "react";
 import { DetailDialog } from "./ui/detail-dialog";
 export type KnowledgeSource = {
   document_id: string;
@@ -8,9 +9,12 @@ export type KnowledgeSource = {
   excerpt: string;
 };
 export function KnowledgeSources({ sources }: { sources?: KnowledgeSource[] }) {
+  const [open, setOpen] = useState(false);
   if (!sources?.length) return null;
   return (
     <DetailDialog
+      open={open}
+      onOpenChange={setOpen}
       title="知识库来源"
       label={
         <>
@@ -25,11 +29,12 @@ export function KnowledgeSources({ sources }: { sources?: KnowledgeSource[] }) {
         <button
           className="knowledge-source"
           key={source.chunk_id}
-          onClick={() =>
+          onClick={() => {
+            setOpen(false);
             window.dispatchEvent(
               new CustomEvent("xiaoxi-open-knowledge", { detail: source }),
-            )
-          }
+            );
+          }}
         >
           <strong>{source.relative_path}</strong>
           <small>{source.locator}</small>

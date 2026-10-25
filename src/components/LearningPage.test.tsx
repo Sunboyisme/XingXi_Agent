@@ -91,6 +91,8 @@ test("the separate answer dock accepts dropped images and submits them without t
       onSettings={vi.fn()}
     />,
   );
+  expect(screen.getByRole("button", { name: "创建学习" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "继续学习" }));
   const dock = await screen.findByRole("region", { name: "练习作答区" });
   expect(dock.closest(".lesson-scroll")).toBeNull();
   expect(screen.getByRole("textbox", { name: "练习回答" })).toBeVisible();

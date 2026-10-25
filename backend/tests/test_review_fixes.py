@@ -151,6 +151,7 @@ def test_previous_export_schema_can_be_upgraded_in_staging(client, tmp_path):
     from pathlib import Path
     from alembic import command
     from alembic.config import Config
+    from alembic.script import ScriptDirectory
     root = Path(__file__).resolve().parents[1]
     migration = Config(str(root / "alembic.ini"))
     migration.set_main_option("script_location", str(root / "migrations"))
@@ -158,7 +159,7 @@ def test_previous_export_schema_can_be_upgraded_in_staging(client, tmp_path):
     command.upgrade(migration, "0016")
     assert data_transfer.validate(stage)["counts"]["conversations"] == 0
     with data_transfer.connect(stage / "bai.sqlite") as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (ScriptDirectory.from_config(migration).get_current_head(),)
 
 
 @pytest.mark.asyncio

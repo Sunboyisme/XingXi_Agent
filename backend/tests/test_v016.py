@@ -124,6 +124,8 @@ def test_known_export_upgrades_only_in_import_staging(client, tmp_path, revision
     migration.set_main_option("script_location", str(root / "migrations"))
     migration.set_main_option("sqlalchemy.url", f"sqlite:///{legacy.as_posix()}")
     command.upgrade(migration, revision)
+    with sqlite3.connect(config.DATA_DIR / "bai.sqlite") as connection:
+        current_revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     exported = client.post("/api/v1/settings/data/export").json()
     with zipfile.ZipFile(exported["path"]) as archive:
         files = {name: archive.read(name) for name in archive.namelist()}
@@ -135,7 +137,7 @@ def test_known_export_upgrades_only_in_import_staging(client, tmp_path, revision
     response = client.post("/api/v1/settings/data/inspect", files={"file": ("legacy.zip", raw.getvalue())})
     assert response.status_code == 200
     with sqlite3.connect(config.DATA_DIR / "bai.sqlite") as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0024"
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == current_revision
     with sqlite3.connect(legacy) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == revision
 

@@ -1,7 +1,7 @@
 """Todos have optional reminders, but never own calendar events."""
 import json
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, TypedDict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException
@@ -63,6 +63,25 @@ class TodoAction(BaseModel):
     action: Literal["complete", "restore", "delete"]
 
 
+class TodoPatch(BaseModel):
+    title: str | None = Field(default=None, max_length=300, description="省略时保留原名称")
+    notes: str | None = Field(default=None, max_length=6000, description="省略时保留原备注，空字符串清空")
+    reminder_at: datetime | None = Field(default=None, description="省略保留提醒；显式 null 取消提醒；时间必须带时区")
+    timezone: str | None = Field(default=None, description="省略时保留原时区")
+
+
+class TodoChanges(TypedDict, total=False):
+    title: str | None
+    notes: str | None
+    reminder_at: str | None
+    timezone: str | None
+
+
+class TodoToolUpdate(BaseModel):
+    todo_id: str
+    changes: TodoChanges = Field(default_factory=dict, description="仅包含需要修改的字段；省略保留，reminder_at=null取消提醒")
+
+
 def require(db, key):
     row = db.get(store.Todo, key)
     if not row or row.profile_id != PROFILE_ID or row.status == "deleted":
@@ -73,9 +92,9 @@ def require(db, key):
 def cancel_reminders(db, key):
     for rule in db.scalars(select(store.Reminder).where(store.Reminder.todo_id == key)):
         rule.status = "removed"
-    for note in db.scalars(select(store.Notification).where(store.Notification.todo_id == key,
-                            store.Notification.status.in_(["pending", "presented", "snoozed"]))):
-        note.status, note.snoozed_until = "cancelled", None
+    for note in db.scalars(select(store.Notification).where(store.Notification.todo_id == key)):
+        if note.status in {"pending", "presented", "snoozed"}:
+            note.status, note.snoozed_until = "cancelled", None
         for delivery in db.scalars(select(store.WechatDelivery).where(
                 store.WechatDelivery.notification_id == note.id, store.WechatDelivery.status == "pending")):
             delivery.status = "cancelled"
@@ -107,14 +126,19 @@ def save(value, key=None):
     with plans.lock, store.Session() as db:
         row = require(db, key) if key else store.Todo()
         due = reminders.utc_text(value.reminder_at) if value.reminder_at else None
+        reminder_unchanged = bool(key and due == row.reminder_at)
         if due and value.reminder_at <= datetime.now(UTC) and (not key or due != row.reminder_at):
             raise HTTPException(422, "提醒时间已过去，请选择一个未来的时间。")
         row.title, row.notes, row.timezone, row.reminder_at = value.title, value.notes.strip(), value.timezone, due
         db.add(row)
         db.flush()
-        # Editing text on a fired reminder must not send it again.
-        if due and datetime.fromisoformat(due) <= datetime.now(UTC):
-            cancel_reminders(db, row.id)
+        if reminder_unchanged:
+            # A text edit preserves fired/snoozed reminders and unread notices.
+            for rule in db.scalars(select(store.Reminder).where(store.Reminder.todo_id == row.id)):
+                rule.title, rule.body, rule.timezone = row.title, row.notes, row.timezone
+            for note in db.scalars(select(store.Notification).where(store.Notification.todo_id == row.id,
+                                    store.Notification.status.in_(["pending", "presented", "snoozed"]))):
+                note.title, note.body = row.title, row.notes
         else:
             schedule(db, row)
         db.commit()
@@ -168,10 +192,17 @@ def build(run_id, conversation_id):
         """用户要求新增待办时保存。待办无排期，提醒可留空；提醒日期或时刻有歧义先询问。"""
         return output(create(TodoWrite(title=title, notes=notes, reminder_at=reminder_at, timezone=timezone)))
 
-    @tool
-    def update_todo(todo_id: str, title: str, notes: str = "", reminder_at: str | None = None, timezone: str = "Asia/Shanghai") -> str:
-        """先查询目标再修改待办。传回未修改字段；reminder_at=null取消提醒。"""
-        return output(update(todo_id, TodoWrite(title=title, notes=notes, reminder_at=reminder_at, timezone=timezone)))
+    @tool(args_schema=TodoToolUpdate)
+    def update_todo(todo_id: str, changes: TodoChanges) -> str:
+        """先查询目标再修改待办。仅传需修改的字段，省略的字段保留；显式reminder_at=null取消提醒。"""
+        with plans.lock:
+            with store.Session() as db:
+                row = require(db, todo_id)
+                payload = {key: getattr(row, key) for key in ("title", "notes", "reminder_at", "timezone")}
+            patch = TodoPatch.model_validate(changes).model_dump(exclude_unset=True)
+            payload.update({key: value for key, value in patch.items() if key in payload
+                            and (value is not None or key == "reminder_at")})
+            return output(update(todo_id, TodoWrite(**payload)))
 
     @tool
     def action_todo(todo_id: str, action: Literal["complete", "restore", "delete"]) -> str:

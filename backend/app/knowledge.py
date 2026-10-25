@@ -91,6 +91,8 @@ def documents():
 
 
 def relative_path(value):
+    if not isinstance(value, str):
+        raise HTTPException(422, "文件相对路径必须是文本")
     value = value.replace("\\", "/")
     path = PurePosixPath(value)
     if not value or len(value) > 2000 or path.is_absolute() or any(p in {"", ".", ".."} for p in value.split("/")) or ":" in value or any(ord(c) < 32 for c in value):

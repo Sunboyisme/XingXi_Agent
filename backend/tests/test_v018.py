@@ -58,9 +58,16 @@ def seed_goal():
         return goal.id, [node.id for node in nodes], [lesson.id for lesson in lessons]
 
 
+def new_intake(client):
+    value = {"creation_id": "v018-direction", "message_id": "one", "content": "想学HTML，理解结构"}
+    row = client.post(API + "/learning/intakes", json=value).json()
+    finished(client, client.get(API + "/runs/" + row["active_run_id"]).json())
+    return row
+
+
 def test_interview_persists_drafts_and_confirms_only_one_goal(client, model):
-    row = client.post(API + "/learning/intakes").json()
-    assert client.post(API + "/learning/intakes").json()["id"] == row["id"]
+    row = new_intake(client)
+    assert client.post(API + "/learning/intakes", json={"creation_id": "v018-direction", "message_id": "one", "content": "想学HTML，理解结构"}).json()["id"] == row["id"]
     path = API + f"/learning/intakes/{row['id']}"
     saved = client.put(path + "/draft", json={"answer": "想学HTML", "revision": 0})
     assert saved.status_code == 200
@@ -79,7 +86,7 @@ def test_interview_persists_drafts_and_confirms_only_one_goal(client, model):
 
 
 def test_failed_course_retry_reuses_created_goal(client, model, monkeypatch):
-    row = client.post(API + "/learning/intakes").json()
+    row = new_intake(client)
     path = API + f"/learning/intakes/{row['id']}/confirm"
     original = provider.ask_json
     async def fail(*args, **kwargs):
@@ -191,7 +198,7 @@ def test_complete_without_submission_is_idempotent(client):
 
 
 def test_intake_summary_saves_unfinished_form_without_creating_goal(client, model):
-    row = client.post(API + "/learning/intakes").json()
+    row = new_intake(client)
     path = API + f"/learning/intakes/{row['id']}"
     summary = {"title": "HTML", "objective": "结构", "foundation": "入门", "weekly_minutes": "尚未决定"}
     assert client.put(path + "/summary", json={"summary": summary}).status_code == 200

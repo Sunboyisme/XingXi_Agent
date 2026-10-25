@@ -177,30 +177,43 @@ def clear_local_references(connection):
 
 
 def upgrade_portable_schema(stage):
-    """Verify a known predecessor against trusted migrations before upgrading its staging copy."""
+    """Verify a trusted predecessor schema before upgrading only its staging copy."""
     from alembic import command
     from alembic.config import Config
-    incoming_path = stage / "bai.sqlite"
-    with connect(incoming_path) as incoming, connect(root() / "bai.sqlite") as current:
-        revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
-        head = current.execute("SELECT version_num FROM alembic_version").fetchone()
-        if revision == head or head not in {("0023",), ("0024",)}:
-            return
-        if revision not in {(f"{number:04d}",) for number in range(16, int(head[0]))}:
-            return
-        if incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]:
-            raise ValueError("导入数据包含不支持的结构")
-        incoming_schema = schema(incoming)
+    from alembic.script import ScriptDirectory
+
     def settings_for(path):
         settings = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         settings.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "migrations"))
         settings.set_main_option("sqlalchemy.url", ("sqlite:///" + path.as_posix()).replace("%", "%%"))
         return settings
+
+    incoming_path = stage / "bai.sqlite"
+    migrations = ScriptDirectory.from_config(settings_for(incoming_path))
+    with connect(incoming_path) as incoming, connect(root() / "bai.sqlite") as current:
+        revision = incoming.execute("SELECT version_num FROM alembic_version").fetchone()
+        head = current.execute("SELECT version_num FROM alembic_version").fetchone()
+        if revision == head or not revision or not head or head[0] not in migrations.get_heads():
+            return
+        predecessors = {item.revision for item in migrations.iterate_revisions(head[0], "0016", inclusive=True)}
+        if revision[0] not in predecessors:
+            return
+        if incoming.execute("SELECT count(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0]:
+            raise ValueError("导入数据包含不支持的结构")
+        incoming_schema = schema(incoming)
     with tempfile.TemporaryDirectory(dir=stage) as temporary:
         reference = Path(temporary) / "reference.sqlite"
         command.upgrade(settings_for(reference), revision[0])
         with connect(reference) as trusted:
-            if not same_schema(incoming_schema, schema(trusted)):
+            trusted_schema = schema(trusted)
+            compatible = same_schema(incoming_schema, trusted_schema)
+            if not compatible and revision == ("0025",):
+                # One preview build recorded 0025 before its additive lesson
+                # source column was finalized. 0026 repairs exactly this shape.
+                preview_schema = dict(trusted_schema)
+                preview_schema["lessons"] = re.sub(r",\s*knowledge_sources JSON DEFAULT '\[\]' NOT NULL", "", preview_schema["lessons"])
+                compatible = same_schema(incoming_schema, preview_schema)
+            if not compatible:
                 raise ValueError("旧版数据结构不兼容，未执行升级")
     command.upgrade(settings_for(incoming_path), head[0])
     manifest_path = stage / "manifest.json"

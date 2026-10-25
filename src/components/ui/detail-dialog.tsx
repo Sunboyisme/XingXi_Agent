@@ -16,15 +16,19 @@ export function DetailDialog({
   description,
   className = "",
   children,
+  open,
+  onOpenChange,
 }: {
   title: string;
   label?: ReactNode;
   description?: string;
   className?: string;
   children: ReactNode;
+  open?: boolean;
+  onOpenChange?: (value: boolean) => void;
 }) {
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button
           type="button"

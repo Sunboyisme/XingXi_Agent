@@ -74,8 +74,8 @@ async def test_search_and_extract_keep_source_and_do_not_fake_missing_text(monke
     assert results["results"][0]["url"] == "https://example.com/docs"
     assert results["results"][0]["summary"] == "摘要"
     extracted = await search.read_webpage("https://example.com/docs")
-    assert "content" not in extracted and "未获得正文" in extracted["error"]
-    assert calls == ["/search", "/extract"]
+    assert "content" not in extracted and extracted["recoverable"] and "正文" in extracted["error"]
+    assert calls == ["/search", "/extract", "/extract"]
 
 
 @pytest.mark.asyncio

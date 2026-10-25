@@ -236,6 +236,7 @@ export function TodoPage({
               <Button
                 size="icon"
                 variant="ghost"
+                disabled={busy}
                 aria-label={`编辑${row.title}`}
                 onClick={() => edit(row)}
               >
@@ -266,9 +267,10 @@ export function TodoPage({
               待办不参与日历排期，提醒时间可留空。
             </DialogDescription>
           </DialogHeader>
-          <label>
+          <label htmlFor="todo-title">
             待办名称
             <Input
+              id="todo-title"
               value={form.title}
               maxLength={300}
               disabled={busy}
@@ -276,9 +278,10 @@ export function TodoPage({
               autoFocus
             />
           </label>
-          <label>
+          <label htmlFor="todo-notes">
             备注
             <Textarea
+              id="todo-notes"
               value={form.notes}
               maxLength={6000}
               disabled={busy}

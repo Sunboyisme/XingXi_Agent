@@ -124,6 +124,7 @@ export function KnowledgePage({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [updatingConfig, setUpdatingConfig] = useState(false);
   const [deleting, setDeleting] = useState<Document>();
   const [downloaded, setDownloaded] = useState<DownloadedFile | null>(null);
   const [query, setQuery] = useState("");
@@ -131,33 +132,39 @@ export function KnowledgePage({
   const [related, setRelated] = useState<KnowledgeSource>();
   const [searched, setSearched] = useState(false);
   const lock = useRef(false);
+  const requestVersion = useRef(0);
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
+    const request = ++requestVersion.current;
     const [docs, info] = await Promise.all([
       api<Document[]>("/knowledge/documents"),
       api<Status>("/knowledge/config"),
     ]);
-    setDocuments(docs);
-    setStatus(info);
+    if (request === requestVersion.current) {
+      setDocuments(docs);
+      setStatus(info);
+    }
     return docs;
   }, []);
   useEffect(() => {
     folder.current?.setAttribute("webkitdirectory", "");
     let live = true;
     const refresh = () => {
+      if (lock.current) return;
+      const request = ++requestVersion.current;
       void Promise.all([
         api<Document[]>("/knowledge/documents"),
         api<Status>("/knowledge/config"),
       ])
         .then(([docs, info]) => {
-          if (live) {
+          if (live && request === requestVersion.current) {
             setDocuments(docs);
             setStatus(info);
           }
         })
         .catch((e: Error) => {
-          if (live) setError(e.message);
+          if (live && request === requestVersion.current) setError(e.message);
         });
     };
     refresh();
@@ -201,6 +208,7 @@ export function KnowledgePage({
   async function perform(work: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true;
+    requestVersion.current += 1;
     setBusy(true);
     setError("");
     try {
@@ -295,19 +303,31 @@ export function KnowledgePage({
             role="switch"
             aria-label="启用知识库检索"
             checked={status?.enabled || false}
+            aria-busy={updatingConfig}
             disabled={busy || !status}
             onChange={(e) => {
               const enabled = e.target.checked;
               void perform(async () => {
-                setStatus(
-                  await api<Status>("/knowledge/config", "PUT", { enabled }),
-                );
-                setResults([]);
-                setSearched(false);
+                setUpdatingConfig(true);
+                try {
+                  setStatus(
+                    await api<Status>("/knowledge/config", "PUT", { enabled }),
+                  );
+                  setResults([]);
+                  setSearched(false);
+                } finally {
+                  setUpdatingConfig(false);
+                }
               });
             }}
           />
-          <span>{status?.enabled ? "已开启" : "已关闭"}</span>
+          <span role="status">
+            {updatingConfig
+              ? "正在更新…"
+              : status?.enabled
+                ? "已开启"
+                : "已关闭"}
+          </span>
         </label>
       </section>
       {status?.error && <ErrorNotice tone="warning" message={status.error} />}
