@@ -341,13 +341,7 @@ body:has(.reminder-popup),
   border: 1px solid
     color-mix(in srgb, var(--ui-color-action) 18%, var(--ui-color-line));
   border-radius: 20px;
-  background:
-    radial-gradient(
-      circle at 8% 12%,
-      color-mix(in srgb, var(--ui-color-action) 10%, transparent),
-      transparent 42%
-    ),
-    var(--ui-color-bg);
+  background: color-mix(in srgb, var(--ui-color-action) 4%, var(--ui-color-surface));
 }
 
 .model-default-icon {

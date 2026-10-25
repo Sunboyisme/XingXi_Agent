@@ -367,12 +367,19 @@
 }
 .knowledge-directory-scroll {
   flex: 1;
+  min-width: 0;
   min-height: 0;
-  padding: 6px;
-  overflow: auto;
+  padding: 6px 10px 6px 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
 }
 .knowledge-tree {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 0 0 0 12px;
   margin: 0;
   list-style: none;
@@ -382,8 +389,10 @@
 }
 .knowledge-tree-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) auto 28px;
+  column-gap: 8px;
   align-items: center;
+  min-width: 0;
   border-radius: 8px;
 }
 .knowledge-tree .knowledge-file-select {
@@ -401,20 +410,20 @@
   color: var(--ui-color-text);
   cursor: pointer;
 }
-.knowledge-file-select > span:not(.knowledge-file-status) {
+.knowledge-file-select > span {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.knowledge-file-select small {
+.knowledge-folder-count {
   font-size: 11px;
   color: var(--ui-color-text-muted);
 }
 .knowledge-file-status {
   display: grid;
-  flex: 0 0 13px;
+  width: 16px;
   place-items: center;
 }
 .knowledge-file-status.is-failed svg,
@@ -422,14 +431,19 @@
   color: var(--ui-color-action);
 }
 .knowledge-tree .knowledge-row-delete {
-  width: 26px;
+  width: 28px;
+  min-width: 0;
   height: 28px;
   min-height: 0;
   padding: 0;
   border-radius: 6px;
   color: var(--ui-color-text-muted);
+  outline-offset: -2px;
 }
-.knowledge-tree .knowledge-row-delete:hover {
+.knowledge-tree .knowledge-row-delete:hover:not(:disabled) {
+  background: transparent;
+}
+.knowledge-tree .knowledge-row-delete:hover:not(:disabled) svg {
   color: var(--ui-color-danger);
 }
 .knowledge-tree svg {
@@ -437,11 +451,15 @@
   color: var(--ui-color-text-muted);
 }
 .knowledge-tree-row:hover,
+.knowledge-tree-row:focus-within,
 .knowledge-tree-row:has([aria-current="true"]) {
   background: var(--ui-color-surface-deep);
 }
 .knowledge-file-select[aria-current="true"] {
   color: var(--ui-color-action);
+}
+.knowledge-file-select:focus-visible {
+  outline-offset: -2px;
 }
 .knowledge-preview {
   padding: 18px 22px;

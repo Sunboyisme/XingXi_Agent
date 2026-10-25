@@ -123,10 +123,13 @@ function FileTree({
                 )}
                 <Folder size={15} />
                 <span>{name}</span>
-                <small aria-label={`${rows.length} 个文件`}>
-                  {rows.length}
-                </small>
               </button>
+              <small
+                className="knowledge-folder-count"
+                aria-label={`${rows.length} 个文件`}
+              >
+                {rows.length}
+              </small>
               <Button
                 variant="ghost"
                 size="icon"
@@ -164,20 +167,21 @@ function FileTree({
               >
                 <FileText size={15} />
                 <span>{doc.relative_path.slice(prefix.length)}</span>
-                <span
-                  className={`knowledge-file-status is-${doc.status}`}
-                  role="img"
-                  aria-label={statusLabels[doc.status] || doc.status}
-                >
-                  {doc.status === "ready" ? (
-                    <CheckCircle2 size={13} />
-                  ) : ["queued", "parsing"].includes(doc.status) ? (
-                    <Clock3 size={13} />
-                  ) : (
-                    <CircleAlert size={13} />
-                  )}
-                </span>
               </button>
+              <span
+                className={`knowledge-file-status is-${doc.status}`}
+                role="img"
+                aria-label={statusLabels[doc.status] || doc.status}
+                title={statusLabels[doc.status] || doc.status}
+              >
+                {doc.status === "ready" ? (
+                  <CheckCircle2 size={13} />
+                ) : ["queued", "parsing"].includes(doc.status) ? (
+                  <Clock3 size={13} />
+                ) : (
+                  <CircleAlert size={13} />
+                )}
+              </span>
               <Button
                 variant="ghost"
                 size="icon"
