@@ -188,24 +188,27 @@
   gap: 4px;
   align-items: center;
 }
+/* Shared by the todo, month and week views. */
 .calendar-view-switch {
   display: flex;
-  gap: 3px;
-  border-radius: 20px;
-  padding: 4px;
+  gap: 2px;
+  border-radius: 10px;
+  padding: 3px;
   background: var(--ui-color-bg);
 }
 .calendar-view-switch button {
   border: 0;
   background: transparent;
   color: var(--ui-color-text-muted);
-  border-radius: 17px;
-  padding: 6px 17px;
+  border-radius: 7px;
+  padding: 5px 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 .calendar-view-switch button[aria-pressed="true"] {
-  background: var(--ui-color-action);
-  color: var(--appearance-on-action, white);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-action);
+  box-shadow: 0 1px 4px rgb(80 50 30 / 8%);
 }
 .plan-weekdays,
 .plan-month-grid,
@@ -659,21 +662,6 @@
   border-radius: 10px;
   font-size: 12px;
   padding: 0 14px;
-}
-.calendar-page .calendar-view-switch {
-  padding: 3px;
-  border-radius: 10px;
-  gap: 2px;
-}
-.calendar-page .calendar-view-switch button {
-  padding: 5px 13px;
-  border-radius: 7px;
-  font-size: 12px;
-}
-.calendar-page .calendar-view-switch button[aria-pressed="true"] {
-  background: var(--ui-color-surface);
-  color: var(--ui-color-action);
-  box-shadow: 0 1px 4px rgb(80 50 30 / 8%);
 }
 .calendar-page .plan-weekdays {
   flex: 0 0 auto;

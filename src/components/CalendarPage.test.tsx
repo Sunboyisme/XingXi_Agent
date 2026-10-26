@@ -94,7 +94,7 @@ test("creates an all-day plan with reminders off and retains calendar/week views
   expect(screen.queryByRole("button", { name: "列表" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "周历" }));
   expect(document.querySelector(".plan-week-grid")).not.toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "日历" }));
+  fireEvent.click(screen.getByRole("button", { name: "月历" }));
   expect(document.querySelector(".plan-month-grid")).not.toBeNull();
 });
 

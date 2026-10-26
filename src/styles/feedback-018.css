@@ -266,24 +266,6 @@
   text-decoration: line-through;
   color: var(--ui-color-text-muted);
 }
-.todo-row .todo-complete-button {
-  border: 1px solid var(--ui-color-border);
-  border-radius: 20px;
-  padding: 6px 10px;
-  color: var(--ui-color-text-muted);
-  background: var(--ui-color-bg);
-  cursor: pointer;
-}
-.todo-row .todo-complete-button:hover,
-.todo-row .todo-complete-button:focus-visible {
-  color: var(--ui-color-action);
-  border-color: var(--ui-color-action);
-  background: color-mix(
-    in srgb,
-    var(--ui-color-action) 12%,
-    var(--ui-color-surface)
-  );
-}
 .todo-drag-handle {
   display: flex;
   padding: 8px 2px;

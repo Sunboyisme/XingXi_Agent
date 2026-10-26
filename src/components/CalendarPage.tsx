@@ -1,4 +1,5 @@
 import { TodoPage } from "./TodoPage";
+import { PlanCompletionButton, PlanViewSwitch } from "./PlanControls";
 import { Hint } from "./common";
 import { PlanAgendaList } from "./PlanAgendaList";
 import {
@@ -863,25 +864,13 @@ export function CalendarPage({
             </Button>
           </div>
           <div className="plan-toolbar-actions">
-            <div
-              className="calendar-view-switch"
-              role="group"
-              aria-label="计划视图"
-            >
-              <button aria-pressed="false" onClick={() => setTodoView(true)}>待办</button>
-              <button
-                aria-pressed={view === "month"}
-                onClick={() => setView("month")}
-              >
-                日历
-              </button>
-              <button
-                aria-pressed={view === "week"}
-                onClick={() => setView("week")}
-              >
-                周历
-              </button>
-            </div>
+            <PlanViewSwitch
+              value={view}
+              onChange={(next) => {
+                if (next === "todo") setTodoView(true);
+                else setView(next);
+              }}
+            />
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <Button size="sm" className="plan-add-trigger">
@@ -1259,15 +1248,12 @@ export function CalendarPage({
           >
             {(event) => (
               <>
-                <button
-                  className="complete-circle"
-                  aria-label={`${["completed", "cancelled"].includes(event.status) ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}
+                <PlanCompletionButton
+                  status={event.status}
+                  label={`${["completed", "cancelled"].includes(event.status) ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}
                   disabled={busy}
                   onClick={() => void complete(event)}
-                >
-                  {event.status === "completed" && <Check size={13} />}
-                  {event.status === "cancelled" && <RotateCcw size={13} />}
-                </button>
+                />
                 <div className="plan-occurrence-content">
                   {eventButton(event, dayList)}
                 </div>

@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
-  Check,
   GripVertical,
   ListPlus,
   Loader2,
   Pencil,
-  RotateCcw,
   Trash2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { zonedInput, zonedISO } from "@/lib/calendarMonth";
 import { Button } from "./ui/button";
+import { PlanCompletionButton, PlanViewSwitch } from "./PlanControls";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import {
@@ -178,19 +177,12 @@ export function TodoPage({
           <p>先记下来，在合适的时候提醒你。</p>
         </div>
         <div className="plan-toolbar-actions">
-          <div
-            className="calendar-view-switch"
-            role="group"
-            aria-label="计划视图"
-          >
-            <button aria-pressed="true">待办</button>
-            <button aria-pressed="false" onClick={() => onCalendar("month")}>
-              日历
-            </button>
-            <button aria-pressed="false" onClick={() => onCalendar("week")}>
-              周历
-            </button>
-          </div>
+          <PlanViewSwitch
+            value="todo"
+            onChange={(view) => {
+              if (view !== "todo") onCalendar(view);
+            }}
+          />
           <Button
             size="sm"
             className="plan-add-trigger"
@@ -310,13 +302,10 @@ export function TodoPage({
               >
                 <GripVertical size={17} />
               </button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="todo-complete-button"
+              <PlanCompletionButton
+                status={row.status}
                 disabled={busy}
-                aria-label={`${completed ? "恢复" : "完成"}${row.title}`}
-                title={completed ? "恢复为未完成" : "标记为已完成"}
+                label={`${completed ? "恢复" : "完成"}${row.title}`}
                 onClick={() =>
                   void perform(
                     () =>
@@ -326,10 +315,7 @@ export function TodoPage({
                     completed ? "待办已恢复" : "待办已完成",
                   )
                 }
-              >
-                {completed ? <RotateCcw size={19} /> : <Check size={19} />}
-                <span>{completed ? "恢复" : "完成"}</span>
-              </Button>
+              />
               <button
                 className="todo-row-copy"
                 disabled={busy}
