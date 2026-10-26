@@ -11,7 +11,7 @@ const themes = [
   {
     id: "cream",
     name: "奶油杏 · 浅色",
-    description: "保留原来的奶油色与杏棕色。",
+    description: "奶油底色，配上温暖的杏棕色。",
     icon: Sun,
   },
   {
@@ -32,7 +32,7 @@ export function AppearanceSettings() {
     <section className="appearance-settings" aria-label="外观设置">
       <div className="section-title">
         <h2>让界面更合眼缘</h2>
-        <p>选择喜欢的配色，立即应用并记住选择。</p>
+        <p>选择喜欢的配色。</p>
       </div>
       <fieldset className="theme-options">
         <legend className="sr-only">主题颜色</legend>
