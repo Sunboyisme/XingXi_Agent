@@ -17,8 +17,7 @@ from . import config, db
 
 LIMIT = 512 * 1024 * 1024
 LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
-                "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes",
-                "file_sessions", "file_save_requests", "file_audits"}
+                "wechat_state", "wechat_inbox", "wechat_deliveries", "skills", "skill_runtimes"}
 COUNTS = {"todos": "待办", "knowledge_documents": "知识库文件", "knowledge_chunks": "知识片段", "knowledge_vectors": "知识向量","conversations": "对话", "messages": "消息", "memories": "记忆",
           "learning_sessions": "学习会话", "learning_intakes": "目标访谈", "learning_reviews": "复习记录", "usage_calls": "模型调用", "usage_prices": "计价配置",
           "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
@@ -167,9 +166,6 @@ def create_archive():
 
 
 def clear_local_references(connection):
-    for table in ("file_save_requests", "file_audits", "file_sessions"):
-        if table in schema(connection):
-            connection.execute(f'DELETE FROM "{table}"')
     for key, raw in connection.execute("SELECT id, local_references FROM messages WHERE local_references <> '[]'").fetchall():
         refs = json.loads(raw or "[]")
         connection.execute("UPDATE messages SET local_references=? WHERE id=?", (
@@ -464,8 +460,6 @@ def apply_pending():
             incoming.execute("PRAGMA foreign_keys=OFF")
             for table in LOCAL_TABLES:
                 incoming.execute(f'DELETE FROM "{table}"')
-                if table in {"file_sessions", "file_save_requests", "file_audits"}:
-                    continue  # Revocable authority must never survive data replacement.
                 rows = current.execute(f'SELECT * FROM "{table}"').fetchall()
                 if rows:
                     placeholders = ",".join("?" for _ in rows[0])

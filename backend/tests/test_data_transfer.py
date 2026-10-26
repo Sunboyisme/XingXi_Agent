@@ -181,13 +181,3 @@ def test_interrupted_restore_recovers_before_services_start():
     with db.Session() as session:
         assert session.query(db.Memory).first().content == "应恢复的原数据"
     assert transfer.info()["last_import"]["ok"] is False
-
-
-def test_schema_constraint_order_is_equivalent_but_modified_sql_is_not():
-    left = {"t": "CREATE TABLE t (id TEXT, note TEXT DEFAULT 'a,b', PRIMARY KEY (id), UNIQUE (note))"}
-    right = {"t": "CREATE TABLE t (id TEXT, note TEXT DEFAULT 'a,b', UNIQUE (note), PRIMARY KEY (id))"}
-    assert transfer.same_schema(left, right)
-    assert not transfer.same_schema(left, {"t": right["t"].replace("'a,b'", "'a, b'")})
-    assert not transfer.same_schema(left, {"t": right["t"].replace("UNIQUE (note)", "UNIQUE (id)")})
-    assert not transfer.same_schema(left, {"t": right["t"].replace("id TEXT, note TEXT", "note TEXT, id TEXT")})
-    assert not transfer.same_schema(left, {**right, "extra": "CREATE TABLE extra (id TEXT)"})

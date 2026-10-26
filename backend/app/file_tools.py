@@ -34,12 +34,6 @@ class Sheet(BaseModel):
 
 
 def build(run_id, conversation_id):
-    @tool
-    def request_file_save(artifact_id: str) -> str:
-        """为当前受限文件任务已生成的产物申请保存。只传真实产物编号；这不会写入用户目录。用户在面板选位置并确认后才保存，不能声称申请已保存。"""
-        from . import restricted_files
-        return json.dumps(restricted_files.request_save(conversation_id, artifact_id), ensure_ascii=False)
-
     async def safe(operation):
         try:
             return json.dumps(await operation, ensure_ascii=False, allow_nan=False)
@@ -135,7 +129,6 @@ def build(run_id, conversation_id):
         )
 
     return [
-        request_file_save,
         list_files,
         read_file,
         read_local_file,

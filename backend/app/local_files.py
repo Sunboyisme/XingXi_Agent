@@ -118,10 +118,6 @@ def _directory_permission(requested, value):
 
 
 def authorize(value, run_id, conversation_id):
-    from . import restricted_files
-    if restricted_files.restricted(conversation_id):
-        restricted_files.guard_run(run_id)
-        return restricted_files.authorize(value, conversation_id)
     requested = local_path(value)
     candidates = [(scope, _mention_pattern(scope)) for scope in (requested, *requested.parents)]
     with Session() as db:
@@ -230,11 +226,7 @@ async def read_file(path, run_id, conversation_id, start=1, count=5, page=None, 
         raise ValueError("page 仅用于 PDF，其他文件请用 start/count 按片段读取")
     if extension not in OFFICE_EXTENSIONS | TEXT_EXTENSIONS | IMAGE_TYPES.keys():
         raise ValueError("暂不支持该文件格式；支持 DOCX、PDF、XLSX、文本/代码和 PNG/JPEG/WebP/GIF 图片，不执行程序、宏或脚本")
-    from . import restricted_files
-    if restricted_files.restricted(conversation_id):
-        raw, details = await asyncio.to_thread(restricted_files.snapshot, resolved, run_id, conversation_id)
-    else:
-        raw, details = await asyncio.to_thread(_snapshot, resolved)
+    raw, details = await asyncio.to_thread(_snapshot, resolved)
     result = {
         "path": str(resolved), "name": resolved.name, "size_bytes": details.st_size,
         "modified_at": datetime.fromtimestamp(details.st_mtime, timezone.utc).isoformat(),
@@ -274,17 +266,11 @@ async def read_file(path, run_id, conversation_id, start=1, count=5, page=None, 
 
 
 def scan_folder(path, run_id, conversation_id, recursive=False, max_depth=3, pattern="*", include_hidden=False, offset=0, limit=200):
-    from . import restricted_files
-    limited = restricted_files.restricted(conversation_id)
-    if limited and include_hidden:
-        raise ValueError("受限文件任务不列出隐藏文件")
     if not 1 <= max_depth <= 10 or not 1 <= limit <= 500 or not 0 <= offset <= 5000:
         raise ValueError("max_depth 为 1–10，limit 为 1–500，offset 为 0–5000")
     if not pattern or len(pattern) > 200 or any(char in pattern for char in "/\\\x00"):
         raise ValueError("pattern 需为文件名通配符，例如 *.pdf，不包含路径")
     root = authorize(path, run_id, conversation_id)
-    if limited:
-        restricted_files.authorize(root, conversation_id, directory=True)
     if not root.is_dir():
         raise ValueError("该路径不是文件夹；读取文件请使用 read_local_file")
     queue = deque([(root, 0)])
@@ -300,9 +286,6 @@ def scan_folder(path, run_id, conversation_id, recursive=False, max_depth=3, pat
     while queue and not stopped and not has_more:
         directory, depth = queue.popleft()
         try:
-            if limited:
-                restricted_files.guard_run(run_id, "scan_local_folder")
-                restricted_files.authorize(directory, conversation_id, directory=True)
             # Revalidate queued paths in case a directory was replaced by a
             # link while earlier directories were being enumerated.
             current = directory.resolve(strict=True)
@@ -323,12 +306,6 @@ def scan_folder(path, run_id, conversation_id, recursive=False, max_depth=3, pat
                     stopped = True
                     break
                 try:
-                    if limited:
-                        try:
-                            restricted_files.authorize(entry.path, conversation_id, directory=entry.is_dir(follow_symlinks=False))
-                        except (ValueError, OSError):
-                            skipped += 1
-                            continue
                     details = entry.stat(follow_symlinks=False)
                     attributes = getattr(details, "st_file_attributes", 0)
                     if entry.is_symlink() or attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400):

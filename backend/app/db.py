@@ -66,37 +66,6 @@ class Conversation(Record, Base):
     title: Mapped[str] = mapped_column(String(200), default="新对话")
     project_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     pinned_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    restricted_files: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-
-
-class FileSession(Record, Base):
-    __tablename__ = "file_sessions"
-    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), unique=True)
-    status: Mapped[str] = mapped_column(String(20), default="pending")
-    grants: Mapped[list] = mapped_column(JSON, default=list)
-    model_binding: Mapped[dict] = mapped_column(JSON, default=dict)
-    expires_at: Mapped[str] = mapped_column(String(40), default="")
-    reads: Mapped[dict] = mapped_column(JSON, default=dict)
-
-
-class FileSaveRequest(Record, Base):
-    __tablename__ = "file_save_requests"
-    session_id: Mapped[str] = mapped_column(ForeignKey("file_sessions.id", ondelete="CASCADE"), index=True)
-    artifact_id: Mapped[str] = mapped_column(String(36))
-    name: Mapped[str] = mapped_column(String(180))
-    digest: Mapped[str] = mapped_column(String(64))
-    size: Mapped[int] = mapped_column(Integer)
-    target: Mapped[str] = mapped_column(Text, default="")
-    status: Mapped[str] = mapped_column(String(20), default="pending")
-    expires_at: Mapped[str] = mapped_column(String(40))
-    error: Mapped[str] = mapped_column(Text, default="")
-
-
-class FileAudit(Record, Base):
-    __tablename__ = "file_audits"
-    session_id: Mapped[str] = mapped_column(ForeignKey("file_sessions.id", ondelete="CASCADE"), index=True)
-    action: Mapped[str] = mapped_column(String(30))
-    detail: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class MCPServer(Record, Base):

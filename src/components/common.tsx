@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useContext,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -25,7 +24,6 @@ import {
 } from "@/components/ui/alert-dialog";
 export { ImagesInput, Picture } from "./ImageAttachments";
 import { ExternalLink } from "./ExternalLink";
-import { RestrictedFileContext } from "@/lib/restrictedFiles";
 
 export function Hint({
   label,
@@ -66,25 +64,17 @@ export const Markdown = memo(function Markdown({
   runId?: string;
   numberedLists?: boolean;
 }) {
-  const restricted = useContext(RestrictedFileContext);
   // React treats these renderers as component types. Recreating them on each
   // token or scroll update remounts pictures and collapses their loaded height.
   const components = useMemo<Components>(
     () => ({
       img: ({ src, alt }) =>
-        restricted ? (
-          <span>[外部图片已阻止：{alt || "图片"}]</span>
-        ) : typeof src === "string" && runId ? (
+        typeof src === "string" && runId ? (
           <RemotePicture runId={runId} src={src} alt={alt || "图片"} />
         ) : (
           <img src={src} alt={alt || "图片"} loading="lazy" />
         ),
-      a: ({ node: _node, ...props }) =>
-        restricted ? (
-          <span>{props.children}（链接未打开）</span>
-        ) : (
-          <ExternalLink {...props} />
-        ),
+      a: ({ node: _node, ...props }) => <ExternalLink {...props} />,
       ...(numberedLists
         ? {
             ul: ({
@@ -97,7 +87,7 @@ export const Markdown = memo(function Markdown({
           }
         : {}),
     }),
-    [runId, numberedLists, restricted],
+    [runId, numberedLists],
   );
   return (
     <div className={`markdown${numberedLists ? " numbered-exercise" : ""}`}>

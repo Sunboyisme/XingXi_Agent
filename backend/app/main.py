@@ -15,7 +15,7 @@ from langgraph.types import Command
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 
-from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, restricted_files, learning_workflows
+from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, learning_workflows
 from .learning_public import LEARNING_KINDS, public as public_learning
 from . import composer_suggestions, todos, knowledge
 from . import (
@@ -55,7 +55,6 @@ async def lifespan(app: FastAPI):
     data_transfer.recover_interrupted()
     store.migrate()
     data_transfer.apply_pending()
-    restricted_files.recover()
     usage_cost.recover_interrupted()
     office.recover_uploads()
     complex_tasks.recover()
@@ -596,8 +595,6 @@ def messages(conversation_id: str, db=Depends(database)):
 @router.post("/conversations/{conversation_id}/messages", response_model=s.RunRead)
 async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(database)):
     conversation = item(db, store.Conversation, conversation_id)
-    if conversation.restricted_files and (value.attachment_ids or value.local_references):
-        raise HTTPException(400, "受限文件任务请通过上方授权面板选择资料，不使用普通附件上传")
     try:
         local_references = local_files.validate_references(value.local_references, len(value.attachment_ids))
     except (ValueError, OSError) as error:
@@ -623,7 +620,6 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
         return active
     try:
         config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), value.model_selection)
-        restricted_files.check_model(conversation_id, config)
         provider.model(config)
         provider.user_content(value.content, value.attachment_ids, config)
     except Exception as error:
@@ -646,7 +642,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
     conversation.updated_at = store.now()
     db.commit()
     async def operation():
-        handoff = None if conversation.restricted_files or value.attachment_ids or local_references else await learning_handoff.handle(run.id, conversation_id, value.content)
+        handoff = None if value.attachment_ids or local_references else await learning_handoff.handle(run.id, conversation_id, value.content)
         return handoff if handoff is not None else await agent.chat(run.id, conversation_id)
     runs.launch(run.id, operation)
     return run
@@ -682,7 +678,6 @@ async def retry_message(conversation_id: str, value: s.ChatRetry | None = None, 
         )
     try:
         config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), selection)
-        restricted_files.check_model(conversation_id, config)
         provider.model(config)
         provider.user_content(source.content, source.attachment_ids, config)
     except Exception as error:
@@ -840,8 +835,6 @@ def get_run(run_id: str, db=Depends(database)):
 @router.post("/runs/{run_id}/cancel", response_model=s.RunRead)
 async def cancel_run(run_id: str, db=Depends(database)):
     value = item(db, store.Run, run_id)
-    if restricted_files.restricted(value.conversation_id):
-        await asyncio.to_thread(restricted_files.stop, value.conversation_id)
     task = runs.tasks.get(run_id)
     if task:
         task.cancel()
@@ -1423,7 +1416,6 @@ async def wechat_disconnect(request: Request):
         raise HTTPException(400, "连接已停止，但清除系统凭据失败，请重试解除绑定。")
 
 
-router.include_router(restricted_files.router(auth))
 router.include_router(features.router)
 router.include_router(projects.router)
 router.include_router(learning_sessions.router)

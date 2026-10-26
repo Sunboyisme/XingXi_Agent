@@ -334,7 +334,6 @@ class ConversationUpdate(BaseModel):
 
 class ConversationRead(RecordRead):
     title: str
-    restricted_files: bool = False
     project_id: str | None = None
     pinned_at: str | None = None
 
