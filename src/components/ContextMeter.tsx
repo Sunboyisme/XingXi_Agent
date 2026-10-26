@@ -29,8 +29,8 @@ export function ContextMeter({
   const label = compacting
     ? "正在整理上下文"
     : used === undefined
-      ? `上下文额度 ${limit.toLocaleString()} token，首次请求后显示用量`
-      : `上下文约 ${percent}% 已用，已用 ${format(used)} token，共 ${format(limit)} token；回复预留 ${format(reserved)} token。点击调整上下文设置。`;
+      ? `上下文窗口，总额度 ${format(limit)} token。点击调整当前模型的上下文设置。`
+      : `上下文约 ${percent}% 已用，已用 ${format(used)} token，共 ${format(limit)} token。点击调整当前模型的上下文设置。`;
   return (
     <Tooltip.Provider delayDuration={180} skipDelayDuration={100}>
       <Tooltip.Root>
@@ -72,9 +72,6 @@ export function ContextMeter({
                 ? `总额度 ${format(limit)} token`
                 : `已用 ${format(used)} token，共 ${format(limit)}`}
             </strong>
-            {used !== undefined && (
-              <small>回复另预留 {format(reserved)} token</small>
-            )}
             <Tooltip.Arrow className="context-meter-arrow" />
           </Tooltip.Content>
         </Tooltip.Portal>

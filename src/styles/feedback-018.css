@@ -466,17 +466,13 @@
   font-variant-numeric: tabular-nums;
 }
 .context-meter-heading,
-.context-meter-percent,
-.context-meter-popover small {
+.context-meter-percent {
   color: var(--ui-color-text-muted);
 }
 .context-meter-popover strong {
   color: var(--ui-color-heading);
   font-size: 12px;
   font-weight: 550;
-}
-.context-meter-popover small {
-  font-size: 10px;
 }
 .context-meter-arrow {
   fill: var(--ui-color-surface);

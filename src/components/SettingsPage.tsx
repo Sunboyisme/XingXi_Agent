@@ -1,6 +1,6 @@
 import { GeneralSettings } from "./GeneralSettings";
 import { useEffect, useState } from "react";
-import { ModelConnections } from "./ModelConnections";
+import { ModelConnections, type ModelContextTarget } from "./ModelConnections";
 import { type Settings, type Memory } from "@/lib/api";
 import { Toast } from "./common";
 import { WechatSection } from "./WechatSection";
@@ -18,13 +18,18 @@ import { UsageCosts } from "./UsageCosts";
 function ConnectionSettings({
   settings,
   onSaved,
+  contextTarget,
+  onContextTargetHandled,
 }: {
   settings: Settings;
   onSaved: (value: Settings) => void;
+  contextTarget?: ModelContextTarget;
+  onContextTargetHandled?: () => void;
 }) {
   return (
     <div className="connections-layout">
-      <ModelConnections settings={settings} onSaved={onSaved} />
+      <ModelConnections settings={settings} onSaved={onSaved}
+        contextTarget={contextTarget} onContextTargetHandled={onContextTargetHandled} />
       <div className="connections-services">
         <EmbeddingSettings />
         <ImageGenerationConnection />
@@ -53,6 +58,8 @@ export function SettingsPage({
   tab,
   onTab,
   createRequested,
+  contextTarget,
+  onContextTargetHandled,
 }: {
   settings: Settings;
   onSaved: (value: Settings) => void;
@@ -61,6 +68,8 @@ export function SettingsPage({
   tab: SettingsTab;
   onTab: (value: SettingsTab) => void;
   createRequested?: number;
+  contextTarget?: ModelContextTarget;
+  onContextTargetHandled?: () => void;
 }) {
   const [error, setError] = useState("");
   useEffect(() => {
@@ -151,7 +160,9 @@ export function SettingsPage({
         aria-labelledby="settings-tab-connections"
         hidden={tab !== "connections"}
       >
-        <ConnectionSettings settings={settings} onSaved={onSaved} />
+        <ConnectionSettings settings={settings} onSaved={onSaved}
+          contextTarget={tab === "connections" ? contextTarget : undefined}
+          onContextTargetHandled={onContextTargetHandled} />
       </div>
       <div
         id="settings-panel-tools"

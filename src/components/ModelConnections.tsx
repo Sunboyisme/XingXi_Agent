@@ -1,5 +1,5 @@
 import { Hint } from "./common";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BrainCircuit,
   Cable,
@@ -33,6 +33,7 @@ import { ConfirmDelete, ErrorNotice, Toast } from "./common";
 
 type Connection = Settings["providers"][number];
 type Draft = Connection & { api_key?: string | null };
+export type ModelContextTarget = { providerId: string; modelName: string };
 const thinkingOptions = [
   { value: "auto", label: "自动识别" },
   { value: "none", label: "不支持思考" },
@@ -60,11 +61,17 @@ const blankModel = () => ({
 export function ModelConnections({
   settings,
   onSaved,
+  contextTarget,
+  onContextTargetHandled,
 }: {
   settings: Settings;
   onSaved: (value: Settings) => void;
+  contextTarget?: ModelContextTarget;
+  onContextTargetHandled?: () => void;
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [contextFocusModel, setContextFocusModel] = useState<string>();
+  const contextInput = useRef<HTMLInputElement | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -99,6 +106,7 @@ export function ModelConnections({
     return name;
   }
   function add() {
+    setContextFocusModel(undefined);
     const preset = presets[0];
     setIsNew(true);
     setError("");
@@ -115,7 +123,8 @@ export function ModelConnections({
         : [blankModel()],
     });
   }
-  function edit(value: Connection) {
+  const edit = useCallback((value: Connection, modelName?: string) => {
+    setContextFocusModel(modelName);
     setIsNew(false);
     setError("");
     setNotice("");
@@ -125,7 +134,17 @@ export function ModelConnections({
         ? value.models.map((x) => ({ ...x }))
         : [blankModel()],
     });
-  }
+  }, []);
+  useEffect(() => {
+    if (!contextTarget) return;
+    const connection = settings.providers.find((value) => value.id === contextTarget.providerId);
+    if (connection?.models.some((model) => model.name === contextTarget.modelName)) {
+      edit(connection, contextTarget.modelName);
+    } else {
+      setError("当前模型连接已变更，请在连接列表中重新选择。");
+    }
+    onContextTargetHandled?.();
+  }, [contextTarget, settings.providers, edit, onContextTargetHandled]);
   function switchPreset(id: string) {
     if (!draft) return;
     const preset = presets.find((x) => x.id === id)!;
@@ -511,7 +530,15 @@ export function ModelConnections({
           }
         }}
       >
-        <DialogContent className="model-dialog model-dialog-redesign">
+        <DialogContent
+          className="model-dialog model-dialog-redesign"
+          onOpenAutoFocus={(event) => {
+            if (!contextInput.current) return;
+            event.preventDefault();
+            contextInput.current.focus({ preventScroll: true });
+            contextInput.current.scrollIntoView({ block: "center" });
+          }}
+        >
           <DialogHeader className="model-dialog-heading">
             <span className="model-dialog-icon" aria-hidden="true">
               {isNew ? <Server size={21} /> : <BrainCircuit size={21} />}
@@ -726,6 +753,7 @@ export function ModelConnections({
                             </span>
                             <span className="model-context-input">
                               <Input
+                                ref={model.name === contextFocusModel ? contextInput : undefined}
                                 type="number"
                                 min={4096}
                                 max={2000000}

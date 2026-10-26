@@ -55,6 +55,7 @@ const LearningPage = lazy(() =>
 );
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import type { SettingsTab } from "./components/SettingsPage";
+import type { ModelContextTarget } from "./components/ModelConnections";
 const SettingsPage = lazy(() =>
   import("./components/SettingsPage").then((module) => ({
     default: module.SettingsPage,
@@ -169,6 +170,7 @@ export function App() {
   const [calendarEventId, setCalendarEventId] = useState<string>();
   const [planAgenda, setPlanAgenda] = useState<PendingAgenda>();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+  const [contextSettingsTarget, setContextSettingsTarget] = useState<ModelContextTarget>();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -805,6 +807,11 @@ export function App() {
                   memories={memories}
                   refresh={refresh}
                   onAction={navigate}
+                  onContextSettings={(providerId, modelName) => {
+                    navigate("settings");
+                    setSettingsTab("connections");
+                    setContextSettingsTarget({ providerId, modelName });
+                  }}
                   onPlan={openAgenda}
                 />
               )}{" "}
@@ -852,6 +859,8 @@ export function App() {
                   memories={memories}
                   refresh={refresh}
                   tab={settingsTab}
+                  contextTarget={contextSettingsTarget}
+                  onContextTargetHandled={() => setContextSettingsTarget(undefined)}
                   onTab={setSettingsTab}
                   createRequested={createKey}
                 />

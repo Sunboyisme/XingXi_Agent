@@ -317,6 +317,7 @@ export function ChatPage({
   memories,
   refresh,
   onAction,
+  onContextSettings,
   projectId = null,
   projects = [],
   pinNew = false,
@@ -342,6 +343,7 @@ export function ChatPage({
   memories?: Memory[];
   refresh: () => Promise<void>;
   onAction: (page: string, create?: boolean) => void;
+  onContextSettings?: (providerId: string, modelName: string) => void;
   onPlan: (plan: CalendarEvent) => void;
 }) {
   const [modelKey, setModelKey] = useState(
@@ -1974,7 +1976,13 @@ export function ChatPage({
                   }
                   limit={selected?.model.context_tokens ?? 64000}
                   compacting={contextStatus === "正在整理上下文…"}
-                  onSettings={() => onAction("settings")}
+                  onSettings={() => {
+                    if (selected && onContextSettings) {
+                      onContextSettings(selected.profile.id, selected.model.name);
+                    } else {
+                      onAction("settings");
+                    }
+                  }}
                 />
               </div>
               <div className="composer-submit">
