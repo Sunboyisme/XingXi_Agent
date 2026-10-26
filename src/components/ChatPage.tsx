@@ -1733,6 +1733,21 @@ export function ChatPage({
               rows={2}
               disabled={submitting || stopping}
               onKeyDown={(e) => {
+                if (
+                  e.key === "Tab" &&
+                  !e.shiftKey &&
+                  !e.ctrlKey &&
+                  !e.altKey &&
+                  !e.metaKey &&
+                  !e.nativeEvent.isComposing &&
+                  e.nativeEvent.keyCode !== 229 &&
+                  e.currentTarget.value === "" &&
+                  contextualPlaceholder
+                ) {
+                  e.preventDefault();
+                  changeDraft(contextualPlaceholder);
+                  return;
+                }
                 if (isSendShortcut(e)) {
                   e.preventDefault();
                   if (modelReady) void send();
