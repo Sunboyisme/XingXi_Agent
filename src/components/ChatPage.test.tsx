@@ -40,6 +40,7 @@ const settings: Settings = {
         {
           name: "mock-test",
           vision_enabled: false,
+          context_tokens: 64000,
           thinking_mode: "auto",
           thinking_control: "none",
         },
@@ -226,6 +227,7 @@ test("a run completed before conversation handoff still shows its persisted answ
               {
                 name: "mock-test",
                 vision_enabled: false,
+                context_tokens: 64000,
                 thinking_mode: "auto",
                 thinking_control: "none",
               },

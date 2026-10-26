@@ -2161,6 +2161,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/todos/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reorder */
+        post: operations["reorder_api_v1_todos_reorder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/todos": {
         parameters: {
             query?: never;
@@ -3295,6 +3312,11 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Context Tokens
+             * @default 64000
+             */
+            context_tokens: number;
+            /**
              * Vision Enabled
              * @default false
              */
@@ -3310,6 +3332,11 @@ export interface components {
         ModelOptionRead: {
             /** Name */
             name: string;
+            /**
+             * Context Tokens
+             * @default 64000
+             */
+            context_tokens: number;
             /**
              * Vision Enabled
              * @default false
@@ -4258,6 +4285,17 @@ export interface components {
              * @enum {string}
              */
             action: "complete" | "restore" | "delete";
+        };
+        /** TodoOrder */
+        TodoOrder: {
+            /** Ids */
+            ids: string[];
+            /**
+             * Status
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "completed";
         };
         /** TodoRead */
         TodoRead: {
@@ -9224,6 +9262,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComposerHintRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_api_v1_todos_reorder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TodoOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -247,7 +247,7 @@ def test_mock_model_sequentially_combines_builtin_and_mcp(configured):
         ),
     )
     assert run["status"] == "completed", run
-    events = configured.get(f"{API}/runs/{run['id']}/tools").json()
+    events = [event for event in configured.get(f"{API}/runs/{run['id']}/tools").json() if event["kind"] == "tool"]
     assert [x["data"]["tool_id"] for x in events] == ["calculate", echo["id"]]
     assert [x["data"]["source"] for x in events] == ["builtin", "mcp"]
 

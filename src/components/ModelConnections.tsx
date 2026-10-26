@@ -51,6 +51,7 @@ const thinkingControlLabels: Record<string, string> = {
 };
 const blankModel = () => ({
   name: "",
+  context_tokens: 64000,
   vision_enabled: false,
   thinking_mode: "auto" as const,
   thinking_control: "auto" as const,
@@ -242,6 +243,15 @@ export function ModelConnections({
         .filter((x) => x.name.trim())
         .map((x) => ({ ...x, name: x.name.trim() }));
       if (!models.length) throw new Error("请添加至少一个模型。");
+      if (
+        models.some(
+          (model) =>
+            !Number.isInteger(model.context_tokens ?? 64000) ||
+            (model.context_tokens ?? 64000) < 4096 ||
+            (model.context_tokens ?? 64000) > 2000000,
+        )
+      )
+        throw new Error("上下文大小请输入 4,096–2,000,000 之间的整数。");
       if (new Set(models.map((x) => x.name)).size !== models.length)
         throw new Error("模型名称不能重复。");
       const profile = {
@@ -709,8 +719,36 @@ export function ModelConnections({
                           </button>
                         </div>
                         <div className="model-capabilities">
-                          <label className="model-vision">
+                          <label className="model-option-row model-context-setting">
+                            <span className="model-option-copy">
+                              <strong>上下文大小</strong>
+                              <small>按服务商支持的上限填写</small>
+                            </span>
+                            <span className="model-context-input">
+                              <Input
+                                type="number"
+                                min={4096}
+                                max={2000000}
+                                step={1}
+                                aria-label={`模型 ${index + 1} 上下文大小`}
+                                value={model.context_tokens ?? 64000}
+                                disabled={busy}
+                                onChange={(event) =>
+                                  updateModel(index, {
+                                    context_tokens: Number(event.target.value),
+                                  })
+                                }
+                              />
+                              <span aria-hidden="true">token</span>
+                            </span>
+                          </label>
+                          <label className="model-option-row model-vision">
+                            <span className="model-option-copy">
+                              <strong>图片输入</strong>
+                              <small>理解截图和照片；生成图片需独立图片模型</small>
+                            </span>
                             <Checkbox
+                              aria-label={`模型 ${index + 1} 图片输入`}
                               checked={model.vision_enabled}
                               disabled={busy}
                               onCheckedChange={(v) =>
@@ -719,15 +757,9 @@ export function ModelConnections({
                                 })
                               }
                             />
-                            <span>
-                              <strong>图片输入</strong>
-                              <small>
-                                用于理解截图和照片；生图请配置独立图片模型
-                              </small>
-                            </span>
                           </label>
-                          <div className="model-thinking-control">
-                            <span>
+                          <div className="model-option-row model-thinking-control">
+                            <span className="model-option-copy">
                               <strong>思考支持</strong>
                               <small>按服务商与完整模型名自动判断</small>
                             </span>
@@ -757,6 +789,9 @@ export function ModelConnections({
                             </span>
                           </div>
                         </div>
+                        <p className="model-capabilities-note">
+                          上下文包含提示、历史、工具结果与回复预留；调大数值不会扩展模型本身的能力。
+                        </p>
                       </div>
                     ))}
                   </div>

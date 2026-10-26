@@ -232,7 +232,7 @@ def test_agent_utility_loop_and_persisted_events(configured, prompt, expected_na
         ),
     )
     assert run["status"] == "completed", run
-    events = configured.get(f"{API}/runs/{run['id']}/tools").json()
+    events = [event for event in configured.get(f"{API}/runs/{run['id']}/tools").json() if event["kind"] == "tool"]
     assert {event["data"]["name"] for event in events} == expected_names
     if prompt == "查资料":
         assert events[0]["data"]["status"] == "error"
@@ -259,7 +259,7 @@ def test_weather_agent_loop_and_failure_are_audited(configured, monkeypatch):
         ),
     )
     assert run["status"] == "completed", run
-    events = configured.get(f"{API}/runs/{run['id']}/tools").json()
+    events = [event for event in configured.get(f"{API}/runs/{run['id']}/tools").json() if event["kind"] == "tool"]
     assert events[0]["data"]["status"] == "error"
     assert "天气查询失败" in events[0]["data"]["result"]["error"]
     assert configured.get(f"{API}/runs/missing/tools").status_code == 404
@@ -277,7 +277,7 @@ def test_weather_agent_loop_uses_adapter_and_persists_source(
         ),
     )
     assert run["status"] == "completed", run
-    event = configured.get(f"{API}/runs/{run['id']}/tools").json()[0]["data"]
+    event = next(event["data"] for event in configured.get(f"{API}/runs/{run['id']}/tools").json() if event["kind"] == "tool")
     assert event["status"] == "completed"
     assert event["result"]["current"]["temperature_c"] == 25
     assert event["result"]["source"]["name"] == "Open-Meteo"

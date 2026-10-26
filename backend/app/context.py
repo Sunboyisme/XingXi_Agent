@@ -20,6 +20,12 @@ RECENT_MESSAGES = 8
 locks = WeakValueDictionary()
 
 
+def limits(config):
+    total = int(config.get("context_tokens", HARD_TOKENS))
+    reserve = min(8192, max(1024, total // 8)) if "context_tokens" in config else 0
+    return total, reserve, total - reserve
+
+
 def conversation_lock(conversation_id):
     lock = locks.get(conversation_id)
     if lock is None:
@@ -69,6 +75,15 @@ def reasoning_text(message) -> str:
 
 
 async def prepare(run_id, conversation_id, model_config, overhead=0):
+    total, reserve, hard = limits(model_config)
+    soft = min(SOFT_TOKENS, int(hard * .65)) if "context_tokens" not in model_config else int(hard * .65)
+    def usage(used):
+        emit(run_id, "context", {"status": "usage", "used_tokens": used,
+             "limit_tokens": total, "reserved_tokens": reserve, "estimated": True,
+             "provider_id": model_config.get("provider_id"), "model_name": model_config.get("model_name")})
+    if overhead >= hard:
+        usage(overhead)
+        raise provider.ConfigurationError("系统提示、工具说明与任务资料已占满上下文。请在连接与设置中增大当前模型的上下文大小，或减少启用的工具及项目资料后重试。")
     with Session() as db:
         records = list(
             db.scalars(
@@ -93,8 +108,12 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
     remaining = [record for record in records[cursor:]
                  if not (record.provider_context or {}).get("incomplete")]
     estimate = overhead + tokens(summary) + sum(map(message_tokens, remaining))
-    if estimate > SOFT_TOKENS and len(remaining) > RECENT_MESSAGES:
-        older, recent = remaining[:-RECENT_MESSAGES], remaining[-RECENT_MESSAGES:]
+    latest_user = max((i for i, record in enumerate(remaining) if record.role == "user"), default=0)
+    split = min(max(0, len(remaining) - RECENT_MESSAGES), latest_user)
+    while split < latest_user and overhead + SUMMARY_TOKENS + sum(map(message_tokens, remaining[split:])) > hard:
+        split += 1
+    if estimate > soft and split:
+        older, recent = remaining[:split], remaining[split:]
         emit(run_id, "context", {"status": "compacting"})
         try:
             config = {**model_config}
@@ -104,6 +123,8 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
             updated = summary
             # Bound each summary call, even when an individual old message is very long.
             batches, batch, size = [], [], 0
+            batch_limit = min(6000, max(256, hard - SUMMARY_TOKENS - 512))
+            part_size = min(5000, batch_limit)
             for record in older:
                 text = json.dumps(
                     {
@@ -114,9 +135,9 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
                     },
                     ensure_ascii=False,
                 )
-                for start in range(0, len(text), 5000):
-                    part = text[start : start + 5000]
-                    if size + tokens(part) > 6000 and batch:
+                for start in range(0, len(text), part_size):
+                    part = text[start : start + part_size]
+                    if size + tokens(part) > batch_limit and batch:
                         batches.append("\n".join(batch))
                         batch, size = [], 0
                     batch.append(part)
@@ -159,14 +180,18 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
                 "context",
                 {"status": "degraded", "text": "上下文整理未完成，本轮使用有限历史。"},
             )
-    budget = HARD_TOKENS - overhead - tokens(summary)
+    budget = hard - overhead - tokens(summary)
+    if overhead + tokens(summary) >= hard:
+        usage(overhead + tokens(summary))
+        raise provider.ConfigurationError("系统提示、工具说明与任务资料已占满上下文。请在连接与设置中增大当前模型的上下文大小，或减少启用的工具及项目资料后重试。")
     kept = []
     for record in reversed(remaining):
         cost = message_tokens(record)
         if cost > budget:
             if not kept:
+                usage(overhead + tokens(summary) + cost)
                 raise provider.ConfigurationError(
-                    "最新消息超过上下文预算，请缩短文字或减少图片后重试。"
+                    "当前消息与任务资料超过可用上下文。请在连接与设置中调整当前模型的上下文大小，或缩短文字、减少图片后重试。"
                 )
             emit(
                 run_id,
@@ -179,6 +204,7 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
             break
         kept.append(record)
         budget -= cost
+    usage(hard - budget)
     return summary, kept[::-1]
 
 

@@ -446,8 +446,8 @@ async def guarded(entry, run_id, arguments, operation):
                     (TaskOperation.revision < execution.revision) & (TaskOperation.policy != "read")),
             ).order_by(TaskOperation.created_at)).all()
             previous = [value for value in previous if value.id not in step.repeat_operation_ids]
-            if entry["id"] == "read_task_result":
-                # The task directory can grow between reads within the same step.
+            if entry["id"] in {"read_task_result", "list_todos", "list_plans", "list_files", "learning_goals", "search_memories", "search_conversation_history", "search_project_history"}:
+                # Queries must observe writes made earlier in the same step.
                 previous = []
             missing = next((value for value in previous if value.status == "completed"
                             and value.policy == "external" and not valid_artifacts(value.result)), None)

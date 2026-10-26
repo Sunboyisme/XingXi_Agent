@@ -266,6 +266,247 @@
   text-decoration: line-through;
   color: var(--ui-color-text-muted);
 }
+.todo-row .todo-complete-button {
+  border: 1px solid var(--ui-color-border);
+  border-radius: 20px;
+  padding: 6px 10px;
+  color: var(--ui-color-text-muted);
+  background: var(--ui-color-bg);
+  cursor: pointer;
+}
+.todo-row .todo-complete-button:hover,
+.todo-row .todo-complete-button:focus-visible {
+  color: var(--ui-color-action);
+  border-color: var(--ui-color-action);
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 12%,
+    var(--ui-color-surface)
+  );
+}
+.todo-drag-handle {
+  display: flex;
+  padding: 8px 2px;
+  min-width: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.todo-drag-handle:active {
+  cursor: grabbing;
+}
+.todo-drag-handle:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  border-radius: 5px;
+}
+.todo-row.is-dragging {
+  opacity: 0.55;
+}
+.todo-row.is-drop-target {
+  border-color: var(--ui-color-action);
+  box-shadow: 0 -2px 0 var(--ui-color-action);
+}
+.model-dialog-redesign .connection-model-row {
+  padding: 16px;
+}
+.model-dialog-redesign .model-capabilities {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin-top: 14px;
+  padding-top: 2px;
+  border-top: 1px solid var(--line-subtle);
+}
+.model-dialog-redesign .model-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: center;
+  gap: 12px 24px;
+  min-width: 0;
+  padding: 13px 0;
+}
+.model-dialog-redesign .model-option-row + .model-option-row {
+  border-top: 1px solid var(--line-subtle);
+}
+.model-dialog-redesign .model-option-row > .model-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.model-dialog-redesign .model-option-copy strong {
+  color: var(--ui-color-heading);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.5;
+}
+.model-dialog-redesign .model-option-copy small {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.model-context-input {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.model-context-input input {
+  width: 100%;
+  padding-right: 58px;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+.model-context-input input::-webkit-inner-spin-button,
+.model-context-input input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+.model-context-input > span {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+  pointer-events: none;
+}
+.model-dialog-redesign .model-vision > [data-slot="checkbox"] {
+  justify-self: end;
+  margin-right: 2px;
+}
+.model-dialog-redesign .model-thinking-control > .model-thinking-select {
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+  gap: 5px;
+}
+.model-dialog-redesign .model-thinking-select .soft-select {
+  width: 100%;
+  max-width: none;
+  min-height: 38px;
+}
+.model-dialog-redesign .model-thinking-detected {
+  max-width: none;
+  font-size: 10px;
+  text-align: right;
+}
+.model-capabilities-note {
+  margin: 0;
+  padding-top: 2px;
+  color: var(--ui-color-text-muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+@media (max-width: 600px) {
+  .model-dialog-redesign .model-option-row {
+    grid-template-columns: minmax(0, 1fr) minmax(130px, 42%);
+    column-gap: 14px;
+  }
+}
+@media (max-width: 420px) {
+  .model-dialog-redesign .model-context-setting,
+  .model-dialog-redesign .model-thinking-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .model-dialog-redesign .model-thinking-detected {
+    text-align: left;
+  }
+}
+.composer-submit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.context-meter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-width: 26px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.context-meter svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+.context-meter circle {
+  fill: none;
+  stroke-width: 2.2;
+}
+.context-meter-track {
+  stroke: currentColor;
+  opacity: 0.22;
+}
+.context-meter-value {
+  stroke: currentColor;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+.context-meter:hover,
+.context-meter[data-state="delayed-open"] {
+  background: var(--surface-hover);
+  color: var(--ui-color-heading);
+}
+.context-meter.is-high {
+  color: var(--ui-color-danger);
+}
+.context-meter.is-compacting svg {
+  animation: context-meter-pulse 1.4s ease-in-out infinite;
+}
+.context-meter:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
+.context-meter-popover {
+  z-index: 100;
+  display: grid;
+  gap: 5px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 14px 18px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 12%);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.context-meter-heading,
+.context-meter-percent,
+.context-meter-popover small {
+  color: var(--ui-color-text-muted);
+}
+.context-meter-popover strong {
+  color: var(--ui-color-heading);
+  font-size: 12px;
+  font-weight: 550;
+}
+.context-meter-popover small {
+  font-size: 10px;
+}
+.context-meter-arrow {
+  fill: var(--ui-color-surface);
+}
+@keyframes context-meter-pulse {
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .context-meter.is-compacting svg {
+    animation: none;
+  }
+}
 .todo-editor label {
   display: grid;
   gap: 8px;

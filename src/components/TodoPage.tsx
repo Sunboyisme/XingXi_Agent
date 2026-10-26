@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   Check,
+  GripVertical,
+  ListPlus,
   Loader2,
   Pencil,
-  Plus,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -51,6 +52,9 @@ export function TodoPage({
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const targetRef = useRef<string | null>(null);
   const lock = useRef(false);
   const [editor, setEditor] = useState(false);
   const [editing, setEditing] = useState<Todo | null>(null);
@@ -132,6 +136,40 @@ export function TodoPage({
       setBusy(false);
     }
   }
+  async function moveTodo(id: string, target: string) {
+    if (id === target || lock.current) return;
+    const visible = items.filter(
+      (row) => (row.status === "completed") === completed,
+    );
+    const from = visible.findIndex((row) => row.id === id);
+    const to = visible.findIndex((row) => row.id === target);
+    if (from < 0 || to < 0) return;
+    visible.splice(to, 0, visible.splice(from, 1)[0]);
+    const previous = items;
+    let index = 0;
+    setItems(
+      items.map((row) =>
+        (row.status === "completed") === completed ? visible[index++] : row,
+      ),
+    );
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/todos/reorder", "POST", {
+        ids: visible.map((row) => row.id),
+        status: completed ? "completed" : "active",
+      });
+      setNotice("待办顺序已保存");
+    } catch (error) {
+      setItems(previous);
+      setError((error as Error).message);
+      await load().catch(() => {});
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
   return (
     <div className="todo-page page-content">
       <div className="plan-toolbar">
@@ -153,9 +191,14 @@ export function TodoPage({
               周历
             </button>
           </div>
-          <Button onClick={() => edit()}>
-            <Plus size={16} />
-            新增待办
+          <Button
+            size="sm"
+            className="plan-add-trigger"
+            disabled={busy}
+            onClick={() => edit()}
+          >
+            <ListPlus size={16} />
+            添加待办
           </Button>
         </div>
       </div>
@@ -165,6 +208,7 @@ export function TodoPage({
       )}
       <div className="segmented todo-filters">
         <button
+          disabled={busy || Boolean(dragging)}
           aria-pressed={!completed}
           className={!completed ? "selected" : ""}
           onClick={() => setCompleted(false)}
@@ -172,6 +216,7 @@ export function TodoPage({
           未完成
         </button>
         <button
+          disabled={busy || Boolean(dragging)}
           aria-pressed={completed}
           className={completed ? "selected" : ""}
           onClick={() => setCompleted(true)}
@@ -198,14 +243,80 @@ export function TodoPage({
           .filter((row) => (row.status === "completed") === completed)
           .map((row) => (
             <article
-              className={`todo-row ${completed ? "is-completed" : ""}`}
+              className={`todo-row ${completed ? "is-completed" : ""} ${dragging === row.id ? "is-dragging" : ""} ${dropTarget === row.id && dragging !== row.id ? "is-drop-target" : ""}`}
               key={row.id}
+              data-todo-id={row.id}
             >
+              <button
+                type="button"
+                className="todo-drag-handle"
+                disabled={busy}
+                aria-label={`排序${row.title}`}
+                title="拖动排序，也可聚焦后按上下方向键调整"
+                onPointerDown={(event) => {
+                  if (event.button !== 0 || busy) return;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  setDragging(row.id);
+                  setDropTarget(row.id);
+                  targetRef.current = row.id;
+                }}
+                onPointerMove={(event) => {
+                  if (!event.currentTarget.hasPointerCapture(event.pointerId))
+                    return;
+                  const target = document
+                    .elementFromPoint(event.clientX, event.clientY)
+                    ?.closest<HTMLElement>("[data-todo-id]")?.dataset.todoId;
+                  targetRef.current = target ?? null;
+                  setDropTarget(target ?? null);
+                  const container =
+                    event.currentTarget.closest<HTMLElement>(".todo-page");
+                  if (container) {
+                    const rect = container.getBoundingClientRect();
+                    if (event.clientY < rect.top + 48)
+                      container.scrollBy(0, -20);
+                    if (event.clientY > rect.bottom - 48)
+                      container.scrollBy(0, 20);
+                  }
+                }}
+                onPointerUp={(event) => {
+                  if (!event.currentTarget.hasPointerCapture(event.pointerId))
+                    return;
+                  const target = targetRef.current;
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                  setDragging(null);
+                  setDropTarget(null);
+                  targetRef.current = null;
+                  if (target) void moveTodo(row.id, target);
+                }}
+                onLostPointerCapture={() => {
+                  setDragging(null);
+                  setDropTarget(null);
+                  targetRef.current = null;
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowUp" && event.key !== "ArrowDown")
+                    return;
+                  event.preventDefault();
+                  const visible = items.filter(
+                    (item) => (item.status === "completed") === completed,
+                  );
+                  const next =
+                    visible[
+                      visible.findIndex((item) => item.id === row.id) +
+                        (event.key === "ArrowUp" ? -1 : 1)
+                    ];
+                  if (next) void moveTodo(row.id, next.id);
+                }}
+              >
+                <GripVertical size={17} />
+              </button>
               <Button
-                size="icon"
+                size="sm"
                 variant="ghost"
+                className="todo-complete-button"
                 disabled={busy}
                 aria-label={`${completed ? "恢复" : "完成"}${row.title}`}
+                title={completed ? "恢复为未完成" : "标记为已完成"}
                 onClick={() =>
                   void perform(
                     () =>
@@ -217,8 +328,13 @@ export function TodoPage({
                 }
               >
                 {completed ? <RotateCcw size={19} /> : <Check size={19} />}
+                <span>{completed ? "恢复" : "完成"}</span>
               </Button>
-              <button className="todo-row-copy" onClick={() => edit(row)}>
+              <button
+                className="todo-row-copy"
+                disabled={busy}
+                onClick={() => edit(row)}
+              >
                 <strong>{row.title}</strong>
                 {row.notes && <span>{row.notes}</span>}
                 {row.reminder_at && (

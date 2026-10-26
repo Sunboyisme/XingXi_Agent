@@ -25,6 +25,7 @@ def seed(count=14):
                 )
             )
         config = model_profiles.resolve(session.get(db.Settings, "local"))
+        config.pop("context_tokens", None)  # These cases exercise legacy constant overrides.
         session.commit()
         return run.id, conversation.id, config
 

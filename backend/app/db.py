@@ -369,6 +369,7 @@ class MemoryChange(Record, Base):
 
 class Todo(Record, Base):
     __tablename__ = "todos"
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     title: Mapped[str] = mapped_column(String(300))
     notes: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)

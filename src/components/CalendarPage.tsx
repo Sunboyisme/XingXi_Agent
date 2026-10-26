@@ -885,7 +885,7 @@ export function CalendarPage({
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <Button size="sm" className="plan-add-trigger">
-                  <Plus size={15} />
+                  <CalendarPlus size={15} />
                   添加计划
                   <ChevronDown size={13} />
                 </Button>

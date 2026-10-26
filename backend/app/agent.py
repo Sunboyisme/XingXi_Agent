@@ -130,7 +130,7 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
     )
     instructions += "\n本轮可用工具：" + json.dumps(
         [
-            {"name": tool.name, "description": tool.description}
+            tool.name
             for tool in available_tools
         ],
         ensure_ascii=False,
@@ -184,19 +184,10 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
             "read_task_result、文件和技能的显式读取已返回所请求片段，不因其他回执被精简而机械重复读取。\n"
             + task_instructions
         )
-    tool_budget = chat_context.tokens(
-        json.dumps(
-            [
-                tool.args_schema
-                if isinstance(tool.args_schema, dict)
-                else tool.args_schema.model_json_schema()
-                if tool.args_schema
-                else {}
-                for tool in available_tools
-            ],
-            ensure_ascii=False,
-        )
-    )
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+    tool_budget = chat_context.tokens(json.dumps(
+        [convert_to_openai_tool(tool) for tool in available_tools], ensure_ascii=False,
+    ))
     summary, records = await chat_context.prepare(
         run_id,
         conversation_id,
@@ -241,10 +232,12 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
                     else {},
                 )
             )
+    from .context_budget import ContextBudget
     agent = create_agent(
         provider.model(model_config) if model_config else provider.model(),
         tools=available_tools,
         system_prompt=instructions,
+        middleware=[ContextBudget(run_id, model_config, tool_budget)],
     )
     text = ""
     total_tokens = 0

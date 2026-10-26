@@ -105,6 +105,9 @@ def model(config=None, *, usage_purpose=None) -> ChatOpenAI:
         enabled = config["thinking_enabled"]
         extra = {}
         options = {}
+        if "context_tokens" in config:
+            from .context import limits
+            options["max_tokens"] = limits(config)[1]
         if mode == "thinking":
             extra = {"thinking": {"type": "enabled" if enabled else "disabled"}}
         elif mode == "enable_thinking":

@@ -56,6 +56,7 @@ ThinkingMode = Literal[
 
 class ModelOption(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    context_tokens: int = Field(default=64000, ge=4096, le=2000000)
     vision_enabled: bool = False
     thinking_mode: ThinkingMode = "auto"
 

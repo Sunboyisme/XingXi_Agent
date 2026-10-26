@@ -641,7 +641,7 @@ def build_tools(run_id: str, conversation_id: str):
                 coroutine=execute,
                 name=entry["id"],
                 description=originals[entry["id"]].description
-                if entry["source"] == "builtin" and entry["id"] in {"read_local_file", "scan_local_folder", "create_learning_goal"}
+                if entry["source"] == "builtin"
                 else f"{entry['source_label']} · {entry['description'] or entry['name']}",
                 args_schema=originals[entry["id"]].args_schema
                 if entry["source"] == "builtin"

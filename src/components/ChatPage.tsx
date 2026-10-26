@@ -1,4 +1,5 @@
 import { resizeMessageInput } from "@/lib/composerSize";
+import { ContextMeter, type ContextUsage } from "./ContextMeter";
 import { isSendShortcut } from "@/lib/generalPreferences";
 import { useComposerPlaceholder } from "@/lib/useComposerPlaceholder";
 import {
@@ -277,7 +278,6 @@ function clearChatDraft(conversationId: string | null) {
   }
 }
 
-
 function ReplyActivity({
   reasoning,
   stream,
@@ -378,7 +378,11 @@ export function ChatPage({
   const thinkingEnabled =
     thinkingControl === "always" || (thinkingControl !== "none" && thinking);
   const [messages, setMessages] = useState<Message[]>([]);
-  const contextualPlaceholder = useComposerPlaceholder(conversationId, messages, settings);
+  const contextualPlaceholder = useComposerPlaceholder(
+    conversationId,
+    messages,
+    settings,
+  );
   const [initialDraft] = useState(() => readChatDraft(conversationId));
   const [draft, setDraft] = useState(initialDraft?.text || "");
   const [images, setImages] = useState<Attachment[]>(
@@ -416,6 +420,7 @@ export function ChatPage({
     ]);
   }, []);
   const [contextStatus, setContextStatus] = useState("");
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
   const [tools, setTools] = useState<RunEvent[]>([]);
   const [imageGeneration, setImageGeneration] =
     useState<ImageGenerationProgress | null>(null);
@@ -647,7 +652,9 @@ export function ChatPage({
                 (text) => text + separator + String(event.data.text || ""),
               );
             }
-            if (event.kind === "context")
+            if (event.kind === "context" && event.data.status === "usage")
+              setContextUsage(event.data as ContextUsage);
+            if (event.kind === "context" && event.data.status !== "usage")
               setContextStatus(
                 event.data.status === "compacting"
                   ? "正在整理上下文…"
@@ -755,6 +762,7 @@ export function ChatPage({
     setStream("");
     setReasoning("");
     setContextStatus("");
+    setContextUsage(null);
     setUploading(false);
     setTools([]);
     setImageGeneration(null);
@@ -832,8 +840,17 @@ export function ChatPage({
               setReasoning([...steps.values()].join("\n\n"));
             }
             const contextEvent = history
-              .filter((event) => event.kind === "context")
+              .filter((event) => event.kind === "context" && event.data.status !== "usage")
               .at(-1);
+            const usageEvent = history
+              .filter(
+                (event) =>
+                  event.kind === "context" && event.data.status === "usage",
+              )
+              .at(-1);
+            setContextUsage(
+              usageEvent ? (usageEvent.data as ContextUsage) : null,
+            );
             if (contextEvent?.data.status === "degraded")
               setContextStatus(String(contextEvent.data.text));
             if (Date.now() - Date.parse(values[0].created_at) < 60000) {
@@ -914,13 +931,17 @@ export function ChatPage({
     observer.observe(target);
     return () => observer.disconnect();
   }, [conversationId, empty, scheduleFollowLatest]);
-  async function send(edited?: Pick<Message, "content" | "attachment_ids" | "local_references">) {
+  async function send(
+    edited?: Pick<Message, "content" | "attachment_ids" | "local_references">,
+  ) {
     const text = edited ? edited.content : draft;
     const attachmentIds = edited
       ? edited.attachment_ids
       : images.filter((x) => !x.local_path).map((x) => x.id);
     const localReferences = edited
-      ? (edited.local_references || []).filter((item) => item.active).map((item) => String(item.path))
+      ? (edited.local_references || [])
+          .filter((item) => item.active)
+          .map((item) => String(item.path))
       : images.filter((x) => x.local_path).map((x) => x.local_path!);
     const supplement = busy && Boolean(run?.task_id);
     if (
@@ -1367,7 +1388,9 @@ export function ChatPage({
                               !modelReady ||
                               (!editedText.trim() &&
                                 !value.attachment_ids.length &&
-                                !(value.local_references || []).some((item) => item.active))
+                                !(value.local_references || []).some(
+                                  (item) => item.active,
+                                ))
                             }
                             onClick={() =>
                               void send({
@@ -1451,7 +1474,14 @@ export function ChatPage({
                         />
                       )}
 
-                    {value.role === "assistant" && value.run_id && value.has_learning_continuation && <LearningHandoffCards runId={value.run_id} status={value.run_status} />}
+                    {value.role === "assistant" &&
+                      value.run_id &&
+                      value.has_learning_continuation && (
+                        <LearningHandoffCards
+                          runId={value.run_id}
+                          status={value.run_status}
+                        />
+                      )}
                     {value.attachment_ids.length > 0 && (
                       <div className="message-pictures">
                         {value.attachment_ids.map((id) => (
@@ -1461,19 +1491,33 @@ export function ChatPage({
                     )}
                     {value.role === "user" && editingMessageId !== value.id && (
                       <>
-                      {!!value.local_references?.length && <div className="message-local-folders">
-                        {value.local_references.map((reference, index) => <div className="local-folder-chip" key={index} title={String(reference.path || "需要重新关联")}>
-                          <Folder size={16} /><span>{String(reference.name || "文件夹")}</span><small>{reference.active ? "只读" : "需要重新关联"}</small>
-                        </div>)}
-                      </div>}
-                      <UserMessageActions
-                        content={value.content}
-                        disabled={busy || uploading}
-                        onEdit={() => {
-                          setEditingMessageId(value.id);
-                          setEditedText(value.content);
-                        }}
-                      />
+                        {!!value.local_references?.length && (
+                          <div className="message-local-folders">
+                            {value.local_references.map((reference, index) => (
+                              <div
+                                className="local-folder-chip"
+                                key={index}
+                                title={String(reference.path || "需要重新关联")}
+                              >
+                                <Folder size={16} />
+                                <span>
+                                  {String(reference.name || "文件夹")}
+                                </span>
+                                <small>
+                                  {reference.active ? "只读" : "需要重新关联"}
+                                </small>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <UserMessageActions
+                          content={value.content}
+                          disabled={busy || uploading}
+                          onEdit={() => {
+                            setEditingMessageId(value.id);
+                            setEditedText(value.content);
+                          }}
+                        />
                       </>
                     )}
                   </div>
@@ -1722,7 +1766,8 @@ export function ChatPage({
               value={draft}
               onChange={(e) => changeDraft(e.target.value)}
               placeholder={
-                contextualPlaceholder || (busy && run?.task_id
+                contextualPlaceholder ||
+                (busy && run?.task_id
                   ? "补充当前任务要求…"
                   : modelReady
                     ? empty
@@ -1920,6 +1965,17 @@ export function ChatPage({
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
                 </DropdownMenu.Root>
+                <ContextMeter
+                  usage={
+                    contextUsage?.model_name === selected?.model.name &&
+                    contextUsage?.provider_id === selected?.profile.id
+                      ? contextUsage
+                      : null
+                  }
+                  limit={selected?.model.context_tokens ?? 64000}
+                  compacting={contextStatus === "正在整理上下文…"}
+                  onSettings={() => onAction("settings")}
+                />
               </div>
               <div className="composer-submit">
                 <Button

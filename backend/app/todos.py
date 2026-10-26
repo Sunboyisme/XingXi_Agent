@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, HTTPException
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from . import db as store, plans, reminders
 from .config import PROFILE_ID
@@ -63,6 +63,27 @@ class TodoAction(BaseModel):
     action: Literal["complete", "restore", "delete"]
 
 
+class TodoOrder(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=10000)
+    status: Literal["active", "completed"] = "active"
+
+
+@router.post("/todos/reorder")
+def reorder(value: TodoOrder):
+    with plans.lock, store.Session() as db:
+        rows = db.scalars(select(store.Todo).where(store.Todo.profile_id == PROFILE_ID,
+                         store.Todo.status == value.status)).all()
+        if len(set(value.ids)) != len(value.ids):
+            raise HTTPException(422, "排序不能包含重复待办")
+        if set(value.ids) != {row.id for row in rows}:
+            raise HTTPException(409, "待办列表已变化，请刷新后重新排序")
+        positions = {key: index for index, key in enumerate(value.ids)}
+        for row in rows:
+            row.sort_order = positions[row.id]
+        db.commit()
+    return {"saved": True}
+
+
 class TodoPatch(BaseModel):
     title: str | None = Field(default=None, max_length=300, description="省略时保留原名称")
     notes: str | None = Field(default=None, max_length=6000, description="省略时保留原备注，空字符串清空")
@@ -111,7 +132,7 @@ def schedule(db, row):
 def list_todos(status: Literal["active", "completed", "all"] = "active", query: str = ""):
     with store.Session() as db:
         values = db.scalars(select(store.Todo).where(store.Todo.profile_id == PROFILE_ID,
-            store.Todo.status != "deleted").order_by(store.Todo.created_at, store.Todo.id))
+            store.Todo.status != "deleted").order_by(store.Todo.sort_order, store.Todo.created_at, store.Todo.id))
         return [TodoRead.model_validate(row) for row in values if (status == "all" or row.status == status)
                 and (not query or query.casefold() in (row.title + " " + row.notes).casefold())]
 
@@ -125,6 +146,8 @@ def get_todo(todo_id: str):
 def save(value, key=None):
     with plans.lock, store.Session() as db:
         row = require(db, key) if key else store.Todo()
+        if key is None:
+            row.sort_order = (db.scalar(select(func.max(store.Todo.sort_order)).where(store.Todo.profile_id == PROFILE_ID)) or 0) + 1
         due = reminders.utc_text(value.reminder_at) if value.reminder_at else None
         reminder_unchanged = bool(key and due == row.reminder_at)
         if due and value.reminder_at <= datetime.now(UTC) and (not key or due != row.reminder_at):
