@@ -24,7 +24,7 @@ READ_TOOLS = {
     "get_weather", "web_search", "read_url", "calculate", "date_time", "convert_units",
     "search_memories", "search_conversation_history", "learning_goals", "list_plans",
     "list_files", "read_file", "load_skill", "read_skill_file", "read_task_result",
-    "read_local_file", "scan_local_folder",
+    "read_local_file", "scan_local_folder", "read_context_record",
 }
 FILE_TOOLS = {"create_document", "create_spreadsheet", "create_text_file"}
 WRITE_TOOLS = {"remember", "create_plans", "update_plan", "delete_plan", "action_plan", "create_learning_goal"}
@@ -169,7 +169,7 @@ def context_tool(run_id):
                                         "status": item.status, "revision": item.revision}
                                        for item in db.scalars(select(TaskOperation).where(TaskOperation.task_id == task.id)
                                                              .order_by(TaskOperation.created_at, TaskOperation.id))
-                                       if item.tool_id != "read_task_result"],
+                                       if item.tool_id not in {"read_task_result", "read_context_record"}],
                     }
                 elif isinstance(record, Message):
                     task_messages = [db.get(Message, key) for key in task.message_ids]
@@ -213,7 +213,7 @@ def step_context(db, task, step, steps):
     related = dependencies | {step.id}
     operations = db.scalars(select(TaskOperation).where(
         TaskOperation.task_id == task.id, TaskOperation.step_id.in_(related),
-        TaskOperation.tool_id != "read_task_result",
+        TaskOperation.tool_id.not_in(["read_task_result", "read_context_record"]),
     ).order_by((TaskOperation.step_id == step.id).desc(), TaskOperation.created_at.desc(), TaskOperation.id)).all()
     return {
         "goal": task.goal, "requirements": task.requirements,
@@ -446,7 +446,7 @@ async def guarded(entry, run_id, arguments, operation):
                     (TaskOperation.revision < execution.revision) & (TaskOperation.policy != "read")),
             ).order_by(TaskOperation.created_at)).all()
             previous = [value for value in previous if value.id not in step.repeat_operation_ids]
-            if entry["id"] in {"read_task_result", "list_todos", "list_plans", "list_files", "learning_goals", "search_memories", "search_conversation_history", "search_project_history"}:
+            if entry["id"] in {"read_task_result", "read_context_record", "list_todos", "list_plans", "list_files", "learning_goals", "search_memories", "search_conversation_history", "search_project_history"}:
                 # Queries must observe writes made earlier in the same step.
                 previous = []
             missing = next((value for value in previous if value.status == "completed"

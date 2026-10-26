@@ -1,34 +1,24 @@
 """Account for every model round, including tool results and reasoning."""
-import json
-
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import SystemMessage
 from openai import BadRequestError
 
 from . import context, provider, task_context
 from .db import Session, TaskStep
+from .loop_compaction import LoopCompactor, message_cost
 from .runs import emit
-
-
-def message_cost(message):
-    content = message.content
-    if isinstance(content, list):
-        cost = sum(1024 if isinstance(part, dict) and part.get("type") in {"image_url", "image"}
-                   else context.tokens(json.dumps(part, ensure_ascii=False)) for part in content)
-    else:
-        cost = context.tokens(str(content))
-    return cost + context.tokens(json.dumps(getattr(message, "tool_calls", []), ensure_ascii=False)) + context.tokens(context.reasoning_text(message)) + 8
 
 
 class ContextBudget(AgentMiddleware):
     def __init__(self, run_id, config, tool_tokens):
         self.run_id, self.config, self.tool_tokens = run_id, config, tool_tokens
         self.first = True
+        self.compactor = LoopCompactor(run_id, config)
 
     async def awrap_model_call(self, request, handler):
         total, reserve, hard = context.limits(self.config)
         overhead = self.tool_tokens + (message_cost(request.system_message) if request.system_message else 0)
-        messages = list(request.messages)
+        messages = await self.compactor.prepare(list(request.messages), overhead, hard)
         used = overhead + sum(map(message_cost, messages))
         # Drop only complete old conversation turns. Never split the active
         # human request or a tool-call/result group, or alter durable history.
@@ -46,7 +36,7 @@ class ContextBudget(AgentMiddleware):
              "limit_tokens": total, "reserved_tokens": reserve, "estimated": True,
              "provider_id": self.config.get("provider_id"), "model_name": self.config.get("model_name")})
         if used > hard:
-            raise provider.ConfigurationError("当前步骤的提示、工具结果与消息超过上下文额度。已有操作结果保留；请在连接与设置中增大该模型的上下文大小后继续，或将当前步骤拆小。")
+            raise provider.ConfigurationError("自动摘要后，当前步骤必须保留的提示、工具信息与消息仍超过上下文额度。已有操作结果保留；请在连接与设置中调整当前模型的上下文大小，或缩小当前步骤范围。")
         overrides = {"messages": messages}
         execution = task_context.current.get()
         if self.first and execution:

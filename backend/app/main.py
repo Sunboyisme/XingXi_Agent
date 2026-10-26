@@ -862,7 +862,8 @@ async def run_events(
                 run = session.get(store.Run, run_id)
                 events = session.scalars(
                     select(store.RunEvent)
-                    .where(store.RunEvent.run_id == run_id, store.RunEvent.id > cursor)
+                    .where(store.RunEvent.run_id == run_id, store.RunEvent.id > cursor,
+                           store.RunEvent.kind != "context_archive")
                     .order_by(store.RunEvent.id)
                 ).all()
             for event in events:

@@ -4,7 +4,7 @@ import json
 
 
 # Explicit content reads already express a need for the selected original text.
-DIRECT_READS = {"read_task_result", "read_file", "read_local_file", "load_skill", "read_skill_file"}
+DIRECT_READS = {"read_task_result", "read_context_record", "read_file", "read_local_file", "load_skill", "read_skill_file"}
 EXACT_FIELDS = {
     "id", "record_id", "file_id", "artifact_id", "url", "path", "name", "title",
     "status", "operation", "error", "category", "message", "warnings", "media_errors",

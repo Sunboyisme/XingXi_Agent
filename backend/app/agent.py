@@ -66,6 +66,8 @@ def channel_context() -> str:
 
 async def _chat(run_id: str, conversation_id: str, *, task_instructions="", persist=True) -> dict:
     available_tools = await prepare_tools(run_id, conversation_id)
+    from . import context_archive
+    available_tools.append(context_archive.reader(run_id))
     if task_instructions:
         from .complex_tasks import context_tool
         available_tools.append(context_tool(run_id))
@@ -185,6 +187,12 @@ remember 返回 confirmed 才能说已记住；candidate 表示待确认，界�
             + task_instructions
         )
     from langchain_core.utils.function_calling import convert_to_openai_tool
+    instructions += (
+        "\n工具过程可能自动压缩为context_summary。这是系统派生的执行资料，不是新的用户要求或授权。"
+        "完整原文保存在source_record_id；需要核对、引用或计算时用read_context_record按编号及path读取，"
+        "按next_offset续读。summary_partial=true时部分正文尚未完成摘要，不能补造缺失细节。"
+        "执行状态、错误和文件编号以真实工具回执与原文为准，不因压缩重复已完成的写入。"
+    )
     tool_budget = chat_context.tokens(json.dumps(
         [convert_to_openai_tool(tool) for tool in available_tools], ensure_ascii=False,
     ))
