@@ -6,7 +6,109 @@ import json
 import pytest
 from sqlalchemy import select
 
-from app import complex_tasks, db, provider, task_context
+from app import complex_tasks, db, provider, task_context, task_results
+
+
+def test_compact_task_receipt_keeps_original_and_execution_facts():
+    value = {"content": "正文" * 10000, "url": "https://example.com/source", "partial": True,
+             "warnings": ["原网页仅提供部分正文"], "artifacts": [{"id": "file-1", "name": "report.pdf"}]}
+    original = json.dumps(value, ensure_ascii=False)
+    compact = task_results.receipt(value, "op-1")
+    assert len(json.dumps(compact, ensure_ascii=False)) < len(original) // 2
+    assert json.dumps(value, ensure_ascii=False) == original
+    assert compact["result"]["url"] == value["url"]
+    assert compact["result"]["warnings"] == value["warnings"]
+    assert compact["result"]["artifacts"] == value["artifacts"]
+    assert compact["result"]["partial"] is True
+    assert "/content" in compact["omitted_paths"]
+    assert task_results.select_path(value, "/content") == value["content"]
+    assert task_results.select_path({"a/b": {"~key": ["原文"]}}, "/a~1b/~0key/0") == "原文"
+
+
+def test_explicit_reads_and_actionable_failures_are_not_shortened():
+    value = {"content": "请求的原文" * 4000}
+    for tool_id in task_results.DIRECT_READS:
+        assert json.loads(task_results.tool_response(value, "op-1", tool_id)) == value
+    failure = {"error": "错误详情" * 2000, "not_executed": True}
+    assert json.loads(task_results.tool_response(failure, "op-1", "remote", status="failed")) == failure
+    assert task_results.receipt({"result": 42}, "op-1") == {"result": 42}
+
+
+@pytest.mark.asyncio
+async def test_compact_receipt_replay_and_paged_read_keep_durable_original():
+    task_id, step_id, run_id, message_id, _ = task_records()
+    original = {"content": "完整工具原文" * 3000, "url": "https://example.com/source"}
+    calls = []
+
+    async def operation(**arguments):
+        calls.append(arguments)
+        return json.dumps(original, ensure_ascii=False)
+
+    token = task_context.current.set(task_context.Execution(task_id, step_id, 1, message_id))
+    try:
+        compact = json.loads(await complex_tasks.guarded(ENTRY, run_id, {}, operation))
+        record_id = compact["record_id"]
+        with db.Session() as session:
+            assert session.get(db.TaskOperation, record_id).result == original
+        reader = complex_tasks.context_tool(run_id)
+        parts, offset = [], 0
+        while offset is not None:
+            page = json.loads(await reader.ainvoke({"record_id": record_id, "path": "/content",
+                                                   "offset": offset, "count": 6000}))
+            parts.append(page["content"])
+            offset = page["next_offset"]
+        assert "".join(parts) == original["content"]
+    finally:
+        task_context.current.reset(token)
+    token = task_context.current.set(task_context.Execution(task_id, step_id, 1, message_id))
+    try:
+        replay = json.loads(await complex_tasks.guarded(ENTRY, run_id, {}, operation))
+        assert replay == compact
+        assert len(calls) == 1
+    finally:
+        task_context.current.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_step_context_filters_dependencies_but_directory_recovers_other_results():
+    task_id, step_id, run_id, message_id, _ = task_records()
+    other_task, other_step, _, _, _ = task_records()
+    with db.Session() as session:
+        dependency = session.get(db.TaskStep, step_id)
+        dependency.status, dependency.output = "completed", {"content": "直接依赖成果"}
+        unrelated = db.TaskStep(task_id=task_id, ordinal=1, title="其他成果", instruction="已执行",
+                               source_message_id=message_id, status="completed", output={"content": "不默认携带"})
+        session.add(unrelated)
+        session.flush()
+        current = db.TaskStep(task_id=task_id, ordinal=2, title="当前步骤", instruction="处理直接依赖",
+                             source_message_id=message_id, dependencies=[dependency.id])
+        session.add(current)
+        session.flush()
+        op = db.TaskOperation(task_id=task_id, step_id=unrelated.id, run_id=run_id, tool_id="web_search",
+                              fingerprint="fixture", policy="read", status="completed", result={"content": "原始资料"})
+        session.add(op)
+        session.commit()
+        context = complex_tasks.step_context(session, session.get(db.ComplexTask, task_id), current,
+                                              [dependency, unrelated, current])
+        assert [item["id"] for item in context["completed_steps"]] == [step_id]
+        assert context["existing_operations"] == []
+        assert context["other_steps"][0]["id"] == unrelated.id
+        current_id, op_id = current.id, op.id
+    token = task_context.current.set(task_context.Execution(task_id, current_id, 1, message_id))
+    try:
+        reader = complex_tasks.context_tool(run_id)
+        directory = json.loads(await reader.ainvoke({"record_id": task_id, "path": "/operations"}))
+        assert json.loads(directory["content"])[0]["id"] == op_id
+        original = json.loads(await reader.ainvoke({"record_id": op_id, "path": "/content"}))
+        assert original["content"] == "原始资料"
+        for foreign_id in (other_task, other_step):
+            with db.Session() as session:
+                session.get(db.ComplexTask, task_id).status = "running"
+                session.commit()
+            with pytest.raises(task_context.TaskControl, match="记录不属于当前任务"):
+                await reader.ainvoke({"record_id": foreign_id})
+    finally:
+        task_context.current.reset(token)
 
 
 def task_records():
