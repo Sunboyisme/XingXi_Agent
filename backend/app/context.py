@@ -49,16 +49,9 @@ def message_tokens(record) -> int:
     )
 
 
-def plain_text(content) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            x.get("text", "")
-            for x in content
-            if isinstance(x, dict) and x.get("type") == "text"
-        )
-    return ""
+# One reader for streamed and final replies: providers may send string parts,
+# text_delta or output_text blocks, and none of them may be dropped.
+plain_text = provider.message_text
 
 
 def reasoning_text(message) -> str:

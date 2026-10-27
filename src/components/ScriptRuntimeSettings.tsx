@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ErrorNotice } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 type Runtime = Record<
   string,
@@ -36,7 +37,7 @@ export function ScriptRuntimeSettings() {
       );
       setDirty(false);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -117,7 +118,7 @@ export function ScriptRuntimeSettings() {
               setDirty(false);
               setNotice("运行环境已保存");
             } catch (e) {
-              setError((e as Error).message);
+              setError(errorMessage(e));
             } finally {
               setBusy(false);
             }

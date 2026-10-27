@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import type { components } from "@/lib/api.generated";
 import { ErrorNotice } from "./common";
-import { dateTime } from "@/lib/utils";
+import { dateTime, errorMessage } from "@/lib/utils";
 import { ConnectionCard } from "./ConnectionCard";
 import {
   Dialog,
@@ -106,7 +106,7 @@ export function WechatSection({ compact = false }: { compact?: boolean }) {
       }
     } catch (cause) {
       if (currentRevision === revision.current)
-        setError((cause as Error).message);
+        setError(errorMessage(cause));
     } finally {
       sendingTest.current = false;
       setTestBusy(false);
@@ -129,7 +129,7 @@ export function WechatSection({ compact = false }: { compact?: boolean }) {
           if (active && currentRevision === revision.current) {
             if (results[0].status === "fulfilled")
               setStatus(results[0].value as Status);
-            else setError((results[0].reason as Error).message);
+            else setError(errorMessage(results[0].reason));
             if (
               results[1].status === "fulfilled" &&
               currentTestId === testId.current &&
@@ -145,7 +145,7 @@ export function WechatSection({ compact = false }: { compact?: boolean }) {
           }
         }
       } catch (cause) {
-        if (active) setError((cause as Error).message);
+        if (active) setError(errorMessage(cause));
       } finally {
         if (active) timer = setTimeout(() => void refresh(), 2500);
       }
@@ -172,7 +172,7 @@ export function WechatSection({ compact = false }: { compact?: boolean }) {
       }
       setCode("");
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
     } finally {
       changing.current = false;
       setBusy(false);

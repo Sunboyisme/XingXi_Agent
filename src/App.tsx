@@ -7,18 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Bell,
-  LibraryBig,
-  Calendar,
-  BookOpen,
-  CircleHelp,
-  Loader2,
-  MessageCircle,
-  Folder,
-  Settings2,
-  X,
-} from "lucide-react";
+import { Bell, Loader2, X } from "lucide-react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useGeneralPreferences } from "@/lib/generalPreferences";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -47,7 +36,7 @@ const CalendarPage = lazy(() =>
     default: module.CalendarPage,
   })),
 );
-import { ChatPage } from "./components/ChatPage";
+import { ChatPage, clearChatPreferences } from "./components/ChatPage";
 const LearningPage = lazy(() =>
   import("./components/LearningPage").then((module) => ({
     default: module.LearningPage,
@@ -63,66 +52,54 @@ const SettingsPage = lazy(() =>
 );
 import { ConfirmDelete, ErrorNotice, Toast } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
+import {
+  ChatIcon,
+  HelpIcon,
+  KnowledgeIcon,
+  LearningIcon,
+  PlanIcon,
+  ProjectIcon,
+  SettingsIcon,
+} from "./components/SoftIcons";
 import { WindowFrame } from "./components/WindowFrame";
 import { SidebarResize } from "./components/SidebarResize";
 import { ProjectSidebar } from "./components/ProjectSidebar";
 import { ProjectOverview } from "./components/ProjectOverview";
 import { ProjectsPage } from "./components/ProjectsPage";
-import { NavigationOverflowMenu, type NavigationFeatureItem } from "./components/NavigationOverflowMenu";
+import { NavigationOverflowMenu, NavigationTooltip, type NavigationFeatureItem } from "./components/NavigationOverflowMenu";
 import { ProjectManagement, type ProjectManagementRequest } from "./components/ProjectManagement";
 
 type Page = "chat" | "projects" | "learning" | "plans" | "knowledge" | "settings";
 const KnowledgePage = lazy(() => import("./components/KnowledgePage").then((module) => ({ default: module.KnowledgePage })));
 import type { KnowledgeSource } from "./components/KnowledgeSources";
+import { errorMessage, isActiveNotification, keepIfSame } from "./lib/utils";
+import { zonedToday } from "./lib/calendarMonth";
+
 const featurePages: NavigationFeatureItem[] = [
   {
     id: "projects",
     label: "项目",
-    icon: Folder,
+    icon: ProjectIcon,
   },
   {
     id: "learning",
     label: "学习",
-    icon: BookOpen,
+    icon: LearningIcon,
   },
   {
     id: "plans",
     label: "计划",
-    icon: Calendar,
+    icon: PlanIcon,
   },
-  { id: "knowledge", label: "知识库", icon: LibraryBig },
+  { id: "knowledge", label: "知识库", icon: KnowledgeIcon },
 ];
-const pages = [{ id: "chat" as const, label: "对话", icon: MessageCircle }, ...featurePages];
+const pages = [{ id: "chat" as const, label: "对话", icon: ChatIcon }, ...featurePages];
 
 type PendingAgenda = {
   day: string;
   tab: "todo" | "repeat";
 };
 
-function NavigationTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactElement;
-}) {
-  return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content
-          className="navigation-tooltip"
-          side="right"
-          align="center"
-          sideOffset={10}
-          collisionPadding={10}
-        >
-          {label}
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
-}
 
 export function App() {
   const { hiddenNavigation } = useGeneralPreferences();
@@ -153,7 +130,7 @@ export function App() {
         window.dispatchEvent(new Event("xiaoxi-learning-ended"));
         await invoke("finish_learning_close", { quit: event.payload });
       } catch (cause) {
-        setError(`结束学习未完成，窗口已保留：${(cause as Error).message}`);
+        setError(`结束学习未完成，窗口已保留：${errorMessage(cause)}`);
         await getCurrentWindow().show(); await getCurrentWindow().setFocus();
       } finally { learningClosing.current = false; }
     });
@@ -262,36 +239,12 @@ export function App() {
     ]);
     // Slow earlier snapshots must not overwrite a newer tool/memory update.
     if (version !== refreshVersion.current) return;
-    setSettings((current) =>
-      JSON.stringify(current) === JSON.stringify(values[0])
-        ? current
-        : values[0],
-    );
-    setConversations((current) =>
-      JSON.stringify(current) === JSON.stringify(values[1])
-        ? current
-        : values[1],
-    );
-    setGoals((current) =>
-      JSON.stringify(current) === JSON.stringify(values[2])
-        ? current
-        : values[2],
-    );
-    setMemories((current) =>
-      JSON.stringify(current) === JSON.stringify(values[3])
-        ? current
-        : values[3],
-    );
-    setNotifications((current) =>
-      JSON.stringify(current) === JSON.stringify(values[4])
-        ? current
-        : values[4],
-    );
-    setProjects((current) =>
-      JSON.stringify(current) === JSON.stringify(values[5])
-        ? current
-        : values[5],
-    );
+    setSettings(keepIfSame(values[0]));
+    setConversations(keepIfSame(values[1]));
+    setGoals(keepIfSame(values[2]));
+    setMemories(keepIfSame(values[3]));
+    setNotifications(keepIfSame(values[4]));
+    setProjects(keepIfSame(values[5]));
   }, []);
   const boot = useCallback(async () => {
     setLoading(true);
@@ -303,7 +256,7 @@ export function App() {
         return;
       } catch (error) {
         if (i === 29) {
-          setError((error as Error).message);
+          setError(errorMessage(error));
           setLoading(false);
           return;
         }
@@ -323,12 +276,7 @@ export function App() {
         const values = await api<Notification[]>(
           "/notifications?unread_only=true",
         );
-        if (live)
-          setNotifications((current) =>
-            JSON.stringify(current) === JSON.stringify(values)
-              ? current
-              : values,
-          );
+        if (live) setNotifications(keepIfSame(values));
       } catch {
         /* Native reminders remain available during connection interruptions. */
       }
@@ -354,10 +302,7 @@ export function App() {
     const stop = listen<string>("bai-tray-action", (event) => {
       if (event.payload === "new_chat") startNewChat();
       else if (event.payload === "plans") {
-        const day = new Intl.DateTimeFormat("en-CA", {
-          timeZone: settings?.timezone || "Asia/Shanghai",
-        }).format(new Date());
-        setPlanAgenda({ day, tab: "todo" });
+        setPlanAgenda({ day: zonedToday(settings?.timezone), tab: "todo" });
         navigate("plans");
       } else if (event.payload === "settings") navigate("settings");
       else if (event.payload === "skills") {
@@ -402,12 +347,7 @@ export function App() {
       window.dispatchEvent(
         new CustomEvent("bai-conversation-deleted", { detail: deleting.id }),
       );
-      try {
-        localStorage.removeItem(`bai-chat-draft:${deleting.id}`);
-        localStorage.removeItem(`bai-chat-model:${deleting.id}`);
-      } catch {
-        /* Storage restrictions must not prevent deletion. */
-      }
+      clearChatPreferences(deleting.id);
       if (conversationId === deleting.id) setConversationId(null);
       await refresh();
       setDeleting(null);
@@ -416,12 +356,11 @@ export function App() {
           "对话记录已删除，部分文件被占用，暂未从磁盘清理；请关闭占用文件后在数据目录中处理。",
         );
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     }
   }
-  const unread = notifications.filter((x) =>
-    ["pending", "presented"].includes(x.status),
-  ).length;
+  const activeNotifications = notifications.filter(isActiveNotification);
+  const unread = activeNotifications.length;
   function toggleSidebar() {
     setSidebarCollapsed((collapsed) => !collapsed);
   }
@@ -431,15 +370,13 @@ export function App() {
     setReminderBusy(true);
     setError("");
     try {
-      const visible = notifications.filter((x) =>
-        ["pending", "presented"].includes(x.status),
-      );
+      const visible = activeNotifications;
       for (const value of visible.slice(0, 3))
         await api(`/notifications/${value.id}/ack?read=true`, "POST");
       await refresh();
       if (visible.length <= 3) await getCurrentWindow().close();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       reminderAction.current = false;
       setReminderBusy(false);
@@ -449,12 +386,7 @@ export function App() {
     setSidebarCollapsed(true);
     setProjectOverviewId(null);
     setNewChatPinned(false);
-    try {
-      localStorage.removeItem("bai-chat-draft:new");
-      localStorage.removeItem("bai-chat-model:new");
-    } catch {
-      /* A blocked storage API must not prevent starting a new chat. */
-    }
+    clearChatPreferences(null);
     setConversationId(null);
     setChatKey((value) => value + 1);
     navigate("chat");
@@ -463,26 +395,6 @@ export function App() {
     setPlanAgenda(undefined);
     setCalendarEventId(planId);
     setPlanOccurrence(occurrence);
-    navigate("plans");
-  }
-  function openAgenda(plan: {
-    start: string;
-    occurrence_start?: string | null;
-    recurrence?: string;
-  }) {
-    const start = plan.occurrence_start || plan.start;
-    const day =
-      start.length === 10
-        ? start
-        : new Intl.DateTimeFormat("en-CA", {
-            timeZone: settings?.timezone || "Asia/Shanghai",
-          }).format(new Date(start));
-    setCalendarEventId(undefined);
-    setPlanOccurrence(undefined);
-    setPlanAgenda({
-      day,
-      tab: plan.recurrence && plan.recurrence !== "none" ? "repeat" : "todo",
-    });
     navigate("plans");
   }
   useEffect(() => {
@@ -558,7 +470,7 @@ export function App() {
               onClick={() =>
                 void getCurrentWindow()
                   .close()
-                  .catch((error: Error) => setError(error.message))
+                  .catch((error) => setError(errorMessage(error)))
               }
             >
               <X size={16} />
@@ -568,8 +480,7 @@ export function App() {
             <ErrorNotice message={error} onClose={() => setError("")} />
           )}
           <div className="popup-list">
-            {notifications
-              .filter((x) => ["pending", "presented"].includes(x.status))
+            {activeNotifications
               .slice(0, 3)
               .map((value) => (
                 <article className="popup-item" key={value.id}>
@@ -591,14 +502,10 @@ export function App() {
                           minutes: 10,
                         });
                         await refresh();
-                        if (
-                          notifications.filter((note) =>
-                            ["pending", "presented"].includes(note.status),
-                          ).length <= 1
-                        )
+                        if (activeNotifications.length <= 1)
                           await getCurrentWindow().close();
                       } catch (error) {
-                        setError((error as Error).message);
+                        setError(errorMessage(error));
                       } finally {
                         reminderAction.current = false;
                         setReminderBusy(false);
@@ -612,12 +519,7 @@ export function App() {
           </div>
           <footer className="popup-actions">
             <span>
-              {Math.min(
-                notifications.filter((x) =>
-                  ["pending", "presented"].includes(x.status),
-                ).length,
-                3,
-              )}{" "}
+              {Math.min(activeNotifications.length, 3)}{" "}
               个提醒
             </span>
             <Button
@@ -695,7 +597,7 @@ export function App() {
                     aria-current={page === "settings" ? "page" : undefined}
                     onClick={() => navigate("settings")}
                   >
-                    <Settings2 size={20} />
+                    <SettingsIcon size={20} />
                     {(memories.some((x) => x.state === "candidate") ||
                       !settings.model_configured) && (
                       <span className="setup-dot" />
@@ -707,7 +609,7 @@ export function App() {
                     onClick={() => setInfo(true)}
                     aria-label="关于这个空间"
                   >
-                    <CircleHelp size={19} />
+                    <HelpIcon size={20} />
                   </button>
                 </NavigationTooltip>
               </div>
@@ -802,8 +704,6 @@ export function App() {
                     }
                   }}
                   settings={settings}
-                  goals={goals}
-                  conversations={conversations}
                   memories={memories}
                   refresh={refresh}
                   onAction={navigate}
@@ -812,7 +712,6 @@ export function App() {
                     setSettingsTab("connections");
                     setContextSettingsTarget({ providerId, modelName });
                   }}
-                  onPlan={openAgenda}
                 />
               )}{" "}
               {page === "learning" && (
@@ -907,15 +806,14 @@ export function App() {
             </DialogHeader>
             <div className="about-copy">
               <p>
-                一个帮你查资料、逐步学习、记住重要信息和安排提醒的个人助手。
+                运行在你电脑上的个人助手：对话查资料、按项目整理工作、循序学习，管理计划与待办，并把资料沉淀进知识库和记忆。
               </p>
               <p>
-                当前数据保存在本机。关闭窗口后继续在托盘运行；退出应用或关闭电脑后，本机提醒暂停。
+                数据只保存在本机，密钥存放在系统凭据库。关闭窗口后留在托盘继续提醒；退出应用或关机后，提醒暂停。
               </p>
               <p>
-                模型与搜索接口由你配置。技能脚本需要单独授权，运行环境和依赖由你准备。
+                模型、搜索与图片生成接口由你配置；绑定微信后可在微信接收提醒。技能脚本需单独授权，运行环境由你准备。
               </p>
-              <p>手机互联与云端持续提醒将在后续版本加入。</p>
             </div>
             <DialogFooter>
               <Button onClick={() => setInfo(false)}>知道了</Button>

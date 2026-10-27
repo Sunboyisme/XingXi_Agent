@@ -60,8 +60,7 @@
   opacity: 0;
   pointer-events: none;
 }
-.sidebar-section-actions [data-slot="button"],
-.sidebar-section-actions .project-running-state {
+.sidebar-section-actions [data-slot="button"] {
   width: 24px;
   min-width: 24px;
   height: 26px;

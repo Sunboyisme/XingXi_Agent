@@ -166,11 +166,7 @@ body,
   top: 44px;
   right: 16px;
   z-index: 30;
-  background: var(--ui-color-danger-surface);
   color: var(--ui-color-danger);
-  border-radius: 10px;
-  padding: 8px 12px;
-  font-size: 12px;
 }
 .window-frame > .boot-screen {
   height: auto;
@@ -189,7 +185,6 @@ body,
   min-height: 0;
 }
 .app-shell .sidebar {
-  width: 300px;
   padding: 0;
   display: flex;
   flex-direction: row;
@@ -198,7 +193,6 @@ body,
   border: 0;
 }
 .app-shell.sidebar-collapsed .sidebar {
-  width: 76px;
   padding: 0;
 }
 .navigation-rail {
@@ -259,9 +253,6 @@ body,
   display: none;
 }
 .chat-sidebar-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin: 0 0 24px;
   padding-left: 10px;
@@ -480,16 +471,12 @@ body,
     position: relative;
     padding: 10px 10px 10px 0;
   }
-  .app-shell .sidebar {
-    width: 76px;
-  }
   .chat-sidebar {
     position: absolute;
     z-index: 20;
     left: 76px;
     top: 10px;
     bottom: 10px;
-    background: var(--ui-color-surface);
     border: 1px solid var(--ui-color-line);
     border-radius: 20px;
     box-shadow: 6px 4px 18px rgb(90 73 55 / 8%);
@@ -511,10 +498,6 @@ body,
 @media (max-height: 680px) {
   .chat-scroll.is-empty {
     padding-top: 24px;
-  }
-  .navigation-rail {
-    gap: 16px;
-    padding-top: 10px;
   }
   .chat-main.is-empty .composer-area {
     margin-top: 24px;
@@ -1093,26 +1076,18 @@ textarea:not(#chat-message):not(.learning-message-input):focus-visible,
   font-size: 12px;
 }
 .reasoning-panel {
-  margin: 6px 0 14px;
-  border-left: 2px solid var(--appearance-border, #d6c9af);
-  padding-left: 12px;
   max-width: 100%;
 }
 .reasoning-toggle {
   display: flex;
   align-items: center;
   gap: 7px;
-  border: 0;
-  padding: 5px 0;
-  color: var(--appearance-muted, #8a7c66);
-  background: transparent;
   font-size: 12px;
 }
 .reasoning-toggle .is-open {
   transform: rotate(180deg);
 }
 .reasoning-content {
-  margin-top: 8px;
   max-height: 340px;
   overflow: auto;
   color: var(--appearance-muted, #827763);
@@ -1144,7 +1119,6 @@ textarea:not(#chat-message):not(.learning-message-input):focus-visible,
 }
 .connections-services {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 .service-card {
@@ -1336,9 +1310,6 @@ textarea:not(#chat-message):not(.learning-message-input):focus-visible,
   font-size: 12px;
 }
 @media (max-width: 1100px) {
-  .connections-services {
-    grid-template-columns: 1fr;
-  }
   .service-card {
     padding: 18px;
   }

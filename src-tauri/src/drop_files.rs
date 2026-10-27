@@ -23,15 +23,18 @@ fn actual(path: &Path) -> Result<PathBuf, String> {
             return Err("仅支持盘符开头的本机路径，不支持网络共享或设备路径".into());
         }
     }
-    for ancestor in path.ancestors() {
-        let metadata = std::fs::symlink_metadata(ancestor).map_err(|_| "文件或目录已无法访问")?;
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            if metadata.file_attributes() & 0x400 != 0 { return Err("请拖入实际文件或文件夹，不支持链接".into()); }
+    // Only the item itself is checked. Parent folders may legitimately be
+    // junctions, e.g. a user profile folder mapped to another name; every
+    // entry inside a dropped folder is checked again as it is collected.
+    let metadata = std::fs::symlink_metadata(path).map_err(|_| "文件或目录已无法访问")?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err("请拖入实际文件或文件夹，不支持快捷链接或未下载到本机的云文件".into());
         }
-        if metadata.file_type().is_symlink() { return Err("不支持链接".into()); }
     }
+    if metadata.file_type().is_symlink() { return Err("不支持链接".into()); }
     Ok(path.to_path_buf())
 }
 
@@ -61,7 +64,7 @@ fn collect(path: &Path, parent: &str, recursive: bool, depth: usize, rows: &mut 
             return Err("文件在读取时发生变化，请保存后重新拖入".into());
         }
         *total += bytes.len() as u64;
-        if recursive && *total > 20 * 1024 * 1024 { return Err("技能包最多 500 个文件、20 MB".into()); }
+        if recursive && *total > 20 * 1024 * 1024 { return Err("一次最多拖入 500 个文件、共 20 MB，请分批添加".into()); }
         bytes
     };
     if rows.len() >= 500 { return Err("最多读取 500 个文件".into()); }
@@ -92,4 +95,27 @@ pub async fn read_dropped_files(state: tauri::State<'_, DroppedPaths>, paths: Ve
         }
         Ok(rows)
     }).await.map_err(|_| "读取拖入文件失败".to_string())?
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::actual;
+
+    #[test]
+    fn files_below_a_junction_are_accepted_but_the_junction_itself_is_not() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        std::fs::write(real.join("note.txt"), b"text").unwrap();
+        let link = root.path().join("profile");
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&real)
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        assert!(actual(&link.join("note.txt")).is_ok());
+        assert!(actual(&link).is_err());
+    }
 }

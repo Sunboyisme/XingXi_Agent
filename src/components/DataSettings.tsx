@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Database, Download, FolderOpen, Upload } from "lucide-react";
-import { api, fetchApi } from "@/lib/api";
+import { api, downloadApiFile, fetchApi } from "@/lib/api";
 import type { components } from "@/lib/api.generated";
 import { Button } from "./ui/button";
 import {
@@ -12,31 +12,98 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { ErrorNotice } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 type Data = components["schemas"]["DataRead"];
 type Preview = components["schemas"]["DataImportRead"];
 type Exported = components["schemas"]["DataExportRead"];
-const labels: Record<string, string> = {
-  conversations: "对话",
-  messages: "消息",
-  memories: "记忆",
-  learning_sessions: "学习会话",
-  usage_calls: "模型调用",
-  usage_prices: "模型单价",
-  projects: "项目",
-  project_materials: "项目资料",
-  plan_day_orders: "日程排序",
-  office_files: "办公文件",
-  memory_vectors: "向量",
-  reminders: "提醒时间",
-  calendar_events: "计划",
-  plan_occurrences: "单次状态记录",
-  plan_segments: "重复规则调整",
-  artifacts: "工具产物",
-  complex_tasks: "复杂任务",
-  goals: "学习目标",
-  attachments: "图片",
-};
+// Record counts grouped by what they belong to; keys follow the backend tables.
+const countGroups: { title: string; items: [string, string][] }[] = [
+  {
+    title: "对话",
+    items: [
+      ["conversations", "对话"],
+      ["messages", "消息"],
+      ["attachments", "图片与附件"],
+      ["office_files", "办公文件"],
+      ["artifacts", "工具产物"],
+      ["complex_tasks", "复杂任务"],
+    ],
+  },
+  {
+    title: "项目",
+    items: [
+      ["projects", "项目"],
+      ["project_materials", "项目资料"],
+    ],
+  },
+  {
+    title: "学习",
+    items: [
+      ["goals", "学习目标"],
+      ["learning_intakes", "目标访谈"],
+      ["learning_sessions", "学习会话"],
+      ["learning_reviews", "复习记录"],
+    ],
+  },
+  {
+    title: "计划与提醒",
+    items: [
+      ["calendar_events", "计划"],
+      ["todos", "待办"],
+      ["reminders", "提醒"],
+      ["plan_occurrences", "单次完成记录"],
+      ["plan_segments", "重复规则调整"],
+      ["plan_day_orders", "日程排序"],
+    ],
+  },
+  {
+    title: "记忆与知识库",
+    items: [
+      ["memories", "记忆"],
+      ["memory_vectors", "记忆向量"],
+      ["knowledge_documents", "知识库文件"],
+      ["knowledge_chunks", "知识片段"],
+      ["knowledge_vectors", "知识向量"],
+    ],
+  },
+  {
+    title: "模型用量",
+    items: [
+      ["usage_calls", "模型调用"],
+      ["usage_prices", "模型单价"],
+    ],
+  },
+];
+
+function DataCounts({ counts }: { counts: Record<string, number> }) {
+  const known = new Set(countGroups.flatMap((group) => group.items.map(([key]) => key)));
+  const others = Object.keys(counts).filter((key) => !known.has(key));
+  const groups = others.length
+    ? [...countGroups, { title: "其他", items: others.map((key): [string, string] => [key, key]) }]
+    : countGroups;
+  return (
+    <div className="data-count-groups">
+      {groups.map((group) => {
+        const items = group.items.filter(([key]) => key in counts);
+        if (!items.length) return null;
+        return (
+          <section key={group.title} aria-label={group.title}>
+            <h3>{group.title}</h3>
+            <div className="data-counts">
+              {items.map(([key, label]) => (
+                <div key={key}>
+                  <strong>{counts[key]}</strong>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
 
 export function DataSettings() {
   const [data, setData] = useState<Data>();
@@ -52,8 +119,8 @@ export function DataSettings() {
       .then((value) => {
         if (live) setData(value);
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((e) => {
+        if (live) setError(errorMessage(e));
       });
     return () => {
       live = false;
@@ -65,7 +132,7 @@ export function DataSettings() {
     try {
       await action();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -80,15 +147,10 @@ export function DataSettings() {
     const value = await api<Exported>("/settings/data/export", "POST");
     setExported(value.name);
     if (!isTauri()) {
-      const response = await fetchApi(
+      await downloadApiFile(
         `/settings/data/exports/${encodeURIComponent(value.name)}`,
+        value.name,
       );
-      const url = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = value.name;
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
   }
   async function inspect(selected: File) {
@@ -114,21 +176,14 @@ export function DataSettings() {
           </span>
           <div>
             <h2>本机数据</h2>
-            <p>SQLite · 记忆原文与向量保存在同一个数据库</p>
+            <p>使用 SQLite 数据库存储</p>
           </div>
         </div>
         {!data ? (
           <p className="retrieval-empty">正在读取数据位置…</p>
         ) : (
           <>
-            <div className="data-counts">
-              {Object.entries(data.counts).map(([name, count]) => (
-                <div key={name}>
-                  <strong>{count}</strong>
-                  <span>{labels[name] || "其他记录"}</span>
-                </div>
-              ))}
-            </div>
+            <DataCounts counts={data.counts} />
             <dl className="data-paths">
               <div>
                 <dt>数据目录</dt>
@@ -255,14 +310,7 @@ export function DataSettings() {
               <p className="data-transfer-note">
                 将替换当前聊天、记忆、图片、学习和计划；本机连接与密钥保留。重启时先自动备份，再恢复。
               </p>
-              <div className="data-counts">
-                {Object.entries(preview.counts).map(([name, count]) => (
-                  <div key={name}>
-                    <strong>{count}</strong>
-                    <span>{labels[name] || "其他记录"}</span>
-                  </div>
-                ))}
-              </div>
+              <DataCounts counts={preview.counts} />
               <p className="data-transfer-note">
                 导出时间：{new Date(preview.created_at).toLocaleString("zh-CN")}
               </p>

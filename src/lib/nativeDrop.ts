@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { errorMessage } from "./utils";
 
 type NativeFile = { path: string; name: string; directory: boolean; relative_path: string; bytes: number[]; last_modified?: number };
 type Target = { element: () => HTMLElement | null; enabled: () => boolean; recursive: boolean; receive: (files: NativeFile[]) => void | Promise<void>; error: (text: string) => void; loading: (value: boolean) => void };
@@ -37,7 +38,7 @@ function listen() {
       if (!targets.has(target) || !target.enabled() || target.element() !== element) return;
       await target.receive(files);
     } catch (error) {
-      if (targets.has(target) && target.enabled() && target.element() === element) target.error(error instanceof Error ? error.message : String(error));
+      if (targets.has(target) && target.enabled() && target.element() === element) target.error(errorMessage(error));
     } finally {
       receiving.delete(target);
       if (targets.has(target) && target.element() === element) target.loading(false);

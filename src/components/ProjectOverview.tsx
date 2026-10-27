@@ -16,6 +16,7 @@ import { FileCard } from "./OfficeFiles";
 import { Picture } from "./ImageAttachments";
 import { materialStatus, type ProjectMaterial } from "./ProjectManagement";
 import "@/styles/projects-workspace.css";
+import { errorMessage } from "@/lib/utils";
 
 export function ProjectOverview({
   project,
@@ -61,7 +62,7 @@ export function ProjectOverview({
         )
           timer = window.setTimeout(() => void load(), 1500);
       } catch (cause) {
-        if (live) setError((cause as Error).message);
+        if (live) setError(errorMessage(cause));
       } finally {
         if (live) setLoading(false);
       }

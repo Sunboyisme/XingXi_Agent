@@ -10,6 +10,7 @@ import { DateTimePicker } from "./DateTimePicker";
 import { ErrorNotice, Markdown } from "./common";
 import { LearningComposer } from "./LearningComposer";
 import { registerLearningFlush } from "@/lib/learningLifecycle";
+import { errorMessage } from "@/lib/utils";
 
 export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?: string; onBack: () => void; onCreated: (goalId: string) => Promise<void> }) {
   const creationId = useRef(crypto.randomUUID());
@@ -50,7 +51,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
   useEffect(() => registerLearningFlush(flushForm), []);
   useEffect(() => {
     if (!form.current.dirty) return;
-    const timer = setTimeout(() => void flushForm().catch((cause: Error) => setError(`目标摘要保存失败：${cause.message}`)), 700);
+    const timer = setTimeout(() => void flushForm().catch((cause) => setError(`目标摘要保存失败：${errorMessage(cause)}`)), 700);
     return () => clearTimeout(timer);
   }, [summary, outcome, minutes, date]);
   const minutesInvalid = Boolean(minutes) && (!/^\d+$/.test(minutes) || Number(minutes) < 1 || Number(minutes) > 10080);
@@ -68,7 +69,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
       const saved = await reload(id); setRun(done);
       if (done.status === "completed" && done.kind === "course" && saved.goal_id) await onCreated(saved.goal_id);
       else if (done.status === "failed") setError(done.error || "本次生成失败，已保留对话，可重试。");
-    } catch (cause) { if (!own.signal.aborted) setError((cause as Error).message); }
+    } catch (cause) { if (!own.signal.aborted) setError(errorMessage(cause)); }
     finally { if (!own.signal.aborted) setBusy(false); }
   }
   useEffect(() => {
@@ -79,7 +80,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
         const previous = await api<Run>(`/runs/${value.active_run_id}`);
         if (live) void track(previous, value.id);
       }
-    }).catch((cause: Error) => { if (live) setError(cause.message); }).finally(() => { if (live) setLoading(false); });
+    }).catch((cause) => { if (live) setError(errorMessage(cause)); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; controller.current?.abort(); };
   }, []);
   useEffect(() => { scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: "smooth" }); }, [row?.messages.length, busy]);
@@ -98,7 +99,7 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
       await draft.flush(); await flushForm();
       const value = await api<Run>(`/learning/intakes/${row.id}/messages`, "POST", { content, message_id: messageId, use_beginner_defaults: beginner });
       draft.clear(); await reload(row.id); void track(value, row.id);
-    } catch (cause) { setError((cause as Error).message); setBusy(false); }
+    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
     finally { sending.current = false; }
   }
   async function confirm() {
@@ -110,21 +111,21 @@ export function LearningIntakePage({ intakeId, onBack, onCreated }: { intakeId?:
       const value = await api<Run>(`/learning/intakes/${row.id}/confirm`, "POST", { ...summary, outcome,
         weekly_minutes: minutes ? Number(minutes) : null, target_date: date || null });
       await reload(row.id); void track(value, row.id);
-    } catch (cause) { setError((cause as Error).message); setBusy(false); }
+    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
     finally { sending.current = false; }
   }
   async function stop() {
     if (!run || stopLock.current) return;
     stopLock.current = true; setStopping(true); setError("");
     try { const done = await api<Run>(`/runs/${run.id}/cancel`, "POST"); controller.current?.abort(); setRun(done); setBusy(false); if (row) await reload(row.id); }
-    catch (cause) { setError((cause as Error).message); }
+    catch (cause) { setError(errorMessage(cause)); }
     finally { stopLock.current = false; setStopping(false); }
   }
   const ready = Boolean(row && ["ready", "confirmed"].includes(row.status));
   const lastUser = row?.messages.filter((item) => item.role === "user").at(-1);
   return <div className="learning-intake-page">
     <header className="learning-workflow-heading">
-      <Button variant="ghost" disabled={busy} onClick={() => void Promise.all([draft.flush(), flushForm()]).then(onBack).catch((cause: Error) => setError(cause.message))}><ArrowLeft size={16} />返回学习</Button>
+      <Button variant="ghost" disabled={busy} onClick={() => void Promise.all([draft.flush(), flushForm()]).then(onBack).catch((cause) => setError(errorMessage(cause)))}><ArrowLeft size={16} />返回学习</Button>
       <h1>一起确定你的学习方向</h1><p>XiaoXi 会帮你规划好适合你的学习路线。</p>
     </header>
     <div className="learning-workflow-scroll" ref={scroll}>

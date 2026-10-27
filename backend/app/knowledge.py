@@ -252,10 +252,7 @@ async def index_once():
     try:
         with usage_cost.scope(purpose="knowledge_index"):
             result = await retrieval.client(value, purpose="knowledge_index").aembed_documents([c.content for c in pending])
-        if len(result) != len(pending) or len({len(v) for v in result}) != 1:
-            raise ValueError("索引批次无效")
-        for vector in result:
-            retrieval.checked(vector)
+        retrieval.checked_batch(result, len(pending), "索引批次无效")
         with store.Session() as db:
             if not enabled(db) or retrieval.signature(retrieval.settings()) != retrieval.signature(value):
                 return
@@ -312,10 +309,7 @@ async def retrieve(query, run_id=None):
     current_config = retrieval.settings()
     if retrieval.signature(current_config) != retrieval.signature(value) or current_config.get("enabled") != value.get("enabled"):
         lists = lists[:1]
-    scores = {}
-    for ranked in lists:
-        for position, key in enumerate(ranked):
-            scores[key] = scores.get(key, 0) + 1 / (61 + position)
+    scores = retrieval.rrf(lists)
     candidates = {c.id: (c, d) for c, d in rows}
     selected, budget = [], 3500
     with store.Session() as db:

@@ -131,6 +131,16 @@ class MemoryVector(Base):
     vector: Mapped[list] = mapped_column(JSON)
 
 
+class NotFound(LookupError):
+    """A requested record does not exist; routes answer 404.
+
+    Narrower than LookupError so a KeyError or IndexError bug is not
+    reported to the user as a missing record."""
+
+
+ACTIVE_RUN_STATUSES = ("queued", "running")
+
+
 class Run(Record, Base):
     __tablename__ = "runs"
     kind: Mapped[str] = mapped_column(String(30))
@@ -608,7 +618,7 @@ def migrate() -> None:
         if not db.get(Settings, PROFILE_ID):
             db.add(Settings(id=PROFILE_ID))
         # A crashed process cannot continue a half-finished provider request.
-        for run in db.query(Run).filter(Run.status.in_(["queued", "running"])):
+        for run in db.query(Run).filter(Run.status.in_(ACTIVE_RUN_STATUSES)):
             run.status = "failed"
             run.error = "服务已重启，之前的执行被中断。请重试。"
         db.commit()

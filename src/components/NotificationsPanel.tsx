@@ -10,7 +10,7 @@ import {
   DialogDescription,
 } from "./ui/dialog";
 import { ErrorNotice } from "./common";
-import { dateTime } from "@/lib/utils";
+import { dateTime, errorMessage, isActiveNotification } from "@/lib/utils";
 
 export function NotificationsPanel({
   open,
@@ -58,7 +58,7 @@ export function NotificationsPanel({
       setNextOffset(offset + page.length);
     } catch (error) {
       if (request === historyRequest.current)
-        setError((error as Error).message);
+        setError(errorMessage(error));
     } finally {
       if (request === historyRequest.current) setLoading(false);
     }
@@ -88,7 +88,7 @@ export function NotificationsPanel({
       );
       await refresh();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy("");
     }
@@ -162,7 +162,7 @@ export function NotificationsPanel({
                     查看计划
                   </Button>
                 )}
-                {["pending", "presented"].includes(note.status) && (
+                {isActiveNotification(note) && (
                   <>
                     <Button
                       variant="ghost"

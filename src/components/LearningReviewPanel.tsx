@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { Markdown, ErrorNotice } from "./common";
 import { LearningComposer } from "./LearningComposer";
 import { LearningConversation, LearningPendingReply } from "./LearningConversation";
+import { errorMessage } from "@/lib/utils";
 
 export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
   goalId: string; onBack: () => void; refresh: () => Promise<void>; onBusy: (value: boolean) => void;
@@ -35,7 +36,7 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
       if (done.status === "completed" && done.kind === "review_assessment") draft.clear();
       setRow(saved); setFields({}); setRun(done); await refresh();
       if (done.status === "failed") setError(done.error || "复习生成失败，可以重试。");
-    } catch (cause) { if (!own.signal.aborted) setError((cause as Error).message); }
+    } catch (cause) { if (!own.signal.aborted) setError(errorMessage(cause)); }
     finally { if (!own.signal.aborted) setBusy(false); }
   }
   async function open(live = () => true) {
@@ -46,7 +47,7 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
       const saved = await api<Review>(`/learning/reviews/${id}`);
       if (!live()) return;
       setRow(saved); void track(value, id);
-    } catch (cause) { if (live()) { setError((cause as Error).message); setBusy(false); } }
+    } catch (cause) { if (live()) { setError(errorMessage(cause)); setBusy(false); } }
   }
   useEffect(() => { let live = true; void open(() => live); return () => { live = false; controller.current?.abort(); }; }, [goalId]);
   async function submit() {
@@ -56,21 +57,21 @@ export function LearningReviewPanel({ goalId, onBack, refresh, onBusy }: {
       await draft.flush();
       const value = await api<Run>(`/learning/reviews/${row.id}/submit`, "POST", { submission_id: crypto.randomUUID(), answer: draft.answer, attachment_ids: draft.images.map((item) => item.id) });
       void track(value, row.id);
-    } catch (cause) { setBusy(false); setError((cause as Error).message); }
+    } catch (cause) { setBusy(false); setError(errorMessage(cause)); }
   }
   async function next() {
     if (!row || busy) return;
     try { await draft.flush(); await api(`/learning/reviews/${row.id}/end`, "POST"); draft.clear(); setRow(null); await open(); }
-    catch (cause) { setError((cause as Error).message); }
+    catch (cause) { setError(errorMessage(cause)); }
   }
   async function back() {
-    try { await draft.flush(); onBack(); } catch (cause) { setError((cause as Error).message); }
+    try { await draft.flush(); onBack(); } catch (cause) { setError(errorMessage(cause)); }
   }
   async function stop() {
     if (!run || stopLock.current) return;
     stopLock.current = true; setStopping(true); setError("");
     try { const done = await api<Run>(`/runs/${run.id}/cancel`, "POST"); controller.current?.abort(); setRun(done); setBusy(false); setFields({}); if (row) setRow(await api(`/learning/reviews/${row.id}`)); }
-    catch (cause) { setError((cause as Error).message); }
+    catch (cause) { setError(errorMessage(cause)); }
     finally { stopLock.current = false; setStopping(false); }
   }
   return <section className="learning-review-panel" aria-label="学习复习">

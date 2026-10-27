@@ -3,6 +3,7 @@ import { Loader2, Puzzle, Settings2 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { api, type Skill } from "@/lib/api";
 import { ToolMenuFrame } from "./ToolMenuFrame";
+import { errorMessage } from "@/lib/utils";
 
 export function SkillsMenu({ onSettings }: { onSettings: () => void }) {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -23,7 +24,7 @@ export function SkillsMenu({ onSettings }: { onSettings: () => void }) {
         ),
       );
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -39,7 +40,7 @@ export function SkillsMenu({ onSettings }: { onSettings: () => void }) {
         items.map((item) => (item.id === value.id ? value : item)),
       );
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setSaving("");
     }

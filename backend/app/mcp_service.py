@@ -18,7 +18,7 @@ from sqlalchemy import select
 from . import config as vault
 from . import mcp_env
 from .config import PROFILE_ID
-from .db import MCPServer, MCPTool, Session, now, uid
+from .db import MCPServer, MCPTool, NotFound, Session, now, uid
 from .schemas import MCPImport, MCPServerWrite
 
 CONNECT_TIMEOUT = 15
@@ -38,7 +38,7 @@ def tool_id(server_id: str, name: str) -> str:
 def require_server(db, server_id):
     server = db.get(MCPServer, server_id)
     if not server or server.profile_id != PROFILE_ID:
-        raise LookupError("MCP 服务不存在")
+        raise NotFound("MCP 服务不存在")
     return server
 
 

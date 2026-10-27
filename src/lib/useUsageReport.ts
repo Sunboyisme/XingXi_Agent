@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { type UsageReport, USAGE_PAGE_SIZE } from "./usageCosts";
+import { errorMessage } from "./utils";
 
 type ReportState = {
   key: string;
@@ -48,12 +49,12 @@ export function useUsageReport(
       .then((report) => {
         if (live) setState({ key, report, loading: false, error: "" });
       })
-      .catch((cause: Error) => {
+      .catch((cause) => {
         if (live)
           setState((current) => ({
             ...current,
             loading: false,
-            error: cause.message,
+            error: errorMessage(cause),
           }));
       });
     return () => {

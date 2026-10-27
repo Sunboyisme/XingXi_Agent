@@ -6,4 +6,3 @@
 .message-local-folders { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .local-folder-chip { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--ui-color-line); border-radius: 10px; }
 .local-folder-chip small { color: var(--ui-color-text-muted); }
-.local-folder-path { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

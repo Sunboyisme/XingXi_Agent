@@ -9,6 +9,7 @@ import {
 import { Button } from "../ui/button";
 import { SoftSelect } from "../ui/soft-select";
 import { DetailDialog } from "../ui/detail-dialog";
+import { errorMessage } from "@/lib/utils";
 
 export function ModelPricing({ onBack }: { onBack: () => void }) {
   const [models, setModels] = useState<UsageModel[]>([]);
@@ -56,8 +57,8 @@ export function ModelPricing({ onBack }: { onBack: () => void }) {
           setPrices(priceRows);
         }
       })
-      .catch((cause: Error) => {
-        if (live) setLoadError(cause.message);
+      .catch((cause) => {
+        if (live) setLoadError(errorMessage(cause));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -151,7 +152,7 @@ export function ModelPricing({ onBack }: { onBack: () => void }) {
         ...current.filter((price) => price.id !== saved.id),
       ]);
     } catch (cause) {
-      setPriceError((cause as Error).message);
+      setPriceError(errorMessage(cause));
     } finally {
       setSaving(false);
     }

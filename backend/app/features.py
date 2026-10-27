@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import artifacts, plans, skills, office
-from . import calendar_service as calendar
 from .db import Run, Session, Skill, SkillRuntime, PlanDayOrder
 from .config import PROFILE_ID
 
@@ -99,32 +98,32 @@ def plan_delete(plan_id: str):
     return {"deleted": True}
 
 
-@router.get("/calendar/events", response_model=list[calendar.EventRead])
+@router.get("/calendar/events", response_model=list[plans.PlanRead])
 def calendar_list(start: str | None = None, end: str | None = None):
     try:
-        return calendar.list_events(start, end)
+        return plans.list_events(start, end)
     except ValueError:
         raise HTTPException(422, "请提供有效的起止日期")
 
 
-@router.post("/calendar/events", response_model=calendar.EventRead)
-def calendar_create(value: calendar.EventWrite):
-    return calendar.create_events([value])[0]
+@router.post("/calendar/events", response_model=plans.PlanRead)
+def calendar_create(value: plans.PlanWrite):
+    return plans.create_events([value])[0]
 
 
-@router.post("/calendar/events/batch", response_model=list[calendar.EventRead])
-def calendar_batch(value: calendar.EventBatch):
-    return calendar.create_events(value.events)
+@router.post("/calendar/events/batch", response_model=list[plans.PlanRead])
+def calendar_batch(value: plans.PlanBatch):
+    return plans.create_events(value.events)
 
 
-@router.put("/calendar/events/{event_id}", response_model=calendar.EventRead)
-def calendar_update(event_id: str, value: calendar.EventWrite):
-    return calendar.update_event(event_id, value)
+@router.put("/calendar/events/{event_id}", response_model=plans.PlanRead)
+def calendar_update(event_id: str, value: plans.PlanWrite):
+    return plans.update_event(event_id, value)
 
 
 @router.delete("/calendar/events/{event_id}")
 def calendar_delete(event_id: str):
-    calendar.delete_event(event_id)
+    plans.delete_event(event_id)
     return {"deleted": True}
 
 

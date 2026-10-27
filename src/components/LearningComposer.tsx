@@ -6,7 +6,7 @@ import type { Attachment } from "@/lib/api";
 import { resizeMessageInput } from "@/lib/composerSize";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { ImagesInput } from "./common";
+import { Hint, ImagesInput } from "./common";
 
 export function LearningComposer({
   answer,
@@ -118,18 +118,10 @@ export function LearningComposer({
               onUploading={onUploading}
             />
           )}
+          <Hint label={stopping ? "正在停止…" : busy ? (onStop ? "停止生成" : "正在处理…") : "发送回答"}>
           <Button
             size="icon"
             aria-label={
-              stopping
-                ? "正在停止…"
-                : busy
-                  ? onStop
-                    ? "停止生成"
-                    : "正在处理…"
-                  : "发送回答"
-            }
-            title={
               stopping
                 ? "正在停止…"
                 : busy
@@ -154,6 +146,7 @@ export function LearningComposer({
               <ArrowUp size={18} />
             )}
           </Button>
+          </Hint>
         </div>
       </div>
     </section>

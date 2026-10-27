@@ -7,13 +7,10 @@ from sqlalchemy import select
 from .db import CalendarEvent, Notification, Reminder, Session, Todo, now
 from . import plan_recurrence
 from .plans import lock
+from .plan_schedule import utc as utc_text
 
 _tick_lock = asyncio.Lock()
 STARTED_AT = now()
-
-
-def utc_text(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 def next_occurrence(due_at: str, recurrence: str, zone: str, after: datetime) -> str:

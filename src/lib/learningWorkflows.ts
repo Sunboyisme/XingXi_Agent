@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type Attachment } from "./api";
 import { registerLearningFlush } from "./learningLifecycle";
 import { draftImages } from "./learningSessions";
+import { errorMessage } from "./utils";
 
 export type Intake = { id: string; messages: { role: string; content: string; message_id?: string; knowledge_sources?: import("@/components/KnowledgeSources").KnowledgeSource[] }[];
   summary: Record<string, string>; draft: string; draft_revision: number;
@@ -63,7 +64,7 @@ export function useWorkflowDraft(kind: "intakes" | "reviews", row: Intake | Revi
   useEffect(() => registerLearningFlush(flush), []);
   function changed() {
     current.current.dirty = true; saveLocal(); clearTimeout(timer.current);
-    timer.current = setTimeout(() => { void flush().catch((cause: Error) => callback.current(`草稿保存失败：${cause.message}`)); }, 600);
+    timer.current = setTimeout(() => { void flush().catch((cause) => callback.current(`草稿保存失败：${errorMessage(cause)}`)); }, 600);
   }
   function clear() {
     clearTimeout(timer.current); current.current.dirty = false; current.current.answer = ""; current.current.images = [];

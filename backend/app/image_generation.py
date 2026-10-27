@@ -114,6 +114,8 @@ async def request_image(value, api_key, prompt, progress=None):
             timeout=httpx.Timeout(IMAGE_REQUEST_TIMEOUT_SECONDS, connect=15),
             trust_env=False,
         ) as client:
+            # The provider renders while this request is open: that is the generating stage.
+            await advance("generate")
             async with client.stream("POST", url, json=body, headers={
                 "Authorization": f"Bearer {api_key}"
             }) as response:
@@ -128,7 +130,6 @@ async def request_image(value, api_key, prompt, progress=None):
                     except ValueError:
                         pass
                 response.raise_for_status()
-        await advance("generate")
         payload = json.loads(encoded)
         item = response_image(payload)
         if not item:

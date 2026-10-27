@@ -5,6 +5,7 @@ import {
   useGeneralPreferences,
 } from "@/lib/generalPreferences";
 import { ErrorNotice } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 type Autostart = { enabled: boolean; supported: boolean; reason: string };
 export function GeneralSettings() {
@@ -27,7 +28,7 @@ export function GeneralSettings() {
         if (live) setValue(result);
       })
       .catch((e) => {
-        if (live) setError(String(e));
+        if (live) setError(errorMessage(e));
       });
     return () => {
       live = false;
@@ -56,7 +57,7 @@ export function GeneralSettings() {
               setError("");
               void invoke<Autostart>("set_autostart", { enabled })
                 .then(setValue)
-                .catch((e) => setError(String(e)))
+                .catch((e) => setError(errorMessage(e)))
                 .finally(() => setBusy(false));
             }}
           />

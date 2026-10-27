@@ -1,6 +1,6 @@
 import { Hint } from "./common";
 import { SoftSelect } from "./ui/soft-select";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Cable,
   Check,
@@ -32,6 +32,7 @@ import {
 import { api, type MCPServer, type MCPServerWrite, type Tool } from "@/lib/api";
 import { parseMCPConfig } from "@/lib/mcp-config";
 import { ConfirmDelete, ErrorNotice } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 const phases: Record<MCPServer["status"], string> = {
   disabled: "已停用",
@@ -304,7 +305,7 @@ function ServerEditor({
       await onSaved();
       onClose();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -475,7 +476,7 @@ function ImportDialog({
         throw new Error("存在同名服务，请在 JSON 中重命名后重新预览");
       setPreview(parsed);
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     }
   }
   async function save() {
@@ -489,7 +490,7 @@ function ImportDialog({
       await onSaved();
       onClose();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -613,11 +614,15 @@ export function ToolsSettings({ active }: { active: boolean }) {
   const [deleting, setDeleting] = useState<MCPServer | null>(null);
   const [builtinOpen, setBuiltinOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const loadSequence = useRef(0);
   const load = useCallback(async () => {
+    const own = ++loadSequence.current;
     const [nextTools, nextServers] = await Promise.all([
       api<Tool[]>("/tools"),
       api<MCPServer[]>("/mcp/servers"),
     ]);
+    // 较早发出的请求晚返回时，不能覆盖更新后的结果。
+    if (own !== loadSequence.current) return;
     setTools(nextTools);
     setServers(nextServers);
     setLoaded(true);
@@ -625,18 +630,20 @@ export function ToolsSettings({ active }: { active: boolean }) {
   useEffect(() => {
     if (!active) return;
     let stopped = false;
+    let timer = 0;
     async function refresh() {
       try {
-        if (!stopped) await load();
+        await load();
       } catch (error) {
-        if (!stopped) setError((error as Error).message);
+        if (!stopped) setError(errorMessage(error));
       }
+      if (!stopped) timer = window.setTimeout(() => void refresh(), 5000);
     }
     void refresh();
-    const timer = setInterval(() => void refresh(), 5000);
     return () => {
       stopped = true;
-      clearInterval(timer);
+      loadSequence.current += 1;
+      clearTimeout(timer);
     };
   }, [active, load]);
   async function act(operation: () => Promise<unknown>) {
@@ -647,7 +654,7 @@ export function ToolsSettings({ active }: { active: boolean }) {
       await operation();
       await load();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }

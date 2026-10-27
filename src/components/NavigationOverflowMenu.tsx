@@ -1,5 +1,6 @@
-import { DropdownMenu } from "radix-ui";
-import { MoreHorizontal, type LucideIcon } from "lucide-react";
+import { DropdownMenu, Tooltip } from "radix-ui";
+import { MoreHorizontal } from "lucide-react";
+import type { SoftIconProps } from "./SoftIcons";
 import {
   setGeneralPreferences,
   useGeneralPreferences,
@@ -9,8 +10,33 @@ import {
 export type NavigationFeatureItem = {
   id: NavigationFeature;
   label: string;
-  icon: LucideIcon;
+  icon: React.ComponentType<SoftIconProps>;
 };
+
+export function NavigationTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactElement;
+}) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="navigation-tooltip"
+          side="right"
+          align="center"
+          sideOffset={10}
+          collisionPadding={10}
+        >
+          {label}
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
 
 export function NavigationOverflowMenu({
   items,
@@ -25,15 +51,16 @@ export function NavigationOverflowMenu({
   const active = hiddenNavigation.some((id) => id === currentPage);
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          className={`navigation-more${active ? " active" : ""}`}
-          aria-label="更多功能"
-          title="更多功能"
-        >
-          <MoreHorizontal size={20} />
-        </button>
-      </DropdownMenu.Trigger>
+      <NavigationTooltip label="更多功能">
+        <DropdownMenu.Trigger asChild>
+          <button
+            className={`navigation-more${active ? " active" : ""}`}
+            aria-label="更多功能"
+          >
+            <MoreHorizontal size={20} fill="currentColor" strokeWidth={2.4} />
+          </button>
+        </DropdownMenu.Trigger>
+      </NavigationTooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           className="navigation-overflow-menu"

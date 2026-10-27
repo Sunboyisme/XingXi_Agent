@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import threading
 import time
 from typing import Literal
 
@@ -29,14 +28,12 @@ from . import (
     utilities,
     weather,
 )
-from . import task_context, todos
+from . import followups, task_context, todos
 from .config import PROFILE_ID, secret_get
-from .db import MESSAGE_ORDER, Goal, KnowledgeNode, Message, Run, RunEvent, Session
+from .db import Goal, KnowledgeNode, NotFound, Run, RunEvent, Session
 from .runs import emit
 
-_PENDING_LEARNING_GOALS: dict[str, dict] = {}
-_PENDING_LEARNING_GOALS_LOCK = threading.Lock()
-_LEARNING_GOAL_PROPOSAL_TTL = 24 * 60 * 60
+_LEARNING_GOAL_PROPOSALS = followups.ProposalStore()
 
 TOOL_INFO = {
     "search_project_history": ("查询项目聊天", "按需检索同项目聊天正文，不包含未共享附件", False),
@@ -259,8 +256,7 @@ def builtin_tools(run_id: str, conversation_id: str):
                 db.add(planning)
                 db.commit()
                 goal_id, planning_id = goal.id, planning.id
-            with _PENDING_LEARNING_GOALS_LOCK:
-                _PENDING_LEARNING_GOALS.pop(conversation_id, None)
+            _LEARNING_GOAL_PROPOSALS.pop(conversation_id)
             runs.launch(planning_id, lambda: learning.generate_course(goal_id, planning_id))
             await runs.tasks[planning_id]
             with Session() as db:
@@ -290,12 +286,10 @@ def builtin_tools(run_id: str, conversation_id: str):
 
         # A later confirmation may omit fields already shown to the user.
         if confirm:
-            with _PENDING_LEARNING_GOALS_LOCK:
-                pending_values = _PENDING_LEARNING_GOALS.get(conversation_id)
-                if pending_values and time.time() - pending_values["created_at"] <= _LEARNING_GOAL_PROPOSAL_TTL:
-                    if title.strip() == pending_values["title"]:
-                        objective = objective or pending_values["objective"]
-                        foundation = foundation or pending_values["foundation"]
+            pending_values = _LEARNING_GOAL_PROPOSALS.get(conversation_id)
+            if pending_values and title.strip() == pending_values["title"]:
+                objective = objective or pending_values["objective"]
+                foundation = foundation or pending_values["foundation"]
         proposal, missing = learning.goal_intake(title, objective, foundation, use_beginner_defaults)
         if not proposal["title"]:
             return json.dumps({"error": "学习主题不能为空"}, ensure_ascii=False)
@@ -310,13 +304,11 @@ def builtin_tools(run_id: str, conversation_id: str):
         if explicit_request:
             return await save(proposal)
         if not confirm:
-            with _PENDING_LEARNING_GOALS_LOCK:
-                _PENDING_LEARNING_GOALS[conversation_id] = {
-                    **proposal,
-                    "run_id": run_id,
-                    "user_message_id": latest_message_id,
-                    "created_at": time.time(),
-                }
+            _LEARNING_GOAL_PROPOSALS.put(conversation_id, {
+                **proposal,
+                "run_id": run_id,
+                "user_message_id": latest_message_id,
+            })
             return json.dumps(
                 {
                     "status": "needs_confirmation",
@@ -329,13 +321,7 @@ def builtin_tools(run_id: str, conversation_id: str):
                 },
                 ensure_ascii=False,
             )
-        with _PENDING_LEARNING_GOALS_LOCK:
-            pending = _PENDING_LEARNING_GOALS.get(conversation_id)
-            if pending and (
-                time.time() - pending["created_at"] > _LEARNING_GOAL_PROPOSAL_TTL
-            ):
-                _PENDING_LEARNING_GOALS.pop(conversation_id, None)
-                pending = None
+        pending = _LEARNING_GOAL_PROPOSALS.get(conversation_id)
         if not pending:
             return json.dumps(
                 {
@@ -483,7 +469,7 @@ def set_tool_enabled(tool_id, enabled):
             row = db.get(MCPTool, tool_id)
             server = db.get(MCPServer, row.server_id) if row else None
             if not row or not server or server.profile_id != PROFILE_ID:
-                raise LookupError("工具不存在")
+                raise NotFound("工具不存在")
         row.enabled = enabled
         db.commit()
     return next(x for x in tool_catalog() if x["id"] == tool_id)

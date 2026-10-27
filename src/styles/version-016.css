@@ -249,7 +249,6 @@
 }
 .plan-move-notice {
   margin: 0 0 8px;
-  font-size: 12px;
   color: var(--ui-color-action);
 }
 .plan-agenda-delete {

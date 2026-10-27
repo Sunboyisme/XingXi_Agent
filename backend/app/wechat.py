@@ -20,6 +20,7 @@ from sqlalchemy import select
 from . import agent, runs
 from .config import PROFILE_ID, secret_get, secret_set
 from .db import (
+    ACTIVE_RUN_STATUSES,
     Conversation,
     Memory,
     Message,
@@ -86,6 +87,16 @@ def trusted_url(value):
     ):
         raise ValueError("微信返回的服务地址不受信任，已停止连接。")
     return value.rstrip("/")
+
+
+def delivery_read(row):
+    return {
+        "id": row.id,
+        "status": row.status,
+        "error": row.error,
+        "created_at": row.created_at,
+        "diagnostics": row.diagnostics,
+    }
 
 
 class ChannelError(Exception):
@@ -155,16 +166,7 @@ class WechatChannel:
                 .order_by(WechatDelivery.created_at.desc())
                 .limit(5)
             ).all()
-            deliveries = [
-                {
-                    "id": row.id,
-                    "status": row.status,
-                    "error": row.error,
-                    "created_at": row.created_at,
-                    "diagnostics": row.diagnostics,
-                }
-                for row in recent
-            ]
+            deliveries = [delivery_read(row) for row in recent]
         phase = self.phase or ("connecting" if state["enabled"] else "paused")
         if not state["account_id"] and not self.phase:
             phase = "unbound"
@@ -372,7 +374,7 @@ class WechatChannel:
                 active = db.scalar(
                     select(Run.id).where(
                         Run.conversation_id == state["conversation_id"],
-                        Run.status.in_(["queued", "running"]),
+                        Run.status.in_(ACTIVE_RUN_STATUSES),
                     )
                 )
             if not active:
@@ -479,7 +481,7 @@ class WechatChannel:
             self.enqueue(source, f"这是一条 XiaoXi 微信连接测试消息（北京时间 {stamp}）。如果你在微信中看到它，说明本次消息已收到。", state["account_id"])
             with Session() as db:
                 row = db.scalar(select(WechatDelivery).where(WechatDelivery.source_key == source))
-                return {"id": row.id, "status": row.status, "error": row.error, "created_at": row.created_at, "diagnostics": row.diagnostics}
+                return delivery_read(row)
 
     def queue_reminders(self):
         state = read_state()
@@ -619,7 +621,7 @@ class WechatChannel:
             ).all()
             for entry in entries:
                 run = db.get(Run, entry.run_id)
-                if run and run.status not in ("running", "queued"):
+                if run and run.status not in ACTIVE_RUN_STATUSES:
                     self.enqueue(
                         "chat:" + entry.id,
                         run.result.get("content", "")

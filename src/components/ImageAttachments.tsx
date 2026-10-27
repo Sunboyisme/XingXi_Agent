@@ -17,6 +17,8 @@ import {
   uploadFile,
   type Attachment,
 } from "@/lib/api";
+import { errorMessage } from "@/lib/utils";
+import { Hint } from "./ui/hint";
 
 const imageExtension = /\.(jpe?g|png|webp)$/i;
 const documentExtension = /\.(docx|pdf|xlsx|txt|md|csv|json)$/i;
@@ -254,7 +256,7 @@ export function ImagesInput({
       update(
         pendingRef.current.map((x) =>
           x.key === item.key
-            ? { ...x, uploading: false, error: (error as Error).message }
+            ? { ...x, uploading: false, error: errorMessage(error) }
             : x,
         ),
       );
@@ -385,25 +387,35 @@ export function ImagesInput({
         aria-label="待发送图片"
       >
         {images.map((image) => (
-          <div className="attachment-draft" key={image.id}>
-            {image.local_path ? (
-              <div className="file-attachment-icon" title={image.local_path}><Folder size={24} /><span>只读文件夹</span></div>
-            ) : image.file_status ? (
-              <div className="file-attachment-icon">
-                <FileText size={24} />
-                <span>
-                  {image.file_status === "partial" ? "部分解析" : "可读取"}
-                </span>
-              </div>
+          <div
+            className={`attachment-draft${image.local_path || image.file_status ? " is-file" : ""}`}
+            key={image.id}
+          >
+            {image.local_path || image.file_status ? (
+              // Files and folders use a compact row: icon, name and one status line.
+              <>
+                <div className="file-attachment-icon" aria-hidden="true">
+                  {image.local_path ? <Folder size={18} /> : <FileText size={18} />}
+                </div>
+                <Hint label={image.local_path || image.name}>
+                  <small className="file-attachment-name">{image.name}</small>
+                </Hint>
+                <small className="file-attachment-meta">
+                  {image.local_path
+                    ? "只读文件夹"
+                    : image.file_status === "partial"
+                      ? "部分解析"
+                      : "可读取"}
+                  {!!image.warnings?.length && " · 有解析提示"}
+                </small>
+              </>
             ) : (
-              previewMode === "thumbnails" && (
-                <Picture id={image.id} name={image.name} />
-              )
-            )}
-            <small>{image.name}</small>
-            {image.local_path && <small className="local-folder-path" title={image.local_path}>{image.local_path}</small>}
-            {!!image.warnings?.length && (
-              <span className="file-attachment-warning">有解析提示</span>
+              <>
+                {previewMode === "thumbnails" && (
+                  <Picture id={image.id} name={image.name} />
+                )}
+                <small>{image.name}</small>
+              </>
             )}
             <button
               type="button"
@@ -469,13 +481,6 @@ export function ImagesInput({
             </button>
           </div>
         ))}
-        {allowFiles &&
-          (images.some((image) => Boolean(image.file_status)) ||
-            pending.some((item) => isDocumentFile(item.file))) && (
-            <p className="file-selection-notice">
-              文件保存在本机；小汐读取的内容会发送给当前所选模型。
-            </p>
-          )}
       </div>
     ) : null;
   return (

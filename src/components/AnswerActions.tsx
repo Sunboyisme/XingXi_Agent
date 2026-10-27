@@ -1,5 +1,5 @@
 import { DetailDialog } from "./ui/detail-dialog";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, CircleAlert, Copy, Layers2 } from "lucide-react";
 import { api, type RunEvent } from "@/lib/api";
 import { Button } from "./ui/button";
@@ -12,6 +12,8 @@ import {
 } from "./ui/dialog";
 import { RetrievalDebugger } from "./RetrievalDebugger";
 import { ErrorNotice, Hint } from "./common";
+import { useCopyFeedback } from "@/lib/clipboard";
+import { errorMessage } from "@/lib/utils";
 
 function toolSummary(event: RunEvent): string {
   const result = event.data.result as Record<string, unknown> | undefined;
@@ -54,14 +56,11 @@ export function AnswerActions({
   runStatus?: string;
   tools?: RunEvent[];
 }) {
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState("");
+  const { copied, error: copyError, copy } = useCopyFeedback(content);
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
   useEffect(() => {
     if (!open || !runId) return;
     let live = true;
@@ -77,8 +76,8 @@ export function AnswerActions({
       .then((values) => {
         if (live) setEvents(values.filter((value) => value.kind === "tool"));
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((cause) => {
+        if (live) setError(errorMessage(cause));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -87,34 +86,6 @@ export function AnswerActions({
       live = false;
     };
   }, [open, runId, tools]);
-  async function copy() {
-    setCopyError("");
-    try {
-      if (navigator.clipboard?.writeText)
-        await navigator.clipboard.writeText(content);
-      else {
-        const previous = document.activeElement as HTMLElement | null;
-        const input = document.createElement("textarea");
-        input.value = content;
-        input.style.cssText = "position:fixed;left:-9999px;top:0";
-        document.body.appendChild(input);
-        input.select();
-        let success = false;
-        try {
-          success = document.execCommand("copy");
-        } finally {
-          input.remove();
-          previous?.focus();
-        }
-        if (!success) throw new Error("copy failed");
-      }
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setCopyError("复制失败，请选择文字后复制。");
-    }
-  }
   return (
     <>
       <div className="answer-actions" role="group" aria-label="回答操作">

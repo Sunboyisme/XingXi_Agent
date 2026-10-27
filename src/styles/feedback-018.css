@@ -2,7 +2,7 @@
 .app-feedback.error-notice {
   --feedback-accent: var(--ui-color-danger);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   margin: 12px 0;
   padding: 12px 14px;
@@ -31,7 +31,7 @@
 }
 .app-feedback > svg {
   flex: 0 0 auto;
-  margin-top: 3px;
+  margin-top: 0;
   color: var(--feedback-accent);
 }
 .app-feedback .error-notice-text {
@@ -40,7 +40,8 @@
 }
 .app-feedback .error-notice-actions {
   display: flex;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  margin-left: auto;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
@@ -612,7 +613,9 @@
   column-gap: 8px;
   align-items: center;
   min-width: 0;
-  border-radius: 8px;
+  padding-right: 4px;
+  border-radius: 10px;
+  transition: background-color 0.15s ease;
 }
 .knowledge-tree .knowledge-file-select {
   display: flex;
@@ -621,7 +624,7 @@
   width: 100%;
   min-width: 0;
   padding: 8px 6px;
-  border-radius: 8px;
+  border-radius: 10px;
   text-align: left;
   font-size: 13px;
   background: none;
@@ -649,32 +652,55 @@
 .knowledge-file-status.is-partial svg {
   color: var(--ui-color-action);
 }
+/* 删除按钮平时隐藏，悬停或键盘聚焦到这一行时才出现。 */
 .knowledge-tree .knowledge-row-delete {
-  width: 28px;
+  width: 26px;
   min-width: 0;
-  height: 28px;
+  height: 26px;
   min-height: 0;
   padding: 0;
-  border-radius: 6px;
+  border-radius: 99px;
   color: var(--ui-color-text-muted);
+  opacity: 0;
   outline-offset: -2px;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+.knowledge-tree-row:hover .knowledge-row-delete,
+.knowledge-tree-row:has(:focus-visible) .knowledge-row-delete {
+  opacity: 1;
+}
+@media (hover: none) {
+  .knowledge-tree .knowledge-row-delete {
+    opacity: 1;
+  }
 }
 .knowledge-tree .knowledge-row-delete:hover:not(:disabled) {
-  background: transparent;
+  background: color-mix(in srgb, var(--ui-color-danger) 10%, transparent);
 }
 .knowledge-tree .knowledge-row-delete:hover:not(:disabled) svg {
   color: var(--ui-color-danger);
+}
+.knowledge-row-delete .soft-icon-fill {
+  opacity: 0;
 }
 .knowledge-tree svg {
   flex-shrink: 0;
   color: var(--ui-color-text-muted);
 }
 .knowledge-tree-row:hover,
-.knowledge-tree-row:focus-within,
+.knowledge-tree-row:has(:focus-visible) {
+  background: color-mix(in srgb, var(--ui-color-text) 4%, transparent);
+}
 .knowledge-tree-row:has([aria-current="true"]) {
-  background: var(--ui-color-surface-deep);
+  background: color-mix(in srgb, var(--ui-color-action) 8%, transparent);
 }
 .knowledge-file-select[aria-current="true"] {
+  color: var(--ui-color-action);
+  font-weight: 500;
+}
+.knowledge-tree .knowledge-file-select[aria-current="true"] svg {
   color: var(--ui-color-action);
 }
 .knowledge-file-select:focus-visible {
@@ -980,4 +1006,272 @@
   .module-toggle input::after {
     transition: none;
   }
+}
+
+/* Knowledge base accepts files and folders dropped from the desktop. */
+.knowledge-page {
+  position: relative;
+}
+.knowledge-page.image-drag-over::after {
+  content: "松开以导入文件或文件夹";
+}
+
+/* Running conversations stay visible without hovering, even in collapsed groups. */
+.sidebar-running {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-color-action) 14%, transparent);
+  color: var(--ui-color-action);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.sidebar-running > i {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: rotate 0.9s linear infinite;
+}
+.sidebar-running.is-row {
+  padding: 0;
+  background: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-running > i {
+    border-color: currentColor;
+    animation: none;
+  }
+}
+
+/* Files and folders in the composer: a compact row instead of a tall tile. */
+.attachment-draft.is-file {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 9px;
+  align-content: center;
+  width: 212px;
+  height: 50px;
+  padding: 7px 28px 7px 8px;
+}
+.attachment-draft.is-file .file-attachment-icon {
+  grid-row: 1 / span 2;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ui-color-action) 12%, transparent);
+}
+.attachment-draft.is-file small {
+  padding: 0;
+  line-height: 16px;
+}
+.attachment-draft.is-file .file-attachment-name {
+  color: var(--ui-color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.attachment-draft.is-file .file-attachment-meta {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.attachment-draft.is-file .attachment-remove {
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+}
+.attachment-names .attachment-draft.is-file {
+  display: flex;
+  width: auto;
+  height: 28px;
+  padding: 3px 6px 3px 9px;
+}
+.attachment-names .attachment-draft.is-file .file-attachment-icon,
+.attachment-names .attachment-draft.is-file .file-attachment-meta {
+  display: none;
+}
+.attachment-names .attachment-draft.is-file .attachment-remove {
+  transform: none;
+}
+
+/* Local data counts are grouped by what they belong to. */
+.data-count-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+.data-count-groups > section {
+  padding: 12px 14px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 12px;
+}
+.data-count-groups h3 {
+  margin: 0 0 8px;
+  color: var(--ui-color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.data-count-groups .data-counts {
+  gap: 10px 22px;
+  margin: 0;
+}
+.data-count-groups .data-counts strong {
+  font-size: 18px;
+}
+
+/* Reply mode and retrieval options in the composer "+" menu. */
+.composer-add-menu {
+  width: 264px;
+}
+.composer-option[data-disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.composer-option {
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+}
+.composer-option-state {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.composer-option-state > svg {
+  color: var(--ui-color-action);
+}
+.composer-option-label {
+  padding-top: 4px;
+  font-size: 11px;
+}
+/* 输入栏常驻的回答方式切换：纯文字分段控件，选中块滑动过去。 */
+.composer-mode-switch {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  height: 32px;
+  padding: 3px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--ui-color-text) 6%, transparent);
+}
+.composer-mode-switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 99px;
+  background: var(--ui-color-surface);
+  box-shadow:
+    0 1px 2px rgb(67 59 53 / 12%),
+    0 0 0 0.5px rgb(67 59 53 / 6%);
+  transition: transform 0.2s ease;
+}
+.composer-mode-switch[data-mode="chat"]::before {
+  transform: translateX(100%);
+}
+.composer-mode-option {
+  position: relative;
+  z-index: 1;
+  height: 26px;
+  min-width: 52px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.composer-mode-option:hover:enabled {
+  color: var(--ui-color-text);
+}
+.composer-mode-option[aria-checked="true"] {
+  color: var(--ui-color-text);
+  font-weight: 500;
+}
+.composer-mode-option:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 1px;
+}
+.composer-mode-switch:has(:disabled) {
+  opacity: 0.45;
+}
+/* 思考开关：与回答方式切换同一套浅灰底，开启时只给图标点缀强调色。 */
+.composer-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.composer-thinking:hover:enabled {
+  background: color-mix(in srgb, var(--ui-color-text) 4%, transparent);
+  color: var(--ui-color-text);
+}
+.composer-thinking[aria-pressed="true"],
+.composer-thinking[aria-pressed="true"]:hover:enabled {
+  background: color-mix(in srgb, var(--ui-color-text) 6%, transparent);
+  color: var(--ui-color-text);
+  font-weight: 500;
+}
+.composer-thinking[aria-pressed="true"] > svg {
+  color: var(--ui-color-action);
+}
+.composer-thinking:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 1px;
+}
+
+/* 侧栏圆润图标：选中时外形填一层淡淡的强调色，悬停时更淡。 */
+.soft-icon .soft-icon-fill {
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.main-navigation svg.soft-icon,
+.sidebar-footer svg.soft-icon {
+  stroke-width: 1.8;
+}
+.navigation-rail .main-navigation > button:hover .soft-icon-fill,
+.navigation-rail .sidebar-footer > button:hover .soft-icon-fill,
+.navigation-overflow-link[data-highlighted] .soft-icon-fill {
+  opacity: 0.1;
+}
+.navigation-rail .main-navigation > button.active .soft-icon-fill,
+.navigation-rail .sidebar-footer > button.active .soft-icon-fill,
+.navigation-overflow-link[data-current="true"] .soft-icon-fill {
+  opacity: 0.18;
+}
+.navigation-rail .main-navigation > button,
+.navigation-rail .sidebar-footer > button {
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.navigation-rail .main-navigation > button.active,
+.navigation-rail .sidebar-footer > button.active {
+  box-shadow: 0 1px 3px rgb(120 80 50 / 9%);
 }

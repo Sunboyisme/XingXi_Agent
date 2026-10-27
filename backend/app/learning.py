@@ -19,6 +19,10 @@ TUTOR_RULES = """你是用户的个人导师，支持任何主题（编程、做
 STUDIED_STATUSES = {"passed", "needs_practice", "skipped"}
 
 
+def schedule_review(node):
+    node.review_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(timespec="microseconds")
+
+
 def update_goal_progress(db, goal):
     nodes = db.scalars(select(KnowledgeNode).where(KnowledgeNode.goal_id == goal.id)).all()
     # Course coverage is distinct from evidence of mastery. Review gaps stay saved.
@@ -318,7 +322,7 @@ async def assess(state: TutorState):
                 node.status = "passed" if result["passed"] else "needs_practice"
             elif node.status != "passed":
                 node.status = "needs_practice"
-            node.review_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(timespec="microseconds")
+            schedule_review(node)
         elif node.status == "not_started":
             node.status = "in_progress"
         goal = db.get(Goal, node.goal_id)

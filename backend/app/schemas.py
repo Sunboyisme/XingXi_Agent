@@ -122,6 +122,10 @@ class ModelSelection(BaseModel):
     provider_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     model_name: str = Field(min_length=1, max_length=200)
     thinking_enabled: bool = False
+    # agent: the model may call tools; chat: system prompt and conversation only.
+    mode: Literal["agent", "chat"] = "agent"
+    use_memory: bool = True
+    use_knowledge: bool = True
 
 
 class SettingsRead(BaseModel):
@@ -364,6 +368,8 @@ class MessageRead(RecordRead):
     reasoning: str = ""
     run_id: str | None = None
     run_status: str | None = None
+    # Why an incomplete reply stopped, so the conversation can explain it.
+    run_error: str | None = None
     task_id: str | None = None
     has_learning_continuation: bool = False
 

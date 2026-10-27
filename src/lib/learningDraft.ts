@@ -2,6 +2,7 @@ import { registerLearningFlush } from "./learningLifecycle";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type Attachment, type Lesson } from "./api";
 import { draftImages, type LearningDraftOptions, type LearningSession } from "./learningSessions";
+import { errorMessage } from "./utils";
 
 type Draft = { nodeId: string; lessonId: string; sessionId: string; answer: string; images: Attachment[]; dirty: boolean };
 const keyFor = (draft: Draft) => draft.sessionId ? `bai-learning-session-draft:${draft.sessionId}:${draft.nodeId}` : `bai-learning-draft:${draft.nodeId}`;
@@ -63,7 +64,7 @@ export function useLearningDraft(nodeId: string, lesson: Lesson | null, options?
         }
         try { localStorage.removeItem(`bai-learning-draft:${draft.nodeId}`); } catch { /* Keep server success. */ }
       } catch (cause) {
-        if ((cause as Error).message.includes("草稿已在其他操作中更新")) {
+        if (errorMessage(cause).includes("草稿已在其他操作中更新")) {
           blocked.current.add(draft.sessionId);
           try {
             const remote = await api<LearningSession>(`/learning/sessions/${draft.sessionId}`);
@@ -72,7 +73,7 @@ export function useLearningDraft(nodeId: string, lesson: Lesson | null, options?
         }
         // A conflicting draft is never retried with a newer revision behind the user's back.
         // Reopening the learning page retrieves the current server copy while retaining local text.
-        callbacks.current?.onError(`草稿已保留在本机，但保存到会话失败：${(cause as Error).message}`);
+        callbacks.current?.onError(`草稿已保留在本机，但保存到会话失败：${errorMessage(cause)}`);
         throw cause;
       } finally {
         if (current.current.sessionId === draft.sessionId) setSaving(false);

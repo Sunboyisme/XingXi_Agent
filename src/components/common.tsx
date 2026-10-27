@@ -11,7 +11,6 @@ import { createPortal } from "react-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AlertCircle, Check, Info, TriangleAlert, X } from "lucide-react";
-import { Tooltip } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -23,37 +22,9 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 export { ImagesInput, Picture } from "./ImageAttachments";
+export { Hint } from "./ui/hint";
 import { ExternalLink } from "./ExternalLink";
 
-export function Hint({
-  label,
-  side = "top",
-  children,
-}: {
-  label?: string;
-  side?: "top" | "right" | "bottom" | "left";
-  children: React.ReactElement;
-}) {
-  if (!label) return children;
-  return (
-    <Tooltip.Provider delayDuration={260} skipDelayDuration={100}>
-      <Tooltip.Root>
-        <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Content
-            className="ui-hint"
-            side={side}
-            sideOffset={7}
-            collisionPadding={8}
-          >
-            {label}
-            <Tooltip.Arrow className="ui-hint-arrow" />
-          </Tooltip.Content>
-        </Tooltip.Portal>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-  );
-}
 
 export const Markdown = memo(function Markdown({
   children,

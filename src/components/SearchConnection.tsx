@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { ErrorNotice } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 export function SearchConnection({
   settings,
@@ -49,7 +50,7 @@ export function SearchConnection({
       setClear(false);
       setOpen(false);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

@@ -24,6 +24,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
+import { errorMessage } from "@/lib/utils";
 
 type Status = components["schemas"]["EmbeddingRead"];
 const initial: Status = {
@@ -62,7 +63,7 @@ export function EmbeddingSettings() {
           setForm(value);
         }
       } catch (e) {
-        if (live) setError((e as Error).message);
+        if (live) setError(errorMessage(e));
       }
     }
     void load();
@@ -96,7 +97,7 @@ export function EmbeddingSettings() {
       setNotice("已保存");
       setOpen(false);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -112,7 +113,7 @@ export function EmbeddingSettings() {
       );
       setNotice(`连接成功 · ${value.dimensions} 维`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

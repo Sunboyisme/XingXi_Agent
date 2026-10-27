@@ -63,7 +63,6 @@ test("the separate answer dock accepts dropped images and submits them without t
     feedback: {},
     state: "awaiting_submission",
   };
-  localStorage.setItem("bai-current-goal", goal.id);
   mocks.api.mockImplementation(async (path: string) =>
     path.endsWith("/lesson")
       ? { ...lesson, id: path.includes("n2") ? "l2" : "l1" }

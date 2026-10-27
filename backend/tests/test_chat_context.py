@@ -131,6 +131,20 @@ def test_reasoning_content_blocks_and_text_are_separate():
     assert context.plain_text(message.content) == "正文"
 
 
+def test_plain_text_keeps_every_provider_text_block():
+    content = [
+        "前缀",
+        {"type": "text_delta", "text": "增量"},
+        {"type": "output_text", "text": "输出"},
+        {"type": "text", "text": "正文"},
+        {"type": "reasoning", "reasoning": "不显示"},
+        {"type": "image_url", "image_url": {"url": "data:,"}},
+        {"type": "text", "text": None},
+    ]
+    assert context.plain_text(content) == "前缀增量输出正文"
+    assert context.plain_text(content) == provider.message_text(content)
+
+
 def test_reasoning_stream_tool_rounds_and_history(configured, monkeypatch):
     from . import mock_provider
 
@@ -183,3 +197,38 @@ def test_duplicate_active_turn_is_rejected(configured, monkeypatch):
         configured.post(f"{API}/conversations/{conversation}/retry").status_code == 409
     )
     assert wait_run(configured, first)["status"] == "completed"
+
+
+def test_chat_mode_sends_only_the_conversation_without_tools(configured, monkeypatch):
+    from app import usage_cost
+    from .test_app import wait_run
+
+    bodies = []
+    original = usage_cost.start
+
+    def record(metadata, body):
+        bodies.append(body)
+        return original(metadata, body)
+
+    monkeypatch.setattr(usage_cost, "start", record)
+    settings = configured.get(API + "/settings").json()
+    conversation = configured.post(API + "/conversations", json={}).json()["id"]
+    selection = {
+        "provider_id": settings["default_provider"],
+        "model_name": settings["model_name"],
+        "mode": "chat",
+        "use_memory": False,
+    }
+    run = wait_run(configured, configured.post(
+        f"{API}/conversations/{conversation}/messages",
+        json={"content": "你好", "model_selection": selection},
+    ))
+    assert run["status"] == "completed", run.get("error")
+    chat = [body for body in bodies if body.get("messages")]
+    assert chat and all(not body.get("tools") for body in chat)
+    assert "对话模式" in chat[-1]["messages"][0]["content"]
+    # A retry keeps the conversation options of the original reply.
+    with db.Session() as session:
+        saved = session.get(db.Run, run["id"]).model_config
+    assert model_profiles.chat_options(saved) == {"mode": "chat", "use_memory": False, "use_knowledge": True}
+    assert model_profiles.saved_selection(saved).mode == "chat"

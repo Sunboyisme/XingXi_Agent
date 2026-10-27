@@ -71,11 +71,11 @@ test("chat home shows its welcome and retains the editable composer", () => {
     <ChatPage
       conversationId={null}
       onConversation={vi.fn()}
-      goals={[]}
+
       settings={settings}
       refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
-      onPlan={vi.fn()}
+
     />,
   );
   expect(
@@ -102,11 +102,11 @@ test("an accepted first message enters its conversation even if list refresh fai
     <ChatPage
       conversationId={null}
       onConversation={onConversation}
-      goals={[]}
+
       settings={settings}
       refresh={vi.fn().mockRejectedValue(new Error("list unavailable"))}
       onAction={vi.fn()}
-      onPlan={vi.fn()}
+
     />,
   );
   fireEvent.change(screen.getByLabelText("发送给XiaoXi的消息"), {
@@ -149,7 +149,7 @@ test("a delayed retry response cannot attach to a different conversation", async
     settings,
     refresh: vi.fn().mockResolvedValue(undefined),
     onAction: vi.fn(),
-    onPlan: vi.fn(),
+
   };
   const view = render(<ChatPage {...props} conversationId="a" />);
   fireEvent.click(await screen.findByRole("button", { name: "重新生成" }));
@@ -197,7 +197,7 @@ test("a run completed before conversation handoff still shows its persisted answ
     <ChatPage
       conversationId="fast"
       onConversation={vi.fn()}
-      goals={[]}
+
       settings={{
         model_name: "mock-test",
         model_url: "http://127.0.0.1:8877/v1",
@@ -237,7 +237,7 @@ test("a run completed before conversation handoff still shows its persisted answ
       }}
       refresh={refresh}
       onAction={vi.fn()}
-      onPlan={vi.fn()}
+
     />,
   );
   expect(await screen.findByText(assistant.content)).toBeTruthy();
@@ -278,7 +278,7 @@ test("turn navigation scrolls to a selected question and resets for another chat
     settings,
     refresh: vi.fn().mockResolvedValue(undefined),
     onAction: vi.fn(),
-    onPlan: vi.fn(),
+
   };
   const view = render(<ChatPage {...props} />);
   const target = await screen.findByRole("button", { name: "第 2 轮：第二问" });
@@ -309,11 +309,11 @@ test("new chats focus the composer and restore an unsent draft after remount", a
     <ChatPage
       conversationId={null}
       onConversation={vi.fn()}
-      goals={[]}
+
       settings={settings}
       refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
-      onPlan={vi.fn()}
+
     />,
   );
   const input = screen.getByLabelText(
@@ -327,11 +327,11 @@ test("new chats focus the composer and restore an unsent draft after remount", a
     <ChatPage
       conversationId={null}
       onConversation={vi.fn()}
-      goals={[]}
+
       settings={settings}
       refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
-      onPlan={vi.fn()}
+
     />,
   );
   const restored = screen.getByLabelText(
@@ -362,11 +362,11 @@ test("restores draft text and attached images after leaving the chat page", asyn
     <ChatPage
       conversationId={null}
       onConversation={vi.fn()}
-      goals={[]}
+
       settings={settings}
       refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
-      onPlan={vi.fn()}
+
     />,
   );
   const input = screen.getByLabelText(
@@ -398,11 +398,11 @@ test("keeps an animated status line while a reply is still streaming", async () 
     <ChatPage
       conversationId="slow"
       onConversation={vi.fn()}
-      goals={[]}
+
       settings={settings}
       refresh={vi.fn().mockResolvedValue(undefined)}
       onAction={vi.fn()}
-      onPlan={vi.fn()}
+
     />,
   );
   const input = screen.getByLabelText("发送给XiaoXi的消息");
@@ -414,4 +414,47 @@ test("keeps an animated status line while a reply is still streaming", async () 
   expect(await screen.findByText("我先整理一下")).toBeTruthy();
   expect(screen.getByText("XiaoXi 正在思考")).toBeTruthy();
   expect(document.querySelectorAll(".thinking-dots > i")).toHaveLength(3);
+});
+
+test("global chat options are sent with the message and shared by every conversation", async () => {
+  localStorage.setItem(
+    "bai-chat-options",
+    JSON.stringify({ mode: "chat", useMemory: false, useKnowledge: true }),
+  );
+  const sent: unknown[] = [];
+  apiMock.mockImplementation(async (path: string, method?: string, body?: unknown) => {
+    if (path === "/conversations" && method === "POST") return { id: "plain" };
+    if (path === "/conversations/plain/messages" && method === "POST") {
+      sent.push(body);
+      return { id: "plain-run", status: "queued" };
+    }
+    return [];
+  });
+  render(
+    <ChatPage
+      conversationId={null}
+      onConversation={vi.fn()}
+      settings={settings}
+      refresh={vi.fn().mockResolvedValue(undefined)}
+      onAction={vi.fn()}
+    />,
+  );
+  expect(
+    screen.getByRole("radio", { name: "对话" }).getAttribute("aria-checked"),
+  ).toBe("true");
+  fireEvent.click(screen.getByRole("radio", { name: "智能体" }));
+  expect(JSON.parse(localStorage.getItem("bai-chat-options") || "{}")).toMatchObject({
+    mode: "agent",
+    useMemory: false,
+  });
+  fireEvent.click(screen.getByRole("radio", { name: "对话" }));
+  fireEvent.change(screen.getByLabelText("发送给XiaoXi的消息"), {
+    target: { value: "只聊聊天" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]).toMatchObject({
+    model_selection: { mode: "chat", use_memory: false, use_knowledge: true },
+  });
+  expect(localStorage.getItem("bai-chat-options:plain")).toBeNull();
 });

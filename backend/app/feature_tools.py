@@ -1,7 +1,5 @@
 from . import task_context, followups
 import json
-import threading
-import time
 from datetime import date
 
 from fastapi import HTTPException
@@ -13,9 +11,7 @@ from . import plans as calendar, plan_targets
 from . import skills
 from .db import Session
 
-_PENDING_PLAN_PROPOSALS: dict[str, dict] = {}
-_PENDING_PLAN_PROPOSALS_LOCK = threading.Lock()
-_PLAN_PROPOSAL_TTL = 24 * 60 * 60
+_PLAN_PROPOSALS = followups.ProposalStore()
 
 
 class RemovalTarget(BaseModel):
@@ -166,19 +162,16 @@ def build(run_id, conversation_id):
             # Explicit authorization must not depend on a pending proposal.
             if explicit_request:
                 result = calendar.create_events(plans, latest_message_id or None)
-                with _PENDING_PLAN_PROPOSALS_LOCK:
-                    _PENDING_PLAN_PROPOSALS.pop(conversation_id, None)
+                _PLAN_PROPOSALS.pop(conversation_id)
                 return result
             if not confirm:
-                with _PENDING_PLAN_PROPOSALS_LOCK:
-                    _PENDING_PLAN_PROPOSALS[conversation_id] = {
-                        "plans": proposal,
-                        "run_id": run_id,
-                        "user_message_id": latest_message_id,
-                        "created_at": time.time(),
-                        "status": "pending",
-                        "result": None,
-                    }
+                _PLAN_PROPOSALS.put(conversation_id, {
+                    "plans": proposal,
+                    "run_id": run_id,
+                    "user_message_id": latest_message_id,
+                    "status": "pending",
+                    "result": None,
+                })
                 return {
                     "status": "needs_confirmation",
                     "plans": proposal,
@@ -188,13 +181,7 @@ def build(run_id, conversation_id):
                         "用户在下一条消息同意后，再提交同一方案并传 confirm=true。"
                     ),
                 }
-            with _PENDING_PLAN_PROPOSALS_LOCK:
-                pending = _PENDING_PLAN_PROPOSALS.get(conversation_id)
-                if pending and (
-                    time.time() - pending["created_at"] > _PLAN_PROPOSAL_TTL
-                ):
-                    _PENDING_PLAN_PROPOSALS.pop(conversation_id, None)
-                    pending = None
+            pending = _PLAN_PROPOSALS.get(conversation_id)
             if not pending:
                 return {
                     "error": (
@@ -244,7 +231,7 @@ def build(run_id, conversation_id):
                 [calendar.PlanWrite(**value) for value in chosen],
                 latest_message_id or None,
             )
-            with _PENDING_PLAN_PROPOSALS_LOCK:
+            with _PLAN_PROPOSALS.lock:
                 pending["status"] = "created"
                 pending["result"] = result
                 pending["confirmed_message_id"] = latest_message_id

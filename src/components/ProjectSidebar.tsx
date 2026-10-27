@@ -2,7 +2,6 @@ import { SoftSelect } from "./ui/soft-select";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
-  CircleDot,
   Folder,
   MessageCircle,
   MoreHorizontal,
@@ -25,6 +24,8 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import type { ProjectManagementRequest } from "./ProjectManagement";
+import { Hint } from "./common";
+import { errorMessage, keepIfSame } from "@/lib/utils";
 
 type SearchHit = {
   conversation_id: string;
@@ -64,6 +65,17 @@ function GroupHeading({
         <ChevronDown size={13} data-collapsed={collapsed} />
         <span>{label}</span>
         <small>{count}</small>
+        {running > 0 && (
+          // Always visible: a collapsed group must still show work in progress.
+          <span
+            className="sidebar-running"
+            role="status"
+            aria-label={`${label}中有 ${running} 个对话正在进行`}
+          >
+            <i aria-hidden="true" />
+            {running}
+          </span>
+        )}
       </button>
       <div className="sidebar-section-actions">
         <Button
@@ -74,17 +86,6 @@ function GroupHeading({
         >
           <Plus size={15} />
         </Button>
-        {running > 0 && (
-          <span
-            className="project-running-state"
-            data-active="true"
-            role="img"
-            aria-label={`${label}中有 ${running} 个任务正在运行`}
-            title={`${running} 个任务进行中`}
-          >
-            <CircleDot size={15} />
-          </span>
-        )}
       </div>
     </div>
   );
@@ -150,12 +151,7 @@ export function ProjectSidebar({
           const values = await api<Record<string, number>>(
             "/conversations/activity",
           );
-          if (live)
-            setActivity((current) =>
-              JSON.stringify(current) === JSON.stringify(values)
-                ? current
-                : values,
-            );
+          if (live) setActivity(keepIfSame(values));
         } catch {
           /* Keep the last known state during a transient connection failure. */
         }
@@ -167,7 +163,8 @@ export function ProjectSidebar({
       live = false;
       clearTimeout(timer);
     };
-  }, [visible, conversations.length]);
+    // A finished reply refreshes the conversation list; re-check activity at once.
+  }, [visible, conversations]);
   const [renaming, setRenaming] = useState<Conversation | null>(null);
   const [conversationName, setConversationName] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -213,7 +210,7 @@ export function ProjectSidebar({
       setError(
         applied
           ? "修改已保存，列表暂未刷新，请稍后重试刷新。"
-          : (cause as Error).message,
+          : errorMessage(cause),
       );
     } finally {
       mutationLock.current = false;
@@ -286,8 +283,7 @@ export function ProjectSidebar({
         setNext(value.next_offset);
       }
     } catch (cause) {
-      if (sequence === searchSequence.current)
-        setError((cause as Error).message);
+      if (sequence === searchSequence.current) setError(errorMessage(cause));
     } finally {
       if (sequence === searchSequence.current) setLoading(false);
     }
@@ -358,37 +354,48 @@ export function ProjectSidebar({
         >
           {value.pinned_at ? <Pin size={13} /> : <MessageCircle size={14} />}
           <span>{value.title}</span>
+          {Boolean(activity[value.id]) && (
+            <span
+              className="sidebar-running is-row"
+              role="status"
+              aria-label="正在进行"
+            >
+              <i aria-hidden="true" />
+            </span>
+          )}
         </button>
         <div className="conversation-row-actions">
-          <button
-            type="button"
-            className="conversation-pin"
-            aria-label={`${value.pinned_at ? "取消置顶对话" : "置顶对话"} ${value.title}`}
-            aria-pressed={Boolean(value.pinned_at)}
-            title={value.pinned_at ? "取消置顶" : "置顶对话"}
-            disabled={busy}
-            onClick={() =>
-              void mutate(() =>
-                api(`/conversations/${value.id}`, "PATCH", {
-                  pinned: !value.pinned_at,
-                }),
-              )
-            }
-          >
-            {value.pinned_at ? <PinOff size={14} /> : <Pin size={14} />}
-          </button>
-          <button
-            type="button"
-            className="conversation-delete"
-            aria-label={`删除对话 ${value.title}`}
-            title="删除对话"
-            disabled={busy}
-            onClick={() => {
-              if (!mutationLock.current) onDelete(value);
-            }}
-          >
-            <Trash2 size={14} />
-          </button>
+          <Hint label={value.pinned_at ? "取消置顶" : "置顶对话"}>
+            <button
+              type="button"
+              className="conversation-pin"
+              aria-label={`${value.pinned_at ? "取消置顶对话" : "置顶对话"} ${value.title}`}
+              aria-pressed={Boolean(value.pinned_at)}
+              disabled={busy}
+              onClick={() =>
+                void mutate(() =>
+                  api(`/conversations/${value.id}`, "PATCH", {
+                    pinned: !value.pinned_at,
+                  }),
+                )
+              }
+            >
+              {value.pinned_at ? <PinOff size={14} /> : <Pin size={14} />}
+            </button>
+          </Hint>
+          <Hint label="删除对话">
+            <button
+              type="button"
+              className="conversation-delete"
+              aria-label={`删除对话 ${value.title}`}
+              disabled={busy}
+              onClick={() => {
+                if (!mutationLock.current) onDelete(value);
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </Hint>
         </div>
       </div>
     );
@@ -557,7 +564,7 @@ export function ProjectSidebar({
           </div>
         )}
         <GroupHeading
-          label="对话"
+          label="最近"
           count={grouped.ordinary.length}
           collapsed={collapsed.includes("group:ordinary")}
           controls="sidebar-ordinary-list"

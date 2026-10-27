@@ -58,25 +58,20 @@ test("authentication errors keep the message aligned and offer interface setting
 });
 
 test("learning failures appear as a bottom toast", async ({ page }) => {
-  await page.route("**/api/v1/learning/goals", (route) =>
-    route.request().method() === "POST"
+  await page.route("**/api/v1/learning/intakes", (route) =>
+    route.request().method() === "GET"
       ? route.fulfill({
-          status: 422,
+          status: 503,
           contentType: "application/json",
           body: JSON.stringify({
-            detail: "学习主题暂时无法保存，请稍后重试。",
+            detail: "学习草稿暂时无法读取，请稍后重试。",
           }),
         })
       : route.continue(),
   );
   await page.getByRole("button", { name: "学习", exact: true }).click();
-  await page.getByRole("button", { name: "新的学习目标", exact: true }).click();
-  await page.getByLabel("学习主题").fill("浏览器验证");
-  await page.getByLabel("你希望学到什么程度").fill("能独立完成练习");
-  await page.getByLabel("目前的基础与相关背景").fill("零基础");
-  await page.getByRole("button", { name: "建立学习路线", exact: true }).click();
   const toast = page.locator(".app-toast.is-error");
-  await expect(toast).toContainText("学习主题暂时无法保存");
+  await expect(toast).toContainText("学习草稿暂时无法读取");
   const box = await toast.boundingBox();
   const viewport = page.viewportSize();
   expect(box && viewport && box.y > viewport.height * 0.7).toBe(true);

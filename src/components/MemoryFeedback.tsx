@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Bookmark, Check, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, type Memory } from "@/lib/api";
-import { dateTime } from "@/lib/utils";
+import { dateTime, errorMessage } from "@/lib/utils";
 import { ErrorNotice } from "./common";
 
 export type MemoryNotice = {
@@ -48,7 +48,7 @@ export function MemoryReview({
       );
       await refresh();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -107,7 +107,7 @@ export function MemorySavedNotice({
       await refresh();
       onClose();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }

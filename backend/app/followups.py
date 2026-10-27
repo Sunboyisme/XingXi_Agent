@@ -1,6 +1,8 @@
 """Resolve short replies against this conversation, without inventing a task."""
 
 import re
+import threading
+import time
 
 from sqlalchemy import and_, or_, select
 
@@ -14,6 +16,36 @@ _CONFIRMATION = re.compile(
     r"(?:创建|安排|保存|写入|写进)?(?:日历里?|日程里?|日志里?)?(?:吧)?",
     re.IGNORECASE,
 )
+
+
+class ProposalStore:
+    """Per-conversation proposals waiting for the user's next-turn confirmation."""
+
+    def __init__(self, ttl=24 * 60 * 60):
+        self.ttl = ttl
+        self.lock = threading.Lock()
+        self._items: dict[str, dict] = {}
+
+    def put(self, key, value):
+        with self.lock:
+            now = time.time()
+            # Expired proposals of other conversations are dropped here, so the
+            # cache cannot grow with every conversation that never confirms.
+            for stale in [k for k, v in self._items.items() if now - v["created_at"] > self.ttl]:
+                del self._items[stale]
+            self._items[key] = {**value, "created_at": now}
+
+    def get(self, key):
+        with self.lock:
+            value = self._items.get(key)
+            if value and time.time() - value["created_at"] > self.ttl:
+                del self._items[key]
+                return None
+            return value
+
+    def pop(self, key):
+        with self.lock:
+            self._items.pop(key, None)
 
 
 def is_confirmation(text: str) -> bool:

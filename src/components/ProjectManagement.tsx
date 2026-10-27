@@ -10,6 +10,7 @@ import { ConfirmDelete, ErrorNotice, Hint } from "./common";
 import { FileCard } from "./OfficeFiles";
 import { Picture } from "./ImageAttachments";
 import "@/styles/projects-workspace.css";
+import { errorMessage } from "@/lib/utils";
 
 export type ProjectManagementRequest = {
   id: string | null;
@@ -174,7 +175,7 @@ export function ProjectManagement({
         ids.filter((id) => files.value.some((item) => item.id === id)),
       );
     } catch (cause) {
-      if (sequence.current === own) setError((cause as Error).message);
+      if (sequence.current === own) setError(errorMessage(cause));
     } finally {
       if (sequence.current === own) setLoadingLibrary(false);
     }
@@ -222,7 +223,7 @@ export function ProjectManagement({
       setError(
         applied
           ? "修改已保存，列表暂未刷新，请稍后刷新。"
-          : (cause as Error).message,
+          : errorMessage(cause),
       );
     } finally {
       lock.current = false;
@@ -247,7 +248,7 @@ export function ProjectManagement({
     } catch (cause) {
       if (own === editorSequence.current)
         setError(
-          `无法选择文件夹：${cause instanceof Error ? cause.message : String(cause)}`,
+          `无法选择文件夹：${errorMessage(cause)}`,
         );
     } finally {
       setPicking(false);

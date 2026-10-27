@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 
 from . import schemas as s
 from .config import PROFILE_ID
-from .db import Attachment, Attempt, Goal, KnowledgeNode, LearningSession, Lesson, Run, Session, now
+from .db import ACTIVE_RUN_STATUSES, Attachment, Attempt, Goal, KnowledgeNode, LearningSession, Lesson, Run, Session, now
 
 router = APIRouter()
 
@@ -60,7 +60,7 @@ def unfinished(db, goal_id):
 
 def ensure_idle(db, goal_id):
     if db.scalar(select(Run.id).where(Run.goal_id == goal_id,
-                                     Run.status.in_(["queued", "running"]))):
+                                     Run.status.in_(ACTIVE_RUN_STATUSES))):
         raise HTTPException(409, "学习任务正在运行，请先停止当前任务")
 
 

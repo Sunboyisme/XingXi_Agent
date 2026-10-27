@@ -6,12 +6,8 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import {
-  CalendarPage,
-  eventsOnDay,
-  nextPlanEnd,
-  zonedISO,
-} from "./CalendarPage";
+import { CalendarPage, eventsOnDay, nextPlanEnd } from "./CalendarPage";
+import { zonedISO } from "@/lib/calendarMonth";
 import type { CalendarEvent } from "@/lib/api";
 const mock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api", () => ({ api: mock }));
@@ -89,7 +85,7 @@ test("creates an all-day plan with reminders off and retains calendar/week views
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(screen.getByRole("button", { name: "周历" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "月历" })).toBeNull();
+  expect(screen.getByRole("button", { name: "月历" }).getAttribute("aria-pressed")).toBe("true");
   expect(document.querySelector(".holiday-source")).toBeNull();
   expect(screen.queryByRole("button", { name: "列表" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "周历" }));

@@ -136,7 +136,9 @@ test("menus create the right content and chat history stays on the chat page", a
   await page
     .getByRole("menuitem", { name: "新建学习目标", exact: true })
     .click();
-  await expect(page.getByRole("dialog")).toContainText("你想学什么");
+  await expect(
+    page.getByRole("textbox", { name: "学习目标对话" }),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await menu.getByRole("menuitem", { name: "文件", exact: true }).click();
   await page.getByRole("menuitem", { name: "新建计划", exact: true }).click();

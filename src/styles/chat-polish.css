@@ -103,20 +103,6 @@
   );
 }
 
-.thinking {
-  gap: 5px;
-  min-height: 34px;
-  padding: 8px 12px;
-  border: 1px solid
-    color-mix(in srgb, var(--ui-color-action) 12%, var(--ui-color-line));
-  border-radius: 14px 14px 14px 5px;
-  background: color-mix(
-    in srgb,
-    var(--ui-color-action) 4%,
-    var(--ui-color-surface)
-  );
-}
-
 .chat-buddy-note {
   display: flex;
   align-items: center;
@@ -179,10 +165,8 @@
 
 /* Thinking is a quiet status line, not a bordered message box. */
 .thinking {
-  display: flex;
   align-items: center;
   gap: 9px;
-  width: fit-content;
   min-height: 32px;
   padding: 2px 0;
   border: 0;
@@ -195,11 +179,7 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  width: auto;
-  height: 12px;
   padding: 0;
-  border-radius: 0;
-  background: transparent;
   animation: none;
 }
 
@@ -241,22 +221,25 @@
 }
 
 .incomplete-reply-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  width: fit-content;
-  max-width: 100%;
+  display: grid;
+  gap: 6px;
+  width: min(100%, 460px);
   margin: 12px 0 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--ui-color-line);
   border-radius: 12px;
   background: var(--ui-color-bg);
   color: var(--ui-color-text-muted);
 }
 
-.incomplete-reply-notice > svg {
+.incomplete-reply-notice header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.incomplete-reply-notice header > svg {
   flex: 0 0 auto;
-  margin-top: 1px;
   color: var(--ui-color-action);
 }
 
@@ -273,25 +256,35 @@
   );
 }
 
-.incomplete-reply-notice.is-failed > svg {
+.incomplete-reply-notice.is-failed header > svg {
   color: var(--ui-color-danger);
 }
 
 .incomplete-reply-notice strong {
-  display: block;
   color: var(--ui-color-heading);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .incomplete-reply-notice p {
-  margin: 3px 0 0;
-  font-size: 11px;
+  margin: 0;
+  padding-left: 23px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
+.incomplete-reply-notice .incomplete-reply-reason {
+  color: var(--ui-color-text);
+  overflow-wrap: anywhere;
+}
+
+.incomplete-reply-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
 .error-notice {
-  align-items: flex-start;
   padding: 11px 13px;
   border-color: color-mix(
     in srgb,

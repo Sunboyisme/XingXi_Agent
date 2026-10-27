@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import artifacts, config
-from .db import Attachment, OfficeFile, Message, Run, Session, uid
+from .db import ACTIVE_RUN_STATUSES, Attachment, OfficeFile, Message, Run, Session, uid
 from .office_formats import MIMES, LIMIT
 
 tasks = set()
@@ -389,7 +389,7 @@ async def _generate(run_id, conversation_id, operation, name, format, **kwargs):
         if (
             not run
             or run.conversation_id != conversation_id
-            or run.status not in {"queued", "running"}
+            or run.status not in ACTIVE_RUN_STATUSES
         ):
             raise ValueError("当前任务已停止，不能生成文件")
         existing = list(
@@ -446,7 +446,7 @@ async def _generate(run_id, conversation_id, operation, name, format, **kwargs):
         raise ValueError("本轮产物总量超过 50 MB，请分批生成")
     with Session() as db:
         run = db.get(Run, run_id)
-        if not run or run.status not in {"queued", "running"}:
+        if not run or run.status not in ACTIVE_RUN_STATUSES:
             raise ValueError("任务已停止，未发布生成结果")
     file = artifacts.save_file(run_id, name, raw, source_url=marker)
     return {

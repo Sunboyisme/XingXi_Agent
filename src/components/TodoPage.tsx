@@ -22,7 +22,8 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { DateTimePicker } from "./DateTimePicker";
-import { ConfirmDelete, ErrorNotice, Toast } from "./common";
+import { ConfirmDelete, ErrorNotice, Hint, Toast } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 type Todo = {
   id: string;
@@ -73,8 +74,8 @@ export function TodoPage({
       .then((rows) => {
         if (live) setItems(rows);
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((e) => {
+        if (live) setError(errorMessage(e));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -106,8 +107,8 @@ export function TodoPage({
           edit(row);
         }
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((e) => {
+        if (live) setError(errorMessage(e));
       })
       .finally(() => {
         if (live) onOpened?.();
@@ -126,10 +127,11 @@ export function TodoPage({
       setEditor(false);
       setDeleting(null);
       setNotice(message);
-      await load();
-      await refresh();
+      await Promise.all([load(), refresh()]).catch(() =>
+        setError("已保存，列表暂未刷新，请稍后重试。"),
+      );
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       lock.current = false;
       setBusy(false);
@@ -162,7 +164,7 @@ export function TodoPage({
       setNotice("待办顺序已保存");
     } catch (error) {
       setItems(previous);
-      setError((error as Error).message);
+      setError(errorMessage(error));
       await load().catch(() => {});
     } finally {
       lock.current = false;
@@ -239,12 +241,12 @@ export function TodoPage({
               key={row.id}
               data-todo-id={row.id}
             >
+              <Hint label="拖动排序，也可聚焦后按上下方向键调整">
               <button
                 type="button"
                 className="todo-drag-handle"
                 disabled={busy}
                 aria-label={`排序${row.title}`}
-                title="拖动排序，也可聚焦后按上下方向键调整"
                 onPointerDown={(event) => {
                   if (event.button !== 0 || busy) return;
                   event.currentTarget.setPointerCapture(event.pointerId);
@@ -302,6 +304,7 @@ export function TodoPage({
               >
                 <GripVertical size={17} />
               </button>
+              </Hint>
               <PlanCompletionButton
                 status={row.status}
                 disabled={busy}

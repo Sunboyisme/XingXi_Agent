@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Pencil } from "lucide-react";
 import { Button } from "./ui/button";
 import { Hint } from "./common";
+import { useCopyFeedback } from "@/lib/clipboard";
 
 export function UserMessageActions({
   content,
@@ -12,39 +12,7 @@ export function UserMessageActions({
   disabled: boolean;
   onEdit: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  async function copy() {
-    setError("");
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(content);
-      } else {
-        const previous = document.activeElement as HTMLElement | null;
-        const input = document.createElement("textarea");
-        input.value = content;
-        input.style.cssText = "position:fixed;left:-9999px;top:0";
-        document.body.appendChild(input);
-        input.select();
-        let success = false;
-        try {
-          success = document.execCommand("copy");
-        } finally {
-          input.remove();
-          previous?.focus();
-        }
-        if (!success) throw new Error("copy failed");
-      }
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setError("复制失败，请选择文字后复制。");
-    }
-  }
+  const { copied, error, copy } = useCopyFeedback(content);
 
   return (
     <div

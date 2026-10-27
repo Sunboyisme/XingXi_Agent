@@ -8,8 +8,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from app import artifacts, data_transfer, db, feature_tools, skills, tools
-from app import calendar_service as calendar
+from app import artifacts, data_transfer, db, feature_tools, plans, skills, tools
 from fastapi import HTTPException
 from PIL import Image
 
@@ -185,12 +184,12 @@ def test_calendar_tool_requires_confirmation_and_retry_is_idempotent(client):
     )
     proposal = json.loads(tool.invoke({"plans": [event()]}))
     assert proposal["status"] == "needs_confirmation"
-    assert len(calendar.list_events()) == 0
+    assert len(plans.list_events()) == 0
     same_turn = json.loads(
         tool.invoke({"plans": [event()], "confirm": True})
     )
     assert "本轮" in same_turn["error"]
-    assert len(calendar.list_events()) == 0
+    assert len(plans.list_events()) == 0
     with db.Session() as session:
         session.add(
             db.Message(
@@ -209,7 +208,7 @@ def test_calendar_tool_requires_confirmation_and_retry_is_idempotent(client):
     again = json.loads(
         confirmed.invoke({"plans": [event()], "confirm": True})
     )
-    assert first == again and len(calendar.list_events()) == 1
+    assert first == again and len(plans.list_events()) == 1
     with db.Session() as session:
         session.add(
             db.Message(
@@ -233,7 +232,7 @@ def test_calendar_tool_requires_confirmation_and_retry_is_idempotent(client):
         )
     )
     assert created[0]["title"] == "明确计划"
-    assert len(calendar.list_events()) == 2
+    assert len(plans.list_events()) == 2
 
 
 def test_plan_confirmation_uses_what_the_user_saw_and_accepts_naive_times(client):
@@ -286,7 +285,7 @@ def test_plan_confirmation_uses_what_the_user_saw_and_accepts_naive_times(client
     )
     assert confirmed[0]["title"] == "晒衣服"
     assert confirmed[0]["reminder_offsets"] == [-10]
-    assert len(calendar.list_events()) == 1
+    assert len(plans.list_events()) == 1
 
     # Naive datetimes are interpreted in the plan's timezone instead of failing.
     with db.Session() as session:
@@ -530,7 +529,7 @@ def test_image_blocks_sources_persistence_and_export(client):
         content.content == image.getvalue()
         and content.headers["content-type"] == "image/png"
     )
-    calendar.create_events([calendar.EventWrite(**event())])
+    plans.create_events([plans.PlanWrite(**event())])
     import_example(client)
     exported = data_transfer.create_archive()
     with zipfile.ZipFile(exported["path"]) as zip:

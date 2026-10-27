@@ -18,12 +18,15 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { api, fetchApi } from "@/lib/api";
+import { api, downloadApiFile, fetchApi } from "@/lib/api";
+import { nativeFile, useNativeDrop } from "@/lib/nativeDrop";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { ConfirmDelete, ErrorNotice, Markdown, Toast } from "./common";
+import { ConfirmDelete, ErrorNotice, Hint, Markdown, Toast } from "./common";
 import { DownloadResultDialog, type DownloadedFile } from "./OfficeFiles";
+import { TrashIcon } from "./SoftIcons";
 import type { KnowledgeSource } from "./KnowledgeSources";
+import { errorMessage } from "@/lib/utils";
 
 type Document = {
   id: string;
@@ -130,17 +133,18 @@ function FileTree({
               >
                 {rows.length}
               </small>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="knowledge-row-delete"
-                disabled={busy}
-                aria-label={`删除文件夹 ${prefix}${name}`}
-                title="删除文件夹中的知识库副本"
-                onClick={() => onDelete(`${prefix}${name}`, rows)}
-              >
-                <Trash2 size={14} />
-              </Button>
+              <Hint label="删除文件夹中的知识库副本">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="knowledge-row-delete"
+                  disabled={busy}
+                  aria-label={`删除文件夹 ${prefix}${name}`}
+                  onClick={() => onDelete(`${prefix}${name}`, rows)}
+                >
+                  <TrashIcon size={15} />
+                </Button>
+              </Hint>
             </div>
             {!closed.has(name) && (
               <FileTree
@@ -168,11 +172,11 @@ function FileTree({
                 <FileText size={15} />
                 <span>{doc.relative_path.slice(prefix.length)}</span>
               </button>
+              <Hint label={statusLabels[doc.status] || doc.status}>
               <span
                 className={`knowledge-file-status is-${doc.status}`}
                 role="img"
                 aria-label={statusLabels[doc.status] || doc.status}
-                title={statusLabels[doc.status] || doc.status}
               >
                 {doc.status === "ready" ? (
                   <CheckCircle2 size={13} />
@@ -182,17 +186,19 @@ function FileTree({
                   <CircleAlert size={13} />
                 )}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="knowledge-row-delete"
-                disabled={busy}
-                aria-label={`删除文件 ${doc.relative_path}`}
-                title="删除知识库副本"
-                onClick={() => onDelete(doc.relative_path, [doc])}
-              >
-                <Trash2 size={14} />
-              </Button>
+              </Hint>
+              <Hint label="删除知识库副本">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="knowledge-row-delete"
+                  disabled={busy}
+                  aria-label={`删除文件 ${doc.relative_path}`}
+                  onClick={() => onDelete(doc.relative_path, [doc])}
+                >
+                  <TrashIcon size={15} />
+                </Button>
+              </Hint>
             </div>
           </li>
         ))}
@@ -260,8 +266,8 @@ export function KnowledgePage({
             setStatus(info);
           }
         })
-        .catch((e: Error) => {
-          if (live && request === requestVersion.current) setError(e.message);
+        .catch((e) => {
+          if (live && request === requestVersion.current) setError(errorMessage(e));
         });
     };
     refresh();
@@ -292,8 +298,8 @@ export function KnowledgePage({
       .then((value) => {
         if (live) setPreview(value);
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((e) => {
+        if (live) setError(errorMessage(e));
       })
       .finally(() => {
         if (live) setPreviewLoading(false);
@@ -311,24 +317,41 @@ export function KnowledgePage({
     try {
       await work();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       lock.current = false;
       setBusy(false);
     }
   }
+  // Files and whole folders dropped from the desktop import with their relative paths.
+  const dropZone = useRef<HTMLDivElement>(null);
+  useNativeDrop(
+    dropZone,
+    (dropped) =>
+      importFiles(
+        dropped
+          .filter((item) => !item.directory)
+          .map((item) => ({ file: nativeFile(item), path: item.relative_path })),
+      ),
+    setError,
+    true,
+    busy,
+  );
   async function upload(list: FileList | null) {
     if (!list?.length) return;
-    const chosen = Array.from(list);
+    await importFiles(
+      Array.from(list, (file) => ({
+        file,
+        path: file.webkitRelativePath || file.name,
+      })),
+    );
+  }
+  async function importFiles(chosen: { file: File; path: string }[]) {
+    if (!chosen.length) return;
     await perform(async () => {
       const body = new FormData();
-      for (const file of chosen) body.append("files", file);
-      body.append(
-        "paths",
-        JSON.stringify(
-          chosen.map((file) => file.webkitRelativePath || file.name),
-        ),
-      );
+      for (const item of chosen) body.append("files", item.file);
+      body.append("paths", JSON.stringify(chosen.map((item) => item.path)));
       const saved: Document[] = await (
         await fetchApi("/knowledge/import", { method: "POST", body })
       ).json();
@@ -351,7 +374,7 @@ export function KnowledgePage({
     setDeleting({ label, documents: rows });
   }
   return (
-    <div className="knowledge-page page-content">
+    <div className="knowledge-page page-content" ref={dropZone}>
       <div className="page-heading">
         <div>
           <h1>知识库</h1>
@@ -535,7 +558,7 @@ export function KnowledgePage({
               <>
                 {!documents.length && (
                   <p className="module-empty">
-                    导入文件或文件夹，从第一份资料开始。
+                    导入或直接拖入文件、文件夹，从第一份资料开始。
                   </p>
                 )}
                 <FileTree
@@ -577,17 +600,10 @@ export function KnowledgePage({
                           );
                           setDownloaded({ name, path });
                         } else {
-                          const response = await fetchApi(
+                          await downloadApiFile(
                             `/knowledge/documents/${current.id}/download`,
+                            name,
                           );
-                          const url = URL.createObjectURL(
-                            await response.blob(),
-                          );
-                          const anchor = document.createElement("a");
-                          anchor.href = url;
-                          anchor.download = name;
-                          anchor.click();
-                          setTimeout(() => URL.revokeObjectURL(url), 1000);
                         }
                       })
                     }
@@ -614,18 +630,19 @@ export function KnowledgePage({
                       <RotateCcw size={16} />
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="删除知识库文件"
-                    title="删除知识库副本"
-                    disabled={busy}
-                    onClick={() =>
-                      requestDelete(current.relative_path, [current])
-                    }
-                  >
-                    <Trash2 size={16} />
-                  </Button>
+                  <Hint label="删除知识库副本">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="删除知识库文件"
+                      disabled={busy}
+                      onClick={() =>
+                        requestDelete(current.relative_path, [current])
+                      }
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  </Hint>
                 </div>
               </header>
               {current.error && (

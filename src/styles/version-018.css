@@ -3,7 +3,7 @@
 .learning-composer-dock > * { pointer-events: auto; }
 .lesson-content > .lesson-scroll { padding-bottom: var(--learning-composer-height, 140px); }
 .learning-composer { border: 1px solid var(--ui-color-line); border-radius: 24px; padding: 10px 16px; background: color-mix(in srgb, var(--bai-lift) 84%, transparent); backdrop-filter: blur(18px) saturate(1.08); }
-.learning-composer > textarea[data-slot="textarea"] { display: block; field-sizing: fixed; min-height: 54px; max-height: min(180px, 25dvh); padding: 5px 0; border: 0; box-shadow: none; border-radius: 0; background: transparent; outline: none; resize: none; overflow-y: auto; font-size: 14px; line-height: 1.75; }
+.learning-composer > textarea[data-slot="textarea"] { display: block; field-sizing: fixed; min-height: 54px; max-height: min(180px, 25dvh); padding: 5px 0; border-radius: 0; resize: none; overflow-y: auto; font-size: 14px; line-height: 1.75; }
 .learning-composer > textarea[data-slot="textarea"], .learning-composer > textarea[data-slot="textarea"]:focus-visible { outline: none !important; box-shadow: none !important; border: 0 !important; background: transparent !important; }
 .learning-composer-tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-height: 34px; margin-top: 4px; }
 .learning-composer-tools > button:last-child { border-radius: 50%; width: 34px; height: 34px; }

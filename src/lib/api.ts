@@ -103,16 +103,26 @@ export async function api<T>(
   ).json();
 }
 
-export async function uploadImage(file: File): Promise<Attachment> {
+async function upload(path: string, file: File): Promise<Attachment> {
   const body = new FormData();
   body.append("file", file);
-  return (await fetchApi("/attachments", { method: "POST", body })).json();
+  return (await fetchApi(path, { method: "POST", body })).json();
 }
 
-export async function uploadFile(file: File): Promise<Attachment> {
-  const body = new FormData();
-  body.append("file", file);
-  return (await fetchApi("/files", { method: "POST", body })).json();
+export const uploadImage = (file: File) => upload("/attachments", file);
+export const uploadFile = (file: File) => upload("/files", file);
+
+/** 浏览器开发环境下载；桌面版走 Tauri 原生保存，不经过这里。 */
+export async function downloadApiFile(path: string, name: string) {
+  const response = await fetchApi(path);
+  const url = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export async function readEvents(

@@ -48,13 +48,15 @@ import {
   dateMove,
   zonedInput,
   zonedISO,
+  zonedToday,
   shiftedPlan,
   monthSegments,
   orderDayEvents,
   occurrenceOrderKey,
   type MonthSegment,
 } from "@/lib/calendarMonth";
-export { dateMove, zonedInput, zonedISO } from "@/lib/calendarMonth";
+import { errorMessage } from "@/lib/utils";
+
 
 export function nextPlanEnd(start: string, end: string, allDay: boolean) {
   const startDay = start.slice(0, 10);
@@ -90,6 +92,27 @@ function eventsBetween(
   );
 }
 
+function emptyPlanForm(day: string) {
+  return {
+    title: "",
+    notes: "",
+    start: day,
+    end: day,
+    all_day: true,
+    reminder_enabled: false,
+    reminder_time: "09:00",
+    reminder_at: "",
+    status: "planned" as "planned" | "completed" | "ended" | "deleted",
+    recurrence: "none" as "none" | "daily" | "weekly" | "monthly",
+    repeat_interval: 1,
+    repeat_end_mode: "never" as "never" | "until" | "count",
+    repeat_until: dateMove(day, 30),
+    repeat_count: 10,
+    calendar_display: "summary" as "summary" | "always",
+    reminder_values: [`${day}T09:00`],
+  };
+}
+
 export function CalendarPage({
   timezone = "Asia/Shanghai",
   refresh,
@@ -109,7 +132,7 @@ export function CalendarPage({
   openOccurrenceStart?: string | null;
   openAgenda?: { day: string; tab: "todo" | "repeat" } | null;
 }) {
-  const today = zonedInput(new Date().toISOString(), timezone).slice(0, 10);
+  const today = zonedToday(timezone);
   const [todoView, setTodoView] = useState(Boolean(openTodoId));
   useEffect(() => { if (openTodoId) setTodoView(true); }, [openTodoId]);
   useEffect(() => { if (openEventId || requestedAgenda || createRequested) setTodoView(false); }, [openEventId, requestedAgenda, createRequested]);
@@ -153,24 +176,7 @@ export function CalendarPage({
   const [draggingId, setDraggingId] = useState("");
   const moveLock = useRef(false);
   const [moveNotice, setMoveNotice] = useState("");
-  const [form, setForm] = useState({
-    title: "",
-    notes: "",
-    start: today,
-    end: today,
-    all_day: true,
-    reminder_enabled: false,
-    reminder_time: "09:00",
-    reminder_at: "",
-    status: "planned" as "planned" | "completed" | "ended" | "deleted",
-    recurrence: "none" as "none" | "daily" | "weekly" | "monthly",
-    repeat_interval: 1,
-    repeat_end_mode: "never" as "never" | "until" | "count",
-    repeat_until: dateMove(today, 30),
-    repeat_count: 10,
-    calendar_display: "summary" as "summary" | "always",
-    reminder_values: [`${today}T09:00`],
-  });
+  const [form, setForm] = useState(() => emptyPlanForm(today));
   const formBaseline = useRef<typeof form | null>(null);
   const first = `${anchor.slice(0, 7)}-01`;
   const offset = (new Date(`${first}T00:00:00Z`).getUTCDay() + 6) % 7;
@@ -248,7 +254,7 @@ export function CalendarPage({
         setError("");
       }
     } catch (e) {
-      if (sequence === requestSequence.current) setError((e as Error).message);
+      if (sequence === requestSequence.current) setError(errorMessage(e));
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
     }
@@ -316,24 +322,7 @@ export function CalendarPage({
               ? dateMove(last!, -1)
               : zonedInput(last!, event.timezone),
           }
-        : {
-            title: "",
-            notes: "",
-            start: day,
-            end: day,
-            all_day: true,
-            reminder_enabled: false,
-            reminder_time: "09:00",
-            reminder_at: "",
-            status: "planned",
-            recurrence: "none",
-            repeat_interval: 1,
-            repeat_end_mode: "never",
-            repeat_until: dateMove(day, 30),
-            repeat_count: 10,
-            calendar_display: "summary",
-            reminder_values: [`${day}T09:00`],
-          };
+        : emptyPlanForm(day);
       formBaseline.current = nextForm;
       setForm({ ...nextForm, ...changes });
       setError("");
@@ -363,7 +352,7 @@ export function CalendarPage({
           : editing;
       edit(editing.start.slice(0, 10), editing, scope, source, changes);
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -406,8 +395,8 @@ export function CalendarPage({
         });
         onOpened?.();
       })
-      .catch((error: Error) => {
-        if (live) setError(error.message);
+      .catch((error) => {
+        if (live) setError(errorMessage(error));
       });
     return () => {
       live = false;
@@ -512,7 +501,7 @@ export function CalendarPage({
         ),
       ]);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -537,7 +526,7 @@ export function CalendarPage({
       ]);
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
       return false;
     } finally {
       setBusy(false);
@@ -657,7 +646,7 @@ export function CalendarPage({
       await load();
       await refresh().catch(() => setError("改期已保存，部分列表暂未刷新。"));
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
     } finally {
       moveLock.current = false;
       setBusy(false);
@@ -791,7 +780,7 @@ export function CalendarPage({
       setAgendaNotice(keys.length ? "顺序已保存。" : "已恢复默认排序。");
       return true;
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
       return false;
     } finally {
       orderLock.current = false;
@@ -1758,7 +1747,7 @@ export function CalendarPage({
               refresh().catch(() => setError("本次已取消，部分列表暂未刷新。")),
             ]);
           } catch (error) {
-            setError((error as Error).message);
+            setError(errorMessage(error));
           }
         }}
       />
@@ -1793,9 +1782,11 @@ export function CalendarPage({
             else await api(`/plans/${deleting.id}`, "DELETE");
             setDeleting(null);
             setEditor(false);
-            await Promise.all([load(), refresh()]);
+            await Promise.all([load(), refresh()]).catch(() =>
+              setError("计划已删除，部分列表暂未刷新。"),
+            );
           } catch (e) {
-            setError((e as Error).message);
+            setError(errorMessage(e));
           }
         }}
       />

@@ -209,33 +209,11 @@ body:has(.reminder-popup),
 }
 
 /* Keep the lower conversation readable beneath a floating composer. */
-.chat-main:not(.is-empty) {
-  position: relative;
-}
 
 .chat-main:not(.is-empty) .composer-area {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 20;
   display: flex;
   flex-direction: column;
   background: transparent !important;
-  pointer-events: none;
-}
-
-.chat-main:not(.is-empty) .chat-scroll {
-  padding-bottom: 214px;
-}
-
-.chat-main:not(.is-empty) .composer-area > * {
-  pointer-events: auto;
-}
-
-.chat-main:not(.is-empty) .composer {
-  background: color-mix(in srgb, var(--bai-lift) 84%, transparent);
-  backdrop-filter: blur(18px) saturate(1.08);
 }
 
 /* Calendar: every repeated series is folded into one quiet count per day. */
@@ -674,19 +652,13 @@ body:has(.reminder-popup),
 }
 
 .model-dialog-redesign .connection-model-row {
-  padding: 13px;
   border-radius: 14px;
   border: 1px solid var(--line-subtle);
 }
 
 .model-dialog-redesign .model-capabilities {
   display: grid;
-  grid-template-columns: 1fr minmax(180px, 0.8fr);
   align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--line-subtle);
 }
 
 .model-dialog-redesign .model-vision,
@@ -730,11 +702,8 @@ body:has(.reminder-popup),
 
 .model-dialog-redesign .model-thinking-control > .model-thinking-select {
   display: flex;
-  min-width: 0;
   flex: 0 1 148px;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
 }
 
 .model-thinking-select .soft-select {
@@ -1264,10 +1233,6 @@ body:has(.reminder-popup),
     display: none;
   }
 
-  .model-dialog-redesign .model-capabilities {
-    grid-template-columns: 1fr;
-  }
-
   .model-thinking-control {
     align-items: flex-start;
     flex-direction: column;
@@ -1275,9 +1240,7 @@ body:has(.reminder-popup),
   }
 
   .model-dialog-redesign .model-thinking-control > .model-thinking-select {
-    width: 100%;
     flex-basis: auto;
-    align-items: flex-start;
   }
 
   .model-thinking-detected {
@@ -1294,13 +1257,6 @@ body:has(.reminder-popup),
 }
 
 @media (max-width: 700px) {
-  .chat-main:not(.is-empty) .composer-area {
-    position: relative;
-  }
-
-  .chat-main:not(.is-empty) .chat-scroll {
-    padding-bottom: var(--ui-space-3);
-  }
 
   .chat-jump-latest {
     position: absolute;
@@ -1344,9 +1300,6 @@ body:has(.reminder-popup),
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .chat-main:not(.is-empty) .composer {
-    background: var(--bai-lift);
-  }
 }
 .course-body .lesson-content {
   position: relative;
@@ -1403,14 +1356,6 @@ body:has(.reminder-popup),
   height: 60px;
   color: var(--ui-color-action);
   font-size: 10px;
-}
-.file-attachment-warning {
-  display: block;
-  font-size: 9px;
-  color: var(--ui-color-text-muted);
-}
-.attachment-draft:has(.file-attachment-icon) {
-  height: 118px;
 }
 .office-file-card {
   display: flex;
@@ -1522,13 +1467,6 @@ body:has(.reminder-popup),
   overflow: hidden;
   font-size: 9px;
 }
-.file-selection-notice {
-  flex-basis: 100%;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--ui-color-text-muted);
-  margin: 0;
-}
 .office-preview-footer {
   display: flex;
   align-items: center;
@@ -1576,24 +1514,6 @@ body:has(.reminder-popup),
   color: var(--ui-color-action);
 }
 
-/* Keep the message at the start and actions at the end of the chat notice. */
-.composer-area > .error-notice {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 12px;
-  row-gap: 8px;
-}
-
-.composer-area > .error-notice .error-notice-text {
-  flex: none;
-  text-align: left;
-}
-
-.composer-area > .error-notice .error-notice-actions {
-  justify-self: end;
-}
-
 .user-message-editor {
   display: grid;
   gap: 8px;
@@ -1617,22 +1537,6 @@ body:has(.reminder-popup),
   color: var(--ui-color-text-muted);
   font-size: 11px;
   line-height: 1.5;
-}
-
-@media (max-width: 700px) {
-  .composer-area > .error-notice {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .composer-area > .error-notice .error-notice-text {
-    text-align: left;
-  }
-
-  .composer-area > .error-notice .error-notice-actions {
-    grid-column: 2;
-    justify-self: end;
-    margin-left: 0;
-  }
 }
 
 @media (max-width: 520px) {
@@ -1659,14 +1563,7 @@ body:has(.reminder-popup),
   align-items: center;
   gap: 9px;
   width: fit-content;
-  max-width: min(560px, calc(100vw - 32px));
   padding: 10px 12px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--ui-color-surface) 96%, transparent);
-  box-shadow: 0 16px 44px rgb(56 39 24 / 18%);
-  color: var(--ui-color-text);
-  font-size: 12px;
   backdrop-filter: blur(16px);
   transform: translateX(-50%);
   animation: app-toast-in 160ms ease-out;
@@ -1674,19 +1571,6 @@ body:has(.reminder-popup),
 
 .app-toast.is-success {
   border-color: color-mix(in srgb, #2f8f5b 26%, var(--ui-color-line));
-}
-
-.app-toast.is-error {
-  border-color: color-mix(
-    in srgb,
-    var(--ui-color-danger) 30%,
-    var(--ui-color-line)
-  );
-  background: color-mix(
-    in srgb,
-    var(--ui-color-danger-surface) 52%,
-    var(--ui-color-surface)
-  );
 }
 
 .app-toast-icon {
@@ -1701,7 +1585,6 @@ body:has(.reminder-popup),
 }
 
 .app-toast.is-error .app-toast-icon {
-  color: var(--ui-color-danger);
   background: color-mix(in srgb, var(--ui-color-danger) 10%, transparent);
 }
 
@@ -2103,8 +1986,6 @@ body:has(.reminder-popup),
   color: var(--ui-color-text);
   font-size: 11px;
   line-height: 1.45;
-  overflow-wrap: anywhere;
-  white-space: normal;
   backdrop-filter: blur(14px);
   animation: navigation-tooltip-in 130ms ease-out;
 }

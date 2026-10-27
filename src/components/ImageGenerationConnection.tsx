@@ -84,7 +84,7 @@ export function ImageGenerationConnection() {
           setForm(value);
         }
       })
-      .catch((error: Error) => {
+      .catch((error) => {
         if (live) {
           setNeedsRestart(isMissingSettings(error));
           setError(settingsError(error));

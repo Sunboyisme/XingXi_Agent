@@ -14,6 +14,7 @@ import { DataSettings } from "./DataSettings";
 import { ScriptRuntimeSettings } from "./ScriptRuntimeSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { UsageCosts } from "./UsageCosts";
+import { errorMessage } from "@/lib/utils";
 
 function ConnectionSettings({
   settings,
@@ -74,7 +75,7 @@ export function SettingsPage({
   const [error, setError] = useState("");
   useEffect(() => {
     if (tab === "memories")
-      void refresh().catch((error: Error) => setError(error.message));
+      void refresh().catch((error) => setError(errorMessage(error)));
   }, [tab, refresh]);
   return (
     <div className="settings-page page-content">

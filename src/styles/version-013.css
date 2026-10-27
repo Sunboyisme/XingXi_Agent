@@ -37,8 +37,6 @@
   color: var(--ui-color-text-muted);
 }
 .retrieval-technical {
-  border-top: 1px solid var(--ui-color-line);
-  padding-top: 14px;
   font-size: 12px;
   color: var(--ui-color-text-muted);
 }
@@ -102,33 +100,21 @@
 }
 .answer-sources {
   max-width: 100%;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 14px;
-  padding: 12px 14px;
   font-size: 13px;
 }
 
 .answer-sources > div {
   display: grid;
-  gap: 8px;
-  margin-top: 12px;
 }
 .answer-sources a {
   display: block;
   color: var(--ui-color-text);
-  padding: 10px;
-  border-radius: 10px;
-  background: var(--ui-color-surface-deep);
   text-decoration: none;
   overflow-wrap: anywhere;
-}
-.answer-sources a:hover {
-  background: var(--ui-color-bg);
 }
 .answer-sources strong {
   display: flex;
   gap: 7px;
-  align-items: center;
   font-weight: 500;
   color: var(--ui-color-action);
 }
@@ -147,7 +133,6 @@
   overflow: hidden;
 }
 .presentation-notice {
-  font-size: 12px;
   color: var(--ui-color-text-muted);
 }
 .calendar-page {
@@ -276,7 +261,6 @@
   color: var(--appearance-on-action, white);
 }
 .plan-day-events {
-  display: grid;
   gap: 3px;
   margin-top: 5px;
 }
@@ -439,11 +423,6 @@
   color: var(--ui-color-text-muted);
   font-size: 12px;
 }
-.plan-agenda-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 .skills-settings {
   display: grid;
   gap: 22px;
@@ -572,9 +551,6 @@
     padding: 4px 3px;
     font-size: 10px;
   }
-  .skills-heading {
-    flex-wrap: wrap;
-  }
 }
 
 .plan-month-grid {
@@ -602,7 +578,6 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 20px;
   overflow: hidden;
 }
 .calendar-page > .plan-calendar {
@@ -610,12 +585,10 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-radius: 16px;
 }
 .calendar-page .plan-toolbar {
   flex: 0 0 auto;
   min-height: 64px;
-  padding: 12px 18px;
   gap: 12px;
   flex-wrap: nowrap;
 }
@@ -638,13 +611,9 @@
   font-weight: 400;
   color: var(--ui-color-text-muted);
 }
-.calendar-page .calendar-period {
-  gap: 1px;
-}
 .calendar-page .calendar-period button {
   height: 30px;
   min-height: 30px;
-  border-radius: 8px;
   padding: 0 9px;
   font-size: 12px;
 }
@@ -713,8 +682,6 @@
 }
 .calendar-page .plan-week-allday {
   flex: 0 0 auto;
-  max-height: 80px;
-  overflow-y: auto;
 }
 .calendar-page .calendar-loading {
   position: absolute;
@@ -726,12 +693,8 @@
   border-radius: 7px;
 }
 @media (max-width: 760px) {
-  .calendar-page.page-content {
-    padding: 12px;
-  }
   .calendar-page .plan-toolbar {
     flex-wrap: wrap;
-    padding: 10px 12px;
     min-height: 54px;
   }
   .plan-heading {
@@ -739,9 +702,6 @@
   }
   .plan-heading h1 {
     font-size: 21px;
-  }
-  .plan-toolbar-actions {
-    gap: 8px;
   }
   .calendar-page .plan-day {
     padding: 4px 3px;

@@ -10,7 +10,12 @@ import {
   Save,
   MoreHorizontal,
 } from "lucide-react";
-import { api, fetchApi, type Artifact, type Attachment } from "@/lib/api";
+import {
+  api,
+  downloadApiFile,
+  type Artifact,
+  type Attachment,
+} from "@/lib/api";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -22,6 +27,7 @@ import {
 } from "./ui/dialog";
 import { Picture } from "./ImageAttachments";
 import { Markdown } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 type Preview = {
   kind: string;
@@ -75,7 +81,7 @@ export function DownloadResultDialog({
               try {
                 await invoke("open_download_location", { path: value.path });
               } catch (cause) {
-                setError((cause as Error).message);
+                setError(errorMessage(cause));
               }
             }}
           >
@@ -122,7 +128,7 @@ export function FileCard({
         if (live) setPreview(value);
       })
       .catch((e) => {
-        if (live) setError(e.message);
+        if (live) setError(errorMessage(e));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -155,20 +161,13 @@ export function FileCard({
           setDownloaded({ name: file.name, path });
         }
       } else {
-        const response = await fetchApi(
+        await downloadApiFile(
           `/${prefix}/${file.id}/content?download=true`,
+          file.name,
         );
-        const url = URL.createObjectURL(await response.blob());
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = file.name;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -385,7 +384,7 @@ export function MessageAttachment({ id }: { id: string }) {
         if (live) setFile(value);
       })
       .catch((e) => {
-        if (live) setError(e.message);
+        if (live) setError(errorMessage(e));
       });
     return () => {
       live = false;

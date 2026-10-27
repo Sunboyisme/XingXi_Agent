@@ -20,7 +20,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { dateTime } from "@/lib/utils";
+import { dateTime, errorMessage } from "@/lib/utils";
 import { api, type Memory, type Settings } from "@/lib/api";
 import { ConfirmDelete, EmptyState, ErrorNotice } from "./common";
 import { MemoryReview } from "./MemoryFeedback";
@@ -64,7 +64,7 @@ export function MemoryPage({
       await api("/settings/memory", "PATCH", { memory_mode: mode });
       await refresh();
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setChangingMode(false);
     }
@@ -93,7 +93,7 @@ export function MemoryPage({
       await refresh();
       setOpen(false);
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -105,7 +105,7 @@ export function MemoryPage({
       await refresh();
       setDeleting(null);
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     }
   }
   const candidates = memories.filter(

@@ -15,6 +15,7 @@ from .db import (
     Memory,
     MemoryChange,
     Message,
+    NotFound,
     Session,
     Settings,
 )
@@ -181,7 +182,7 @@ def policy(content, category, message, evidence, risk, explicit_request, mode):
 def get_memory(db, memory_id):
     record = db.get(Memory, memory_id)
     if not record or record.profile_id != PROFILE_ID:
-        raise LookupError("记忆不存在")
+        raise NotFound("记忆不存在")
     return record
 
 
@@ -277,7 +278,7 @@ def save_from_chat(
         if replaces_id:
             try:
                 target = get_memory(db, replaces_id)
-            except LookupError:
+            except NotFound:
                 return {"error": "要替换的记忆不存在，请先查询记忆"}
             if target.state != "confirmed":
                 return {"error": "只能替换已保存的记忆"}
@@ -394,7 +395,7 @@ def undo(change_id):
     with lock, Session() as db:
         change = db.get(MemoryChange, change_id)
         if not change or change.profile_id != PROFILE_ID:
-            raise LookupError("记忆变更不存在")
+            raise NotFound("记忆变更不存在")
         if change.undone:
             return {"undone": True}
         record = get_memory(db, change.memory_id)

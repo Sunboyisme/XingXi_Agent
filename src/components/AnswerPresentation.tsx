@@ -13,7 +13,13 @@ import {
   FileCard,
   type DownloadedFile,
 } from "./OfficeFiles";
-import { api, fetchApi, type Artifact, type Presentation } from "@/lib/api";
+import {
+  api,
+  downloadApiFile,
+  fetchApi,
+  type Artifact,
+  type Presentation,
+} from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +27,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "./ui/dialog";
+import { errorMessage } from "@/lib/utils";
 
 // Keep decoded pictures and resolved image artifacts for the session. Remounting
 // a message (stream → persisted answer, page switch) must not flash blank again.
@@ -148,8 +155,8 @@ export function RemotePicture({
         imageArtifacts.set(key, value);
         if (live) setArtifact(value);
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((e) => {
+        if (live) setError(errorMessage(e));
       });
     return () => {
       live = false;
@@ -188,20 +195,13 @@ export function ArtifactDownload({ artifact }: { artifact: Artifact }) {
               setDownloaded({ name: artifact.name, path });
               return;
             }
-            const response = await fetchApi(
+            await downloadApiFile(
               `/artifacts/${artifact.id}/content?download=true`,
+              artifact.name,
             );
-            const url = URL.createObjectURL(await response.blob());
-            const anchor = document.createElement("a");
-            anchor.href = url;
-            anchor.download = artifact.name;
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
             setWebSaved(true);
           } catch (e) {
-            setError((e as Error).message);
+            setError(errorMessage(e));
           }
         }}
       >
@@ -238,8 +238,8 @@ export function AnswerPresentation({
       .then((result) => {
         if (live && Array.isArray(result?.artifacts)) setValue(result);
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((e) => {
+        if (live) setError(errorMessage(e));
       });
     return () => {
       live = false;

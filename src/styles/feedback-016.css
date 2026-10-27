@@ -163,9 +163,6 @@
   transform: translateX(-50%);
   z-index: 3;
   max-width: calc(100% - 32px);
-  padding: 9px 15px;
-  border-radius: 12px;
-  background: var(--ui-color-surface);
   box-shadow: 0 4px 20px #0002;
 }
 .learning-conversation {
@@ -192,22 +189,6 @@
 }
 .sidebar-group-toggle svg[data-collapsed="true"] {
   transform: rotate(-90deg);
-}
-.project-running-state {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.project-running-state {
-  color: var(--ui-color-text-muted);
-  opacity: 0.55;
-}
-.project-running-state[data-active="true"] {
-  color: var(--ui-color-action);
-  opacity: 1;
 }
 .goal-list {
   display: flex;
@@ -391,14 +372,9 @@
 }
 
 .project-source-files > div {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: center;
   padding: 6px 0;
 }
 .project-source-files > div > span {
-  min-width: 0;
   overflow-wrap: anywhere;
 }
 .chat-search-fields {

@@ -1,5 +1,6 @@
 """Observable request ledger. Never infer provider bills from text length."""
 
+import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, datetime, time, timedelta
@@ -7,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import logging
+import weakref
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -248,10 +250,51 @@ class MeteredImageStream(httpx.AsyncByteStream):
             finish(self.call_id, self.payload, self.status if self.complete else "interrupted")
 
 
+# Captured at import: tests replace httpx.AsyncClient for unrelated services.
+_AsyncClient = httpx.AsyncClient
+_loop_pools: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _loop_pool():
+    # Connections are bound to the event loop that opened them.
+    loop = asyncio.get_running_loop()
+    pool = _loop_pools.get(loop)
+    if pool is None or pool.is_closed:
+        pool = _loop_pools[loop] = _AsyncClient()
+    return pool
+
+
+class SharedPoolTransport(httpx.AsyncBaseTransport):
+    """Route through one connection pool per event loop.
+
+    A model or embedding client is created for every call and LangChain never
+    closes it, so a pool per client kept sockets open until garbage collection.
+    The pool keeps httpx's environment and system proxy routing.
+    """
+
+    async def handle_async_request(self, request):
+        pool = _loop_pool()
+        return await pool._transport_for_url(request.url).handle_async_request(request)
+
+    async def aclose(self):
+        # Closing one client must not close the pool other calls are using.
+        pass
+
+
+async def close_shared_pool():
+    pool = _loop_pools.pop(asyncio.get_running_loop(), None)
+    if pool is not None:
+        await pool.aclose()
+
+
 class MeteredAsyncClient(httpx.AsyncClient):
     """SDK retries call send again: each observable HTTP request gets its own row."""
 
     def __init__(self, *, usage_metadata, **kwargs):
+        if "transport" not in kwargs and kwargs.get("trust_env", True):
+            kwargs["transport"] = SharedPoolTransport()
         super().__init__(**kwargs)
         self.usage_metadata = dict(usage_metadata)
 

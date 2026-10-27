@@ -1,4 +1,5 @@
 import { Check, RotateCcw } from "lucide-react";
+import { Hint } from "./common";
 
 type PlanView = "todo" | "month" | "week";
 
@@ -43,20 +44,23 @@ export function PlanCompletionButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      className="complete-circle"
-      aria-label={label}
-      title={
+    <Hint
+      label={
         ["completed", "cancelled"].includes(status)
           ? "恢复为未完成"
           : "标记为已完成"
       }
-      disabled={disabled}
-      onClick={onClick}
     >
-      {status === "completed" && <Check size={13} />}
-      {status === "cancelled" && <RotateCcw size={13} />}
-    </button>
+      <button
+        type="button"
+        className="complete-circle"
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        {status === "completed" && <Check size={13} />}
+        {status === "cancelled" && <RotateCcw size={13} />}
+      </button>
+    </Hint>
   );
 }

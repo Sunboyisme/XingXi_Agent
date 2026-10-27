@@ -81,7 +81,7 @@ uv run --project backend python backend/tests/mock_provider.py                  
 
 - `src/App.tsx` 持有页面路由（chat/learning/reminders/settings）、全局数据和 5 秒通知轮询；各功能页在 `src/components/`。
 - `src/lib/api.ts`：Tauri 环境通过 IPC `backend_config` 取得后端 URL + bearer token，浏览器开发环境走 Vite 代理；`readEvents()` 解析 SSE。类型来自 `api.generated.ts`（OpenAPI 生成，不要手改）。
-- 样式加载顺序在 `src/main.tsx`：`style.css` → `styles/cream.css` → `styles/workspace.css`。`styles/interface.css` 是旧外观，当前不加载。
+- 全局样式按 `src/main.tsx` 中的 import 顺序层叠：`style.css` → `styles/cream.css` → `styles/workspace.css` → 各版本覆盖层（`version-0xx.css`、`feedback-0xx.css` 等，后加载者优先）。另有少数样式由组件直接 import（如 `projects-workspace.css`、`learning-sessions.css`），其注入顺序随懒加载变化，不要依赖它们与全局样式的先后。
 - 界面视觉约定见 `docs/interface.md`（奶油杏主题、圆角、头像动效、中文文案规范）。
 
 ### Tauri 壳

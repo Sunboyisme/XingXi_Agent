@@ -103,9 +103,12 @@ async def lifespan(app: FastAPI):
         if outstanding:
             await asyncio.gather(*outstanding, return_exceptions=True)
         await mcp_service.manager.close()
+        await usage_cost.close_shared_pool()
 
 
-app = FastAPI(title="XiaoXi API", version="0.1.8", lifespan=lifespan)
+# Keep in step with package.json, tauri.conf.json and pyproject.toml.
+APP_VERSION = "0.1.8"
+app = FastAPI(title="XiaoXi API", version=APP_VERSION, lifespan=lifespan)
 
 
 # Pydantic's default response includes the rejected input, including credentials.
@@ -149,6 +152,18 @@ def database():
         yield db
 
 
+def checked_model(db, selection, content=None, attachment_ids=()):
+    """Resolve the chosen model and verify it can take this message, or answer 400."""
+    try:
+        config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), selection)
+        provider.model(config)
+        if content is not None:
+            provider.user_content(content, attachment_ids, config)
+    except Exception as error:
+        raise HTTPException(400, provider.safe_error(error)) from None
+    return config
+
+
 def item(db, model, item_id):
     value = db.get(model, item_id)
     if not value or getattr(value, "profile_id", PROFILE_ID) != PROFILE_ID:
@@ -168,7 +183,7 @@ def goal_read(db, goal):
             .order_by(store.KnowledgeNode.ordinal)
         )
     ]
-    active = db.scalar(select(store.Run.id).where(store.Run.goal_id == goal.id, store.Run.status.in_(["queued", "running"])))
+    active = db.scalar(select(store.Run.id).where(store.Run.goal_id == goal.id, store.Run.status.in_(store.ACTIVE_RUN_STATUSES)))
     return s.GoalRead(**values, nodes=nodes, active_run_id=active)
 
 
@@ -194,7 +209,7 @@ def settings_read(db):
 def create_run(db, kind, conversation_id=None, goal_id=None, *, commit=True):
     if kind in LEARNING_KINDS:
         learning_workflows.assert_open(goal_id)
-    query = select(store.Run).where(store.Run.status.in_(["queued", "running"]))
+    query = select(store.Run).where(store.Run.status.in_(store.ACTIVE_RUN_STATUSES))
     query = (
         query.where(store.Run.conversation_id == conversation_id)
         if conversation_id
@@ -214,7 +229,7 @@ def create_run(db, kind, conversation_id=None, goal_id=None, *, commit=True):
 
 @app.get("/api/v1/health")
 def health():
-    return {"service": "bai-agent", "version": "0.1.8"}
+    return {"service": "bai-agent", "version": APP_VERSION}
 
 
 from fastapi import APIRouter
@@ -224,7 +239,7 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(auth)])
 
 def data_idle():
     with store.Session() as db:
-        active = db.scalar(select(store.Run.id).where(store.Run.status.in_(["queued", "running"])))
+        active = db.scalar(select(store.Run.id).where(store.Run.status.in_(store.ACTIVE_RUN_STATUSES)))
     if active or runs.tasks or retrieval.indexing or office.tasks:
         raise HTTPException(409, "请等待当前任务、文件解析和记忆索引完成后再操作数据。")
     if wechat.read_state().get("enabled"):
@@ -370,7 +385,7 @@ def get_tools():
 def update_tool(tool_id: str, value: s.ToolUpdate):
     try:
         return tools.set_tool_enabled(tool_id, value.enabled)
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error)) from None
 
 
@@ -411,7 +426,7 @@ async def update_mcp_server(server_id: str, value: s.MCPServerWrite):
         mcp_service.save_servers([value], server_id)
         await mcp_service.manager.reload(server_id)
         return next(x for x in mcp_service.list_servers() if x["id"] == server_id)
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error)) from None
     except ValueError as error:
         raise HTTPException(400, str(error)) from None
@@ -432,7 +447,7 @@ async def delete_mcp_server(server_id: str):
                 db.delete(server)
                 db.commit()
         return {"deleted": True}
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error)) from None
 
 
@@ -441,7 +456,7 @@ async def test_mcp_server(server_id: str):
     try:
         await mcp_service.manager.test(server_id)
         return next(x for x in mcp_service.list_servers() if x["id"] == server_id)
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error)) from None
 
 
@@ -580,13 +595,15 @@ def messages(conversation_id: str, db=Depends(database)):
         .where(store.Message.conversation_id == conversation_id)
         .order_by(store.Message.created_at, store.MESSAGE_ORDER)
     ).all()
-    run_details = {row.id: row for row in db.execute(select(store.Run.id, store.Run.status, store.Run.task_id).where(
+    run_details = {row.id: row for row in db.execute(select(store.Run.id, store.Run.status, store.Run.task_id, store.Run.error).where(
         store.Run.conversation_id == conversation_id,
     )).all()}
     learning_cards = set(db.scalars(select(store.RunEvent.run_id).join(store.Run, store.Run.id == store.RunEvent.run_id).where(
         store.Run.conversation_id == conversation_id, store.RunEvent.kind == "learning_continuation")))
     return [s.MessageRead.model_validate(record).model_copy(update={
         "run_status": run_details[record.run_id].status if record.run_id in run_details else None,
+        "run_error": (run_details[record.run_id].error or None)
+        if record.run_id in run_details and run_details[record.run_id].status == "failed" else None,
         "task_id": run_details[record.run_id].task_id if record.run_id in run_details else None,
         "has_learning_continuation": record.run_id in learning_cards,
     }) for record in records]
@@ -600,7 +617,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
     except (ValueError, OSError) as error:
         raise HTTPException(400, str(error)) from None
     active = db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id,
-        store.Run.status.in_(["queued", "running"])))
+        store.Run.status.in_(store.ACTIVE_RUN_STATUSES)))
     if active:
         if not active.task_id:
             raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
@@ -618,12 +635,7 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
         db.commit()
         complex_tasks.publish(active.id, task.id)
         return active
-    try:
-        config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), value.model_selection)
-        provider.model(config)
-        provider.user_content(value.content, value.attachment_ids, config)
-    except Exception as error:
-        raise HTTPException(400, provider.safe_error(error))
+    config = checked_model(db, value.model_selection, value.content, value.attachment_ids)
     run = create_run(db, "chat", conversation_id=conversation_id, commit=False)
     office.claim(db,value.attachment_ids,conversation_id)
     run.model_config = config
@@ -652,13 +664,8 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
 async def retry_message(conversation_id: str, value: s.ChatRetry | None = None, db=Depends(database)):
     item(db, store.Conversation, conversation_id)
     if db.scalar(select(store.Run.id).where(store.Run.conversation_id == conversation_id,
-        store.Run.status.in_(["queued", "running"]))):
+        store.Run.status.in_(store.ACTIVE_RUN_STATUSES))):
         raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
-    latest = db.scalar(
-        select(store.Message)
-        .where(store.Message.conversation_id == conversation_id)
-        .order_by(store.Message.created_at.desc(), store.MESSAGE_ORDER.desc())
-    )
     previous = db.get(store.Run, value.source_run_id) if value and value.source_run_id else db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id).order_by(store.Run.created_at.desc()))
     if not previous or previous.conversation_id != conversation_id or retry_action(db, previous) == "none":
         raise HTTPException(409, "这条回答的状态已变化，请刷新后继续当前任务或发送新的要求。")
@@ -670,18 +677,9 @@ async def retry_message(conversation_id: str, value: s.ChatRetry | None = None, 
     if not source or source.conversation_id != conversation_id:
         raise HTTPException(409, "原始用户消息不存在")
     selection = value.model_selection if value else None
-    if selection is None and previous.model_config:
-        selection = s.ModelSelection(
-            provider_id=previous.model_config["provider_id"],
-            model_name=previous.model_config["model_name"],
-            thinking_enabled=previous.model_config.get("thinking_enabled", False),
-        )
-    try:
-        config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), selection)
-        provider.model(config)
-        provider.user_content(source.content, source.attachment_ids, config)
-    except Exception as error:
-        raise HTTPException(400, provider.safe_error(error))
+    if selection is None:
+        selection = model_profiles.saved_selection(previous.model_config)
+    config = checked_model(db, selection, source.content, source.attachment_ids)
     run = create_run(db, "chat", conversation_id=conversation_id, commit=False)
     run.model_config = config
     run.source_message_id = source.id
@@ -719,17 +717,13 @@ async def resume_task(task_id: str, value: s.ChatRetry | None = None, db=Depends
         raise HTTPException(409, "请先补充任务要求或核实未知操作结果，再继续任务。")
     if db.scalar(select(store.Run.id).where(
         store.Run.conversation_id == task.conversation_id,
-        store.Run.status.in_(["queued", "running"]),
+        store.Run.status.in_(store.ACTIVE_RUN_STATUSES),
     )):
         raise HTTPException(409, "当前对话仍在执行，请等待完成或先停止。")
     selection = value.model_selection if value else None
-    if selection is None and task.model_config:
-        selection = s.ModelSelection(provider_id=task.model_config["provider_id"], model_name=task.model_config["model_name"], thinking_enabled=task.model_config.get("thinking_enabled", False))
-    try:
-        task.model_config = model_profiles.resolve(db.get(store.Settings, PROFILE_ID), selection)
-        provider.model(task.model_config)
-    except Exception as error:
-        raise HTTPException(400, provider.safe_error(error)) from None
+    if selection is None:
+        selection = model_profiles.saved_selection(task.model_config)
+    task.model_config = checked_model(db, selection)
     task.status, task.reason = "running", ""
     run = create_run(db, "chat", conversation_id=task.conversation_id, commit=False)
     run.task_id, run.model_config = task.id, task.model_config
@@ -747,7 +741,7 @@ async def resume_task(task_id: str, value: s.ChatRetry | None = None, db=Depends
 async def end_task(task_id: str, db=Depends(database)):
     task = complex_tasks.require(db, task_id)
     active = db.scalar(select(store.Run).where(store.Run.task_id == task_id,
-        store.Run.status.in_(["queued", "running"])))
+        store.Run.status.in_(store.ACTIVE_RUN_STATUSES)))
     task.status, task.reason = "cancelled", "已结束任务，已有成果保留。"
     db.commit()
     if active and active.id in runs.tasks:
@@ -761,7 +755,7 @@ def resolve_task_operation(task_id: str, value: s.TaskResolution, db=Depends(dat
     if task.status in complex_tasks.TERMINAL:
         raise HTTPException(409, "任务已经结束，已有操作记录保留；重新执行请提出新要求。")
     if db.scalar(select(store.Run.id).where(store.Run.task_id == task_id,
-        store.Run.status.in_(["queued", "running"]))):
+        store.Run.status.in_(store.ACTIVE_RUN_STATUSES))):
         raise HTTPException(409, "请先停止任务，再核实操作结果。")
     operation = db.get(store.TaskOperation, value.operation_id)
     if not operation or operation.task_id != task_id or operation.status != "unknown":
@@ -790,7 +784,7 @@ def delete_conversation(conversation_id: str, db=Depends(database)):
     if db.scalar(
         select(store.Run).where(
             store.Run.conversation_id == conversation_id,
-            store.Run.status.in_(["queued", "running"]),
+            store.Run.status.in_(store.ACTIVE_RUN_STATUSES),
         )
     ):
         raise HTTPException(409, "请先停止正在执行的对话")
@@ -810,7 +804,7 @@ def list_runs(
 
 
 def retry_action(db, run):
-    if not run.conversation_id or run.status in {"queued", "running"}:
+    if not run.conversation_id or run.status in store.ACTIVE_RUN_STATUSES:
         return "none"
     latest_user = db.scalar(select(store.Message).where(store.Message.conversation_id == run.conversation_id, store.Message.role == "user").order_by(store.Message.created_at.desc(), store.MESSAGE_ORDER.desc()))
     if run.task_id:
@@ -842,16 +836,17 @@ async def cancel_run(run_id: str, db=Depends(database)):
         if pending:
             raise HTTPException(409, "正在停止当前回答，请稍候再发送。")
     db.refresh(value)
-    if value.status in {"queued", "running"}:
+    if value.status in store.ACTIVE_RUN_STATUSES:
         raise HTTPException(409, "当前回答的停止状态尚未同步，请稍候再试。")
     return run_read(db, value)
 
 
 @router.get("/runs/{run_id}/events")
-async def run_events(
-    run_id: str, request: Request, after: int = 0, db=Depends(database)
-):
-    item(db, store.Run, run_id)
+async def run_events(run_id: str, request: Request, after: int = 0):
+    # A short session only: a yield dependency would hold its connection
+    # until the stream ends, which can take many minutes.
+    with store.Session() as db:
+        item(db, store.Run, run_id)
 
     async def stream():
         cursor = after
@@ -866,11 +861,13 @@ async def run_events(
                            store.RunEvent.kind != "context_archive")
                     .order_by(store.RunEvent.id)
                 ).all()
+            if run is None:  # deleted together with its goal or conversation
+                break
             for event in events:
                 cursor = event.id
                 data = public_learning(event.data) if run.kind in LEARNING_KINDS else event.data
                 yield f"id: {event.id}\ndata: {json.dumps({'kind': event.kind, 'data': data}, ensure_ascii=False)}\n\n"
-            if run.status not in ("queued", "running"):
+            if run.status not in store.ACTIVE_RUN_STATUSES:
                 break
             if not events:
                 yield ": keepalive\n\n"
@@ -922,7 +919,7 @@ async def plan_course(goal_id: str, db=Depends(database)):
 async def delete_goal(goal_id: str, request: Request, stop: bool = False, db=Depends(database)):
     from sqlalchemy import delete
     goal = item(db, store.Goal, goal_id)
-    active = list(db.scalars(select(store.Run).where(store.Run.goal_id == goal_id, store.Run.status.in_(["queued", "running"]))))
+    active = list(db.scalars(select(store.Run).where(store.Run.goal_id == goal_id, store.Run.status.in_(store.ACTIVE_RUN_STATUSES))))
     if active and not stop:
         raise HTTPException(409, "学习任务正在运行，请选择停止任务并删除")
     pending = []
@@ -1071,7 +1068,7 @@ def skip_node(node_id: str, db=Depends(database)):
     if db.scalar(
         select(store.Run).where(
             store.Run.goal_id == node.goal_id,
-            store.Run.status.in_(["queued", "running"]),
+            store.Run.status.in_(store.ACTIVE_RUN_STATUSES),
         )
     ):
         raise HTTPException(409, "请先停止当前学习任务")
@@ -1096,7 +1093,7 @@ def complete_learning_section(node_id: str, db=Depends(database)):
         raise HTTPException(409, "请先查看本节讲解，再结束本节学习")
     if node.status not in ("passed", "skipped", "needs_practice"):
         node.status = "needs_practice"
-        node.review_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(timespec="microseconds")
+        learning.schedule_review(node)
     goal = item(db, store.Goal, node.goal_id)
     learning.update_goal_progress(db, goal)
     db.commit()
@@ -1121,12 +1118,12 @@ def add_memory(value: s.MemoryCreate, db=Depends(database)):
 
 
 @router.put("/memories/{memory_id}", response_model=s.MemoryRead)
-def edit_memory(memory_id: str, value: s.MemoryCreate, db=Depends(database)):
+def edit_memory(memory_id: str, value: s.MemoryCreate):
     try:
         return memory.edit(
             memory_id, value.model_dump(exclude={"revision"}), value.revision
         )
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error))
     except memory.MemoryConflict as error:
         raise HTTPException(409, str(error))
@@ -1136,7 +1133,7 @@ def edit_memory(memory_id: str, value: s.MemoryCreate, db=Depends(database)):
 def confirm_memory(memory_id: str, value: s.MemoryConfirm):
     try:
         return memory.confirm(memory_id, value.revision)
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error))
     except memory.MemoryConflict as error:
         raise HTTPException(409, str(error))
@@ -1146,17 +1143,17 @@ def confirm_memory(memory_id: str, value: s.MemoryConfirm):
 def undo_memory(change_id: str):
     try:
         return memory.undo(change_id)
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error))
     except memory.MemoryConflict as error:
         raise HTTPException(409, str(error))
 
 
 @router.delete("/memories/{memory_id}")
-def remove_memory(memory_id: str, db=Depends(database)):
+def remove_memory(memory_id: str):
     try:
         memory.discard(memory_id)
-    except LookupError as error:
+    except store.NotFound as error:
         raise HTTPException(404, str(error))
     return {"deleted": True}
 
@@ -1280,19 +1277,28 @@ async def upload(file: UploadFile = File(...), db=Depends(database)):
             raise ValueError("图片像素过大")
         image = ImageOps.exif_transpose(image).convert("RGB")
         image.thumbnail((2048, 2048))
-        record = store.Attachment(
-            name=Path(file.filename or "图片.jpg").name[:300],
-            media_type="image/jpeg",
-            width=image.width,
-            height=image.height,
-        )
-        db.add(record)
-        db.flush()
-        image.save(ATTACHMENTS_DIR / f"{record.id}.jpg", "JPEG", quality=88)
-        db.commit()
-        return record
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         raise HTTPException(422, "无法读取图片，请上传有效的 JPG、PNG 或 WebP 图片")
+    record = store.Attachment(
+        name=Path(file.filename or "图片.jpg").name[:300],
+        media_type="image/jpeg",
+        width=image.width,
+        height=image.height,
+    )
+    db.add(record)
+    db.flush()
+    path = ATTACHMENTS_DIR / f"{record.id}.jpg"
+    # Disk failures are not the user's image being invalid; keep no orphan file.
+    try:
+        image.save(path, "JPEG", quality=88)
+        db.commit()
+    except OSError:
+        path.unlink(missing_ok=True)
+        raise HTTPException(507, "图片保存失败，请检查磁盘空间或数据目录权限后重试")
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    return record
 
 
 @router.post("/files", response_model=s.AttachmentRead)
@@ -1387,7 +1393,7 @@ def wechat_delivery(delivery_id: str, db=Depends(database)):
     row = item(db, store.WechatDelivery, delivery_id)
     if row.account_id != wechat.read_state()["account_id"]:
         raise HTTPException(404, "投递记录不存在")
-    return {"id": row.id, "status": row.status, "error": row.error, "created_at": row.created_at, "diagnostics": row.diagnostics}
+    return wechat.delivery_read(row)
 
 
 @router.put("/wechat/options", response_model=s.WechatStatus)

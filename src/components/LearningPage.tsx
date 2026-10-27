@@ -58,6 +58,7 @@ import { LearningIntakePage } from "./LearningIntakePage";
 import { LearningReviewPanel } from "./LearningReviewPanel";
 import type { Intake } from "@/lib/learningWorkflows";
 import { flushLearningDrafts } from "@/lib/learningLifecycle";
+import { errorMessage } from "@/lib/utils";
 
 export function LearningPage({
   goals,
@@ -93,8 +94,16 @@ export function LearningPage({
   const [useBeginnerDefaults, setUseBeginnerDefaults] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    if (!open) api<Intake[]>("/learning/intakes").then(setIntakes).catch((cause: Error) => setError(cause.message));
+    if (open) return;
+    let live = true;
+    api<Intake[]>("/learning/intakes")
+      .then((values) => { if (live) setIntakes(values); })
+      .catch((cause) => { if (live) setError(errorMessage(cause)); });
+    return () => { live = false; };
   }, [open, goals]);
+  // 事件监听只注册一次，通过 ref 读取最新的学习目标。
+  const goalsRef = useRef(goals);
+  goalsRef.current = goals;
   const [notice, setNotice] = useState("");
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -212,7 +221,7 @@ export function LearningPage({
     const previous = sessionRef.current;
     if (previous?.status === "active")
       void api(`/learning/sessions/${previous.id}/pause`, "POST").catch(
-        (cause: Error) => setError(cause.message),
+        (cause) => setError(errorMessage(cause)),
       );
     setSession(null);
     watch.current?.abort();
@@ -221,24 +230,29 @@ export function LearningPage({
     setStopping(false);
     stopLock.current = false;
     setGoalId(value.id);
-    localStorage.setItem("bai-current-goal", value.id);
     setNodeId(value.current_node_id || value.nodes[0]?.id || "");
     setError("");
   }
-  function openGoalEditor(value?: LearningGoalDetails) {
+  // 新的学习目标都经由访谈页建立；目标表单只用于调整已有目标。
+  function openIntake(id?: string) {
+    setIntakeId(id);
+    setEditingGoalId(null);
+    setOpen(true);
+  }
+  function openGoalEditor(value: LearningGoalDetails) {
     setIntakeId(undefined);
-    setEditingGoalId(value?.id || null);
-    setTitle(value?.title || "");
-    setObjective(value?.objective || "");
-    setFoundation(value?.foundation || "");
-    setOutcome(value?.outcome || "");
-    setWeeklyMinutes(value?.weekly_minutes ? String(value.weekly_minutes) : "");
-    setTargetDate(value?.target_date || "");
+    setEditingGoalId(value.id);
+    setTitle(value.title);
+    setObjective(value.objective || "");
+    setFoundation(value.foundation || "");
+    setOutcome(value.outcome || "");
+    setWeeklyMinutes(value.weekly_minutes ? String(value.weekly_minutes) : "");
+    setTargetDate(value.target_date || "");
     setUseBeginnerDefaults(false);
     setOpen(true);
   }
   useEffect(() => {
-    const ended = () => { watch.current?.abort(); setBusy(false); setRun(null); setReviewOpen(false); setPendingReply(null); setLearningStream(null); void reloadContinuity().catch((cause: Error) => setError(cause.message)); };
+    const ended = () => { watch.current?.abort(); setBusy(false); setRun(null); setReviewOpen(false); setPendingReply(null); setLearningStream(null); void reloadContinuity().catch((cause) => setError(errorMessage(cause))); };
     window.addEventListener("xiaoxi-learning-ended", ended);
     return () => window.removeEventListener("xiaoxi-learning-ended", ended);
   }, []);
@@ -265,7 +279,7 @@ export function LearningPage({
       throw new Error("接续卡与学习目标不一致，请从学习列表继续。");
     setSession(saved);
     const nodeTitle =
-      goals
+      goalsRef.current
         .find((item) => item.id === targetGoal)
         ?.nodes.find((item) => item.id === saved?.node_id)?.title || "";
     setContinuations((previous) => ({
@@ -303,8 +317,8 @@ export function LearningPage({
             return next;
           });
       })
-      .catch((cause: Error) => {
-        if (live) setError(cause.message);
+      .catch((cause) => {
+        if (live) setError(errorMessage(cause));
       });
     return () => {
       live = false;
@@ -312,8 +326,8 @@ export function LearningPage({
   }, [goals]);
   useEffect(() => {
     if (goalId)
-      void reloadContinuity(goalId).catch((cause: Error) =>
-        setError(cause.message),
+      void reloadContinuity(goalId).catch((cause) =>
+        setError(errorMessage(cause)),
       );
     // Goal navigation reads saved continuity, never starts teaching.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -349,8 +363,8 @@ export function LearningPage({
         id: openRequest.sessionId,
       };
     }
-    void reloadContinuity(requestedGoal.id).catch((cause: Error) =>
-      setError(`无法打开原会话：${cause.message}`),
+    void reloadContinuity(requestedGoal.id).catch((cause) =>
+      setError(`无法打开原会话：${errorMessage(cause)}`),
     );
     onOpenHandled?.();
     // Each explicit card activation has its own key.
@@ -391,7 +405,7 @@ export function LearningPage({
           }
         })
         .catch((error) => {
-          if (live) setError(error.message);
+          if (live) setError(errorMessage(error));
         });
     return () => {
       live = false;
@@ -438,7 +452,7 @@ export function LearningPage({
           : "已暂停，下次可以接着学。",
       );
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
     } finally {
       setSessionBusy(false);
     }
@@ -481,7 +495,7 @@ export function LearningPage({
     try {
       await moveToNode(value);
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
     } finally {
       setSessionBusy(false);
     }
@@ -514,7 +528,7 @@ export function LearningPage({
         setNotice("课程已学完，未掌握的内容保留为待复习内容。");
       }
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
     } finally {
       finishingSection.current = false;
       setSessionBusy(false);
@@ -528,7 +542,7 @@ export function LearningPage({
       if (previous?.status === "active")
         await api(`/learning/sessions/${previous.id}/pause`, "POST");
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
     }
     if (selectedGoalId.current !== targetGoal) return;
     watch.current?.abort();
@@ -609,7 +623,7 @@ export function LearningPage({
         await finishRun(result, controller.signal, targetNode);
     } catch (error) {
       if (!controller.signal.aborted) {
-        setError((error as Error).message);
+        setError(errorMessage(error));
         setBusy(false);
       }
     }
@@ -639,7 +653,7 @@ export function LearningPage({
           setError("学习任务已停止，进度暂未刷新，请重新进入学习页查看。");
       });
     } catch (error) {
-      if (isCurrent()) setError(`停止失败：${(error as Error).message}`);
+      if (isCurrent()) setError(`停止失败：${errorMessage(error)}`);
     } finally {
       if (isCurrent()) {
         stopLock.current = false;
@@ -666,41 +680,28 @@ export function LearningPage({
     // Track is intentionally scoped to a selected goal; API completion reads fresh data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goalId]);
-  async function create() {
+  async function saveGoal() {
+    const editing = editingGoalId;
+    if (!editing) return;
     setBusy(true);
     setError("");
     try {
-      const editing = editingGoalId;
-      const value = await api<Goal>(
-        editing ? `/learning/goals/${editing}` : "/learning/goals",
-        editing ? "PUT" : "POST",
-        {
-          title,
-          objective,
-          foundation,
-          use_beginner_defaults: useBeginnerDefaults,
-          outcome,
-          weekly_minutes: weeklyMinutes.trim() ? Number(weeklyMinutes) : null,
-          target_date: targetDate || null,
-        },
-      );
+      await api<Goal>(`/learning/goals/${editing}`, "PUT", {
+        title,
+        objective,
+        foundation,
+        use_beginner_defaults: useBeginnerDefaults,
+        outcome,
+        weekly_minutes: weeklyMinutes.trim() ? Number(weeklyMinutes) : null,
+        target_date: targetDate || null,
+      });
       await refresh();
       setOpen(false);
-      if (editing) {
-        setNotice("学习目标已更新，已有课程、练习和会话继续保留。");
-        setBusy(false);
-        await reloadContinuity(editing);
-        return;
-      }
-      selectGoal(value);
-      setTitle("");
-      setObjective("");
-      setFoundation("");
-      setUseBeginnerDefaults(false);
-      const next = await api<Run>(`/learning/goals/${value.id}/plan`, "POST");
-      void track(next);
+      setNotice("学习目标已更新，已有课程、练习和会话继续保留。");
+      setBusy(false);
+      await reloadContinuity(editing);
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
       setBusy(false);
     }
   }
@@ -711,7 +712,7 @@ export function LearningPage({
     try {
       void track(await api<Run>(`/learning/goals/${goal.id}/plan`, "POST"));
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
       setBusy(false);
     }
   }
@@ -728,7 +729,7 @@ export function LearningPage({
         value.id,
       );
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
       setBusy(false);
     }
   }
@@ -765,7 +766,7 @@ export function LearningPage({
       });
       void track(value, node.id);
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
       setBusy(false);
       setPendingReply(null);
     }
@@ -787,7 +788,7 @@ export function LearningPage({
       );
       setNotice("已创建明天同一时间的复习提醒，可在提醒页调整。");
     } catch (cause) {
-      setError((cause as Error).message);
+      setError(errorMessage(cause));
     } finally {
       reviewReminderLock.current = false;
     }
@@ -853,25 +854,21 @@ export function LearningPage({
     <div
       className={`learning-page ${open ? "is-editing" : goal ? "has-course" : "page-content"}`}
     >
-      <ConfirmDelete open={Boolean(deletingIntake)} title="删除这份访谈草稿？" description="将删除这个学习方向的访谈与草稿。" label="删除草稿" onClose={() => setDeletingIntake(null)} onConfirm={async () => { if (!deletingIntake) return; try { await api(`/learning/intakes/${deletingIntake.id}`, "DELETE"); setIntakes((items) => items.filter((item) => item.id !== deletingIntake.id)); setDeletingIntake(null); } catch (cause) { setError((cause as Error).message); } }} />
+      <ConfirmDelete open={Boolean(deletingIntake)} title="删除这份访谈草稿？" description="将删除这个学习方向的访谈与草稿。" label="删除草稿" onClose={() => setDeletingIntake(null)} onConfirm={async () => { if (!deletingIntake) return; try { await api(`/learning/intakes/${deletingIntake.id}`, "DELETE"); setIntakes((items) => items.filter((item) => item.id !== deletingIntake.id)); setDeletingIntake(null); } catch (cause) { setError(errorMessage(cause)); } }} />
       {notice && <Toast message={notice} onClose={() => setNotice("")} />}
       {error && (
         <Toast tone="error" message={error} onClose={() => setError("")} />
       )}
       {open && !editingGoalId ? (
-        <LearningIntakePage key={intakeId || "new"} intakeId={intakeId} onBack={() => { setOpen(false); void refresh().catch((cause: Error) => setError(cause.message)); }} onCreated={async (id) => {
+        <LearningIntakePage key={intakeId || "new"} intakeId={intakeId} onBack={() => { setOpen(false); void refresh().catch((cause) => setError(errorMessage(cause))); }} onCreated={async (id) => {
           const value = await api<Goal>(`/learning/goals/${id}`); await refresh(); setOpen(false); selectGoal(value);
         }} />
       ) : open ? (
         <CreationPage
           className="learning-goal-creation"
-          footerNote="填写主题与基础即可开始，时间安排之后也能调整。"
-          title={editingGoalId ? "调整学习目标" : "你想学什么？"}
-          description={
-            editingGoalId
-              ? "调整接下来的方向，已有课程与学习记录会继续保留。"
-              : "告诉 XiaoXi 你想做成什么，从适合你的一小步开始。"
-          }
+          footerNote="时间安排可以留空，之后也能再调整。"
+          title="调整学习目标"
+          description="调整接下来的方向，已有课程与学习记录会继续保留。"
           backLabel={goal ? "返回课程" : "返回学习"}
           onBack={() => setOpen(false)}
           busy={busy}
@@ -892,14 +889,10 @@ export function LearningPage({
                   (!useBeginnerDefaults &&
                     (!objective.trim() || !foundation.trim()))
                 }
-                onClick={() => void create()}
+                onClick={() => void saveGoal()}
               >
                 <Sparkles size={15} />
-                {busy
-                  ? "正在保存…"
-                  : editingGoalId
-                    ? "保存目标"
-                    : "建立学习路线"}
+                {busy ? "正在保存…" : "保存目标"}
               </Button>
             </>
           }
@@ -1037,16 +1030,16 @@ export function LearningPage({
             <div>
               <div className="learning-home-heading"><BaiAvatar motion="idle" /><div><h1>一起确定你的学习方向</h1><p>XiaoXi 会帮你规划好适合你的学习路线。</p></div></div>
             </div>
-            <Button onClick={() => openGoalEditor()}>
+            <Button onClick={() => openIntake()}>
               <Plus size={16} />
               创建学习
             </Button>
           </div>
           {intakes.filter((item) => !item.goal_id).map((item) => <article className="goal-card-row intake-card" key={item.id}>
-            <button className="goal-card-main" onClick={() => { setIntakeId(item.id); setEditingGoalId(null); setOpen(true); }}>
+            <button className="goal-card-main" onClick={() => openIntake(item.id)}>
               <span className="goal-row-icon"><BookOpen size={22} /></span><span className="goal-row-content"><strong>{item.summary.title || item.messages.find((m) => m.role === "user")?.content.slice(0, 70) || "未完成的学习方向"}</strong><span>{item.status === "ready" ? "方向已整理，待确认生成路线" : "继续和 XiaoXi 确定学习方向"}</span><small>访谈草稿 · 已自动保存</small></span>
             </button>
-            <Button variant="ghost" onClick={() => { setIntakeId(item.id); setEditingGoalId(null); setOpen(true); }}>继续完善<ArrowRight size={15} /></Button>
+            <Button variant="ghost" onClick={() => openIntake(item.id)}>继续完善<ArrowRight size={15} /></Button>
             <Button size="icon" variant="ghost" aria-label="删除访谈草稿" onClick={() => setDeletingIntake(item)}><Trash2 size={15} /></Button>
           </article>)}
           {availableGoals.length ? (
@@ -1172,7 +1165,7 @@ export function LearningPage({
               session={session}
               busy={busy || sessionBusy || uploading || reviewBusy}
               ending={sessionBusy}
-              onReview={() => { void flushDraft().then(() => setReviewOpen(true)).catch((cause: Error) => setError(cause.message)); }}
+              onReview={() => { void flushDraft().then(() => setReviewOpen(true)).catch((cause) => setError(errorMessage(cause))); }}
               onPause={() => void changeSession("pause")}
               onEnd={() => void changeSession("end")}
               onComplete={node && lesson && !reviewOpen ? () => void finishSection() : undefined}
@@ -1226,7 +1219,7 @@ export function LearningPage({
                       disabled={busy || sessionBusy || reviewBusy}
                       onClick={() => { setReviewOpen(false); void switchNode(value); }}
                     >
-                      <span title={nodeStatus[value.status]} className={`node-symbol ${value.status}`}>
+                      <span className={`node-symbol ${value.status}`}>
                         <span className="sr-only">{nodeStatus[value.status]}</span>
                         {value.status === "passed" ? (
                           <Check size={13} />
@@ -1498,7 +1491,7 @@ export function LearningPage({
               setNotice("学习目标已删除，部分列表暂未刷新，请稍后刷新查看。"),
             );
           } catch (error) {
-            setError((error as Error).message);
+            setError(errorMessage(error));
             void api<Goal>(`/learning/goals/${deleting.id}`)
               .then(setDeleting)
               .catch(() => {});

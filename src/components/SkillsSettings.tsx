@@ -37,6 +37,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "./ui/dialog";
+import { errorMessage } from "@/lib/utils";
 
 function SkillSection({
   title,
@@ -96,7 +97,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
     setSkills(await api<Skill[]>("/skills"));
   }, []);
   useEffect(() => {
-    void load().catch((e: Error) => setError(e.message));
+    void load().catch((e) => setError(errorMessage(e)));
   }, [load]);
   async function inspect(input: SkillUpload[] | Promise<SkillUpload[]>) {
     if (busy || importBusy.current) return;
@@ -122,7 +123,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
         ).json(),
       );
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       importBusy.current = false;
       setBusy(false);
@@ -150,7 +151,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
         rows.map((row) => (row.id === skill.id ? skill : row)),
       );
       setDetail((current) => (current?.id === skill.id ? skill : current));
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -387,7 +388,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                   await load();
                   setNotice("技能已保存，可以按需要启用");
                 } catch (e) {
-                  setError((e as Error).message);
+                  setError(errorMessage(e));
                 } finally {
                   setBusy(false);
                 }
@@ -485,7 +486,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                         await api(`/skills/${detail.id}/stop`, "POST");
                         setNotice("已请求停止此技能的脚本");
                       } catch (e) {
-                        setError((e as Error).message);
+                        setError(errorMessage(e));
                       }
                     }}
                   >
@@ -513,7 +514,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
             setDetail(null);
             await load();
           } catch (e) {
-            setError((e as Error).message);
+            setError(errorMessage(e));
           }
         }}
       />

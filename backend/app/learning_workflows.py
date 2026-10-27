@@ -102,7 +102,7 @@ class ReviewDraft(BaseModel):
 
 def active_run(db, row):
     run = db.get(store.Run, row.active_run_id) if row.active_run_id else None
-    return run if run and run.status in {"queued", "running"} else None
+    return run if run and run.status in store.ACTIVE_RUN_STATUSES else None
 
 
 def new_run(db, kind, row, key, goal_id=None):
@@ -506,7 +506,7 @@ def end_review(review_id: str):
 async def stop_learning_runs(goal_id=None):
     with store.Session() as db:
         query = select(store.Run).where(store.Run.profile_id == PROFILE_ID,
-            store.Run.kind.in_(LEARNING_KINDS), store.Run.status.in_(["queued", "running"]))
+            store.Run.kind.in_(LEARNING_KINDS), store.Run.status.in_(store.ACTIVE_RUN_STATUSES))
         if goal_id:
             query = query.where(store.Run.goal_id == goal_id)
         ids = [run.id for run in db.scalars(query)]
@@ -520,7 +520,7 @@ async def stop_learning_runs(goal_id=None):
     with store.Session() as db:
         for key in ids:
             run = db.get(store.Run, key)
-            if run and run.status in {"queued", "running"}:
+            if run and run.status in store.ACTIVE_RUN_STATUSES:
                 run.status = "cancelled"
         db.commit()
 

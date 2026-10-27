@@ -162,7 +162,32 @@ def resolve(settings, selection=None):
         "thinking_control": model["thinking_control"],
         "thinking_enabled": enabled or model["thinking_control"] == "always",
         "context_tokens": model.get("context_tokens", 64000),
+        **chat_options(selection.model_dump() if selection else None),
     }
+
+
+def chat_options(config):
+    """Conversation options carried with a run: mode and which context to retrieve."""
+    config = config or {}
+    return {
+        "mode": "chat" if config.get("mode") == "chat" else "agent",
+        "use_memory": config.get("use_memory", True) is not False,
+        "use_knowledge": config.get("use_knowledge", True) is not False,
+    }
+
+
+def saved_selection(config):
+    """Rebuild a model selection from the config stored on a run or task."""
+    if not config:
+        return None
+    from .schemas import ModelSelection
+
+    return ModelSelection(
+        provider_id=config["provider_id"],
+        model_name=config["model_name"],
+        thinking_enabled=bool(config.get("thinking_enabled")),
+        **chat_options(config),
+    )
 
 
 def sync_default(settings):

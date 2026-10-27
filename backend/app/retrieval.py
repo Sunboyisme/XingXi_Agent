@@ -59,6 +59,24 @@ def client(value, *, purpose="embedding"):
     )
 
 
+def checked_batch(result, expected, message):
+    """An embedding batch must match its inputs and share one valid dimension."""
+    if len(result) != expected or len({len(v) for v in result}) != 1:
+        raise ValueError(message)
+    for vector in result:
+        checked(vector)
+    return result
+
+
+def rrf(lists):
+    """Reciprocal rank fusion of ranked key lists."""
+    scores = {}
+    for ranked in lists:
+        for position, key in enumerate(ranked):
+            scores[key] = scores.get(key, 0) + 1 / (61 + position)
+    return scores
+
+
 def checked(vector):
     if (
         not vector
@@ -146,11 +164,9 @@ async def index_once():
         return
     indexing = True
     try:
-        result = await client(value).aembed_documents([x[2] for x in pending])
-        if len(result) != len(pending) or len({len(v) for v in result}) != 1:
-            raise ValueError("向量批次格式无效")
-        for vector in result:
-            checked(vector)
+        result = checked_batch(
+            await client(value).aembed_documents([x[2] for x in pending]), len(pending), "向量批次格式无效"
+        )
         with Session() as db:
             current = db.get(Settings, config.PROFILE_ID).embedding_config or {}
             if not current.get("enabled") or signature(current) != signature(value):
@@ -245,10 +261,7 @@ async def retrieve_detailed(query: str, purpose="preview", project_id=None):
             raise
         except Exception:
             last_error = fallback = "语义查询暂不可用，已使用关键词检索。"
-    scores = {}
-    for ranked in lists:
-        for i, key in enumerate(ranked):
-            scores[key] = scores.get(key, 0) + 1 / (61 + i)
+    scores = rrf(lists)
     result, budget = [], MEMORY_TOKENS
     reasons = {}
     # Validate again after network I/O, including manually edited records and configuration.

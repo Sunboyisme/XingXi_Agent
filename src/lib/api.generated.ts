@@ -3299,6 +3299,8 @@ export interface components {
             run_id?: string | null;
             /** Run Status */
             run_status?: string | null;
+            /** Run Error */
+            run_error?: string | null;
             /** Task Id */
             task_id?: string | null;
             /**

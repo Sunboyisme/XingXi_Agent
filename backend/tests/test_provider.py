@@ -137,3 +137,19 @@ def test_provider_429_preserves_safe_status_and_distinguishes_quota(code, catego
     assert details["provider_code"] == code
     assert "429" in provider.safe_error(error)
     assert "private" not in str(details) + provider.safe_error(error)
+
+
+def test_bad_request_keeps_the_provider_reason_without_secrets():
+    import openai
+
+    response = httpx.Response(400, request=httpx.Request("POST", "https://models.example/v1/chat/completions"))
+    error = openai.BadRequestError(
+        "Error code: 400",
+        response=response,
+        body={"message": "messages.3: tool_use ids must be unique (key: sk-abcdef1234567890)", "type": "invalid_request_error"},
+    )
+    details = provider.error_details(error)
+    assert details["category"] == "bad_request"
+    assert details["provider_message"] == "messages.3: tool_use ids must be unique (key: ***)"
+    message = provider.safe_error(error)
+    assert "tool_use ids must be unique" in message and "abcdef1234567890" not in message

@@ -771,12 +771,9 @@ async def execute(run_id, task_id, *, repairs=0):
     # Portable task data can select a model, never supply an outbound credential destination.
     from . import model_profiles
     from .db import Settings
-    from .schemas import ModelSelection
     with Session() as db:
         task = require(db, task_id)
-        saved = task.model_config
-        selection = ModelSelection(provider_id=saved["provider_id"], model_name=saved["model_name"],
-                                   thinking_enabled=bool(saved.get("thinking_enabled"))) if saved else None
+        selection = model_profiles.saved_selection(task.model_config)
         resolved = model_profiles.resolve(db.get(Settings, PROFILE_ID), selection)
         task.model_config = resolved
         db.get(Run, run_id).model_config = resolved
@@ -973,6 +970,10 @@ async def dispatch(run_id, conversation_id):
             # keep the original operation ledger and its duplicate-write guards.
             await make_plan(run_id, existing_task_id, repair=True)
         return await execute(run_id, existing_task_id)
+    from . import model_profiles
+    if model_profiles.chat_options(config)["mode"] == "chat":
+        # 对话模式只回答，不新建、续接或修改复杂任务，避免未经同意调用工具。
+        return await agent._chat(run_id, conversation_id)
     if confirmation and not confirmation_task_id:
         return await agent._chat(run_id, conversation_id)
     simple_analysis = re.search(r"算|求和|总时长|提取|识别|读图|汇总", message.content) and not re.search(r"生成.{0,12}(?:文档|文件|报告)|保存|导出|Word|Markdown|\bdocx\b|\bpdf\b|\bxlsx\b", message.content, re.I)

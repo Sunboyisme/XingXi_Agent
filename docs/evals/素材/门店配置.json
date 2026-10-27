@@ -1,0 +1,27 @@
+{
+  "brand": "禾木咖啡",
+  "stores": [
+    {
+      "name": "东湖店",
+      "open": "08:00",
+      "close": "21:00",
+      "seats": 36,
+      "pickup": true
+    },
+    {
+      "name": "西岭店",
+      "open": "09:00",
+      "close": "22:00",
+      "seats": 24,
+      "pickup": false
+    },
+    {
+      "name": "南站店",
+      "open": "06:30",
+      "close": "20:00",
+      "seats": 18,
+      "pickup": true
+    }
+  ],
+  "member_discount": 0.9
+}

@@ -26,13 +26,14 @@ def legacy_vault_services() -> list[str]:
     from ``com.qinbai.baiagent`` to ``XiaoXi_Agent`` would otherwise look like
     a fresh install with no API keys. Reads fall back to the old service and
     copy the value forward on first use.
+
+    Only the installed data directory inherits the old credentials; dev,
+    preview and isolated test directories must never read personal keys.
     """
     local = os.getenv("LOCALAPPDATA")
-    if not local:
+    if not local or DATA_DIR != (Path(local) / "XiaoXi_Agent").resolve():
         return []
     legacy = (Path(local) / "com.qinbai.baiagent").resolve()
-    if legacy == DATA_DIR:
-        return []
     return ["BaiAgent-" + hashlib.sha256(str(legacy).encode()).hexdigest()[:16]]
 
 
@@ -86,8 +87,10 @@ def secret_set(name: str, value: str | None) -> None:
 
     if value.strip():
         keyring.set_password(VAULT_SERVICE, name, value.strip())
-    else:
+        return
+    # Clear the legacy copy too, otherwise the next read would restore it.
+    for service in [VAULT_SERVICE, *legacy_vault_services()]:
         try:
-            keyring.delete_password(VAULT_SERVICE, name)
+            keyring.delete_password(service, name)
         except keyring.errors.PasswordDeleteError:
             pass

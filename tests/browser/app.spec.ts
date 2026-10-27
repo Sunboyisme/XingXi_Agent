@@ -183,18 +183,22 @@ test("course, teaching, feedback, next node and reload progress", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "学习", exact: true }).click();
-  await page.getByRole("button", { name: "新的学习目标", exact: true }).click();
-  await page.getByLabel("学习主题").fill("学习前端");
-  await page.getByLabel("你希望学到什么程度").fill("独立做一个网页");
-  await page.getByLabel("目前的基础与相关背景").fill("零基础，尚未学习编程");
-  await page.getByRole("button", { name: "建立学习路线", exact: true }).click();
+  await page.getByRole("button", { name: "创建学习", exact: true }).click();
+  // New goals are shaped through the guided intake conversation.
+  const intake = page.getByRole("textbox", { name: "学习目标对话" });
+  await intake.fill("我想学HTML，能够理解页面结构");
+  await page.getByRole("button", { name: "发送回答", exact: true }).click();
+  await expect(page.getByText("你目前有什么基础？", { exact: true })).toBeVisible();
+  await intake.fill("零基础，尚未学习编程");
+  await page.getByRole("button", { name: "发送回答", exact: true }).click();
+  await expect(page.getByRole("region", { name: "学习目标摘要" })).toBeVisible();
+  await page.getByRole("button", { name: "确认并生成学习路线" }).click();
   await expect(
-    page.getByRole("heading", { name: "学习前端 · 认识基础", exact: true }),
+    page.getByRole("heading", { name: "HTML隔离验收 · 认识基础", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "开始这个知识点", exact: true })
     .click();
-  await page.getByRole("button", { name: "作答", exact: true }).click();
   await expect(page.getByLabel("练习回答")).toBeVisible();
   await page
     .getByLabel("练习回答")
@@ -205,12 +209,14 @@ test("course, teaching, feedback, next node and reload progress", async ({
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "学习", exact: true }).click();
+  // The learning home lists goals; progress resumes from the goal card.
+  await page.getByRole("button", { name: "继续学习" }).first().click();
   await expect(
     page.getByText("这次练习通过了", { exact: false }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /学习前端 · 应用方法/ }).click();
+  await page.getByRole("button", { name: /HTML隔离验收 · 应用方法/ }).click();
   await expect(
-    page.getByRole("heading", { name: "学习前端 · 应用方法", exact: true }),
+    page.getByRole("heading", { name: "HTML隔离验收 · 应用方法", exact: true }),
   ).toBeVisible();
   await page.screenshot({ path: ".local-data/review/learning-browser.png" });
 });

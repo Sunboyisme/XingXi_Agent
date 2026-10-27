@@ -7,6 +7,19 @@ export function dateMove(key: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+/** 指定时区下今天的日期键 YYYY-MM-DD。 */
+export function zonedToday(zone = "Asia/Shanghai") {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  return ["year", "month", "day"]
+    .map((name) => parts.find((part) => part.type === name)?.value)
+    .join("-");
+}
+
 const zoneFormats = new Map<string, Intl.DateTimeFormat>();
 const localTimes = new Map<string, string>();
 

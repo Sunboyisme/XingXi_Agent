@@ -22,6 +22,7 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ErrorNotice, Hint } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 type Trace = components["schemas"]["RetrievalRead"];
 export function RetrievalDebugger({
@@ -50,8 +51,8 @@ export function RetrievalDebugger({
       .then((values) => {
         if (live) setTraces(values);
       })
-      .catch((e: Error) => {
-        if (live) setError(e.message);
+      .catch((e) => {
+        if (live) setError(errorMessage(e));
       })
       .finally(() => {
         if (live) setBusy(false);
@@ -70,7 +71,7 @@ export function RetrievalDebugger({
       setTraces([trace]);
       setActive(0);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

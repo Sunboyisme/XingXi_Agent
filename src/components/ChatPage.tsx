@@ -24,6 +24,7 @@ import {
   Pin,
   Plus,
   LoaderCircle,
+  RotateCcw,
   Settings2,
   Square,
   Sparkles,
@@ -41,8 +42,6 @@ import {
   type RunEvent,
   type Settings,
   type Attachment,
-  type CalendarEvent,
-  type Goal,
   type Memory,
   type ComplexTask,
 } from "@/lib/api";
@@ -64,47 +63,62 @@ import {
   MemorySavedNotice,
   type MemoryNotice,
 } from "./MemoryFeedback";
+import { errorMessage } from "@/lib/utils";
+
+const configurationProblem = /密钥|接口|认证|模型|连接|配置|401|403|unauthorized/i;
 
 function IncompleteReplyNotice({
   cancelled,
+  reason,
   onRetry,
+  onSettings,
   disabled,
 }: {
   cancelled: boolean;
+  reason?: string | null;
   onRetry?: () => void;
+  onSettings?: () => void;
   disabled?: boolean;
 }) {
+  const showSettings = Boolean(onSettings && reason && configurationProblem.test(reason));
+  // Title, then what happened, then what is kept; the action sits on its own row.
   return (
     <div
       className={`incomplete-reply-notice ${cancelled ? "is-cancelled" : "is-failed"}`}
       role="status"
     >
-      <AlertCircle size={15} />
-      <div>
-        <strong>{cancelled ? "回答停在这里" : "这次回答没有完成"}</strong>
-        <p>
-          {!onRetry
-            ? "已有内容保留，可以发送新要求继续。"
-            : cancelled
-              ? "已经完成的工具操作仍会保留，可以继续追问或重新生成。"
-              : "可以重新生成，或者换个说法继续。"}
+      <header>
+        <AlertCircle size={15} aria-hidden="true" />
+        <strong>{cancelled ? "回答已停止" : "这次回答没有完成"}</strong>
+      </header>
+      {!cancelled && (
+        <p className="incomplete-reply-reason">
+          {reason || "模型连接中断，没有返回完整回答。"}
         </p>
-      </div>
-      {onRetry && (
-        <Button size="sm" variant="ghost" disabled={disabled} onClick={onRetry}>
-          重新生成
-        </Button>
+      )}
+      <p className="incomplete-reply-kept">
+        {cancelled
+          ? "已经显示的内容和完成的工具操作都会保留。"
+          : "上面已显示的内容和完成的工具操作都已保留。"}
+        {onRetry ? "可以重新生成，或换个说法继续。" : "可以发送新要求继续。"}
+      </p>
+      {(onRetry || showSettings) && (
+        <div className="incomplete-reply-actions">
+          {showSettings && (
+            <Button size="sm" variant="ghost" onClick={onSettings}>
+              检查模型连接
+            </Button>
+          )}
+          {onRetry && (
+            <Button size="sm" variant="outline" disabled={disabled} onClick={onRetry}>
+              <RotateCcw size={14} aria-hidden="true" />
+              重新生成
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
-}
-
-function isRunErrorDismissed(runId: string) {
-  try {
-    return sessionStorage.getItem(`bai-dismissed-chat-error:${runId}`) === "1";
-  } catch {
-    return false;
-  }
 }
 
 type StoredChatDraft = {
@@ -112,11 +126,55 @@ type StoredChatDraft = {
   images: Attachment[];
 };
 
+const chatModelKey = (conversationId: string | null) =>
+  `bai-chat-model:${conversationId || "new"}`;
+const chatDraftKey = (conversationId: string | null) =>
+  `bai-chat-draft:${conversationId || "new"}`;
+
+/** 回答方式与检索开关对所有对话生效，不再按对话分别保存。 */
+const chatOptionsKey = "bai-chat-options";
+
+/** agent 可调用工具；chat 只发送系统提示词与对话，更省 token。 */
+type ChatOptions = { mode: "agent" | "chat"; useMemory: boolean; useKnowledge: boolean };
+const defaultChatOptions: ChatOptions = { mode: "agent", useMemory: true, useKnowledge: true };
+
+function readChatOptions(): ChatOptions {
+  try {
+    const value = JSON.parse(localStorage.getItem(chatOptionsKey) || "null");
+    return {
+      mode: value?.mode === "chat" ? "chat" : "agent",
+      useMemory: value?.useMemory !== false,
+      useKnowledge: value?.useKnowledge !== false,
+    };
+  } catch {
+    return defaultChatOptions;
+  }
+}
+
+function storeChatOptions(value: ChatOptions) {
+  try {
+    localStorage.setItem(chatOptionsKey, JSON.stringify(value));
+  } catch {
+    /* Storage restrictions must not block changing the reply mode. */
+  }
+}
+
+/** 删除对话或开始新对话时，清掉该对话保存的草稿与模型偏好；全局回答选项保持不变。 */
+export function clearChatPreferences(conversationId: string | null) {
+  try {
+    localStorage.removeItem(chatDraftKey(conversationId));
+    localStorage.removeItem(chatModelKey(conversationId));
+    // 清理旧版按对话保存的回答选项。
+    localStorage.removeItem(`bai-chat-options:${conversationId || "new"}`);
+  } catch {
+    /* Storage restrictions must not block deleting or starting a chat. */
+  }
+}
+
 function readModelPreference(conversationId: string | null) {
   try {
     const value = JSON.parse(
-      localStorage.getItem(`bai-chat-model:${conversationId || "new"}`) ||
-        "null",
+      localStorage.getItem(chatModelKey(conversationId)) || "null",
     );
     return value?.version === 1 && typeof value.key === "string"
       ? { key: value.key, thinking: value.thinking === true }
@@ -133,7 +191,7 @@ function storeModelPreference(
 ) {
   try {
     localStorage.setItem(
-      `bai-chat-model:${conversationId || "new"}`,
+      chatModelKey(conversationId),
       JSON.stringify({ version: 1, key, thinking }),
     );
   } catch {
@@ -229,10 +287,6 @@ function ImageGenerationPreview({
   );
 }
 
-function chatDraftKey(conversationId: string | null) {
-  return `bai-chat-draft:${conversationId || "new"}`;
-}
-
 function readChatDraft(conversationId: string | null): StoredChatDraft | null {
   try {
     const value = JSON.parse(
@@ -287,8 +341,6 @@ function ReplyActivity({
   reasoning: string;
   stream: string;
   imageGeneration: ImageGenerationProgress | null;
-  contextStatus: string;
-  toolCount: number;
   runId?: string;
 }) {
   return (
@@ -338,13 +390,10 @@ export function ChatPage({
   conversationId: string | null;
   onConversation: (id: string) => void;
   settings: Settings;
-  goals: Goal[];
-  conversations?: Conversation[];
   memories?: Memory[];
   refresh: () => Promise<void>;
   onAction: (page: string, create?: boolean) => void;
   onContextSettings?: (providerId: string, modelName: string) => void;
-  onPlan: (plan: CalendarEvent) => void;
 }) {
   const [modelKey, setModelKey] = useState(
     () => readModelPreference(conversationId)?.key || "",
@@ -352,6 +401,14 @@ export function ChatPage({
   const [thinking, setThinking] = useState(
     () => readModelPreference(conversationId)?.thinking || false,
   );
+  const [chatOptions, setChatOptions] = useState(readChatOptions);
+  function updateChatOptions(change: Partial<ChatOptions>) {
+    const next = { ...chatOptions, ...change };
+    setChatOptions(next);
+    storeChatOptions(next);
+  }
+  // null while unknown; knowledge context only exists when retrieval is enabled.
+  const [knowledgeEnabled, setKnowledgeEnabled] = useState<boolean | null>(null);
   useEffect(() => {
     const saved = readModelPreference(conversationId);
     setModelKey(saved?.key || "");
@@ -379,6 +436,16 @@ export function ChatPage({
   const thinkingControl = selected?.model.thinking_control || "none";
   const thinkingEnabled =
     thinkingControl === "always" || (thinkingControl !== "none" && thinking);
+  const modelSelection = selected
+    ? {
+        provider_id: selected.profile.id,
+        model_name: selected.model.name,
+        thinking_enabled: thinkingEnabled,
+        mode: chatOptions.mode,
+        use_memory: chatOptions.useMemory,
+        use_knowledge: chatOptions.useKnowledge,
+      }
+    : undefined;
   const [messages, setMessages] = useState<Message[]>([]);
   const contextualPlaceholder = useComposerPlaceholder(
     conversationId,
@@ -726,9 +793,8 @@ export function ChatPage({
         );
         if (watch.signal.aborted) return;
         setRun(result);
-        if (result.status === "failed")
-          setError(result.error || "本次回答未完成");
-        if (result.status === "cancelled") setError("");
+        // A failed reply explains itself in the conversation; no duplicate banner.
+        if (["failed", "cancelled"].includes(result.status)) setError("");
         let loaded = false;
         try {
           loaded = await loadMessages(id);
@@ -746,7 +812,7 @@ export function ChatPage({
         });
       } catch (error) {
         if (!watch.signal.aborted) {
-          setError((error as Error).message);
+          setError(errorMessage(error));
           setBusy(false);
         }
       }
@@ -792,12 +858,12 @@ export function ChatPage({
               ),
             ]);
         })
-        .catch((error: Error) => {
-          if (live) setError(error.message);
+        .catch((error) => {
+          if (live) setError(errorMessage(error));
         });
       const initialMessages = loadMessages(conversationId);
-      void initialMessages.catch((error: Error) => {
-        if (live) setError(error.message);
+      void initialMessages.catch((error) => {
+        if (live) setError(errorMessage(error));
       });
       api<Run[]>(`/runs?conversation_id=${conversationId}`)
         .then(async (values) => {
@@ -865,16 +931,11 @@ export function ChatPage({
               if (live)
                 setSyncWarning("聊天已恢复，部分列表暂未刷新，请重试刷新。");
             });
-            if (
-              values[0].status === "failed" &&
-              !isRunErrorDismissed(values[0].id)
-            )
-              setError(values[0].error || "之前的回答未完成");
-            if (values[0].status === "cancelled") setError("");
+            if (["failed", "cancelled"].includes(values[0].status)) setError("");
           }
         })
         .catch((error) => {
-          if (live) setError(error.message);
+          if (live) setError(errorMessage(error));
         });
     }
     return () => {
@@ -989,15 +1050,11 @@ export function ChatPage({
         content: text.trim() || "请根据上传的附件帮助我分析。",
         attachment_ids: attachmentIds,
         local_references: localReferences,
-        model_selection: selected
-          ? {
-              provider_id: selected.profile.id,
-              model_name: selected.model.name,
-              thinking_enabled: thinkingEnabled,
-            }
-          : undefined,
+        model_selection: modelSelection,
       });
-      if (created) storeModelPreference(id, selected?.key || "", thinking);
+      if (created) {
+        storeModelPreference(id, selected?.key || "", thinking);
+      }
       if (!isCurrent()) {
         if (!edited) clearChatDraft(sendingTo);
         void refresh().catch(() => {});
@@ -1035,7 +1092,7 @@ export function ChatPage({
       return true;
     } catch (error) {
       if (isCurrent()) {
-        setError((error as Error).message);
+        setError(errorMessage(error));
         if (!supplement) setBusy(busy && !cancelledPrevious);
       }
       return false;
@@ -1068,7 +1125,7 @@ export function ChatPage({
         setBusy(false);
       }
     } catch (error) {
-      if (isCurrent()) setError((error as Error).message);
+      if (isCurrent()) setError(errorMessage(error));
     } finally {
       if (actionSequence.current === sequence) {
         actionLock.current = false;
@@ -1093,19 +1150,13 @@ export function ChatPage({
         "POST",
         {
           source_run_id: sourceRunId,
-          model_selection: selected
-            ? {
-                provider_id: selected.profile.id,
-                model_name: selected.model.name,
-                thinking_enabled: thinkingEnabled,
-              }
-            : undefined,
+          model_selection: modelSelection,
         },
       );
       if (!isCurrent()) return;
       void track(value, id);
     } catch (error) {
-      if (isCurrent()) setError((error as Error).message);
+      if (isCurrent()) setError(errorMessage(error));
       if (isCurrent()) void refreshChatView();
     } finally {
       if (isCurrent()) {
@@ -1132,13 +1183,6 @@ export function ChatPage({
     }
   }
   function closeError() {
-    if (run?.status === "failed") {
-      try {
-        sessionStorage.setItem(`bai-dismissed-chat-error:${run.id}`, "1");
-      } catch {
-        // Closing the current notice still works when session storage is unavailable.
-      }
-    }
     setError("");
     composer.current?.focus({ preventScroll: true });
   }
@@ -1273,7 +1317,7 @@ export function ChatPage({
         setError(
           saved
             ? "归属已保存，列表暂未刷新，请稍后重试。"
-            : (cause as Error).message,
+            : errorMessage(cause),
         );
     } finally {
       moveProjectLock.current = false;
@@ -1336,8 +1380,6 @@ export function ChatPage({
                         reasoning={reasoning}
                         stream={stream}
                         imageGeneration={imageGeneration}
-                        contextStatus={contextStatus}
-                        toolCount={tools.length}
                         runId={run?.id}
                       />
                     ) : (
@@ -1465,6 +1507,11 @@ export function ChatPage({
                           cancelled={
                             (value.run_status || run?.status) === "cancelled"
                           }
+                          reason={
+                            value.run_error ||
+                            (value.run_id === run?.id ? run?.error : null)
+                          }
+                          onSettings={() => onAction("settings")}
                           onRetry={
                             value === lastAssistant &&
                             value.run_id === run?.id &&
@@ -1541,8 +1588,6 @@ export function ChatPage({
                       reasoning={reasoning}
                       stream={stream}
                       imageGeneration={imageGeneration}
-                      contextStatus={contextStatus}
-                      toolCount={tools.length}
                       runId={run?.id}
                     />
                   </div>
@@ -1570,6 +1615,8 @@ export function ChatPage({
                     {incompleteRun && (
                       <IncompleteReplyNotice
                         cancelled={incompleteRun.status === "cancelled"}
+                        reason={incompleteRun.error}
+                        onSettings={() => onAction("settings")}
                         onRetry={
                           run?.retry_action === "none"
                             ? undefined
@@ -1645,9 +1692,7 @@ export function ChatPage({
               }
               onClose={closeError}
               action={
-                /密钥|接口|认证|模型|连接|配置|401|403|unauthorized/i.test(
-                  error,
-                )
+                configurationProblem.test(error)
                   ? { label: "配置接口", onClick: () => onAction("settings") }
                   : undefined
               }
@@ -1820,18 +1865,25 @@ export function ChatPage({
                 <DropdownMenu.Root
                   modal={false}
                   open={composerMenuOpen}
-                  onOpenChange={setComposerMenuOpen}
+                  onOpenChange={(open) => {
+                    setComposerMenuOpen(open);
+                    if (open)
+                      void api<{ enabled: boolean }>("/knowledge/config")
+                        .then((value) => setKnowledgeEnabled(value.enabled))
+                        .catch(() => setKnowledgeEnabled(null));
+                  }}
                 >
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      type="button"
-                      className="composer-add-trigger"
-                      aria-label="更多功能"
-                      title="添加附件、MCP 工具和技能"
-                    >
-                      <Plus size={19} />
-                    </button>
-                  </DropdownMenu.Trigger>
+                  <Hint label="添加附件、工具与检索设置">
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        className="composer-add-trigger"
+                        aria-label="更多功能"
+                      >
+                        <Plus size={19} />
+                      </button>
+                    </DropdownMenu.Trigger>
+                  </Hint>
                   <DropdownMenu.Portal>
                     <DropdownMenu.Content
                       className="model-menu composer-add-menu"
@@ -1841,6 +1893,49 @@ export function ChatPage({
                       sideOffset={8}
                       collisionPadding={16}
                     >
+                      <DropdownMenu.Label className="model-menu-label composer-option-label">
+                        检索 · 所有对话生效
+                      </DropdownMenu.Label>
+                      <DropdownMenu.CheckboxItem
+                        className="model-menu-item composer-option"
+                        checked={chatOptions.useMemory}
+                        onSelect={(event) => event.preventDefault()}
+                        onCheckedChange={(checked) =>
+                          updateChatOptions({ useMemory: checked === true })
+                        }
+                      >
+                        <span>记忆检索</span>
+                        <span
+                          className="mini-toggle"
+                          data-checked={chatOptions.useMemory}
+                          aria-hidden="true"
+                        >
+                          <span />
+                        </span>
+                      </DropdownMenu.CheckboxItem>
+                      <DropdownMenu.CheckboxItem
+                        className="model-menu-item composer-option"
+                        checked={chatOptions.useKnowledge && knowledgeEnabled !== false}
+                        disabled={knowledgeEnabled === false}
+                        onSelect={(event) => event.preventDefault()}
+                        onCheckedChange={(checked) =>
+                          updateChatOptions({ useKnowledge: checked === true })
+                        }
+                      >
+                        <span>知识库检索</span>
+                        {knowledgeEnabled === false ? (
+                          <span className="composer-option-state">未在知识库开启</span>
+                        ) : (
+                          <span
+                            className="mini-toggle"
+                            data-checked={chatOptions.useKnowledge}
+                            aria-hidden="true"
+                          >
+                            <span />
+                          </span>
+                        )}
+                      </DropdownMenu.CheckboxItem>
+                      <DropdownMenu.Separator className="model-menu-separator" />
                       <DropdownMenu.Item
                         className="model-menu-item composer-add-menu-item"
                         disabled={submitting || stopping || !modelReady}
@@ -1864,6 +1959,32 @@ export function ChatPage({
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
                 </DropdownMenu.Root>
+                <div
+                  className="composer-mode-switch"
+                  role="radiogroup"
+                  aria-label="回答方式"
+                  data-mode={chatOptions.mode}
+                >
+                  {(
+                    [
+                      ["agent", "智能体", "可调用工具、文件与技能，对所有对话生效"],
+                      ["chat", "对话", "只回答不调用工具，也不会接续任务，更省 token，对所有对话生效"],
+                    ] as const
+                  ).map(([value, label, description]) => (
+                    <Hint key={value} label={description}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={chatOptions.mode === value}
+                        className="composer-mode-option"
+                        disabled={busy}
+                        onClick={() => updateChatOptions({ mode: value })}
+                      >
+                        {label}
+                      </button>
+                    </Hint>
+                  ))}
+                </div>
                 <Hint
                   label={
                     thinkingControl === "none"

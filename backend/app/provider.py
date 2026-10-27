@@ -276,8 +276,25 @@ def partial_json_strings(raw, fields):
     return values
 
 
+def _provider_message(chain) -> str:
+    """The provider's own short reason for rejecting a request.
+
+    Only the error message field is kept, never prompts, headers or the full
+    body; anything shaped like a credential is masked.
+    """
+    for item in chain:
+        body = getattr(item, "body", None)
+        if isinstance(body, dict) and isinstance(body.get("error"), dict):
+            body = body["error"]
+        value = body.get("message") if isinstance(body, dict) else body
+        if isinstance(value, str) and value.strip():
+            value = re.sub(r"(?i)\b(sk-|bearer\s+|key[-_=:]\s*)[A-Za-z0-9_\-.]{6,}", r"\1***", value)
+            return " ".join(value.split())[:300]
+    return ""
+
+
 def error_details(error: Exception) -> dict:
-    """Persist diagnostic metadata without provider bodies, prompts or headers."""
+    """Persist diagnostic metadata and the provider's short reason, never prompts or headers."""
     chain, current = [], error
     while current is not None and len(chain) < 5 and all(current is not item for item in chain):
         chain.append(current)
@@ -314,6 +331,10 @@ def error_details(error: Exception) -> dict:
         details["http_status"] = status
     if code:
         details["provider_code"] = code
+    if status is not None and 400 <= status < 500 and status not in (401, 403):
+        reason = _provider_message(chain)
+        if reason:
+            details["provider_message"] = reason
     return details
 
 
@@ -357,6 +378,9 @@ def safe_error(error: Exception, *, model_config=None) -> str:
             return "模型接口返回 HTTP 429：可用额度不足，请检查服务商余额或配额。"
         return "模型接口返回 HTTP 429：请求受到限流或配额限制，请稍后重试并检查服务商额度。"
     if status == 400:
+        reason = details.get("provider_message")
+        if reason:
+            return f"服务商拒绝了这次请求（HTTP 400）：{reason}"
         return "服务商不接受当前请求，请检查模型名称、图片支持和工具调用能力。"
     if category == "provider_unavailable":
         return f"模型服务暂时不可用（HTTP {status}），请稍后重试。"

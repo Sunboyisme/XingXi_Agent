@@ -13,6 +13,7 @@ import { api, type ComplexTask } from "@/lib/api";
 import { ArtifactDownload, ArtifactPicture } from "./AnswerPresentation";
 import { FileCard } from "./OfficeFiles";
 import { Button } from "./ui/button";
+import { errorMessage } from "@/lib/utils";
 
 const states: Record<string, string> = {
   planning: "正在安排步骤",
@@ -74,7 +75,7 @@ export function TaskCard({
         }),
       );
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setSaving(false);
     }

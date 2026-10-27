@@ -126,3 +126,26 @@ async def test_legacy_confirmation_task_cannot_hide_unresolved_writes(monkeypatc
     assert result["content"] == ("verify existing write" if effect else "chat")
     with db.Session() as session:
         assert list(session.scalars(select(db.ComplexTask.id))) == [task_id]
+
+
+@pytest.mark.asyncio
+async def test_chat_mode_never_routes_into_a_task(monkeypatch):
+    conversation_id, run_id, reply_id, _, task_id = exchange(task_source="安排周日并输出行程文件")
+    with db.Session() as session:
+        session.get(db.Message, reply_id).content = "如果下雨，流程该怎么调整？"
+        session.get(db.Run, run_id).model_config = {"provider_id": "custom", "model_name": "fixture", "mode": "chat"}
+        session.commit()
+
+    async def chat(*args):
+        return {"content": "chat"}
+
+    async def unexpected(*args, **kwargs):
+        raise AssertionError("chat mode must not classify, continue or amend a task")
+
+    monkeypatch.setattr(agent, "_chat", chat)
+    monkeypatch.setattr(complex_tasks, "execute", unexpected)
+    monkeypatch.setattr(provider, "ask_json", unexpected)
+    assert (await complex_tasks.dispatch(run_id, conversation_id))["content"] == "chat"
+    with db.Session() as session:
+        task = session.get(db.ComplexTask, task_id)
+        assert reply_id not in task.message_ids and session.get(db.Run, run_id).task_id is None

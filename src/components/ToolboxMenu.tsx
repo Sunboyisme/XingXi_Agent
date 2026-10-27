@@ -3,6 +3,7 @@ import { Layers2, Loader2, Settings2 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { api, type Tool } from "@/lib/api";
 import { ToolMenuFrame } from "./ToolMenuFrame";
+import { errorMessage } from "@/lib/utils";
 
 export function ToolboxMenu({ onSettings }: { onSettings: () => void }) {
   const [tools, setTools] = useState<Tool[]>([]);
@@ -15,7 +16,7 @@ export function ToolboxMenu({ onSettings }: { onSettings: () => void }) {
     try {
       setTools((await api<Tool[]>("/tools")).filter((x) => x.source === "mcp"));
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -29,7 +30,7 @@ export function ToolboxMenu({ onSettings }: { onSettings: () => void }) {
       });
       setTools((items) => items.map((x) => (x.id === value.id ? value : x)));
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setSaving("");
     }

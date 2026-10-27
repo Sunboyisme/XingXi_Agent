@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select
 
 from . import artifacts, config, office, schemas as s
-from .db import (Attachment, Conversation, ConversationSummary, Memory, MemoryChange, OfficeFile,
+from .db import (ACTIVE_RUN_STATUSES, Attachment, Conversation, ConversationSummary, Memory, MemoryChange, OfficeFile,
                  Project, ProjectMaterial, Run, Session, now, uid)
 
 router = APIRouter()
@@ -36,7 +36,7 @@ def shared_file(db, file_id, conversation_id):
 
 
 def idle(db, conversation_ids):
-    if db.scalar(select(Run.id).where(Run.conversation_id.in_(conversation_ids), Run.status.in_(["queued", "running"]))):
+    if db.scalar(select(Run.id).where(Run.conversation_id.in_(conversation_ids), Run.status.in_(ACTIVE_RUN_STATUSES))):
         raise HTTPException(409, "请先停止项目中的运行任务，再移动聊天或删除项目")
 
 
@@ -87,7 +87,7 @@ def project_activity():
         return dict(db.execute(select(Conversation.project_id, func.count(Run.id))
             .join(Run, Run.conversation_id == Conversation.id)
             .where(Conversation.profile_id == config.PROFILE_ID, Conversation.project_id.is_not(None),
-                   Run.profile_id == config.PROFILE_ID, Run.status.in_(["queued", "running"]))
+                   Run.profile_id == config.PROFILE_ID, Run.status.in_(ACTIVE_RUN_STATUSES))
             .group_by(Conversation.project_id)).all())
 
 
@@ -97,7 +97,7 @@ def conversation_activity():
         return dict(db.execute(select(Conversation.id, func.count(Run.id))
             .join(Run, Run.conversation_id == Conversation.id)
             .where(Conversation.profile_id == config.PROFILE_ID,
-                   Run.profile_id == config.PROFILE_ID, Run.status.in_(["queued", "running"]))
+                   Run.profile_id == config.PROFILE_ID, Run.status.in_(ACTIVE_RUN_STATUSES))
             .group_by(Conversation.id)).all())
 
 

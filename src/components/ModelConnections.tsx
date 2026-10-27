@@ -30,6 +30,7 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { ConfirmDelete, ErrorNotice, Toast } from "./common";
+import { errorMessage } from "@/lib/utils";
 
 type Connection = Settings["providers"][number];
 type Draft = Connection & { api_key?: string | null };
@@ -218,7 +219,7 @@ export function ModelConnections({
       const models: Connection["models"] = await response.json();
       if (!request.signal.aborted) setCatalog(models);
     } catch (error) {
-      if (!request.signal.aborted) setCatalogError((error as Error).message);
+      if (!request.signal.aborted) setCatalogError(errorMessage(error));
     } finally {
       if (catalogRequest.current === request) setCatalogBusy(false);
     }
@@ -307,7 +308,7 @@ export function ModelConnections({
         setNotice("连接已保存");
       }
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -329,7 +330,7 @@ export function ModelConnections({
         }),
       );
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -344,7 +345,7 @@ export function ModelConnections({
       );
       setDeleting(null);
     } catch (error) {
-      setError((error as Error).message);
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }

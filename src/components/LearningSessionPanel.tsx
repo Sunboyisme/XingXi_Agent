@@ -15,6 +15,7 @@ import {
 import { LearningConversation } from "./LearningConversation";
 import { Markdown } from "./common";
 import "@/styles/learning-sessions.css";
+import { errorMessage } from "@/lib/utils";
 
 const statusLabels: Record<string, string> = {
   ended: "已结束",
@@ -84,8 +85,8 @@ export function LearningSessionPanel({
           setSelectedId(ordered[0]?.id || "");
         }
       })
-      .catch((cause: Error) => {
-        if (live) setError(cause.message);
+      .catch((cause) => {
+        if (live) setError(errorMessage(cause));
       })
       .finally(() => {
         if (live) setLoadingList(false);
@@ -111,8 +112,8 @@ export function LearningSessionPanel({
           detailPane.current?.scrollTo({ top: 0 });
         }
       })
-      .catch((cause: Error) => {
-        if (detailRequest.current === request) setError(cause.message);
+      .catch((cause) => {
+        if (detailRequest.current === request) setError(errorMessage(cause));
       })
       .finally(() => {
         if (detailRequest.current === request) setLoadingDetail(false);

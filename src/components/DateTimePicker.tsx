@@ -8,27 +8,12 @@ import {
   Clock3,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { dateMove, zonedToday } from "@/lib/calendarMonth";
 
 const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
 const pad = (value: number) => String(value).padStart(2, "0");
 function dateKey(date: Date) {
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
-}
-function todayKey(timezone = "Asia/Shanghai") {
-  const parts = new Intl.DateTimeFormat("en", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  return ["year", "month", "day"]
-    .map((name) => parts.find((part) => part.type === name)?.value)
-    .join("-");
-}
-function move(key: string, days: number) {
-  const value = new Date(`${key}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + days);
-  return dateKey(value);
 }
 function dateLabel(key: string) {
   const date = new Date(`${key}T00:00:00Z`);
@@ -54,17 +39,17 @@ export function DateTimePicker({
 }) {
   const initial = value.split("T");
   const [open, setOpen] = useState(false);
-  const [day, setDay] = useState(initial[0] || todayKey(timezone));
+  const [day, setDay] = useState(initial[0] || zonedToday(timezone));
   const [month, setMonth] = useState(day.slice(0, 7));
   const [hour, setHour] = useState(initial[1]?.slice(0, 2) || "09");
   const [minute, setMinute] = useState(initial[1]?.slice(3, 5) || "00");
   const grid = useRef<HTMLDivElement>(null);
   const shouldFocus = useRef(false);
-  const today = todayKey(timezone);
+  const today = zonedToday(timezone);
   const first = `${month}-01`;
   const offset = (new Date(`${first}T00:00:00Z`).getUTCDay() + 6) % 7;
-  const start = move(first, -offset);
-  const days = Array.from({ length: 42 }, (_, index) => move(start, index));
+  const start = dateMove(first, -offset);
+  const days = Array.from({ length: 42 }, (_, index) => dateMove(start, index));
   const validHour = /^\d{1,2}$/.test(hour) && Number(hour) <= 23;
   const validMinute = /^\d{1,2}$/.test(minute) && Number(minute) <= 59;
   useEffect(() => {
@@ -203,7 +188,7 @@ export function DateTimePicker({
                   };
                   if (event.key in amounts) {
                     event.preventDefault();
-                    select(move(key, amounts[event.key]), true);
+                    select(dateMove(key, amounts[event.key]), true);
                   }
                 }}
               >

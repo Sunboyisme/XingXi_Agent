@@ -235,7 +235,6 @@
   border: 0;
   padding: 0 34px;
   font-size: 12px;
-  justify-content: flex-end;
 }
 .bell-button {
   border-radius: 50%;
@@ -324,7 +323,6 @@
 }
 .chat-main.is-empty .composer-area {
   width: calc(100% - 108px);
-  max-width: 840px;
   margin-left: auto;
   margin-right: auto;
 }
@@ -469,12 +467,10 @@
   background: var(--surface-hover);
 }
 .toolbox-menu {
-  max-height: min(480px, var(--radix-dropdown-menu-content-available-height));
   overflow-y: auto;
 }
 .toolbox-item {
   justify-content: space-between;
-  gap: 14px;
 }
 .toolbox-item > span:first-child {
   min-width: 0;
@@ -491,8 +487,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px;
-  font-size: 12px;
 }
 .tool-result p {
   margin: 4px 0 0;
@@ -724,7 +718,6 @@
 .course-body .lesson-content {
   min-height: 0;
   padding: 0;
-  overflow-y: auto;
 }
 .lesson-inner {
   display: flex;
@@ -908,9 +901,6 @@
   border-color: var(--ui-color-line);
   border-radius: 24px;
 }
-.reminder-popup {
-  background: var(--ui-color-bg);
-}
 .popup-item {
   border-radius: 20px;
   background: var(--ui-color-surface);
@@ -960,7 +950,6 @@
 }
 @media (max-height: 720px) and (min-width: 601px) {
   .app-shell {
-    padding-top: 12px;
     padding-bottom: 12px;
   }
   .sidebar {
@@ -1094,9 +1083,6 @@
   }
   .composer-area {
     padding: 12px 16px 16px;
-  }
-  .toolbox-menu {
-    width: min(390px, calc(100vw - 32px));
   }
 }
 .brand-home {
@@ -1232,8 +1218,6 @@
 }
 .tool-result-title {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
   gap: 12px;
 }
 .tool-result-title strong {
