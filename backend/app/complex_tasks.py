@@ -520,14 +520,17 @@ async def guarded(entry, run_id, arguments, operation):
                 row = db.get(TaskOperation, operation_id)
                 row.status, row.result = status, result
                 db.commit()
-        if status != "completed" and policy == "read" and entry["id"] in {"read_url", "web_search"}:
+        if status == "waiting" or (status != "completed" and policy == "read" and result.get("not_executed")) or (status != "completed" and policy == "read" and entry["id"] in {"read_url", "web_search"}):
             # A failed source is evidence for the agent, not a task-wide stop.
             # Persist the failed operation and let it choose another source.
             return json.dumps({**result, "recoverable": True}, ensure_ascii=False)
         if status != "completed":
             reason = str(result.get("error") or result.get("message") or "需要补充信息或确认后继续。")
             if status == "failed" and result.get("not_executed"):
-                execution.corrections += 1
+                from .execution_policy import correction_target
+                target = str((entry["id"], correction_target(arguments)))
+                execution.correction_counts[target] = execution.correction_counts.get(target, 0) + 1
+                execution.corrections = execution.correction_counts[target]
                 with Session() as db:
                     saved = db.get(TaskStep, execution.step_id)
                     saved.output = {**saved.output, "argument_corrections": execution.corrections, "correction_run_id": run_id}
@@ -601,7 +604,8 @@ async def make_plan(run_id, task_id, *, repair=False):
         "expected_outputs与formats只列真实文件格式：md/txt/csv/json/docx/pdf/xlsx/image，一份写一次。纯文字回答与分析步骤formats=[]，不能写text或markdown。"
         "输入文件清单区分图片和文档；当前图片可由视觉模型直接读取，不需要强制read_file。只在需要读取历史或项目图片时使用read_file。"
         "用户提供本机绝对路径时可用read_local_file读取、scan_local_folder扫描目录，无需要求上传。只在用户提供的路径范围内只读访问，不安排本地路径写入。"
-        "保留用户约束和来源要求；缺少影响执行的关键信息时填写question。不要要求用户逐步批准已有授权。"
+        "保留用户约束和来源要求；只有所有工作都被必要缺项阻塞才填写question。部分事项缺信息时，先规划其余独立可执行步骤，末步汇总缺项询问；不要要求逐步批准已有授权。"
+        "长文按章节或连续片段分批读取，每批保存覆盖范围和小结，再汇总生成报告；定点问题先全文检索再读命中。文件只在其指定生成步骤制作，分析或核对步骤复用原产物，不重做。"
         "创建学习路线前必须了解学习目标、目前基础和相关背景；从原对话提取，缺什么一次问清，不从主题或岗位推断会编程。未提供基础时用question询问，不先建课；用户明确让直接安排或从零开始时才按保守入门方案。"
         "conversation_context保留确认前的原始对话。简短同意指向前面已展示的具体方案，结合原方案执行，不能把‘确认用户想做什么’设为任务目标。"
         "只有同意但没有可确定的方案时才询问；已经明确的岗位、输出格式等要求不要重复追问，不影响交付的行业偏好可采用通用范围。"
@@ -796,8 +800,17 @@ async def execute(run_id, task_id, *, repairs=0):
         if not steps:
             await make_plan(run_id, task_id)
             continue
-        step = next((value for value in steps if value.status != "completed"), None)
+        completed_ids = {value.id for value in steps if value.status == "completed"}
+        step = next((value for value in steps if value.status in {"pending", "running"}
+                     and set(value.dependencies) <= completed_ids), None)
         if step is None:
+            remaining = [value for value in steps if value.status != "completed"]
+            if remaining:
+                with Session() as db:
+                    task = require(db, task_id)
+                    task.status, task.reason = "waiting_input", "已完成可独立执行的事项，其余事项等待补充或确认。"
+                    db.commit()
+                return notice(run_id, task_id)
             break
         with Session() as db:
             reused = reuse_step_files(db, db.get(TaskStep, step.id))
@@ -847,7 +860,13 @@ async def execute(run_id, task_id, *, repairs=0):
                 and set(step.tools) <= {"read_file", "list_files"})
             tool_match = any(value.tool_id in step.tools or (value.tool_id == "delete_plans" and "delete_plan" in step.tools) for value in operations)
             file_delivery = step.formats and not missing and set(step.tools) <= FILE_TOOLS
-            if (step.tools and not tool_match and not direct_images and not file_delivery) or missing:
+            pending_operations = list(db.scalars(select(TaskOperation).where(TaskOperation.step_id == step.id,
+                                      TaskOperation.status == "waiting")))
+            if pending_operations:
+                row.status = "waiting"
+                row.output = {"content": result["content"], "artifacts": outputs,
+                              "pending_operation_ids": [value.id for value in pending_operations]}
+            elif (step.tools and not tool_match and not direct_images and not file_delivery) or missing:
                 row.status = "pending"
                 attempts = row.output.get("repair_attempts", 0) if row.output.get("repair_run_id") == run_id else 0
                 reason = "尚缺文件：" + "、".join(f"{count}份{fmt}" for fmt, count in missing.items()) if missing else "当前步骤尚未实际调用所需工具：" + "、".join(step.tools)
@@ -923,6 +942,9 @@ async def execute(run_id, task_id, *, repairs=0):
 
 async def dispatch(run_id, conversation_id):
     from . import agent
+    from .execution_policy import rewrite_source
+    if rewrite_source(run_id):
+        return await agent._chat(run_id, conversation_id)
     with Session() as db:
         run = db.get(Run, run_id)
         if not run.model_config:

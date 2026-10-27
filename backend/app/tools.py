@@ -486,6 +486,12 @@ def _guard_tool(entry, originals, run_id):
         secrets = []
         value = {}
         try:
+            from .execution_policy import correction_target, rewrite_source, root_error
+            from .complex_tasks import READ_TOOLS
+            if rewrite_source(run_id) and (entry["source"] != "builtin" or entry["id"] not in READ_TOOLS):
+                value = {"error": "成功回答重试仅重组答案，已保存结果不会重复执行；如需修改请发送新的要求。", "not_executed": True}
+                status = "error"
+                return json.dumps(value, ensure_ascii=False)
             # Repeating the same rejected parameters cannot repair a request.
             with Session() as db:
                 previous = db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool").order_by(RunEvent.id.desc())).all()
@@ -498,7 +504,7 @@ def _guard_tool(entry, originals, run_id):
                             return json.dumps(value, ensure_ascii=False)
                 rejected = []
                 for event in previous:
-                    if event.data.get("tool_id") != entry["id"]:
+                    if event.data.get("tool_id") != entry["id"] or correction_target(event.data.get("arguments", {})) != correction_target(arguments):
                         continue
                     if event.data.get("status") == "completed":
                         break
@@ -506,9 +512,9 @@ def _guard_tool(entry, originals, run_id):
                     if isinstance(result, dict) and result.get("error") and result.get("not_executed"):
                         rejected.append(result)
                 if len(rejected) >= 3 and task_context.current.get() is None:
-                    value = {**rejected[0], "error": "工具参数修正未完成，已停止重复尝试：" + str(rejected[0]["error"]), "retryable": False}
+                    value = {**rejected[0], "error": "工具参数修正未完成，已停止重复尝试：" + root_error(rejected[0]["error"]), "retryable": False}
                     status = "error"
-                    raise task_context.ToolInputLimit(value["error"])
+                    return json.dumps(value, ensure_ascii=False)
                 cached = next((event.data.get("result") for event in previous
                     if event.data.get("tool_id") == entry["id"] and event.data.get("arguments") == arguments
                     and isinstance(event.data.get("result"), dict) and event.data["result"].get("not_executed")
@@ -640,5 +646,10 @@ def build_tools(run_id: str, conversation_id: str):
 async def prepare_tools(run_id, conversation_id):
     from . import mcp_service
 
+    from .execution_policy import rewrite_source
+    if rewrite_source(run_id):
+        from .complex_tasks import READ_TOOLS
+        # Do not connect external services just to rewrite an existing answer.
+        return [value for value in build_tools(run_id, conversation_id) if value.name in READ_TOOLS]
     await mcp_service.manager.prepare()
     return build_tools(run_id, conversation_id)

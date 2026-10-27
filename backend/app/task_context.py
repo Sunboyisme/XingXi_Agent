@@ -21,6 +21,7 @@ class Execution:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     operation_id: str = ""
     corrections: int = 0
+    correction_counts: dict[str, int] = field(default_factory=dict)
 
 
 current: ContextVar[Execution | None] = ContextVar("complex_task", default=None)

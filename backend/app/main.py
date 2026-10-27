@@ -688,6 +688,9 @@ async def retry_message(conversation_id: str, value: s.ChatRetry | None = None, 
         task = complex_tasks.require(db, previous.task_id)
         task.model_config = config
         task.status, task.reason = "running", ""
+    if previous.status == "completed" and not previous.task_id:
+        from .execution_policy import rewrite_source
+        db.add(store.RunEvent(run_id=run.id, kind="answer_retry", data={"source_run_id": rewrite_source(previous.id) or previous.id}))
     db.commit()
     runs.launch(run.id, lambda: agent.chat(run.id, conversation_id))
     return run
@@ -812,7 +815,7 @@ def retry_action(db, run):
         if task and task.status == "paused" and latest_user and latest_user.id in [*task.message_ids, *task.pending_message_ids]:
             return "continue"
         return "none"
-    return "retry" if run.status in {"failed", "cancelled"} and latest_user and latest_user.id == run.source_message_id else "none"
+    return "retry" if run.status in {"completed", "failed", "cancelled"} and latest_user and latest_user.id == run.source_message_id else "none"
 
 
 def run_read(db, run):
