@@ -51,8 +51,8 @@ def reader(run_id):
                     return json.dumps({"error": "归档不属于当前任务或聊天", "not_executed": True}, ensure_ascii=False)
                 try:
                     value = task_results.select_path(row.data, path)
-                except ValueError as error:
-                    return json.dumps({"error": str(error), "not_executed": True}, ensure_ascii=False)
+                except ValueError:
+                    return json.dumps(task_results.path_error(row.data, path), ensure_ascii=False)
                 raw = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
                 if offset > len(raw):
                     return json.dumps({"error": "offset超过原文长度", "not_executed": True}, ensure_ascii=False)

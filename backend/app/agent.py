@@ -318,6 +318,8 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
     finally:
         stream_events.flush()
     model_text = text
+    from .file_reading import verify_claims
+    text = verify_claims(run_id, text)
     if buffer_learning_reply:
         text = _learning_intake_reply(run_id, text)
     if not persist:

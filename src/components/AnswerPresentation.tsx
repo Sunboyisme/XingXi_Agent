@@ -233,6 +233,7 @@ export function AnswerPresentation({
   useEffect(() => {
     if (!runId) return;
     let live = true;
+    setValue(null);
     setError("");
     void api<Presentation>(`/runs/${runId}/presentation`)
       .then((result) => {
@@ -252,7 +253,7 @@ export function AnswerPresentation({
         <button
           className="presentation-retry"
           aria-label={`来源与产物暂不可用：${error}。点击重试`}
-          onClick={() => setAttempt(attempt + 1)}
+          onClick={() => setAttempt((value) => value + 1)}
         >
           来源与产物暂不可用，重试
         </button>
@@ -263,7 +264,12 @@ export function AnswerPresentation({
           artifact.image ? (
             <ArtifactPicture key={artifact.id} artifact={artifact} />
           ) : (
-            <FileCard key={artifact.id} file={artifact} />
+            <div key={artifact.id}>
+              {((artifact.revision ?? 1) > 1 || artifact.current === false) && (
+                <small>{artifact.current === false ? "历史成果" : "当前成果"} · 第 {artifact.revision ?? 1} 版</small>
+              )}
+              <FileCard file={artifact} />
+            </div>
           ),
         )}
       {value?.image_urls

@@ -224,6 +224,8 @@ class ArtifactRead(BaseModel):
     media_type: str
     source_url: str
     image: bool
+    current: bool = True
+    revision: int = 1
 
 
 class SourceRead(BaseModel):

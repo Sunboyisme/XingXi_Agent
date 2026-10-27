@@ -9,6 +9,7 @@ from . import local_files, office
 INFO = {
     "list_files": ("查看对话文件", "列出当前对话上传的资料和生成文件", False),
     "read_file": ("读取文件资料", "按编号读取文档片段、PDF页码或使用当前视觉模型读取图片", False),
+    "search_file": ("检索文件全文", "在授权文件已解析正文中定位原文及片段位置，不调用模型", False),
     "read_local_file": ("读取本地文件", "按用户提供的本机绝对路径只读读取文档、文本、代码或图片，不修改原件", False),
     "scan_local_folder": ("扫描本地文件夹", "只读列举用户指定文件夹，支持子目录、文件名过滤及分页，不读取正文", False),
     "create_document": ("生成办公文档", "生成真正的 Word 或 PDF 文档", False),
@@ -53,6 +54,11 @@ def build(run_id, conversation_id):
         return json.dumps(
             {"files": office.list_files(conversation_id)}, ensure_ascii=False
         )
+
+    @tool
+    async def search_file(file_id: str, query: str, offset: int = 0, limit: int = 8) -> str:
+        """全文检索当前对话授权文档（含项目资料和产物）。query使用主题词或原文短语；返回命中part、source和read_start，随后read_file读取原文及相邻片段。offset按next_offset分页。搜索覆盖已解析正文，未命中不能断言原文没有答案；解析截断仍受warnings限制。"""
+        return await safe(office.search_file(file_id, conversation_id, query, offset, limit))
 
     @tool
     async def read_file(
@@ -105,7 +111,7 @@ def build(run_id, conversation_id):
 
     @tool
     async def create_spreadsheet(name: str, sheets: list[Sheet]) -> str:
-        """生成真正的xlsx。sheets每项含name和rows二维数组。单元格可为普通值，或{formula:'SUM(B2:B5)',number_format:'0.00'}；公式仅支持基础四则运算、SUM/AVERAGE/MIN/MAX/COUNT/ABS/ROUND及工作表引用，会计算缓存并校验。普通字符串不执行公式，不支持宏或外部链接。最多20表、共20000单元格。"""
+        """生成真正的xlsx。sheets每项含name和rows二维数组。单元格可为普通值，或{formula:'SUM(B2:B5)',number_format:'0.00'}；公式仅支持基础四则运算、SUM/AVERAGE/MIN/MAX/COUNT/ABS/ROUND及工作表引用，会计算缓存并校验，返回calculations中的真实公式值，后续Word和答复必须复用这些值。比例用实际/目标及0.00%格式，汇总包含总合计。普通字符串不执行公式，不支持宏或外部链接。最多20表、共20000单元格。"""
         return await safe(
             office.generate(
                 run_id,
@@ -119,18 +125,20 @@ def build(run_id, conversation_id):
 
     @tool
     async def create_text_file(
-        name: str, format: Literal["txt", "md", "csv", "json"], content: str
+        name: str, format: Literal["txt", "md", "csv", "json"], content: str | None = None,
+        rows: list[list[str | float | bool | None]] | None = None,
     ) -> str:
-        """生成新TXT、Markdown、CSV或JSON文件。name仅文件名；CSV传合法CSV文字，JSON传合法JSON文字。CSV为UTF-8 BOM并防公式注入，JSON先校验。工具返回可预览、下载的文件。"""
+        """生成新TXT/Markdown/CSV/JSON。content与rows必须且只能提供一项。CSV优先用rows二维数组，由工具处理逗号、引号和换行；兼容content合法CSV文本，列数不齐会拒绝。rows仅限CSV。CSV为UTF-8 BOM并防公式注入，JSON先校验。仅生成用户要求的成果，不为检查另造一份。"""
         return await safe(
             office.generate(
-                run_id, conversation_id, "text", name, format, content=content
+                run_id, conversation_id, "text", name, format, content=content, rows=rows
             )
         )
 
     return [
         list_files,
         read_file,
+        search_file,
         read_local_file,
         scan_local_folder,
         create_document,

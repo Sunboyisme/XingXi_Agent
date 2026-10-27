@@ -4,13 +4,14 @@ import json
 
 
 # Explicit content reads already express a need for the selected original text.
-DIRECT_READS = {"read_task_result", "read_context_record", "read_file", "read_local_file", "load_skill", "read_skill_file"}
+DIRECT_READS = {"read_task_result", "read_context_record", "search_file", "read_file", "read_local_file", "load_skill", "read_skill_file"}
 EXACT_FIELDS = {
     "id", "record_id", "file_id", "artifact_id", "url", "path", "name", "title",
     "status", "operation", "error", "category", "message", "warnings", "media_errors",
     "needs_confirmation", "needs_clarification", "not_executed", "retryable", "recoverable",
     "partial", "truncated", "next_offset", "next_start", "occurrence_start", "target_date",
     "local_start", "local_end", "start", "end", "timezone", "missing", "read",
+    "coverage", "document_total_parts", "series_revision", "available_paths", "searched_parts",
 }
 
 
@@ -79,3 +80,18 @@ def select_path(value, path):
         else:
             raise ValueError("记录中不存在该path，请核对目录或省略字段路径")
     return value
+
+
+def path_error(value, path):
+    """Describe actual roots, not a preview wrapper's fictional /result path."""
+    def escape(key):
+        return str(key).replace("~", "~0").replace("/", "~1")
+    if isinstance(value, dict):
+        available = ["/" + escape(key) for key in list(value)[:30]]
+    elif isinstance(value, list):
+        available = [f"/{index}" for index in range(min(len(value), 10))]
+    else:
+        available = [""]
+    return {"error": f"字段路径{path!r}不存在，请使用返回的真实路径；空path读取整条记录。",
+            "available_paths": available, "not_executed": True, "recoverable": True,
+            "hint": "摘录的result仅为展示包装，原记录根节点不一定有/result。"}

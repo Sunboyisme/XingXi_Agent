@@ -11,6 +11,7 @@ def main():
     try:
         request = json.loads(sys.stdin.buffer.read(35 * 1024 * 1024))
         operation = request["operation"]
+        calculations = []
         if operation == "parse":
             value = fmt.parse(
                 base64.b64decode(request["data"], validate=True),
@@ -31,14 +32,14 @@ def main():
                     request.get("footer", ""),
                 )
             elif operation == "spreadsheet":
-                raw = fmt.spreadsheet(request["sheets"])
+                raw, calculations = fmt.spreadsheet(request["sheets"], with_values=True)
             elif operation == "text":
-                raw = fmt.text_file(request["format"], request["content"])
+                raw = fmt.text_file(request["format"], request.get("content"), request.get("rows"))
             else:
                 raise ValueError("未知文件操作")
             if not raw or len(raw) > fmt.LIMIT:
                 raise ValueError("生成文件为空或超过 20 MB")
-            value = {"data": base64.b64encode(raw).decode()}
+            value = {"data": base64.b64encode(raw).decode(), "calculations": calculations}
         print(json.dumps(value, ensure_ascii=True, allow_nan=False))
     except Exception as error:
         known = isinstance(

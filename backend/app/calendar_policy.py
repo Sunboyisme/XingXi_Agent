@@ -18,6 +18,8 @@ def similar_title(first, second):
 
 def reminder_offsets(evidence):
     digits = {"一": 1, "两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+    if re.search(r"提前\s*(?:\d+|[一两二三四五六七八九十])\s*(?:天|周).{0,5}(?:上午|下午|晚上|早上|\d{1,2}[:：点])", evidence):
+        return []  # A clock on another day is not the same-clock minute offset.
     values = []
     for quantity, unit in re.findall(r"提前\s*(\d+|[一两二三四五六七八九十])\s*(分钟|小时|天|周)", evidence):
         amount = int(quantity) if quantity.isdigit() else digits[quantity]

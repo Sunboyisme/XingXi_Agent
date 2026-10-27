@@ -125,6 +125,8 @@ test("a decoded picture is reused when the same artifact remounts", async () => 
     image: true,
     media_type: "image/png",
     source_url: "https://example.com/poster.png",
+    current: true,
+    revision: 1,
   };
   const first = render(<ArtifactPicture artifact={artifact} />);
   await screen.findByRole("img", { name: "poster.png" });

@@ -492,6 +492,16 @@ def _guard_tool(entry, originals, run_id):
                 value = {"error": "成功回答重试仅重组答案，已保存结果不会重复执行；如需修改请发送新的要求。", "not_executed": True}
                 status = "error"
                 return json.dumps(value, ensure_ascii=False)
+            execution = task_context.current.get()
+            if execution and entry["id"] in {"create_document", "create_spreadsheet", "create_text_file"}:
+                from .db import TaskStep
+                with Session() as db:
+                    step = db.get(TaskStep, execution.step_id)
+                    fmt = "xlsx" if entry["id"] == "create_spreadsheet" else arguments.get("format")
+                    if not step or fmt not in step.formats:
+                        value = {"error": "当前步骤不是此格式的文件交付步骤，请保存分析结果供对应生成步骤使用；未创建文件。", "not_executed": True}
+                        status = "error"
+                        return json.dumps(value, ensure_ascii=False)
             # Repeating the same rejected parameters cannot repair a request.
             with Session() as db:
                 previous = db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool").order_by(RunEvent.id.desc())).all()

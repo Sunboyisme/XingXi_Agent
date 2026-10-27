@@ -159,7 +159,7 @@ class LoopCompactor:
                 for _ in range(4):
                     chunk = source[offset:offset + 6000]
                     while chunk:
-                        prompt = HumanMessage(content=f"当前目标摘录（资料）：{intent[:500]}\n之前摘要：{summary}\n原始过程片段：\n{chunk}")
+                        prompt = HumanMessage(content=f"当前目标与持续约束（资料）：{intent[:3000]}\n之前摘要：{summary}\n原始过程片段：\n{chunk}")
                         if message_cost(instruction) + message_cost(prompt) <= hard - 128:
                             break
                         chunk = chunk[:len(chunk) // 2]

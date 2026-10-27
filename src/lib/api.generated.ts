@@ -2385,6 +2385,16 @@ export interface components {
             source_url: string;
             /** Image */
             image: boolean;
+            /**
+             * Current
+             * @default true
+             */
+            current: boolean;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
         };
         /** AttachmentRead */
         AttachmentRead: {
@@ -3367,6 +3377,22 @@ export interface components {
              * @default false
              */
             thinking_enabled: boolean;
+            /**
+             * Mode
+             * @default agent
+             * @enum {string}
+             */
+            mode: "agent" | "chat";
+            /**
+             * Use Memory
+             * @default true
+             */
+            use_memory: boolean;
+            /**
+             * Use Knowledge
+             * @default true
+             */
+            use_knowledge: boolean;
         };
         /** NodeRead */
         NodeRead: {
@@ -3519,6 +3545,8 @@ export interface components {
             reminder_time: string;
             /** Reminder At */
             reminder_at?: string | null;
+            /** Series Revision */
+            series_revision?: string | null;
             /** Id */
             id: string;
             /** Reminder Id */

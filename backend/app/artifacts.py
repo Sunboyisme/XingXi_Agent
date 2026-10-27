@@ -319,18 +319,44 @@ async def normalize(run_id, value, read=False):
 
 
 def presentation(run_id):
+    from .db import Run
+    from .execution_policy import rewrite_source
     with Session() as db:
-        media = [
-            describe(row)
-            for row in db.scalars(select(Artifact).where(Artifact.run_id == run_id))
-        ]
+        run = db.get(Run, run_id)
+        if not run or run.profile_id != config.PROFILE_ID:
+            raise HTTPException(404, "运行记录不存在")
+        source_id = rewrite_source(run_id)
+        related_ids = [run_id] + ([source_id] if source_id else [])
+        rows = list(db.scalars(select(Artifact).where(Artifact.run_id.in_(related_ids),
+                         Artifact.profile_id == config.PROFILE_ID).order_by(Artifact.created_at, Artifact.id)))
+        media = {row.id: describe(row) for row in rows}
+        if run.task_id:
+            from .complex_tasks import task_artifacts
+            media.update({item["id"]: item for item in task_artifacts(db, run.task_id)})
+        # Replayed tools point to original files, never create copies for cards.
+        for event in db.scalars(select(RunEvent).where(RunEvent.run_id.in_(related_ids), RunEvent.kind == "tool")):
+            result = event.data.get("result", {})
+            for item in result.get("artifacts", []) if isinstance(result, dict) else []:
+                row = db.get(Artifact, item.get("id"))
+                owner = db.get(Run, row.run_id) if row else None
+                if owner and owner.profile_id == config.PROFILE_ID and owner.conversation_id == run.conversation_id:
+                    media.setdefault(row.id, describe(row))
+        versions = {}
+        for row in rows:
+            if row.source_url.startswith("xiaoxi-office:"):
+                versions.setdefault(row.name, []).append(row.id)
+        for ids in versions.values():
+            for revision, key in enumerate(ids, 1):
+                media[key].setdefault("current", key == ids[-1])
+                media[key]["revision"] = revision
+        media = list(media.values())
         sources, errors, image_urls = {}, [], []
         knowledge_sources = {}
-        for event in db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "knowledge_retrieval")):
+        for event in db.scalars(select(RunEvent).where(RunEvent.run_id.in_(related_ids), RunEvent.kind == "knowledge_retrieval")):
             for source in event.data.get("sources", []):
                 knowledge_sources[source["chunk_id"]] = source
         for event in db.scalars(
-            select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool")
+            select(RunEvent).where(RunEvent.run_id.in_(related_ids), RunEvent.kind == "tool")
         ):
             result = event.data.get("result", {})
             if isinstance(result, dict):

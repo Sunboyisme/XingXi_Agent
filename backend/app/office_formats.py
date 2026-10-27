@@ -35,6 +35,8 @@ def check_zip(raw):
 
 def parse(raw, name, cached=False):
     extension = Path(name).suffix.lower()[1:]
+    if extension == "doc":
+        raise ValueError("旧版Word .doc不支持，请在Word中另存为.docx后重新上传。")
     if extension not in MIMES or len(raw) > LIMIT:
         raise ValueError("支持 DOCX、PDF、XLSX、TXT、MD、CSV、JSON，单文件最多 20 MB")
     chunks, warnings = [], []
@@ -362,7 +364,7 @@ def document(format, title, blocks, header="", footer=""):
     return output.getvalue()
 
 
-def spreadsheet(sheets):
+def spreadsheet(sheets, *, with_values=False):
     import xlsxwriter
     from openpyxl.formula.tokenizer import Tokenizer
     from openpyxl.utils.cell import range_boundaries, get_column_letter
@@ -575,17 +577,35 @@ def spreadsheet(sheets):
                 0, 0, len(sheet["rows"]) - 1, max(map(len, sheet["rows"])) - 1
             )
     wb.close()
+    if with_values:
+        calculations = [{"sheet": name, "cell": cell, "formula": grid[name, cell], "value": cached.get((name, cell))}
+                        for name, cell in sorted(formula_cells)]
+        return output.getvalue(), calculations
     return output.getvalue()
 
 
-def text_file(format, content):
+def text_file(format, content=None, rows=None):
+    if (content is None) == (rows is None):
+        raise ValueError("content与rows必须且只能提供一项")
+    if rows is not None and format != "csv":
+        raise ValueError("rows结构化行仅适用于CSV")
     if format == "json":
         value = json.loads(content)
         return json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False).encode(
             "utf-8"
         )
     if format == "csv":
-        rows = list(csv.reader(io.StringIO(content)))
+        if rows is None:
+            try:
+                rows = list(csv.reader(io.StringIO(content, newline=""), strict=True))
+            except csv.Error as error:
+                raise ValueError(f"CSV引号或转义不合法：{error}，请改用rows结构化行。") from None
+        if not rows or len(rows) > 4000 or any(not isinstance(row, list) or len(row) > 50 for row in rows):
+            raise ValueError("CSV需有1–4000行，每行最多50列")
+        widths = {len(row) for row in rows if row}
+        if len(widths) > 1 or not widths or sum(len(row) for row in rows) > 20000:
+            raise ValueError("CSV各数据行须与表头列数一致，且最多20000单元格；含逗号/引号的字段请改用rows。")
+        rows = [["" if value is None else str(value) for value in row] for row in rows]
         output = io.StringIO(newline="")
         writer = csv.writer(output)
         for row in rows:
