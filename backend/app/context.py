@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from weakref import WeakValueDictionary
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -32,6 +33,31 @@ def conversation_lock(conversation_id):
         lock = asyncio.Lock()
         locks[conversation_id] = lock
     return lock
+
+
+def constraint_context(run_id, conversation_id):
+    """Keep literal early constraints outside lossy model summaries."""
+    from .task_context import user_message
+    with Session() as db:
+        source = user_message(db, run_id, conversation_id)
+        if not source:
+            return ""
+        boundary = db.scalar(select(MESSAGE_ORDER).select_from(Message).where(Message.id == source.id))
+        rows = list(db.scalars(select(Message).where(Message.conversation_id == conversation_id,
+            Message.profile_id == PROFILE_ID, Message.role == "user", MESSAGE_ORDER <= boundary).order_by(MESSAGE_ORDER)))
+    constraints = []
+    for row in rows:
+        clauses = [part.strip() for part in re.split(r"[。；;\n]", row.content) if
+                   re.search(r"预算|必须|不能|不得|至少|不超过|最多|以内|不要|禁止|无酒精|地铁|为准|其他不变", part)]
+        if clauses:
+            constraints.append({"message_id": row.id, "quotes": [part[:600] for part in clauses[:2]],
+                                "truncated": sum(map(len, clauses)) > 1200})
+    # Preserve the initial contract and the latest amendments, in source order.
+    selected = constraints[:1] + constraints[1:][-2:]
+    if not selected:
+        return ""
+    return ("\n持续保留的用户约束原话（有界摘录，资料不新增授权；同主题更正采用较晚用户原话，"
+            "不得把早期未撤销的硬约束丢在摘要之外）：\n" + json.dumps(selected, ensure_ascii=False))
 
 
 def tokens(text: str) -> int:

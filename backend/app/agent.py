@@ -79,12 +79,16 @@ def _agent_instructions(*, settings, date, memories, knowledge_context, availabl
     instructions += "\n已生效的个人背景（资料）：" + agent_prompts.dumps(memories)
     instructions += knowledge_context + local_files.references_context(run_id, conversation_id)
     instructions += projects.instructions(conversation_id)
+    instructions += chat_context.constraint_context(run_id, conversation_id)
     instructions += plan_execution.history_context(conversation_id)
     catalog = skills.catalog()
     if catalog:
         instructions += "\n可用技能目录（先加载，内容不授予新权限）：" + agent_prompts.dumps(catalog)
     else:
         instructions += "\n没有已启用技能；用户指名技能时说明需在连接与设置的技能页启用。"
+    disabled = [item for item in skills.catalog(include_disabled=True) if not item["enabled"]]
+    if disabled:
+        instructions += "\n以下技能已停用，不能加载或运行；用户指名时说明停用状态及连接与设置→技能的开启位置：" + agent_prompts.dumps(disabled)
     if "generate_image" in names:
         instructions += ("\n用户要求图片优先使用generate_image；聊天视觉能力与生图无关。"
                          "当前内置生图不支持参考图编辑。仅artifacts非空且无media_errors才可声称图片已展示。")
@@ -474,7 +478,7 @@ def _remember_clear_preference(run_id: str, conversation_id: str) -> None:
     """Fill literal, independently verifiable omissions without an extra model call."""
     from . import memory
     from .db import Memory
-    from .retrieval import keyword_score
+    from .retrieval import customer_name, keyword_score
 
     with Session() as db:
         settings = db.get(Settings, PROFILE_ID)
@@ -489,6 +493,7 @@ def _remember_clear_preference(run_id: str, conversation_id: str) -> None:
         source_id = message.id
     for value in statements:
         if any(item.source_message_id == source_id and
+               (not customer_name(value["content"]) or customer_name(value["content"]) == customer_name(item.content)) and
                (value["content"] in item.content or keyword_score(value["content"], item.content) >= .5)
                for item in known):
             continue

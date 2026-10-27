@@ -50,7 +50,8 @@ class ProposalStore:
 
 def is_confirmation(text: str) -> bool:
     compact = re.sub(r"[\s，,。.!！~～]", "", text or "")
-    return bool(compact) and bool(_CONFIRMATION.fullmatch(compact))
+    compound = re.fullmatch(r"(?:(?:可以|好的|好|行|确认|确定|同意)[，,]?)?(?:就)?按(?:这个|上述|刚才的|上面这份)(?:方案|安排)(?:执行|创建|写入|写进日历)?(?:吧)?", compact, re.IGNORECASE)
+    return bool(compact) and bool(_CONFIRMATION.fullmatch(compact) or compound)
 
 
 def prior_messages(db, message, limit=16):

@@ -118,7 +118,8 @@ def builtin_tools(run_id: str, conversation_id: str):
             "location_id": location_id,
         }
         try:
-            result = await weather.get_weather(**arguments)
+            selected = weather.previous_location(run_id, conversation_id, city, location_id, country_code)
+            result = await weather.get_weather(**arguments, **({"selected_location": selected} if selected else {}))
         except (ValueError, KeyError, TypeError):
             result = {
                 "error": "天气参数或服务返回格式无效，请检查城市、国家代码和预报天数（1–7）。"

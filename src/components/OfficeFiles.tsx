@@ -121,6 +121,7 @@ export function FileCard({
   useEffect(() => {
     if (!open) return;
     let live = true;
+    setPreview(null);
     setLoading(true);
     setError("");
     void api<Preview>(`/${prefix}/${file.id}/preview?page=${page}`)

@@ -251,11 +251,11 @@ def import_skill(value):
         return SkillRead.model_validate(row)
 
 
-def catalog():
+def catalog(*, include_disabled=False):
     with Session() as db:
         return [
-            {"id": r.id, "name": r.name, "description": r.description}
-            for r in db.scalars(select(Skill).where(Skill.enabled.is_(True)))
+            {"id": r.id, "name": r.name, "description": r.description, "enabled": r.enabled, "scripts_allowed": r.scripts_allowed}
+            for r in db.scalars(select(Skill) if include_disabled else select(Skill).where(Skill.enabled.is_(True)))
         ]
 
 

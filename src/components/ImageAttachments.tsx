@@ -265,6 +265,10 @@ export function ImagesInput({
   function addFiles(files: File[]) {
     if (disabledRef.current) return;
     for (const file of files) {
+      if (allowFiles && /\.doc$/i.test(file.name)) {
+        callbacks.current.onError("旧版Word .doc暂不支持，请在Word中另存为.docx后重新添加。");
+        continue;
+      }
       const origin = (file as File & { nativePath?: string }).nativePath || file.name;
       const key = `${origin}:${file.size}:${file.lastModified}`;
       if (fingerprints.current.has(key)) continue;

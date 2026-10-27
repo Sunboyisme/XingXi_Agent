@@ -109,7 +109,9 @@ def extract_statements(message):
             continue
         sensitive = bool(SENSITIVE.search(value) and re.search(r"我|用户|本人", value))
         preference = bool(PREFERENCE.search(clause))
-        if preference or sensitive or (explicit and re.search(r"我|用户|客户", value)):
+        correction = bool(correction_topic(value) and re.search(r"我|用户", value) and
+                          re.search(r"现在|不再|改成|改为|搬家|搬到|更正|纠正", value))
+        if preference or sensitive or correction or (explicit and re.search(r"我|用户|客户", value)):
             # Schedules remain calendar/todo requests, even after “记一下”.
             if not sensitive and not preference and re.search(r"明天|下周|这周|通电话|提醒|交了|交付|截止", value):
                 continue

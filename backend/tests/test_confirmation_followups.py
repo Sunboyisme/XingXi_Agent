@@ -46,7 +46,7 @@ def exchange(*, task_source=None, effect=False):
         return conversation.id, run.id, reply.id, proposal.id, task.id if task else None
 
 
-@pytest.mark.parametrize("text", ["可以", "可以的。", "同意", "同意你写进日志", "好的，创建吧", "OK"])
+@pytest.mark.parametrize("text", ["可以", "可以的。", "同意", "同意你写进日志", "好的，创建吧", "可以，就按这个安排。", "就按这个安排", "OK"])
 def test_confirmation_phrases(text):
     assert followups.is_confirmation(text)
 

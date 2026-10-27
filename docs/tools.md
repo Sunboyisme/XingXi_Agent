@@ -14,7 +14,9 @@
 | `date_time`                                            | 当前时间、日期偏移、时区换算、日期间隔 | 无                     |
 | `convert_units`                                        | 长度、重量、体积、温度、速度、时长换算 | 无                     |
 | `search_memories`、`remember`                          | 查询与保存记忆                         | 无                     |
-| `create_reminder`、`list_reminders`、`cancel_reminder` | 安排、查看和取消提醒                   | 无                     |
+| `create_plans`、`list_plans`、`update_plan`、`action_plan` | 日历安排、重复及提醒 | 无 |
+| `list_todos`、`create_todo`、`update_todo`、`action_todo` | 独立待办与跟进提醒 | 无 |
+| `list_files`、`search_file`、`read_file` | 授权资料的目录、全文定位与分段读取 | 无 |
 | `learning_goals`、`create_learning_goal`               | 查询学习进度、生成并保存学习路线       | 课程生成使用已配置模型 |
 
 天气适配在 `backend/app/weather.py`：先查询城市坐标，再查询预报；返回具体地点、当地时间、单位、获取时间及来源 URL。同名地点返回候选列表，Agent 应先询问用户，再传入候选的 `location_id`。未找到城市、数据不完整、网络错误均明确报告。当前天气来自气象模型，不能当成气象站实测；公开服务按个人使用方式接入。
@@ -23,6 +25,17 @@
 
 本地计算在 `backend/app/utilities.py`：算式解析 AST，只允许数字和算术运算，不调用 `eval`；限制输入长度、节点数、幂与结果范围，使用 28 位 Decimal 精度。日期输入为 ISO 8601，默认北京时间；无 UTC 偏移的时间按指定时区解释，跨夏令时的模糊时间要求明确偏移。日期间隔返回实际经过秒数及对应 24 小时天数。单位换算拒绝跨类别、不支持的单位、非有限数和低于绝对零度的温度。
 
-工具结果写入 RunEvent 并通过 SSE 呈现。外部服务失败返回结构化错误，工具记录区显示「调用失败」。记忆和提醒保持原有授权规则：明确要求才直接保存记忆或安排/取消提醒；自动归纳的记忆保留为待确认。
+工具结果写入 RunEvent 并通过 SSE 呈现。外部服务失败返回结构化错误，工具记录区显示「调用失败」。日历在用户明确委托且信息齐全时实际执行；仅讨论不写入，模糊项集中追问并先处理独立明确项。普通稳定偏好按记忆设置生效，私密/推测信息未授权时待确认；auto下明确纠正已生效记录支持直接更新和撤销。
 
 扩展时添加有明确参数说明的 `@tool` 函数，在 `build_tools` 和 `TOOL_INFO` 中注册，；聊天菜单无需为内置工具添加入口。后端测试检查注册工具与菜单一致、实际 LangChain 工具循环、错误结果与记录持久化；天气和搜索使用 MockTransport 或本地模拟模型，未验证真实服务商的回答质量。
+
+
+## 0.1.8 评测整改接口（2026-10-28，待用户验证）
+
+- `search_file(file_id, query, offset=0, limit=8)`只检索当前对话/项目授权文档的已解析正文，返回`matches`、`part`、`source`、`read_start`、`searched_parts`与`next_offset`；命中需继续读取原文，未命中不代表原文无答案。`read_file`返回`coverage`与文档片段总数，完整范围仍受解析警告限制。
+- `create_text_file`支持`content`或仅CSV的结构化`rows`，两者互斥；CSV统一转义、校验列数并保留公式注入防护。Excel生成返回`calculations`，公式值与文件缓存一致；可识别销售额/目标的完成率列额外校验比例。
+- `create_plans`兼容原参数，增加可选逐项`reminder_evidence`，仅接受当前用户或本轮实际读取文件的逐字依据；存在冲突时返回实际已保存的`value`和待确认项。重复系列查询有`series_revision`，整个系列按编号及版本核对，普通事项仍执行本地日期校验。
+- 成功普通回答的`retry_action=retry`表示只读重组，不能新增写入、文件、脚本或付费生成；已有文件卡直接复用。产物返回`current`、`revision`以标记同名修订，原文件保留。
+- 学习提交可带`exercise_id`，旧客户端省略时绑定服务端当前题；过期标识返回409。公开作答要求与内部评分标准分开，逐项判分与本次作答证据不进入公开接口。
+
+代码与提示调整不等于验收通过，逐项状态见[74项整改记录](evals/results/2026-10-27/整改记录.md)。

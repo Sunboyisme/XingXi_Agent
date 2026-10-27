@@ -64,3 +64,10 @@ def test_percentage_formula_and_returned_value_share_same_cache():
 def test_legacy_word_explains_conversion():
     with pytest.raises(ValueError, match="另存为.docx"):
         office_formats.parse(b"legacy", "合同.doc")
+
+
+def test_tenfold_percentage_error_is_rejected_before_publication():
+    with pytest.raises(ValueError, match="完成率与销售额/目标不一致"):
+        office_formats.spreadsheet([{"name": "经营", "rows": [
+            ["销售额", "销售目标", "完成率"], [156438.5, 150000, .104292],
+        ]}])

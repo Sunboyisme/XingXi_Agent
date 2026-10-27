@@ -577,6 +577,32 @@ def spreadsheet(sheets, *, with_values=False):
                 0, 0, len(sheet["rows"]) - 1, max(map(len, sheet["rows"])) - 1
             )
     wb.close()
+    for sheet in sheets:
+        rows, name = sheet.get("rows", []), sheet["name"]
+        if not rows:
+            continue
+        headers = [str(value) for value in rows[0]]
+        ratios = [index for index, value in enumerate(headers) if re.search(r"完成率|达成率", value)]
+        actual = next((index for index, value in enumerate(headers) if "销售额" in value and not re.search(r"目标|完成率", value)), None)
+        target = next((index for index, value in enumerate(headers) if re.search(r"销售目标|目标销售额|目标金额|^目标(?:[（(].*)?$", value) and not re.search(r"完成率|达成率", value)), None)
+        if actual is None or target is None:
+            continue
+        def unit_scale(header):
+            return 10000 if "万元" in header else 1000 if "千元" in header else 1
+        for r, row in enumerate(rows[1:], 2):
+            if max(actual, target) >= len(row) or type(row[actual]) not in {int, float} or type(row[target]) not in {int, float} or row[target] == 0:
+                continue
+            expected = row[actual] * unit_scale(headers[actual]) / (row[target] * unit_scale(headers[target]))
+            for c in ratios:
+                if c >= len(row) or row[c] is None:
+                    continue
+                value = cell(name, f"{get_column_letter(c + 1)}{r}")
+                tolerance = 1e-6
+                if isinstance(value, str) and re.fullmatch(r"[-+]?\d+(?:\.\d+)?%", value.strip()):
+                    value = float(value.strip().rstrip("%")) / 100
+                    tolerance = .0005
+                if type(value) in {int, float} and abs(value - expected) > tolerance:
+                    raise ValueError(f"{name}第{r}行完成率与销售额/目标不一致，应约为{expected:.8g}（显示{expected:.1%}），请使用引用实际和目标单元格的公式。")
     if with_values:
         calculations = [{"sheet": name, "cell": cell, "formula": grid[name, cell], "value": cached.get((name, cell))}
                         for name, cell in sorted(formula_cells)]

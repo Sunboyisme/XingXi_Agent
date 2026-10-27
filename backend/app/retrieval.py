@@ -113,6 +113,11 @@ def keyword_score(query, text):
     return score + (0.08 * overlap / max(1, len(topic_chars))) + boost
 
 
+def customer_name(text):
+    match = re.search(r"客户[「“\"']?([^」”\"'：:，,。\s]{2,30}?)(?:[」”\"']|的|写作|文案|[：:，,。])", text)
+    return match[1] if match else ""
+
+
 def cosine(a, b):
     if len(a) != len(b):
         raise ValueError("向量维度不匹配")
@@ -234,8 +239,7 @@ async def retrieve_detailed(query: str, purpose="preview", project_id=None, *, f
         )
         vectors = {r.memory_id: r for r in db.scalars(select(MemoryVector))}
     # Named customer rules do not bleed into another customer's writing task.
-    named_customers = {match.group(1).strip("：:，,。 ") for item in memories
-        for match in re.finditer(r"客户[“\"「]?([^”\"」：:，,。\s]{2,20})", item.content)}
+    named_customers = {name for item in memories if (name := customer_name(item.content))}
     selected_customers = {name for name in named_customers if name in (focus_query or query)}
     if selected_customers:
         memories = [item for item in memories if not any(name in item.content for name in named_customers - selected_customers)

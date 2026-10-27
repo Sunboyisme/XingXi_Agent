@@ -45,6 +45,8 @@ def location_read(item: dict) -> dict:
             "id",
             "name",
             "admin1",
+            "admin2",
+            "admin3",
             "country",
             "country_code",
             "latitude",
@@ -54,7 +56,8 @@ def location_read(item: dict) -> dict:
 
 
 async def get_weather(
-    city: str, days: int = 3, country_code: str = "", location_id: int | None = None
+    city: str, days: int = 3, country_code: str = "", location_id: int | None = None,
+    *, selected_location: dict | None = None,
 ) -> dict:
     if not city.strip() or len(city) > 120 or not 1 <= days <= 7:
         raise ValueError("请提供城市名称；预报天数为 1 到 7 天。")
@@ -64,28 +67,31 @@ async def get_weather(
     if country_code:
         params["countryCode"] = country_code.upper()
     async with AsyncClient(timeout=20) as client:
-        response = await client.get(GEOCODING_URL, params=params)
-        response.raise_for_status()
-        locations = response.json().get("results", [])
-        if not locations:
-            return {
-                "error": "未找到城市，请补充省份、国家或使用拼音/英文城市名。",
-                "query": city,
-            }
-        if location_id is not None:
-            location = next(
-                (item for item in locations if item["id"] == location_id), None
-            )
-            if not location:
-                return {"error": "所选地点不在本次查询结果中，请重新查询城市。"}
-        elif len(locations) > 1:
-            return {
-                "needs_clarification": True,
-                "message": "找到多个地点，请让用户确认省份或国家，再用对应 location_id 查询。",
-                "locations": [location_read(item) for item in locations],
-            }
+        if selected_location is not None:
+            location = selected_location
         else:
-            location = locations[0]
+            response = await client.get(GEOCODING_URL, params=params)
+            response.raise_for_status()
+            locations = response.json().get("results", [])
+            if not locations:
+                return {
+                    "error": "未找到城市，请补充省份、国家或使用拼音/英文城市名。",
+                    "query": city,
+                }
+            if location_id is not None:
+                location = next(
+                    (item for item in locations if item["id"] == location_id), None
+                )
+                if not location:
+                    return {"error": "所选地点不在本次查询结果中，请重新查询城市。"}
+            elif len(locations) > 1:
+                return {
+                    "needs_clarification": True,
+                    "message": "找到多个地点，请让用户确认省份或国家，再用对应 location_id 查询。",
+                    "locations": [location_read(item) for item in locations],
+                }
+            else:
+                location = locations[0]
         response = await client.get(
             FORECAST_URL,
             params={
@@ -143,3 +149,31 @@ async def get_weather(
         },
         "note": "当前天气与预报来自气象模型；时间按查询地点的时区显示。",
     }
+
+
+def previous_location(run_id, conversation_id, city, location_id, country_code=""):
+    """Reuse a real earlier-turn candidate instead of re-geocoding a changed list."""
+    if location_id is None:
+        return None
+    from sqlalchemy import select
+    from .config import PROFILE_ID
+    from .db import Run, RunEvent, Session
+    from .task_context import user_message
+    with Session() as db:
+        source = user_message(db, run_id, conversation_id)
+        if not source:
+            return None
+        for event in db.scalars(select(RunEvent).join(Run, Run.id == RunEvent.run_id).where(
+            Run.conversation_id == conversation_id, Run.profile_id == PROFILE_ID,
+            Run.source_message_id != source.id, RunEvent.kind == "tool").order_by(RunEvent.id.desc())):
+            data = event.data
+            if data.get("tool_id") != "get_weather" or data.get("status") != "completed":
+                continue
+            result = data.get("result", {})
+            if not isinstance(result, dict):
+                continue
+            locations = result.get("locations", []) + ([result["location"]] if result.get("location") else [])
+            for location in locations:
+                if location.get("id") == location_id and (not country_code or location.get("country_code") == country_code.upper()) and city in {data.get("arguments", {}).get("city"), location.get("name")}:
+                    return location_read(location)
+    return None

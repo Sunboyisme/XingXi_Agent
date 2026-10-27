@@ -305,7 +305,12 @@ def build(run_id, conversation_id):
         """用户明确要求时更新同一计划，先查询编号。scope 为 this（仅本次）、future（本次及以后）、series（整个系列）；前两者必须传查询得到的 occurrence_start，不能猜测修改范围。传入完整计划并同步提醒。repeat_until 为包含当天的截止日期，或 repeat_count 为次数，二选一；calendar_display=summary 汇总日常事项，always 在月历展开。完成、关闭提醒、结束系列用 action_plan。"""
         def update():
             with calendar.lock:
-                before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, plan.occurrence_start or "", date_evidence)
+                with Session() as db:
+                    repeating = calendar.find(db, plan_id).recurrence != "none"
+                if plan.scope == "series" and repeating:
+                    before = plan_targets.validate_series(run_id, conversation_id, plan_id, date_evidence)
+                else:
+                    before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, plan.occurrence_start or "", date_evidence)
                 if before["series_status"] == "deleted":
                     raise ValueError("计划已经删除，请先按用户要求恢复原记录，再修改。")
                 if before["recurrence"] != "none":
@@ -357,7 +362,11 @@ def build(run_id, conversation_id):
         """操作同一份计划。完成本次用 complete；仅取消某次重复安排用 cancel_occurrence，不标为完成也不结束系列。实例操作必须传查询得到的本次 occurrence_start；end_series/disable_reminders只需查询得到的系列编号，不需要target_date或occurrence_start。恢复已完成或已取消的本次用 restore；关闭提醒用 disable_reminders，保留计划；结束整个重复系列用 end_series。先查询核对编号与本次时间，按用户明确要求执行。知道了与稍后提醒属于通知，不是计划操作。"""
         def apply():
             with calendar.lock:
-                if action in {"end_series", "disable_reminders"}:
+                with Session() as db:
+                    repeating = calendar.find(db, plan_id).recurrence != "none"
+                if action == "end_series" and not repeating:
+                    raise ValueError("结束整个系列仅用于重复计划；普通事项请按要求完成或删除。")
+                if action in {"end_series", "disable_reminders"} and repeating:
                     before = plan_targets.validate_series(run_id, conversation_id, plan_id, date_evidence)
                 else:
                     before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, occurrence_start, date_evidence)

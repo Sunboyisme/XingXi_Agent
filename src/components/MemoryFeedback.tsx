@@ -94,12 +94,13 @@ export function MemorySavedNotice({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [paused, setPaused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   useEffect(() => {
-    if (busy || paused || error) return;
+    if (busy || hovered || focused || error) return;
     const timer = setTimeout(onClose, 8000);
     return () => clearTimeout(timer);
-  }, [busy, paused, error, onClose]);
+  }, [busy, hovered, focused, error, onClose]);
   async function undo() {
     setBusy(true);
     try {
@@ -115,12 +116,12 @@ export function MemorySavedNotice({
   return (
     <div
       className="memory-saved-notice"
-      onPointerEnter={() => setPaused(true)}
-      onPointerLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget))
-          setPaused(false);
+          setFocused(false);
       }}
     >
       <div className="memory-saved-row">
