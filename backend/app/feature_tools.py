@@ -1,5 +1,6 @@
 from . import task_context, followups
 import json
+import re
 from datetime import date
 
 from fastapi import HTTPException
@@ -12,6 +13,51 @@ from . import skills
 from .db import Session
 
 _PLAN_PROPOSALS = followups.ProposalStore()
+_SERIES_PROPOSALS = followups.ProposalStore()
+
+
+def _save_plans(values, run_id, conversation_id, message_id, text, *, allow_conflicts=False, reminder_evidence=None):
+    from . import calendar_policy
+    from .db import Message, RunEvent
+
+    if reminder_evidence is not None and len(reminder_evidence) != len(values):
+        raise ValueError("reminder_evidence与plans逐项对应，未设置提醒的项填空字符串。")
+    evidence_texts = [text]
+    with Session() as db:
+        source = db.get(Message, message_id) if message_id else None
+        if source:
+            evidence_texts.append(source.content)
+        for event in db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool")):
+            if event.data.get("tool_id") in {"read_file", "read_local_file"}:
+                result = event.data.get("result", {})
+                if isinstance(result, dict):
+                    evidence_texts.extend(str(part.get("text", "")) for part in result.get("parts", []))
+    ready, pending, overlaps = [], [], []
+    with calendar.lock:
+        for index, value in enumerate(values):
+            quote = reminder_evidence[index] if reminder_evidence is not None else ""
+            if quote and not any(quote in original for original in evidence_texts):
+                raise ValueError("提醒依据必须逐字来自当前用户要求或本轮实际读取的文件片段。")
+            implied = calendar_policy.reminder_offsets(quote or (text if len(values) == 1 and not re.search(r"别人|待办", text) else ""))
+            if implied and (not value.reminder_enabled or sorted(value.reminder_offsets or []) != implied):
+                raise ValueError(f"提醒与原文不符，reminder_offsets应为{implied}，请修正后提交；未写入。")
+            start, end = calendar_policy.date_window(value)
+            existing = calendar.list_events(start, end, value.timezone)
+            conflicts = [] if allow_conflicts else calendar_policy.conflicts(value, existing)
+            if conflicts:
+                pending.append(value.model_dump())
+                overlaps.extend(conflicts)
+            else:
+                ready.append(value)
+        saved = calendar.create_events(ready, message_id or None) if ready else []
+    if pending:
+        _PLAN_PROPOSALS.put(conversation_id, {"plans": pending, "run_id": run_id,
+            "user_message_id": message_id, "status": "pending", "result": None, "conflict": True})
+        return {"value": saved, "status": "needs_confirmation", "plans": pending,
+                "conflicts": list({(item["id"], item["occurrence_start"]): item for item in overlaps}.values()),
+                "message": f"已保存{len(saved)}项无冲突安排。其余安排与已有日程重叠，请确认仍要安排还是调整时间。"}
+    _PLAN_PROPOSALS.pop(conversation_id)
+    return saved
 
 
 class RemovalTarget(BaseModel):
@@ -145,8 +191,11 @@ def build(run_id, conversation_id):
         plans: list[calendar.PlanWrite],
         explicit_request: bool = False,
         confirm: bool = False,
+        reminder_evidence: list[str] | None = None,
     ) -> str:
-        """用户明确要求创建日历计划且日期、时间、范围清楚时，设 explicit_request=true 直接创建。其他情况先询问：首次调用不要传 confirm（或传 false），只登记待确认方案，返回 needs_confirmation，不写入日历；请把计划名称、日期或时间、重复和提醒摘要告诉用户并明确询问是否创建。用户没有说清日期、时间或范围时先追问，不能自行补全。只有用户在下一条消息明确同意后，才能再次提交同一方案并传 confirm=true；同一轮提出并创建会被拒绝。用户确认时直接提交用户刚看到的同一方案即可，参数缺失的默认值会被容错。用户修改内容时重新提出方案。无时间的单项事项用全天，start/end 是日期（结束日期不包含当天）；定时事项用 ISO 时间，未带偏移时按 timezone（默认 Asia/Shanghai）解释。recurrence 为 none/daily/weekly/monthly，repeat_interval 为间隔。repeat_until 是包含当天的截止日期，或 repeat_count 为包含首次的次数，二选一；未指定则永不结束。calendar_display 默认 summary 汇总日常，用户要求突出显示时用 always。reminder_enabled 控制提醒；reminder_offsets 是每次开始前后本地分钟偏移的数组（提前为负），多个提醒属于同一计划。提醒请求同样创建计划，不另建提醒事项。"""
+        """创建用户授权的日历计划。明确安排、提醒、记一下事项，信息齐全直接执行；只讨论或先给方案则登记待确认，下一轮同意才confirm=true。无具体时刻用全天；上午/晚上等模糊时段先询问该项，其余明确项先提交。
+        start/end为日期或ISO时间，无偏移按timezone解释；全天end不含当天。recurrence为none/daily/weekly/monthly，年度可monthly+repeat_interval=12。repeat_until含当天，repeat_count含首次，二者互斥。多个提醒在同一计划reminder_offsets，提前为负；提前一天=-1440。
+        提醒依据reminder_evidence可逐项传当前用户或本轮已读取文件中的原文，工具校验偏移一致；不要把参数混进title。创建前查询，冲突项等待确认而不阻塞独立项；同一请求不要改标题再建一次。"""
 
         def create():
             if not 1 <= len(plans) <= 100:
@@ -160,11 +209,22 @@ def build(run_id, conversation_id):
             proposal = [value.model_dump() for value in plans]
             # A model may set both flags on an already authorized request.
             # Explicit authorization must not depend on a pending proposal.
-            if explicit_request:
-                result = calendar.create_events(plans, latest_message_id or None)
-                _PLAN_PROPOSALS.pop(conversation_id)
-                return result
-            if not confirm:
+            from .calendar_policy import creation_authorized
+            pending = _PLAN_PROPOSALS.get(conversation_id)
+            confirmed_reply = followups.is_confirmation(latest_text)
+            if pending and confirmed_reply:
+                wants_confirmation = True
+            else:
+                wants_confirmation = confirm
+            direct = creation_authorized(latest_text) and not (pending and confirmed_reply)
+            if confirmed_reply and not pending:
+                with Session() as db:
+                    source = task_context.user_message(db, run_id, conversation_id)
+                    direct = bool(followups.prior_context(db, source))
+            if direct:
+                return _save_plans(plans, run_id, conversation_id, latest_message_id, latest_text,
+                                   reminder_evidence=reminder_evidence)
+            if not wants_confirmation:
                 _PLAN_PROPOSALS.put(conversation_id, {
                     "plans": proposal,
                     "run_id": run_id,
@@ -176,9 +236,7 @@ def build(run_id, conversation_id):
                     "status": "needs_confirmation",
                     "plans": proposal,
                     "message": (
-                        "本轮只登记了待确认方案，尚未写入日历。请把计划名称、"
-                        "日期或时间、重复和提醒摘要告诉用户，并明确询问是否创建；"
-                        "用户在下一条消息同意后，再提交同一方案并传 confirm=true。"
+                        "安排已整理为待确认方案，尚未写入日历。请确认名称、日期、重复和提醒后再创建。"
                     ),
                 }
             pending = _PLAN_PROPOSALS.get(conversation_id)
@@ -227,10 +285,13 @@ def build(run_id, conversation_id):
                         "待确认方案重新完整告诉用户，并再次询问是否按这个方案创建。"
                     ),
                 }
-            result = calendar.create_events(
-                [calendar.PlanWrite(**value) for value in chosen],
-                latest_message_id or None,
-            )
+            if re.search(r"不要|不用|不同意|取消|不按|先不", latest_text) or (not confirmed_reply and not re.match(r"^(?:确认|确定|同意|就按|按这个)", latest_text)):
+                return {"status": "needs_confirmation", "plans": pending["plans"], "message": "尚未收到对这份具体方案的确认，未写入日历。"}
+            result = _save_plans([calendar.PlanWrite(**value) for value in chosen], run_id,
+                                conversation_id, latest_message_id, latest_text,
+                                allow_conflicts=bool(pending.get("conflict")))
+            _PLAN_PROPOSALS.put(conversation_id, pending)
+            pending = _PLAN_PROPOSALS.get(conversation_id)
             with _PLAN_PROPOSALS.lock:
                 pending["status"] = "created"
                 pending["result"] = result
@@ -293,14 +354,34 @@ def build(run_id, conversation_id):
 
     @tool
     def action_plan(plan_id: str, action: str, occurrence_start: str = "", target_date: date | None = None, date_evidence: str = "") -> str:
-        """操作同一份计划。完成本次用 complete；仅取消某次重复安排用 cancel_occurrence，不标为完成也不结束系列。重复计划必须传查询得到的本次 occurrence_start。恢复已完成或已取消的本次用 restore；关闭提醒用 disable_reminders，保留计划；结束整个重复系列用 end_series。先查询核对编号与本次时间，按用户明确要求执行。知道了与稍后提醒属于通知，不是计划操作。"""
+        """操作同一份计划。完成本次用 complete；仅取消某次重复安排用 cancel_occurrence，不标为完成也不结束系列。实例操作必须传查询得到的本次 occurrence_start；end_series/disable_reminders只需查询得到的系列编号，不需要target_date或occurrence_start。恢复已完成或已取消的本次用 restore；关闭提醒用 disable_reminders，保留计划；结束整个重复系列用 end_series。先查询核对编号与本次时间，按用户明确要求执行。知道了与稍后提醒属于通知，不是计划操作。"""
         def apply():
             with calendar.lock:
-                before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, occurrence_start, date_evidence)
+                if action in {"end_series", "disable_reminders"}:
+                    before = plan_targets.validate_series(run_id, conversation_id, plan_id, date_evidence)
+                else:
+                    before = plan_targets.validate(run_id, conversation_id, plan_id, target_date, occurrence_start, date_evidence)
                 if before["series_status"] == "deleted" and action != "restore":
                     raise ValueError("计划已经删除，请先按用户要求恢复原记录。")
                 if before["recurrence"] != "none" and action in {"end_series", "disable_reminders"}:
-                    plan_targets.require_scope(run_id, conversation_id, "series")
+                    prior_scope = _SERIES_PROPOSALS.get(conversation_id) if action == "end_series" else None
+                    with Session() as db:
+                        source = task_context.user_message(db, run_id, conversation_id)
+                    if not (prior_scope and prior_scope["plan_id"] == plan_id and
+                            prior_scope["user_message_id"] != source.id and followups.is_confirmation(source.content)):
+                        plan_targets.require_scope(run_id, conversation_id, "series")
+                if action == "end_series":
+                    with Session() as db:
+                        source = task_context.user_message(db, run_id, conversation_id)
+                    pending = _SERIES_PROPOSALS.get(conversation_id)
+                    accepted = bool(re.match(r"^(?:确认|确定|同意)", source.content.strip())) or bool(pending and
+                        pending["plan_id"] == plan_id and pending["user_message_id"] != source.id and
+                        followups.is_confirmation(source.content))
+                    if not accepted:
+                        _SERIES_PROPOSALS.put(conversation_id, {"plan_id": plan_id, "user_message_id": source.id})
+                        return {"status": "needs_confirmation", "plan": before,
+                                "message": f"请确认结束整个‘{before['title']}’系列；后续不再安排，已有完成记录保留。"}
+                    _SERIES_PROPOSALS.pop(conversation_id)
                 result = calendar.act(plan_id, calendar.PlanAction(action=action, occurrence_start=occurrence_start or None))
                 return {**result, "operation": action, "before": before}
         return safe(apply)

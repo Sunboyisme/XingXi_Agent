@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func
 
-from . import db as store, plans, reminders
+from . import db as store, plans, reminders, task_context
 from .config import PROFILE_ID
 from .schemas import RecordRead
 
@@ -32,6 +32,9 @@ class TodoWrite(BaseModel):
     def title_text(cls, value):
         if not value.strip():
             raise ValueError("请填写待办名称")
+        import re
+        if re.search(r'string=["\']true["\']>|["\'],?\s*["\'](?:notes|reminder_at|timezone)["\']\s*[:=]', value):
+            raise ValueError("title混入了其他字段或工具标记，请将notes、reminder_at分别传入对应参数；未保存。")
         return value.strip()
 
     @field_validator("reminder_at")
@@ -212,8 +215,25 @@ def build(run_id, conversation_id):
 
     @tool
     def create_todo(title: str, notes: str = "", reminder_at: str | None = None, timezone: str = "Asia/Shanghai") -> str:
-        """用户要求新增待办时保存。待办无排期，提醒可留空；提醒日期或时刻有歧义先询问。"""
-        return output(create(TodoWrite(title=title, notes=notes, reminder_at=reminder_at, timezone=timezone)))
+        """用户要求新增待办时保存。title只含名称，notes独立传入，禁止将JSON或工具标记混入标题。待办无排期，提醒可留空；时刻有歧义先询问，只缺该项不阻塞其他事项。"""
+        from .calendar_policy import similar_title
+        with plans.lock, store.Session() as db:
+            source = task_context.user_message(db, run_id, conversation_id)
+            source_runs = select(store.Run.id).where(store.Run.conversation_id == conversation_id,
+                                                   store.Run.source_message_id == source.id)
+            for event in db.scalars(select(store.RunEvent).where(store.RunEvent.run_id.in_(source_runs),
+                    store.RunEvent.kind == "tool").order_by(store.RunEvent.id.desc())):
+                data = event.data
+                result = data.get("result", {})
+                if data.get("tool_id") == "create_todo" and data.get("status") == "completed" and similar_title(data.get("arguments", {}).get("title", ""), title) and isinstance(result, dict) and result.get("id"):
+                    # Reuse even a subsequently completed/deleted item; retries cannot restore it.
+                    row = db.get(store.Todo, result["id"])
+                    if row and row.profile_id == PROFILE_ID:
+                        return output(TodoRead.model_validate(row))
+            if reminder_at:
+                moment = datetime.fromisoformat(reminder_at)
+                reminder_at = moment.replace(tzinfo=ZoneInfo(timezone)).isoformat() if moment.tzinfo is None else reminder_at
+            return output(create(TodoWrite(title=title, notes=notes, reminder_at=reminder_at, timezone=timezone)))
 
     @tool(args_schema=TodoToolUpdate)
     def update_todo(todo_id: str, changes: TodoChanges) -> str:

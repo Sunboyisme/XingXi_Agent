@@ -745,9 +745,22 @@ def notice(run_id, task_id):
     else:
         text = value["reason"] or "任务已暂停。"
     if questions and value["status"] not in TERMINAL:
-        text += "\n\n" + "\n".join(filter(None, questions))
+        text += "\n\n" + "\n".join(dict.fromkeys(filter(None, questions)))
     if proposals and value["status"] not in TERMINAL:
-        text += "\n\n待确认的具体安排：\n" + json.dumps(proposals, ensure_ascii=False)
+        from .plan_execution import plan_time
+        lines = []
+        for batch in proposals:
+            for plan in batch:
+                lines.append(f"- {plan.get('title', '安排')}：{plan_time(plan)}")
+        text += "\n\n待确认的具体安排：\n" + "\n".join(dict.fromkeys(lines))
+    if value["status"] not in TERMINAL:
+        completed = [item["output"].get("content", "") for item in value["steps"] if item["status"] == "completed"]
+        if completed:
+            text += "\n\n已完成的事项：\n" + "\n\n".join(part[:3000] for part in completed if part)
+        from .plan_execution import facts_receipt, task_facts
+        receipt = facts_receipt(task_facts(task_id))
+        if receipt:
+            text += "\n\n" + receipt
     if value["artifacts"]:
         text += "\n\n已保存：" + "、".join(item["name"] for item in value["artifacts"])
     publish(run_id, task_id)

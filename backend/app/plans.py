@@ -135,6 +135,7 @@ class PlanWrite(BaseModel):
 
 
 class PlanRead(PlanWrite):
+    series_revision: str | None = None
     status: Literal["planned", "completed", "ended", "deleted", "cancelled"] = "planned"
     id: str
     reminder_id: str | None = None
@@ -206,6 +207,7 @@ def serialize(db, row, start=None, end=None, status=None, *, root=None, occurren
     value.update(
         id=master.id, reminder_id=master.reminder_id,
         source_message_id=master.source_message_id,
+        series_revision=master.updated_at,
         series_start=master.start, series_end=master.end, series_status=master.status, series_all_day=master.all_day, series_title=series_title or master.title,
         occurrence_start=occurrence_key or start or row.start,
         occurrence_index=index, next_reminder_at=min(active) if active else None,
@@ -330,6 +332,20 @@ def create_events(values, source_message_id=None):
             if value.recurrence != "none" and value.status == "completed":
                 raise HTTPException(422, "重复计划须明确完成本次，或结束整个系列")
             # A repeated tool call or an old reminder alias cannot create a second item.
+            # Rewording one source item is not a second creation authorization.
+            from .calendar_policy import similar_title
+            same_source = list(db.scalars(select(CalendarEvent).where(
+                CalendarEvent.profile_id == PROFILE_ID,
+                CalendarEvent.source_message_id == source_message_id,
+                CalendarEvent.start == value.start,
+                CalendarEvent.all_day == value.all_day,
+                CalendarEvent.recurrence == value.recurrence,
+                CalendarEvent.repeat_interval == value.repeat_interval,
+            ))) if source_message_id else []
+            prior_item = next((item for item in same_source if similar_title(item.title, value.title)), None)
+            if prior_item:
+                result.append(prior_item)
+                continue
             row = db.scalar(
                 select(CalendarEvent).where(
                     CalendarEvent.profile_id == PROFILE_ID,

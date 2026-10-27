@@ -103,5 +103,30 @@ def require_scope(run_id, conversation_id, scope):
         message = task_context.user_message(db, run_id, conversation_id)
         text = message.content if message else ""
     pattern = r"整个|全部|所有|(?:这个|该|结束).{0,3}系列|(?:停止|不再).{0,6}重复" if scope == "series" else r"以后|之后|后续|从.{0,20}开始"
-    if not re.search(pattern, text):
+    if re.search(r"(?:不要|别|不用|先不).{0,4}(?:结束|删除|取消|修改)", text) or not re.search(pattern, text):
         raise ValueError("用户尚未明确要求修改整个系列或后续范围；请仅操作本次，范围有歧义时先询问。")
+
+
+def validate_series(run_id, conversation_id, plan_id, date_evidence=""):
+    """A whole series has an identity and revision, not an arbitrary target day."""
+    with Session() as db:
+        message = task_context.user_message(db, run_id, conversation_id)
+        if not message or (date_evidence and date_evidence not in message.content):
+            raise ValueError("date_evidence 必须逐字引用本次用户要求，或留空。")
+        run = db.get(Run, run_id)
+        run_ids = list(db.scalars(select(Run.id).where(Run.task_id == run.task_id))) if run and run.task_id else [run_id]
+        proofs = []
+        for event in db.scalars(select(RunEvent).where(RunEvent.run_id.in_(run_ids),
+                               RunEvent.kind == "tool").order_by(RunEvent.id)):
+            data = event.data
+            if data.get("tool_id") == "list_plans" and data.get("status") == "completed":
+                result = data.get("result", [])
+                result = result.get("value", []) if isinstance(result, dict) else result
+                proofs.extend(item for item in result if isinstance(item, dict) and item.get("id") == plan_id)
+        current = plans.serialize(db, plans.find(db, plan_id))
+    if not proofs:
+        raise ValueError("先查询并核对实际系列，再传返回的plan_id；整个系列不需要猜测实例日期。")
+    proof = proofs[-1]
+    if not proof.get("series_revision") or proof["series_revision"] != current["series_revision"]:
+        raise HTTPException(409, "系列在查询后已变更，请重新查询；未使用旧记录执行操作。")
+    return current

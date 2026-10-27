@@ -65,8 +65,8 @@ def task_facts(task_id):
         if not task:
             return []
         rows = db.scalars(select(TaskOperation).where(TaskOperation.task_id == task_id,
-            TaskOperation.revision == task.revision, TaskOperation.status == "completed").order_by(TaskOperation.created_at)).all()
-        return operation_facts([{"tool_id": row.tool_id, "status": row.status, "result": row.result} for row in rows])
+            TaskOperation.revision == task.revision, TaskOperation.status.in_(["completed", "waiting"])).order_by(TaskOperation.created_at)).all()
+        return operation_facts([{"tool_id": row.tool_id, "status": "completed", "result": row.result} for row in rows])
 
 
 def facts_receipt(facts):
