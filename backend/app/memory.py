@@ -49,6 +49,9 @@ PREFERENCE = re.compile(
     r"我.{0,20}(?:喜欢|偏好|习惯|坚持|希望|倾向|更想)"
     r"|我(?:每天|每周|平时|通常|一般).{0,20}(?:学习|读书|阅读|运动|跑步|健身|早起|写日记)"
     r"|(?:回答|回复|解释|界面|设计).{0,8}(?:简短|简洁|详细|圆角|扁平)"
+    r"|我.{0,12}(?:通常|一般|平时|一向|一直|总是|只)(?:只)?(?:喝|点|吃|用|选|看|买)"
+    r"|(?:以后|今后).{0,24}(?:都按|一律|统一|命名|格式|称呼)"
+    r"|客户.{0,30}(?:写作|语气|文案|称呼|不要用|不用)"
     r"|\bI (?:prefer|like|always)\b",
     re.IGNORECASE,
 )
@@ -69,6 +72,52 @@ class MemoryConflict(ValueError):
 class SourceQuote(BaseModel):
     message_id: str = Field(min_length=1, max_length=64)
     quote: str = Field(min_length=1, max_length=6000)
+
+
+def correction_topic(text):
+    for name, pattern in (
+        ("residence", r"住在|居住|住址|搬家|搬到|住到"),
+        ("work", r"就职|工作单位|任职|在.{1,20}(?:工作|上班)"),
+        ("style", r"回答|回复|写作|命名|格式|语气"),
+        ("preference", r"喜欢|偏好|习惯|通常|一般"),
+    ):
+        if re.search(pattern, text):
+            return name
+    return ""
+
+
+def is_correction(previous, content, evidence):
+    """Only a first-person, definite update of the same already-saved topic."""
+    return bool(re.search(r"我|我的|用户", evidence)
+                and re.search(r"现在|不再|改成|改为|搬家|搬到|更正|纠正|已经换|换成", evidence)
+                and not re.search(r"可能|打算|假如|如果|也许|考虑|是否|[？?]", evidence)
+                and correction_topic(previous)
+                and correction_topic(previous) == correction_topic(content))
+
+
+def extract_statements(message):
+    """Literal fallback statements, never facts inferred from documents or answers."""
+    text = (message or "").strip()
+    if not text or len(text) > 6000 or DECLINED.search(text) or SECRET.search(text):
+        return []
+    result = []
+    explicit = bool(EXPLICIT.search(text))
+    for clause in re.split(r"[。；;\n]", text):
+        clause = re.split(r"[，,]?(?:给我|帮我推荐|你推荐|请推荐|推荐几|能不能|可以吗)", clause, maxsplit=1)[0].strip(" ，,。；;")
+        value = normalize_content(clause)
+        if not value or len(value) > 600 or TEMPORARY.search(value):
+            continue
+        sensitive = bool(SENSITIVE.search(value) and re.search(r"我|用户|本人", value))
+        preference = bool(PREFERENCE.search(clause))
+        if preference or sensitive or (explicit and re.search(r"我|用户|客户", value)):
+            # Schedules remain calendar/todo requests, even after “记一下”.
+            if not sensitive and not preference and re.search(r"明天|下周|这周|通电话|提醒|交了|交付|截止", value):
+                continue
+            result.append({"content": value, "evidence": clause,
+                           "category": "preference" if preference and not sensitive else "fact",
+                           "risk": "sensitive" if sensitive else "normal",
+                           "explicit_request": explicit})
+    return result[:12]
 
 
 def history_evidence(db, message, sources):
@@ -290,6 +339,10 @@ def save_from_chat(
                 and target.revision != existing.replaces_revision
             ):
                 return {"error": "原记忆已修改，请在记忆页核实这条旧提议"}
+        if (target and state == "candidate" and settings.memory_mode == "auto"
+            and risk not in {"inferred", "temporary"} and not sources
+            and is_correction(target.content, content, evidence)):
+            state, reason = "confirmed", ""
         # A proposal keeps the previously confirmed memory active until confirmation.
         conversation = db.get(Conversation, conversation_id)
         record = target if target and state == "confirmed" else existing

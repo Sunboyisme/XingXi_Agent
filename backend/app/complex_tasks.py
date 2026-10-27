@@ -328,6 +328,8 @@ def save_reply(run_id, conversation_id, text):
         db.get(Conversation, conversation_id).updated_at = now()
         db.commit()
     emit(run_id, "answer", {"text": text})
+    from .agent import _remember_clear_preference
+    _remember_clear_preference(run_id, conversation_id)
     return {"content": text, "conversation_id": conversation_id}
 
 

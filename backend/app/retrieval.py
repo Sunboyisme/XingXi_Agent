@@ -102,7 +102,15 @@ def keyword_score(query, text):
     short_topics = re.findall(r"[\u3400-\u9fff]{1,2}(?![\u3400-\u9fff])", query)
     topic_chars = set("".join(short_topics)) - set("的一是在了有我你他她它个只要想学会吗呢吧好不无从到多少什么")
     overlap = sum(char in text for char in topic_chars)
-    return score + (0.08 * overlap / max(1, len(topic_chars)))
+    boost = 0.0
+    for query_pattern, memory_pattern in (
+        (r"周末.*(?:去哪|去哪里|玩)|附近|当地|住哪|住所|出行", r"住在|居住|住址|搬到"),
+        (r"感冒|药|饮食|吃什么|新品|食物|推荐.*吃", r"过敏|忌口"),
+        (r"学习|讲解|代码|教学", r"学.{0,20}希望|先.{0,10}代码|最多.{0,8}句话|讲解|回答.*简"),
+    ):
+        if re.search(query_pattern, query) and re.search(memory_pattern, text):
+            boost = max(boost, .24)
+    return score + (0.08 * overlap / max(1, len(topic_chars))) + boost
 
 
 def cosine(a, b):
@@ -211,7 +219,7 @@ async def worker():
         await asyncio.sleep(15 if last_error else 3)
 
 
-async def retrieve_detailed(query: str, purpose="preview", project_id=None):
+async def retrieve_detailed(query: str, purpose="preview", project_id=None, *, focus_query=""):
     global last_error
     started = time.monotonic()
     value = settings()
@@ -225,6 +233,13 @@ async def retrieve_detailed(query: str, purpose="preview", project_id=None):
             )
         )
         vectors = {r.memory_id: r for r in db.scalars(select(MemoryVector))}
+    # Named customer rules do not bleed into another customer's writing task.
+    named_customers = {match.group(1).strip("：:，,。 ") for item in memories
+        for match in re.finditer(r"客户[“\"「]?([^”\"」：:，,。\s]{2,20})", item.content)}
+    selected_customers = {name for name in named_customers if name in (focus_query or query)}
+    if selected_customers:
+        memories = [item for item in memories if not any(name in item.content for name in named_customers - selected_customers)
+                    or any(name in item.content for name in selected_customers)]
     originals = {m.id: m for m in memories}
     lexical = sorted(
         ((keyword_score(query, m.content), m.id) for m in memories), reverse=True
@@ -330,7 +345,7 @@ async def retrieve_detailed(query: str, purpose="preview", project_id=None):
     return result, trace
 
 
-async def retrieve(query: str, run_id=None, purpose="context"):
+async def retrieve(query: str, run_id=None, purpose="context", *, focus_query=""):
     if not query.strip():
         return []
     from .db import Run, Conversation
@@ -338,7 +353,7 @@ async def retrieve(query: str, run_id=None, purpose="context"):
         run = db.get(Run, run_id) if run_id else None
         conversation = db.get(Conversation, run.conversation_id) if run and run.conversation_id else None
         project_id = conversation.project_id if conversation else None
-    result, trace = await retrieve_detailed(query, purpose, project_id=project_id)
+    result, trace = await retrieve_detailed(query, purpose, project_id=project_id, focus_query=focus_query)
     if run_id:
         from .runs import emit
 

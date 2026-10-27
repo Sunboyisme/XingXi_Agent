@@ -147,7 +147,7 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
             Message.role == "user", Message.created_at <= latest.created_at,
         ).order_by(Message.created_at.desc(), MESSAGE_ORDER.desc()).limit(6)).all() if latest else []
     memory_query = "\n".join(record.content[:800] for record in reversed(recent_user_messages))
-    memories = await retrieval.retrieve(memory_query, run_id=run_id) if options["use_memory"] else []
+    memories = await retrieval.retrieve(memory_query, run_id=run_id, focus_query=latest.content if latest else "") if options["use_memory"] else []
     knowledge_context = await knowledge.context(memory_query, run_id) if options["use_knowledge"] else ""
     if chat_only:
         instructions = _chat_instructions(
@@ -469,46 +469,36 @@ def _verify_plan_execution(run_id: str, text: str) -> str:
 
 
 def _remember_clear_preference(run_id: str, conversation_id: str) -> None:
-    """Persist an obvious stable preference the model did not save itself.
-
-    The agent is instructed to call ``remember``, but smaller models sometimes
-    answer “我记住了” without calling it. This deterministic fallback only
-    covers a short, literal clause from the user's latest message and respects
-    the existing write policy (declines, secrets, temporary remarks).
-    """
+    """Fill literal, independently verifiable omissions without an extra model call."""
     from . import memory
+    from .db import Memory
+    from .retrieval import keyword_score
 
     with Session() as db:
-        changed = db.scalar(
-            select(RunEvent.id).where(
-                RunEvent.run_id == run_id, RunEvent.kind == "memory"
-            )
-        )
-        if changed:
-            return
         settings = db.get(Settings, PROFILE_ID)
-        if not settings or settings.memory_mode != "auto":
-            return
         message = task_context.user_message(db, run_id, conversation_id)
-        if not message:
+        if not settings or not message:
             return
-        text = message.content
-        content = memory.preference_clause(text)
-        if not content:
-            return
-        category = "preference" if memory.PREFERENCE.search(content) else "fact"
-        explicit = bool(memory.EXPLICIT.search(text)) and content != text.strip()
-    result = memory.save_from_chat(
-        run_id,
-        conversation_id,
-        content=content,
-        category=category,
-        explicit_request=explicit,
-        evidence=text,
-        risk="normal",
-    )
-    if result.get("changed"):
-        emit(run_id, "memory", result)
+        statements = memory.extract_statements(message.content)
+        conversation = db.get(Conversation, conversation_id)
+        project_id = conversation.project_id if conversation else None
+        known = list(db.scalars(select(Memory).where(Memory.profile_id == PROFILE_ID,
+                            Memory.project_id == project_id)))
+        source_id = message.id
+    for value in statements:
+        if any(item.source_message_id == source_id and
+               (value["content"] in item.content or keyword_score(value["content"], item.content) >= .5)
+               for item in known):
+            continue
+        topic = memory.correction_topic(value["content"])
+        targets = [item for item in known if item.state == "confirmed" and topic
+                   and memory.is_correction(item.content, value["content"], value["evidence"])]
+        if len(targets) == 1:
+            value["replaces_id"] = targets[0].id
+        result = memory.save_from_chat(run_id, conversation_id, **value)
+        if result.get("changed"):
+            emit(run_id, "memory", result)
+
 
 
 async def _persist_markdown_images(run_id, text):
