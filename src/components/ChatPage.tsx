@@ -1475,6 +1475,10 @@ export function ChatPage({
                     {value.role === "assistant" && !synthetic && (
                       <AnswerActions
                         content={value.content}
+                        onRetry={value === lastAssistant && value.run_id === run?.id &&
+                          run?.status === "completed" && !run.task_id && run.retry_action === "retry"
+                          ? () => void retry(value.run_id || undefined) : undefined}
+                        retryDisabled={busy || submitting || uploading || !modelReady}
                         runId={
                           value.run_id ||
                           (value === lastAssistant &&

@@ -67,11 +67,19 @@ def reply(body):
             )
         }
     if '"title": "Feedback"' in system:
+        try:
+            assessment = json.JSONDecoder().raw_decode(user)[0]
+        except (ValueError, TypeError):
+            assessment = {}
+        current_answer = assessment.get("current_answer", assessment.get("answer", ""))
         passed = "不会" not in user.split("用户提交：")[-1]
         return {
             "content": json.dumps(
                 {
                     "passed": passed,
+                    "assessed_exercise_id": assessment.get("current_exercise_id", ""),
+                    "current_answer_quotes": [current_answer] if current_answer else [],
+                    "criterion_checks": [{"criterion": "解释概念并举例", "satisfied": passed, "answer_quote": current_answer}],
                     "explanation": "测试反馈：已依据提交的文字检查。",
                     "reference_answer": "参考答案：给出一个具体例子。" if not passed else "",
                     "strengths": ["提交了具体回答"] if passed else [],

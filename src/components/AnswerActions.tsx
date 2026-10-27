@@ -1,6 +1,6 @@
 import { DetailDialog } from "./ui/detail-dialog";
 import { useEffect, useState } from "react";
-import { Check, CircleAlert, Copy, Layers2 } from "lucide-react";
+import { Check, CircleAlert, Copy, Layers2, RotateCcw } from "lucide-react";
 import { api, type RunEvent } from "@/lib/api";
 import { Button } from "./ui/button";
 import {
@@ -27,6 +27,7 @@ function toolSummary(event: RunEvent): string {
     return JSON.stringify(result.structured_content).slice(0, 220);
   if (result.skipped) return String(result.skipped);
   if (result.needs_clarification) return "找到多个同名地点，等待确认";
+  if (result.status === "needs_confirmation" || result.status === "needs_details") return String(result.message || "等待补充或确认");
   if (result.result !== undefined)
     return `结果：${String(result.result)}${result.to_unit ? ` ${result.to_unit}` : ""}`;
   if (result.datetime) return `${result.datetime} · ${result.weekday}`;
@@ -50,11 +51,15 @@ export function AnswerActions({
   runId,
   runStatus,
   tools,
+  onRetry,
+  retryDisabled = false,
 }: {
   content: string;
   runId?: string;
   runStatus?: string;
   tools?: RunEvent[];
+  onRetry?: () => void;
+  retryDisabled?: boolean;
 }) {
   const { copied, error: copyError, copy } = useCopyFeedback(content);
   const [open, setOpen] = useState(false);
@@ -101,6 +106,14 @@ export function AnswerActions({
             {copied ? <Check size={15} /> : <Copy size={15} />}
           </Button>
         </Hint>
+        {onRetry && (
+          <Hint label="重新回答，复用已保存结果">
+            <Button className="answer-action" size="icon" variant="ghost" aria-label="重试回答"
+              disabled={retryDisabled} onClick={onRetry}>
+              <RotateCcw size={15} />
+            </Button>
+          </Hint>
+        )}
         {runId && (
           <>
             {(tools === undefined || tools.length > 0) && (
@@ -152,7 +165,7 @@ export function AnswerActions({
                     Record<string, unknown> | undefined;
                   const failed =
                     event.data.status === "error" || Boolean(result?.error);
-                  const clarify = Boolean(result?.needs_clarification);
+                  const clarify = Boolean(result?.needs_clarification || result?.status === "needs_confirmation" || result?.status === "needs_details");
                   return (
                     <div
                       className={`tool-result ${failed ? "tool-result-failed" : ""}`}

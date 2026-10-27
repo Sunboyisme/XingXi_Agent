@@ -11,7 +11,9 @@ router = APIRouter()
 
 
 async def handle(run_id, conversation_id, text):
-    if len(text) > 160 or not re.search(r"继续学习|接着学|继续学|上次学到哪|昨天学到哪", text) or re.search(r"不要|不想|不用|停止|结束|取消|怎么实现|功能|总结|整理|生成|修改|解释|分析", text):
+    # Match the intent clause; words inside a goal name (e.g. 数据分析) are not commands.
+    compact = text.strip()
+    if len(text) > 160 or not re.search(r"继续学习|接着学|继续学|上次学到哪|昨天学到哪", compact) or re.search(r"(?:不要|不想|不用|停止|结束|取消).{0,6}(?:继续|学习|学)|(?:怎么实现|如何实现).{0,12}(?:功能|接续)|(?:帮我|请你|请).{0,3}(?:总结|整理|生成|修改|解释|分析)", compact):
         return None
     values = list_continuations()
     named = [value for value in values if value["goal_title"] and value["goal_title"] in text]

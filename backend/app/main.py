@@ -1016,6 +1016,8 @@ async def submit(
     lesson_id: str, value: s.Submission, request: Request, db=Depends(database)
 ):
     lesson = item(db, store.Lesson, lesson_id)
+    from .learning_state import require_current
+    require_current(lesson, value.exercise_id)
     if not value.answer.strip() and not value.attachment_ids:
         raise HTTPException(422, "请输入回答或提交图片")
     previous = db.scalar(

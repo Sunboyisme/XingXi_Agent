@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import time
 from typing import Literal
 
@@ -381,7 +382,19 @@ def builtin_tools(run_id: str, conversation_id: str):
         """查询用户的学习主题和当前进度。开始新学习前了解目标与相关基础；同主题已有目标时先询问是否继续，避免重复创建。"""
         from .learning_sessions import list_continuations
         result = list_continuations()
-        emit(run_id, "learning_continuation", {"cards": result})
+        with Session() as db:
+            source = task_context.user_message(db, run_id, conversation_id)
+            if source and re.search(r"继续学|接着学|学到哪", source.content):
+                emit(run_id, "learning_continuation", {"cards": result})
+            for value in result:
+                goal = db.get(Goal, value["goal_id"])
+                value["foundation"] = goal.foundation if goal else ""
+                value["knowledge_points"] = []
+                for node in db.scalars(select(KnowledgeNode).where(KnowledgeNode.goal_id == value["goal_id"],
+                    KnowledgeNode.profile_id == PROFILE_ID).order_by(KnowledgeNode.ordinal)):
+                    value["knowledge_points"].append({"id": node.id, "title": node.title, "status": node.status,
+                        "review_at": node.review_at, "mastery": "未学习" if node.status == "not_started" else
+                        "待加强" if node.status == "needs_practice" else "已通过" if node.status == "passed" else "尚未验证"})
         return json.dumps(result, ensure_ascii=False)
 
     return [

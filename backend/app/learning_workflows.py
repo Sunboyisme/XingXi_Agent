@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, update
 
 from . import db as store, learning, learning_sessions as sessions, provider, runs, schemas as s
-from . import knowledge
+from . import knowledge, learning_state
 from .config import PROFILE_ID
 from .learning_public import LEARNING_KINDS, public
 
@@ -64,6 +64,7 @@ class IntakeResult(BaseModel):
     objective: str = Field(default="", max_length=4000)
     foundation: str = Field(default="", max_length=4000)
     question: str = Field(default="", max_length=2000)
+    outcome: str = Field(default="", max_length=4000)
 
 
 class ReviewCreate(BaseModel):
@@ -203,9 +204,14 @@ async def interview(intake_id, run_id, beginner):
         text = json.dumps({"messages": row.messages[-40:], "summary": row.summary,
                            "explicit_beginner": beginner}, ensure_ascii=False)
         text += learning.context(db, " ".join(x["content"] for x in row.messages[-6:] if x["role"] == "user"))
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        zone = db.get(store.Settings, PROFILE_ID).timezone
+        schedule = learning_state.intake_schedule(row.messages, row.summary, datetime.now(ZoneInfo(zone)).date())
+        text += "\n已从用户原话核对的时间约束：" + json.dumps(schedule, ensure_ascii=False)
     text += await knowledge.context(text[:4000], run_id)
     result = await provider.ask_json(IntakeResult, learning.TUTOR_RULES + "\n你正在帮助用户建立学习目标。"
-        "从真实用户回答及明确的个人背景提取title、objective、foundation，保留已知答案，不猜测经验。"
+        "从真实用户回答及明确的个人背景提取title、objective、foundation、用户想做出的成果outcome；每周分钟数是每周总量，不要误述成每天或每次。保留已知答案，不猜测经验。"
         "每轮只问一个尚未明确的核心问题，按主题、想具备的能力、目前基础的顺序补齐；已有答案绝不重复追问。"
         "用户说零基础或明确选择入门默认时可如实填写基础。不知道基础不等于零基础。"
         "用户明确选择入门默认时，可把未说明的目标设为从零认识主题并完成一个入门小实践。"
@@ -219,7 +225,9 @@ async def interview(intake_id, run_id, beginner):
         question = values["question"].strip() if missing else "目标已经整理好了，你可以检查或修改下面的摘要，再生成学习路线。"
         if missing and not question:
             question = f"请告诉我你的{missing[0]}。"
-        row.summary = {**row.summary, **summary}
+        row.summary = {**row.summary, **summary, **schedule}
+        if values.get("outcome"):
+            row.summary["outcome"] = values["outcome"].strip()
         row.status = "draft" if missing else "ready"
         row.messages = [*row.messages, {"role": "assistant", "content": question, "run_id": run_id, "knowledge_sources": knowledge.sources_for_run(run_id)}]
         db.commit()

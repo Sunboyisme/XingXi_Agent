@@ -3106,6 +3106,16 @@ export interface components {
             state: string;
             /** Session Id */
             session_id?: string | null;
+            /**
+             * Exercise Id
+             * @default
+             */
+            exercise_id: string;
+            /**
+             * Exercise Requirements
+             * @default
+             */
+            exercise_requirements: string;
         };
         /** MCPImport */
         MCPImport: {
@@ -4245,6 +4255,8 @@ export interface components {
             attachment_ids?: string[];
             /** Session Id */
             session_id?: string | null;
+            /** Exercise Id */
+            exercise_id?: string | null;
         };
         /** TaskRead */
         TaskRead: {

@@ -586,6 +586,16 @@ class LessonRead(RecordRead):
     feedback: dict
     state: str
     session_id: str | None = None
+    exercise_id: str = ""
+    exercise_requirements: str = ""
+
+    @model_validator(mode="after")
+    def question_identity(self):
+        import hashlib
+        key = hashlib.sha256(str(self.feedback.get("active_exercise") or self.exercise).encode()).hexdigest()[:12]
+        self.exercise_id = self.feedback.get("active_exercise_id") or f"{self.id}:{key}"
+        self.exercise_requirements = self.feedback.get("active_requirements") or ""
+        return self
 
     @field_validator("feedback")
     @classmethod
@@ -614,6 +624,7 @@ class Submission(BaseModel):
     answer: str = Field(max_length=30000)
     attachment_ids: list[str] = Field(default_factory=list, max_length=4)
     session_id: str | None = None
+    exercise_id: str | None = Field(default=None, max_length=220)
 
 
 class LearningSessionStart(BaseModel):
@@ -792,6 +803,13 @@ class LessonContent(BaseModel):
     exercise: str = Field(min_length=1, description="需要用户回答的要求按1.、2.、3.的Markdown有序列表逐项列出，一个问题对应一个序号。")
     hints: list[str]
     criteria: str = Field(min_length=1)
+    exercise_requirements: str = Field(default="", max_length=2000, description="可公开的简明作答要求，说明形式和范围，不含标准答案或内部评分细节。")
+
+
+class CriterionEvidence(BaseModel):
+    criterion: str
+    satisfied: bool
+    answer_quote: str = Field(default="", description="只逐字引用本次作答；图片证据写image:本次附件编号，不能引用历史回答。")
 
 
 class Feedback(BaseModel):
@@ -805,6 +823,10 @@ class Feedback(BaseModel):
     reference_answer: str = Field(default="", description="练习未通过或用户求助时，直接给出当前题的完整参考答案与简短原因，不要求反复补填。")
     next_exercise: str = Field(default="", description="仅在本节尚未给过巩固题且用户愿意继续时，可给一道可选的小题；否则留空。")
     next_criteria: str = Field(default="", description="与新题配套的简明判断标准；不沿用原题中已不相关的要求。")
+    next_requirements: str = Field(default="", description="新题公开作答要求，说明应提交什么，不给答案或内部评分细节。")
+    assessed_exercise_id: str = Field(default="", description="原样返回输入current_exercise_id，不能用历史题号。")
+    current_answer_quotes: list[str] = Field(default_factory=list, description="本次答案中的逐字证据；图片用image:本次附件编号。")
+    criterion_checks: list[CriterionEvidence] = Field(default_factory=list, description="逐项核对当前题标准，历史答案和参考答案不算本次证据。")
 
     @model_validator(mode="after")
     def validate_feedback(self):

@@ -97,7 +97,8 @@ def record_feedback(db, row, lesson, feedback, submission=None):
     row.lesson_id = lesson.id
     row.last_studied_at = now()
     row.summary = str(feedback.get("explanation", ""))[:2400]
-    row.gaps = [str(value)[:600] for value in feedback.get("gaps", []) if value][:12]
+    if feedback.get("response_type") != "discussion":
+        row.gaps = [str(value)[:600] for value in feedback.get("gaps", []) if value][:12]
     row.next_step = str(feedback.get("next_step", ""))[:2400]
     drafts = dict(row.drafts or {})
     pending = drafts.get(lesson.node_id)
@@ -130,7 +131,7 @@ def continuation(db, goal):
     node = current_node(db, goal, row.node_id if row else None)
     lesson = latest_lesson(db, node.id if node else None)
     feedback = lesson.feedback if lesson else {}
-    gap_values = row.gaps if row else feedback.get("gaps", [])
+    gap_values = row.gaps if row else (feedback.get("gaps") or feedback.get("retained_gaps", []))
     summary = row.summary if row else str(feedback.get("explanation", ""))[:2400]
     next_step = row.next_step if row else str(feedback.get("next_step", ""))[:2400]
     if not summary:

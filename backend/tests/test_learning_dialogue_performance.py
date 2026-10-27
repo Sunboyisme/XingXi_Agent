@@ -35,8 +35,8 @@ async def test_reviewed_lesson_accepts_followup_with_history_without_reteaching(
 
     async def reply(schema, instructions, text, *args, **kwargs):
         context = json.JSONDecoder().raw_decode(text)[0]
-        assert context["previous_turns"][0]["answer"] == "我每周可以投入五小时"
-        assert context["previous_turns"][0]["feedback"]["explanation"] == "先选一件小事开始"
+        assert context["previous_turns_background_only"][0]["answer"] == "我每周可以投入五小时"
+        assert context["previous_turns_background_only"][0]["feedback"]["explanation"] == "先选一件小事开始"
         assert context["current_answer"] == "我不会做，第一步怎么开始？"
         return schemas.Feedback(response_type="discussion", passed=True, explanation="先选一个你能观察的小场景。",
                                 strengths=[], gaps=[], next_step="这个场景是什么？", evidence="本知识点的文字对话")

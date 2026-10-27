@@ -1,5 +1,5 @@
 """Keep grading rubrics internal, including archived run events and feedback."""
-PRIVATE_KEYS = {"criteria", "next_criteria", "active_criteria"}
+PRIVATE_KEYS = {"criteria", "next_criteria", "active_criteria", "criterion_checks", "current_answer_quotes"}
 LEARNING_KINDS = {"course", "lesson", "assessment", "learning_intake", "learning_review", "review_assessment"}
 
 

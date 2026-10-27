@@ -59,6 +59,8 @@ test("the separate answer dock accepts dropped images and submits them without t
     node_id: node.id,
     content: "教学内容",
     exercise: "画出你的理解",
+    exercise_id: "l1:initial",
+    exercise_requirements: "提交一张草图",
     hints: [],
     feedback: {},
     state: "awaiting_submission",

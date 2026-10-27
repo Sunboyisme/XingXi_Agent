@@ -24,11 +24,21 @@ function FeedbackReply({ value }: { value: Record<string, unknown> }) {
         <>
           <h4>再试一题（可选）</h4>
           <Markdown numberedLists>{String(value.next_exercise)}</Markdown>
+          {Boolean(value.next_requirements) && (
+            <p className="muted">作答要求：{String(value.next_requirements)}</p>
+          )}
         </>
       ) : (
         Boolean(value.next_step) && (
           <Markdown>{String(value.next_step).replaceAll("结束本节，下一节", "完成本章")}</Markdown>
         )
+      )}
+      {discussion && Boolean(value.active_exercise) && (
+        <>
+          <h4>当前练习</h4>
+          <Markdown numberedLists>{String(value.active_exercise)}</Markdown>
+          {Boolean(value.active_requirements) && <p className="muted">作答要求：{String(value.active_requirements)}</p>}
+        </>
       )}
       {!discussion && Boolean(value.evidence) && (
         <DetailDialog

@@ -756,6 +756,7 @@ export function LearningPage({
           answer: submittedAnswer,
           attachment_ids: submittedImages.map((x) => x.id),
           session_id: saved.id,
+          exercise_id: lesson.exercise_id,
         },
       );
       submittedDrafts.current.set(value.id, {
@@ -821,6 +822,9 @@ export function LearningPage({
           </div>
         </div>
         <Markdown numberedLists>{lesson.exercise}</Markdown>
+        {lesson.exercise_requirements && (
+          <p className="muted">作答要求：{lesson.exercise_requirements}</p>
+        )}
         {lesson.hints.length > 0 && (
           <div className="lesson-hint-entry">
             <div>
