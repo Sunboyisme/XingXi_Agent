@@ -78,6 +78,8 @@ def _agent_instructions(*, settings, date, memories, knowledge_context, availabl
     instructions += "\n本轮可用工具：" + agent_prompts.dumps(sorted(names))
     instructions += "\n已生效的个人背景（资料）：" + agent_prompts.dumps(memories)
     instructions += knowledge_context + local_files.references_context(run_id, conversation_id)
+    from .chat_feedback import file_context
+    instructions += file_context(conversation_id)
     instructions += projects.instructions(conversation_id)
     instructions += chat_context.constraint_context(run_id, conversation_id)
     instructions += plan_execution.history_context(conversation_id)
@@ -113,6 +115,7 @@ def _chat_instructions(*, settings, date, memories, knowledge_context, conversat
 
     instructions = f"""你是XiaoXi，用户的个人助手。当前是对话模式：本轮没有任何工具，只依据对话内容、你的知识和下面提供的资料回答，使用清晰自然的中文。
 不能查询实时信息、读取网页或文件、创建计划、保存记忆或生成图片；用户需要这些操作时，说明可以在输入框下方把「对话」切换为「智能体」。不要声称执行了任何操作。
+用户告知生日、偏好或要求记住时，明确‘本次对话可以参考，尚未保存到长期记忆’，不能说记下了、记住了或承诺以后跨对话记得。历史助手的保存声明也不是实际保存证据。
 当前时间：{date}（{datetime.now(ZoneInfo(settings.timezone)).strftime('%A')}）；用户时区：{settings.timezone}。
 {channel_context()}"""
     if memories:
@@ -133,6 +136,9 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
         latest = task_context.user_message(db, run_id, conversation_id)
         from . import followups
         confirmation_context = followups.prior_context(db, latest) if latest and followups.is_confirmation(latest.content) else []
+        selected_choice = followups.choice_context(db, latest) if latest else None
+        if selected_choice and not selected_choice.get("error"):
+            confirmation_context = [*confirmation_context, {"selected_options": selected_choice}]
     options = model_profiles.chat_options(model_config)
     # Task steps always need tools; chat mode is for plain conversation.
     chat_only = options["mode"] == "chat" and not task_instructions
@@ -151,6 +157,7 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
             Message.role == "user", Message.created_at <= latest.created_at,
         ).order_by(Message.created_at.desc(), MESSAGE_ORDER.desc()).limit(6)).all() if latest else []
     memory_query = "\n".join(record.content[:800] for record in reversed(recent_user_messages))
+    emit(run_id, "progress", {"stage": "retrieval", "message": "正在查找相关背景"})
     memories = await retrieval.retrieve(memory_query, run_id=run_id, focus_query=latest.content if latest else "") if options["use_memory"] else []
     knowledge_context = await knowledge.context(memory_query, run_id) if options["use_knowledge"] else ""
     if chat_only:
@@ -220,6 +227,7 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
         middleware=[ContextBudget(run_id, model_config, tool_budget)],
     )
     text = ""
+    chat_sentence = ""
     total_tokens = 0
     final_context = {}
     reasoning_parts = {}
@@ -231,6 +239,7 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
     }
     from .runs import StreamEmitter
     stream_events = StreamEmitter(run_id)
+    emit(run_id, "progress", {"stage": "answer", "message": "正在整理回答"})
     try:
         async for mode, chunk in agent.astream(
             {"messages": messages},
@@ -265,7 +274,24 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
                     if part:
                         text += part
                         if persist and not buffer_image_reply and not buffer_learning_reply:
-                            stream_events.emit("delta", {"text": part})
+                            if chat_only:
+                                from .chat_feedback import honest_chat_memory
+                                chat_sentence += part
+                                while chat_sentence:
+                                    fenced = re.match(r"\s*(```|~~~)", chat_sentence)
+                                    if fenced:
+                                        end = chat_sentence.find(fenced[1], fenced.end())
+                                        boundary = end + 3 if end >= 0 else 0
+                                    else:
+                                        end = re.search(r"[。！？!?\n]", chat_sentence)
+                                        boundary = end.end() if end else 0
+                                    if not boundary:
+                                        break
+                                    raw = chat_sentence[:boundary]
+                                    stream_events.emit("delta", {"text": raw if fenced else honest_chat_memory(raw)})
+                                    chat_sentence = chat_sentence[boundary:]
+                            else:
+                                stream_events.emit("delta", {"text": part})
                 usage = getattr(message, "usage_metadata", None)
                 if usage:
                     total_tokens += usage.get("total_tokens", 0)
@@ -322,6 +348,9 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
     finally:
         stream_events.flush()
     model_text = text
+    if chat_only:
+        from .chat_feedback import honest_chat_memory
+        text = honest_chat_memory(text)
     from .file_reading import verify_claims
     text = verify_claims(run_id, text)
     if buffer_learning_reply:
@@ -454,7 +483,12 @@ def _verify_plan_execution(run_id: str, text: str) -> str:
         run = db.get(Run, run_id)
         request = task_context.user_message(db, run_id, run.conversation_id) if run else None
         events = list(db.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "tool")))
-    if not request or not re.search(r"安排|提醒|日历|日程|计划|删除|恢复", request.content):
+        from .followups import choice_context
+        choice = choice_context(db, request) if request else None
+        request_text = request.content if request else ""
+        if choice and not choice.get("error"):
+            request_text += "\n" + "\n".join(item["content"] for item in choice["selected"])
+    if not request or not re.search(r"安排|提醒|日历|日程|计划|删除|恢复", request_text):
         return text
     if any(event.data.get("tool_id") in {"create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}
            and event.data.get("status") == "completed" and plan_execution.operation_facts([event]) for event in events):

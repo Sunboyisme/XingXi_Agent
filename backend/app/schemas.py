@@ -56,7 +56,7 @@ ThinkingMode = Literal[
 
 class ModelOption(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    context_tokens: int = Field(default=64000, ge=4096, le=2000000)
+    context_tokens: int = Field(default=500000, ge=4096, le=2000000)
     vision_enabled: bool = False
     thinking_mode: ThinkingMode = "auto"
 
@@ -372,6 +372,7 @@ class MessageRead(RecordRead):
     run_error: str | None = None
     task_id: str | None = None
     has_learning_continuation: bool = False
+    has_learning_course: bool = False
 
 
 class ImageGenerationWrite(BaseModel):

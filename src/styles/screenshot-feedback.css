@@ -1,0 +1,371 @@
+/* 0.1.8 screenshot feedback: shared theme surfaces and compact information. */
+.settings-tabs[role="tablist"] {
+  background: color-mix(in srgb, var(--ui-color-surface) 85%, transparent);
+  border: 1px solid var(--ui-color-line);
+  padding: 4px;
+  gap: 4px;
+}
+.settings-tabs [role="tab"] {
+  border: 1px solid transparent;
+}
+.settings-tabs [aria-selected="true"] {
+  background: var(--ui-color-surface);
+  border-color: var(--ui-color-line);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 4%);
+}
+.data-count-groups {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 40px;
+}
+.data-count-groups > section {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+.data-count-groups h3 {
+  font-size: 13px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.data-count-groups .data-counts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.data-count-groups .data-counts > div {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+}
+.data-count-groups .data-counts span {
+  font-size: 13px;
+  color: var(--ui-color-text-muted);
+}
+.data-count-groups .data-counts strong {
+  font-size: 14px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.context-capacity-control {
+  width: min(100%, 370px);
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.context-capacity-entry {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) 116px;
+  gap: 8px;
+}
+.context-capacity-entry input {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.context-capacity-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.context-capacity-presets button {
+  padding: 3px 7px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 7px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--ui-color-text-muted);
+}
+.context-capacity-presets button[aria-pressed="true"] {
+  color: var(--ui-color-action);
+  border-color: var(--ui-color-action);
+  background: color-mix(in srgb, var(--ui-color-action) 6%, transparent);
+}
+.context-capacity-help,
+.context-capacity-error {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ui-color-text-muted);
+}
+.context-capacity-error {
+  color: var(--ui-color-danger);
+}
+.model-context-setting {
+  align-items: start;
+}
+.model-dialog-redesign .model-option-row.model-context-setting {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 1.35fr);
+  align-items: start;
+}
+.ui-hint {
+  max-width: min(380px, calc(100vw - 24px));
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.ui-hint > strong,
+.ui-hint > span {
+  display: block;
+}
+.ui-hint > strong {
+  font-weight: 550;
+}
+.ui-hint > span {
+  color: var(--ui-color-text-muted);
+}
+.conversation-row-actions > .conversation-delete {
+  width: 30px;
+  height: 30px;
+  border-radius: 11px;
+  color: var(--ui-color-text-muted);
+}
+.conversation-row-actions > .conversation-delete:hover {
+  color: var(--ui-color-danger);
+  background: color-mix(
+    in srgb,
+    var(--ui-color-danger) 8%,
+    var(--ui-color-surface)
+  );
+}
+.conversation-popconfirm {
+  z-index: 150;
+  width: min(300px, calc(100vw - 24px));
+  padding: 17px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 12%);
+  font-size: 13px;
+}
+.conversation-popconfirm > strong {
+  font-size: 14px;
+}
+.conversation-popconfirm p {
+  margin: 9px 0 14px;
+  line-height: 1.7;
+  color: var(--ui-color-text-muted);
+}
+.conversation-popconfirm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.conversation-popconfirm .popconfirm-error {
+  color: var(--ui-color-danger);
+}
+.conversation-popconfirm-arrow {
+  fill: var(--ui-color-surface);
+}
+.markdown-code-block,
+.markdown-table-block {
+  position: relative;
+  margin: 16px 0;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.markdown-block-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-bg) 60%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-text-muted);
+  font-family: var(--ui-font-sans);
+  font-size: 11px;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.markdown-block-copy {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 4px 5px;
+  border-radius: 6px;
+  color: inherit;
+  font-size: 11px;
+}
+.markdown-block-copy:hover {
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+.markdown .markdown-code-block pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.markdown .markdown-table-block table {
+  margin: 0;
+  width: 100%;
+}
+.markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-copy-error {
+  color: var(--ui-color-danger);
+  font-size: 11px;
+}
+.current-task-summary {
+  margin: 0 0 9px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--ui-color-surface) 94%, transparent);
+  color: var(--ui-color-text);
+  backdrop-filter: blur(16px);
+}
+.current-task-summary summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+}
+.current-task-summary summary::-webkit-details-marker {
+  display: none;
+}
+.current-task-summary summary > strong {
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-task-summary summary > span {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ui-color-text-muted);
+}
+.current-task-summary summary > small {
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-color-text-muted);
+}
+.current-task-summary[open] summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.current-task-summary-body {
+  max-height: min(35vh, 280px);
+  overflow-y: auto;
+  border-top: 1px solid var(--ui-color-line);
+  padding: 8px 16px 12px;
+  font-size: 12px;
+}
+.current-task-summary-body p {
+  color: var(--ui-color-text-muted);
+  margin: 4px 0 9px;
+}
+.current-task-summary-body ol {
+  padding-left: 20px;
+  margin: 0;
+}
+.current-task-summary-body li {
+  padding: 4px 0;
+}
+.current-task-summary-body li span {
+  float: right;
+  margin-left: 12px;
+  color: var(--ui-color-text-muted);
+}
+.current-task-summary-body li[data-status="completed"] {
+  color: var(--ui-color-text-muted);
+}
+.learning-course-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 12px 0;
+  padding: 15px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 15px;
+  background: var(--ui-color-surface);
+}
+.learning-course-card > div {
+  min-width: 0;
+  flex: 1;
+}
+.learning-course-card strong,
+.learning-course-card small {
+  display: block;
+}
+.learning-course-card strong {
+  font-size: 14px;
+}
+.learning-course-card small {
+  margin-top: 5px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.course-outline-dialog {
+  width: min(660px, calc(100vw - 32px));
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.course-outline-body {
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 8px;
+}
+.course-outline-body h3 {
+  margin: 14px 0 9px;
+  font-size: 14px;
+}
+.course-outline-body ol {
+  margin: 0;
+  padding-left: 25px;
+}
+.course-outline-body li {
+  padding: 6px 0;
+}
+.course-outline-body strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+.course-outline-body p {
+  font-size: 12px;
+  margin: 4px 0;
+  color: var(--ui-color-text-muted);
+}
+@media (max-width: 650px) {
+  .data-count-groups {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .model-context-setting {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .model-dialog-redesign .model-option-row.model-context-setting {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .context-capacity-control {
+    width: 100%;
+  }
+  .current-task-summary summary > strong {
+    max-width: 55%;
+  }
+  .current-task-summary summary > span {
+    display: none;
+  }
+  .current-task-summary summary > small {
+    margin-left: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-hint {
+    animation: none;
+  }
+}

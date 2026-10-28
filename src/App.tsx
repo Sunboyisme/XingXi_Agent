@@ -50,7 +50,7 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 );
-import { ConfirmDelete, ErrorNotice, Toast } from "./components/common";
+import { ErrorNotice, Toast } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
 import {
   ChatIcon,
@@ -221,10 +221,10 @@ export function App() {
   const reminderAction = useRef(false);
   const [loading, setLoading] = useState(true);
   const [createKey, setCreateKey] = useState(0);
-  const [deleting, setDeleting] = useState<Conversation | null>(null);
   const [info, setInfo] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const refreshVersion = useRef(0);
+  const conversationDeletions = useRef(new Set<string>());
   const isReminderWindow =
     new URLSearchParams(location.search).get("view") === "reminder";
   const refresh = useCallback(async () => {
@@ -326,10 +326,11 @@ export function App() {
       value === "memories" ||
       value === "tools" ||
       value === "skills" ||
-      value === "runtimes"
+      value === "runtimes" ||
+      value === "connections"
     ) {
       setPage("settings");
-      setSettingsTab(value);
+      setSettingsTab(value as SettingsTab);
     } else {
       setPage(value as Page);
       if (value === "settings") setSettingsTab("general");
@@ -337,8 +338,9 @@ export function App() {
     if (create) setCreateKey(Date.now());
     else setCreateKey(0);
   }
-  async function deleteConversation() {
-    if (!deleting) return;
+  async function deleteConversation(deleting: Conversation) {
+    if (conversationDeletions.current.has(deleting.id)) throw new Error("这段对话正在删除，请稍候。");
+    conversationDeletions.current.add(deleting.id);
     try {
       const result = await api<{ cleanup_pending: number }>(
         `/conversations/${deleting.id}`,
@@ -348,15 +350,15 @@ export function App() {
         new CustomEvent("bai-conversation-deleted", { detail: deleting.id }),
       );
       clearChatPreferences(deleting.id);
-      if (conversationId === deleting.id) setConversationId(null);
-      await refresh();
-      setDeleting(null);
+      setConversationId((current) => current === deleting.id ? null : current);
+      setConversations((items) => items.filter((item) => item.id !== deleting.id));
+      await refresh().catch(() => setError("对话已删除，列表暂未刷新，请稍后刷新。"));
       if (result.cleanup_pending)
         setError(
           "对话记录已删除，部分文件被占用，暂未从磁盘清理；请关闭占用文件后在数据目录中处理。",
         );
-    } catch (error) {
-      setError(errorMessage(error));
+    } finally {
+      conversationDeletions.current.delete(deleting.id);
     }
   }
   const activeNotifications = notifications.filter(isActiveNotification);
@@ -635,7 +637,7 @@ export function App() {
               onProject={openProject}
               onOpen={openConversation}
               onManage={setProjectPanelRequest}
-              onDelete={setDeleting}
+              onDelete={deleteConversation}
               refresh={refresh}
             />
           </div>
@@ -786,15 +788,6 @@ export function App() {
           onPlan={(id, occurrence) => {
             openPlan(id, occurrence);
           }}
-        />
-        <ConfirmDelete
-          open={Boolean(deleting)}
-          title="删除这段对话？"
-          description="将删除聊天消息、运行记录和专属附件、生成文件。已经保存的记忆、课程或提醒会保留。"
-          label="删除对话"
-          error={error}
-          onClose={() => setDeleting(null)}
-          onConfirm={deleteConversation}
         />
         <Dialog open={info} onOpenChange={setInfo}>
           <DialogContent className="about-dialog">

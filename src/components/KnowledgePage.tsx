@@ -106,10 +106,9 @@ function FileTree({
         .map(([name, rows]) => (
           <li key={name}>
             <div className="knowledge-tree-row">
-              <button
+              <Hint label={`${prefix}${name}`}><button
                 className="knowledge-file-select"
                 aria-expanded={!closed.has(name)}
-                title={`${prefix}${name}`}
                 onClick={() =>
                   setClosed((previous) => {
                     const next = new Set(previous);
@@ -126,7 +125,7 @@ function FileTree({
                 )}
                 <Folder size={15} />
                 <span>{name}</span>
-              </button>
+              </button></Hint>
               <small
                 className="knowledge-folder-count"
                 aria-label={`${rows.length} 个文件`}
@@ -163,15 +162,14 @@ function FileTree({
         .map((doc) => (
           <li key={doc.id}>
             <div className="knowledge-tree-row">
-              <button
+              <Hint label={<><strong>{doc.relative_path}</strong><span>{statusLabels[doc.status] || doc.status}</span><span>导入于 {new Date(doc.created_at).toLocaleString("zh-CN", { hour12: false })}</span></>}><button
                 className="knowledge-file-select"
                 aria-current={selected === doc.id ? "true" : undefined}
                 onClick={() => onSelect(doc)}
-                title={`${doc.relative_path} · ${statusLabels[doc.status] || doc.status} · 导入于 ${doc.created_at}`}
               >
                 <FileText size={15} />
                 <span>{doc.relative_path.slice(prefix.length)}</span>
-              </button>
+              </button></Hint>
               <Hint label={statusLabels[doc.status] || doc.status}>
               <span
                 className={`knowledge-file-status is-${doc.status}`}

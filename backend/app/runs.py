@@ -9,6 +9,25 @@ tasks: dict[str, asyncio.Task] = {}
 RUN_TIMEOUT_SECONDS = 720
 
 
+def queue_successor(db, run, message_ids):
+    """Persist the next request before publishing the old run's completion."""
+    from .db import Message, Settings
+    from .config import PROFILE_ID
+    from . import model_profiles
+    from .schemas import ModelSelection
+    source = db.get(Message, message_ids[0])
+    selected = (source.provider_context or {}).get("queued_model_selection")
+    config = model_profiles.resolve(db.get(Settings, PROFILE_ID), ModelSelection(**selected)) if selected else run.model_config
+    successor = Run(kind="chat", conversation_id=run.conversation_id,
+                    source_message_id=source.id,
+                    model_config=config,
+                    result={"queued_message_ids": message_ids[1:]})
+    db.add(successor)
+    db.flush()
+    run.result = {**run.result, "next_run_id": successor.id}
+    return successor.id
+
+
 def emit(run_id: str, kind: str, data: dict):
     with Session() as db:
         db.add(RunEvent(run_id=run_id, kind=kind, data=data))
@@ -65,10 +84,18 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
                     result = await operation()
             with Session() as db:
                 run = db.get(Run, run_id)
+                queued = run.result.get("queued_message_ids", [])
+                if queued and not result.get("next_run_id"):
+                    result = {**result, "next_run_id": queue_successor(db, run, queued)}
+                    run.result = {**run.result, "queued_message_ids": []}
                 run.status = "completed"
-                run.result = result
+                run.result = {**run.result, **result}
                 db.commit()
             emit(run_id, "done", {"result": result})
+            if result.get("next_run_id"):
+                from .agent import chat
+                next_id = result["next_run_id"]
+                launch(next_id, lambda: chat(next_id, run.conversation_id))
         except asyncio.CancelledError:
             from .complex_tasks import pause_run
             pause_run(run_id, "已停止，已有成果保留，发送“继续”后恢复。")

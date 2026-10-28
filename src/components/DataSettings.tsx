@@ -93,8 +93,8 @@ function DataCounts({ counts }: { counts: Record<string, number> }) {
             <div className="data-counts">
               {items.map(([key, label]) => (
                 <div key={key}>
-                  <strong>{counts[key]}</strong>
                   <span>{label}</span>
+                  <strong>{counts[key].toLocaleString("zh-CN")}</strong>
                 </div>
               ))}
             </div>

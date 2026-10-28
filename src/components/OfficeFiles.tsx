@@ -27,6 +27,7 @@ import {
 } from "./ui/dialog";
 import { Picture } from "./ImageAttachments";
 import { Markdown } from "./common";
+import { HintText } from "./ui/hint";
 import { errorMessage } from "@/lib/utils";
 
 type Preview = {
@@ -180,7 +181,7 @@ export function FileCard({
       >
         <FileText size={23} />
         <div className="office-file-copy">
-          {status ? <div className="office-file-name"><strong title={file.name}>{file.name}</strong>{status}</div> : <strong>{file.name}</strong>}
+          {status ? <div className="office-file-name"><HintText as="strong" label={file.name}>{file.name}</HintText>{status}</div> : <strong>{file.name}</strong>}
           {!compact && (
             <small>{upload ? "上传资料 · 原件保留" : "生成文件"}</small>
           )}

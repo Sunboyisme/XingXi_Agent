@@ -212,11 +212,17 @@ def build(run_id, conversation_id):
             from .calendar_policy import creation_authorized
             pending = _PLAN_PROPOSALS.get(conversation_id)
             confirmed_reply = followups.is_confirmation(latest_text)
+            with Session() as db:
+                choice = followups.choice_context(db, task_context.user_message(db, run_id, conversation_id))
+            chosen_option = bool(choice and not choice.get("error"))
             if pending and confirmed_reply:
                 wants_confirmation = True
             else:
                 wants_confirmation = confirm
-            direct = creation_authorized(latest_text) and not (pending and confirmed_reply)
+            option_authorized = chosen_option and creation_authorized("\n".join(item["content"] for item in choice["selected"]))
+            direct = (creation_authorized(latest_text) or option_authorized) and not (pending and confirmed_reply)
+            if chosen_option:
+                latest_text = latest_text + "\n已选择此前明确展示的选项：" + "\n".join(item["content"] for item in choice["selected"])
             if confirmed_reply and not pending:
                 with Session() as db:
                     source = task_context.user_message(db, run_id, conversation_id)

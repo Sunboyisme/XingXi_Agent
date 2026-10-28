@@ -20,6 +20,7 @@ export type ProjectManagementRequest = {
 export type ProjectMaterial = {
   id: string;
   file_id: string;
+  source_file_id?: string | null;
   name: string;
   image: boolean;
   file_status: string;
@@ -162,7 +163,7 @@ export function ProjectManagement({
       setMaterials(files.value);
       setSources(
         inputs.status === "fulfilled"
-          ? inputs.value.filter((item) => !item.kind.startsWith("project_"))
+          ? inputs.value.filter((item) => !item.kind.startsWith("project_") && !files.value.some((material) => material.source_file_id === item.id))
           : [],
       );
       setSourceError(
@@ -348,13 +349,12 @@ export function ProjectManagement({
             </header>
             <div className="project-workspace-field" aria-busy={picking}>
               <label htmlFor="shared-project-workspace">本地工作路径</label>
-              <Input
+              <Hint label={workspacePath || "尚未选择文件夹"}><Input
                 id="shared-project-workspace"
                 readOnly
                 value={workspacePath}
-                title={workspacePath || "尚未选择文件夹"}
                 placeholder="尚未选择文件夹"
-              />
+              /></Hint>
               <div className="project-workspace-actions">
                 <Button
                   variant="outline"
@@ -566,6 +566,7 @@ export function ProjectManagement({
                           file_id: item.id,
                           conversation_id: currentId,
                         });
+                        setSources((items) => items.filter((source) => source.id !== item.id));
                         await loadLibrary(project);
                         onLibraryChange?.();
                       });

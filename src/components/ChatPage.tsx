@@ -58,6 +58,8 @@ import { NewChatStarters, NewChatWelcome } from "./NewChatWelcome";
 import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
 import { LearningHandoffCards } from "./LearningHandoffCards";
+import { CourseOutline, LearningCourseCards, type CourseReceipt } from "./LearningCourseCards";
+import { CurrentTaskSummary } from "./CurrentTaskSummary";
 import {
   MemoryReview,
   MemorySavedNotice,
@@ -337,20 +339,22 @@ function ReplyActivity({
   stream,
   imageGeneration,
   runId,
+  progress,
 }: {
   reasoning: string;
   stream: string;
   imageGeneration: ImageGenerationProgress | null;
   runId?: string;
+  progress?: string;
 }) {
   return (
     <>
       <Reasoning text={reasoning} active />
       {imageGeneration && <ImageGenerationPreview progress={imageGeneration} />}
       {stream && <Markdown runId={runId}>{stream}</Markdown>}
-      {!imageGeneration && !reasoning && (
+      {!imageGeneration && !stream && (
         <div className="thinking" role="status" aria-live="polite">
-          <span className="thinking-label">XiaoXi 正在思考</span>
+          <span className="thinking-label">{progress || "XiaoXi 正在思考"}</span>
           <span className="thinking-dots" aria-hidden="true">
             <i />
             <i />
@@ -461,6 +465,13 @@ export function ChatPage({
   const [stream, setStream] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [tasks, setTasks] = useState<ComplexTask[]>([]);
+  const [progress, setProgress] = useState({ stage: "", message: "" });
+  const [liveCourses, setLiveCourses] = useState<Record<string, CourseReceipt[]>>({});
+  const [courseDialog, setCourseDialog] = useState<CourseReceipt | null>(null);
+  const pageOpenedAt = useRef(Date.now());
+  const openedCourses = useRef(new Set<string>());
+  const queuedInput = useRef(false);
+  const trackNext = useRef<(value: Run, id: string) => Promise<void>>(undefined);
   useEffect(() => {
     if (
       !focusMessageId ||
@@ -494,6 +505,10 @@ export function ChatPage({
   const [imageGeneration, setImageGeneration] =
     useState<ImageGenerationProgress | null>(null);
   const [run, setRun] = useState<Run | null>(null);
+  function openModelSettings() {
+    if (selected && onContextSettings) onContextSettings(selected.profile.id, selected.model.name);
+    else onAction("connections");
+  }
   const [error, setError] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
   const [busy, setBusy] = useState(false);
@@ -692,6 +707,8 @@ export function ChatPage({
       setStream("");
       setReasoning("");
       setContextStatus("");
+      setProgress({ stage: "", message: "" });
+      queuedInput.current = false;
       let reasoningStep = "";
       setTools([]);
       setImageGeneration(null);
@@ -700,7 +717,22 @@ export function ChatPage({
           value.id,
           (event) => {
             if (watch.signal.aborted) return;
+            if (event.kind === "progress") setProgress({ stage: String(event.data.stage || ""), message: String(event.data.message || "") });
+            if (event.kind === "learning_course") {
+              const course = event.data as unknown as CourseReceipt;
+              setLiveCourses((values) => ({ ...values, [value.id]: [...(values[value.id] || []).filter((item) => item.goal_id !== course.goal_id), course] }));
+              if (!queuedInput.current && course.status === "completed" && course.nodes.length && Date.parse(course.completed_at || "") >= pageOpenedAt.current) {
+                const key = `bai-course-opened:${course.planning_run_id}`;
+                if (!openedCourses.current.has(key)) {
+                  openedCourses.current.add(key);
+                  try {
+                    if (!sessionStorage.getItem(key)) { sessionStorage.setItem(key, "seen"); setCourseDialog(course); }
+                  } catch { setCourseDialog(course); }
+                }
+              }
+            }
             if (event.kind === "task") {
+              if (event.data.pending_messages === 0 && ["planning", "running"].includes(String(event.data.status))) queuedInput.current = false;
               updateTask(event.data as unknown as ComplexTask);
               setRun((current) =>
                 current?.id === value.id
@@ -804,6 +836,11 @@ export function ChatPage({
         }
         if (watch.signal.aborted) return;
         if (loaded) setStream("");
+        if (typeof result.result.next_run_id === "string") {
+          const next = await api<Run>(`/runs/${result.result.next_run_id}`);
+          if (!watch.signal.aborted) void trackNext.current?.(next, id);
+          return;
+        }
         if (result.status === "completed") setReasoning("");
         setBusy(false);
         void refresh().catch(() => {
@@ -819,6 +856,7 @@ export function ChatPage({
     },
     [loadMessages, refresh, receiveMemory, updateTask],
   );
+  trackNext.current = track;
   useEffect(() => {
     let live = true;
     const saved = readChatDraft(conversationId);
@@ -839,6 +877,9 @@ export function ChatPage({
     setSyncWarning("");
     setRun(null);
     setTasks([]);
+    setLiveCourses({});
+    setCourseDialog(null);
+    setProgress({ stage: "", message: "" });
     setSubmitting(false);
     setStopping(false);
     actionLock.current = false;
@@ -1077,7 +1118,7 @@ export function ChatPage({
         onConversation(id);
       } else if (currentId.current === id) {
         if (!supplement || value.id !== run?.id) void track(value, id);
-        else setBuddyNote("已收到，当前步骤结束后处理补充要求。");
+        else { queuedInput.current = true; setBuddyNote("已收到新消息，当前操作结束后处理。"); setProgress({ stage: "queued_input", message: "已收到新消息，当前操作结束后判断归属" }); }
         void loadMessages(id).catch(() => {
           if (isCurrent())
             setSyncWarning("消息已发送，聊天记录暂未刷新，请重试刷新。");
@@ -1285,6 +1326,7 @@ export function ChatPage({
         ),
     );
   const hasDraft = Boolean(draft.trim() || images.length);
+  const currentTask = tasks.find((task) => task.id === run?.task_id && !["completed", "cancelled"].includes(task.status));
   const showStop = busy && !hasDraft;
   async function changeProject(nextId: string | null) {
     if (
@@ -1377,6 +1419,7 @@ export function ChatPage({
                     </span>
                     {synthetic && busy && value.run_id === run?.id ? (
                       <ReplyActivity
+                        progress={progress.message}
                         reasoning={reasoning}
                         stream={stream}
                         imageGeneration={imageGeneration}
@@ -1515,7 +1558,7 @@ export function ChatPage({
                             value.run_error ||
                             (value.run_id === run?.id ? run?.error : null)
                           }
-                          onSettings={() => onAction("settings")}
+                          onSettings={() => openModelSettings()}
                           onRetry={
                             value === lastAssistant &&
                             value.run_id === run?.id &&
@@ -1535,6 +1578,7 @@ export function ChatPage({
                           status={value.run_status}
                         />
                       )}
+                    {value.role === "assistant" && value.run_id && value.has_learning_course && <LearningCourseCards runId={value.run_id} onOpen={setCourseDialog} />}
                     {value.attachment_ids.length > 0 && (
                       <div className="message-pictures">
                         {value.attachment_ids.map((id) => (
@@ -1547,10 +1591,9 @@ export function ChatPage({
                         {!!value.local_references?.length && (
                           <div className="message-local-folders">
                             {value.local_references.map((reference, index) => (
-                              <div
+                              <Hint key={index} label={String(reference.path || "需要重新关联")}><div
                                 className="local-folder-chip"
-                                key={index}
-                                title={String(reference.path || "需要重新关联")}
+                                tabIndex={0}
                               >
                                 <Folder size={16} />
                                 <span>
@@ -1559,7 +1602,7 @@ export function ChatPage({
                                 <small>
                                   {reference.active ? "只读" : "需要重新关联"}
                                 </small>
-                              </div>
+                              </div></Hint>
                             ))}
                           </div>
                         )}
@@ -1589,6 +1632,7 @@ export function ChatPage({
                   <div className="message-body">
                     <span className="message-name">XiaoXi</span>
                     <ReplyActivity
+                      progress={progress.message}
                       reasoning={reasoning}
                       stream={stream}
                       imageGeneration={imageGeneration}
@@ -1620,7 +1664,7 @@ export function ChatPage({
                       <IncompleteReplyNotice
                         cancelled={incompleteRun.status === "cancelled"}
                         reason={incompleteRun.error}
-                        onSettings={() => onAction("settings")}
+                        onSettings={() => openModelSettings()}
                         onRetry={
                           run?.retry_action === "none"
                             ? undefined
@@ -1665,6 +1709,9 @@ export function ChatPage({
           />
         )}
         <div className="composer-area" ref={composerArea}>
+          {currentTask && <CurrentTaskSummary task={currentTask} queued={currentTask.pending_messages > 0 || progress.stage === "queued_input"} />}
+          {busy && run && liveCourses[run.id]?.length > 0 && <LearningCourseCards runId={run.id} courses={liveCourses[run.id]} onOpen={setCourseDialog} />}
+          <CourseOutline course={courseDialog} onClose={() => setCourseDialog(null)} />
           {buddyNote && (
             <div className="chat-buddy-note" role="status" aria-live="polite">
               <span className="chat-buddy-note-avatar">
@@ -1697,7 +1744,7 @@ export function ChatPage({
               onClose={closeError}
               action={
                 configurationProblem.test(error)
-                  ? { label: "配置接口", onClick: () => onAction("settings") }
+                  ? { label: "配置接口", onClick: () => openModelSettings() }
                   : undefined
               }
             />
@@ -1717,7 +1764,7 @@ export function ChatPage({
           {!modelReady && (
             <button
               className="setup-nudge"
-              onClick={() => onAction("settings")}
+              onClick={() => openModelSettings()}
             >
               <Cable size={16} />
               <span>先连接你的模型，就能开始对话和学习。</span>
@@ -1972,7 +2019,7 @@ export function ChatPage({
                   {(
                     [
                       ["agent", "智能体", "可调用工具、文件与技能，对所有对话生效"],
-                      ["chat", "对话", "只回答不调用工具，也不会接续任务，更省 token，对所有对话生效"],
+                      ["chat", "对话", "普通问答模式，不会调用工具，更省 token"],
                     ] as const
                   ).map(([value, label, description]) => (
                     <Hint key={value} label={description}>
@@ -2084,7 +2131,7 @@ export function ChatPage({
                       <DropdownMenu.Separator className="model-menu-separator" />
                       <DropdownMenu.Item
                         className="model-menu-item"
-                        onSelect={() => onAction("settings")}
+                        onSelect={() => openModelSettings()}
                       >
                         <Settings2 size={15} />
                         连接与设置
@@ -2099,13 +2146,13 @@ export function ChatPage({
                       ? contextUsage
                       : null
                   }
-                  limit={selected?.model.context_tokens ?? 64000}
+                  limit={selected?.model.context_tokens ?? 500000}
                   compacting={contextStatus === "正在整理上下文…"}
                   onSettings={() => {
                     if (selected && onContextSettings) {
                       onContextSettings(selected.profile.id, selected.model.name);
                     } else {
-                      onAction("settings");
+                      openModelSettings();
                     }
                   }}
                 />

@@ -114,6 +114,14 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
                 .order_by(Message.created_at, MESSAGE_ORDER)
             )
         )
+        from .db import Run, ComplexTask
+        from .task_context import current
+        run = db.get(Run, run_id)
+        execution = current.get()
+        task = db.get(ComplexTask, execution.task_id) if execution else None
+        approved = set(task.message_ids) if task else {run.source_message_id if run else None}
+        boundary = max((index for index, record in enumerate(records) if record.id in approved), default=len(records) - 1)
+        records = records[:boundary + 1]
         checkpoint = db.get(ConversationSummary, conversation_id)
         summary = checkpoint.content if checkpoint else ""
         cursor = next(

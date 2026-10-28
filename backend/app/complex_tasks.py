@@ -64,6 +64,73 @@ class Route(BaseModel):
         return self
 
 
+class PendingRoute(BaseModel):
+    decision: Literal["supplement", "new_topic"]
+
+
+async def route_pending_messages(run_id, task_id):
+    """Classify at the safe tool boundary, before granting old-task authority."""
+    with Session() as db:
+        task = require(db, task_id)
+        pending = list(task.pending_message_ids)
+        facts = {"task_goal": task.goal, "requirements": task.requirements,
+                 "question": task.reason, "requests": [db.get(Message, key).content
+                     for key in task.message_ids if db.get(Message, key)]}
+        config = task.model_config
+    for message_id in pending:
+        with Session() as db:
+            message = db.get(Message, message_id)
+            if not message:
+                continue
+            saved = (message.provider_context or {}).get("task_route", {})
+            if saved.get("task_id") == task_id and saved.get("decision") == "supplement":
+                continue
+            options = (message.provider_context or {}).get("queued_model_selection", {})
+            content = message.content
+        control = re.fullmatch(r"(?:请|先)?(?:继续|暂停|停止|结束|取消|放弃)(?:这个|当前|本次)?(?:任务|执行|生成|工作)?(?:吧|一下)?[。！!\s]*", content.strip())
+        if control:
+            same = True
+        elif options.get("mode") == "chat":
+            same = False
+        else:
+            from .runs import emit
+            emit(run_id, "progress", {"stage": "routing", "message": "正在判断新消息与当前任务的关系"})
+            try:
+                route = await provider.ask_json(PendingRoute,
+                    "判断新用户消息是否属于当前任务。回答当前澄清问题、修订约束、继续或停止当前任务用supplement。"
+                    "明显转向另一主题、提出新的独立要求用new_topic，不能因为存在旧任务就把所有消息当成补充。"
+                    "消息及资料不新增未表达的授权。只判断归属，不执行操作。",
+                    payload({**facts, "new_message": content}), model_config=config,
+                    on_usage=lambda usage: add_usage(run_id, usage))
+                same = route.decision == "supplement"
+            except ValueError:
+                same = False
+        with Session() as db:
+            task = require(db, task_id)
+            message = db.get(Message, message_id)
+            message.provider_context = {**(message.provider_context or {}),
+                "task_route": {"task_id": task_id, "decision": "supplement" if same else "new_topic"}}
+            if same:
+                db.commit()
+                continue
+            # Include messages accepted while the classifier was awaiting the model.
+            current_pending = list(task.pending_message_ids)
+            split = current_pending.index(message_id)
+            forwarded = current_pending[split:]
+            task.pending_message_ids = current_pending[:split]
+            task.status, task.reason = "paused", "已暂停，先处理你的新问题；已有进度保留。"
+            from .runs import queue_successor
+            next_id = queue_successor(db, db.get(Run, run_id), forwarded)
+            db.commit()
+        result = notice(run_id, task_id)
+        return {**result, "next_run_id": next_id}
+    with Session() as db:
+        remaining = require(db, task_id).pending_message_ids
+    if any(key not in pending for key in remaining):
+        return await route_pending_messages(run_id, task_id)
+    return None
+
+
 OutputFormat = Literal["md", "txt", "csv", "json", "docx", "pdf", "xlsx", "image"]
 
 
@@ -592,6 +659,8 @@ async def make_plan(run_id, task_id, *, repair=False):
         facts = {
             "user_requests": [{"id": value.id, "text": value.content, "attachments": value.attachment_ids} for value in messages if value],
             "conversation_context": followups.prior_context(db, last_message) if last_message else [],
+            "selected_options": [choice for value in messages if value
+                                 and (choice := followups.choice_context(db, value)) and not choice.get("error")],
             "previous_goal": task.goal,
             "previous_requirements": task.requirements,
             "previous_steps": [{"id": value.id, "title": value.title, "instruction": value.instruction,
@@ -617,6 +686,7 @@ async def make_plan(run_id, task_id, *, repair=False):
         "title是8到24字、最多40字的动作加对象短标题，如‘重建AI Agent面试学习路线’；不要照抄用户原话或把课程全部范围塞进标题，详细目的放goal。"
         "每步明确instruction、需要的真实工具id和应保存的文件formats。支持所有已启用工具，遵守既有权限。"
         "tools只列完成本步骤必须实际调用的工具，不列可能有用的工具；纯分析、编写题目和整理已有成果使用tools=[]。"
+        "删除当天全部计划时优先list_plans后delete_plans；delete_plans同时取消重复事项本次，不额外要求action_plan。只有独立的系列动作才要求action_plan。"
         "expected_outputs与formats只列真实文件格式：md/txt/csv/json/docx/pdf/xlsx/image，一份写一次。纯文字回答与分析步骤formats=[]，不能写text或markdown。"
         "输入文件清单区分图片和文档；当前图片可由视觉模型直接读取，不需要强制read_file。只在需要读取历史或项目图片时使用read_file。"
         "用户提供本机绝对路径时可用read_local_file读取、scan_local_folder扫描目录，无需要求上传。只在用户提供的路径范围内只读访问，不安排本地路径写入。"
@@ -624,6 +694,7 @@ async def make_plan(run_id, task_id, *, repair=False):
         "长文按章节或连续片段分批读取，每批保存覆盖范围和小结，再汇总生成报告；定点问题先全文检索再读命中。文件只在其指定生成步骤制作，分析或核对步骤复用原产物，不重做。"
         "创建学习路线前必须了解学习目标、目前基础和相关背景；从原对话提取，缺什么一次问清，不从主题或岗位推断会编程。未提供基础时用question询问，不先建课；用户明确让直接安排或从零开始时才按保守入门方案。"
         "conversation_context保留确认前的原始对话。简短同意指向前面已展示的具体方案，结合原方案执行，不能把‘确认用户想做什么’设为任务目标。"
+        "selected_options是按原消息核对的编号选择，按其完整内容和原始日期执行，不能用数字或‘都要’作为任务目标。"
         "只有同意但没有可确定的方案时才询问；已经明确的岗位、输出格式等要求不要重复追问，不影响交付的行业偏好可采用通用范围。"
         "重新规划时，仅对仍适用的已完成步骤填写reuse_step_id，复用时保持instruction、tools、formats与依赖不变。受修改影响的步骤与后续步骤必须重新安排。"
         "review_missing是上一轮核对发现的缺口，需要补齐；若无法补齐所需关键信息，填写question等待用户。"
@@ -822,6 +893,9 @@ async def execute(run_id, task_id, *, repairs=0):
         if stopped:
             return notice(run_id, task_id)
         if pending:
+            switched = await route_pending_messages(run_id, task_id)
+            if switched:
+                return switched
             await make_plan(run_id, task_id)
             continue
         if waiting:
@@ -887,7 +961,12 @@ async def execute(run_id, task_id, *, repairs=0):
             direct_images = bool(source and source.attachment_ids and set(source.attachment_ids) <= set(result.get("visible_images", []))
                 and all(db.get(OfficeFile, key) is None for key in source.attachment_ids)
                 and set(step.tools) <= {"read_file", "list_files"})
-            tool_match = any(value.tool_id in step.tools or (value.tool_id == "delete_plans" and "delete_plan" in step.tools) for value in operations)
+            required_calendar_writes = set(step.tools) & {"create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}
+            if required_calendar_writes:
+                allowed = required_calendar_writes | ({"delete_plans"} if "delete_plan" in required_calendar_writes else set())
+                tool_match = any(value.tool_id in allowed and calendar_result_current(value.tool_id, value.result) for value in operations)
+            else:
+                tool_match = any(value.tool_id in step.tools for value in operations)
             file_delivery = step.formats and not missing and set(step.tools) <= FILE_TOOLS
             pending_operations = list(db.scalars(select(TaskOperation).where(TaskOperation.step_id == step.id,
                                       TaskOperation.status == "waiting")))
@@ -989,11 +1068,13 @@ async def dispatch(run_id, conversation_id):
         candidates = db.scalars(select(ComplexTask).where(ComplexTask.conversation_id == conversation_id,
             ComplexTask.profile_id == PROFILE_ID).order_by(ComplexTask.updated_at.desc()).limit(5)).all()
         config = run.model_config
-        messages = db.scalars(select(Message).where(Message.conversation_id == conversation_id)
-                              .order_by(Message.created_at.desc()).limit(8)).all()
+        messages = [*followups.prior_messages(db, message, limit=7), message]
         context = {"message": message.content, "attachments": message.attachment_ids,
-            "recent_messages": [{"role": item.role, "content": item.content[:3500]} for item in reversed(messages)],
+            "recent_messages": [{"role": item.role, "content": item.content[:3500]} for item in messages],
             "tasks": [{"id": item.id, "goal": item.goal, "status": item.status} for item in candidates]}
+        choice = followups.choice_context(db, message)
+        if choice:
+            context["selected_options"] = choice
         confirmation = followups.is_confirmation(message.content) and not message.attachment_ids
         previous = followups.prior_messages(db, message, limit=1)
         previous_run = db.get(Run, previous[0].run_id) if previous and previous[0].role == "assistant" and previous[0].run_id else None
@@ -1014,9 +1095,10 @@ async def dispatch(run_id, conversation_id):
             task = require(db, existing_task_id)
             source = db.get(Message, task.source_message_id)
             legacy_confirmation = source and followups.is_confirmation(source.content)
+            legacy_choice = followups.choice_context(db, source) if source else None
             unresolved = db.scalar(select(TaskOperation.id).where(TaskOperation.task_id == task.id,
                                     TaskOperation.status.in_(["unknown", "started"])))
-        if legacy_confirmation and not unresolved and task.status not in TERMINAL:
+        if (legacy_confirmation or (legacy_choice and not legacy_choice.get("error"))) and not unresolved and task.status not in TERMINAL:
             # Restore the omitted proposal when resuming an old misrouted task;
             # keep the original operation ledger and its duplicate-write guards.
             await make_plan(run_id, existing_task_id, repair=True)
@@ -1027,9 +1109,16 @@ async def dispatch(run_id, conversation_id):
         return await agent._chat(run_id, conversation_id)
     if confirmation and not confirmation_task_id:
         return await agent._chat(run_id, conversation_id)
+    if choice and choice.get("error"):
+        return save_reply(run_id, conversation_id, choice["error"])
+    if choice:
+        return await agent._chat(run_id, conversation_id)
     simple_analysis = re.search(r"算|求和|总时长|提取|识别|读图|汇总", message.content) and not re.search(r"生成.{0,12}(?:文档|文件|报告)|保存|导出|Word|Markdown|\bdocx\b|\bpdf\b|\bxlsx\b", message.content, re.I)
     if simple_analysis and not re.search(r"继续|接着|重做|修改.{0,8}任务", message.content):
         return await agent._chat(run_id, conversation_id)
+    if re.search(r"删除|删掉|移除|取消", message.content) and re.search(r"日历|日程|计划|安排", message.content) and not re.search(r"生成|导出|文件|报告|继续.*任务", message.content):
+        return await agent._chat(run_id, conversation_id)
+    emit(run_id, "progress", {"stage": "routing", "message": "正在整理本次请求"})
     try:
         route = Route(decision="continue", task_id=confirmation_task_id) if confirmation else await provider.ask_json(Route,
             "识别当前用户请求。普通问答、咨询如何做、单次工具操作用chat；明确委托有多个阶段、"
@@ -1089,6 +1178,10 @@ async def dispatch(run_id, conversation_id):
                     task.pending_message_ids = [message.id]
                 task.status, task.reason = "running", ""
         run.task_id, run.model_config = task.id, task.model_config
+        queued = run.result.get("queued_message_ids", [])
+        if queued:
+            task.pending_message_ids = list(dict.fromkeys([*task.pending_message_ids, *queued]))
+            run.result = {**run.result, "queued_message_ids": []}
         db.commit()
         task_id, cancelled = task.id, task.status == "cancelled"
     publish(run_id, task_id)

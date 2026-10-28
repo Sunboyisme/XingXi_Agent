@@ -43,7 +43,7 @@ def idle(db, conversation_ids):
 def describe_material(db, row):
     file = db.get(Attachment, row.file_id)
     detail = db.get(OfficeFile, row.file_id)
-    return {"id": row.id, "file_id": row.file_id, "project_id": row.project_id,
+    return {"id": row.id, "file_id": row.file_id, "project_id": row.project_id, "source_file_id": row.source_file_id,
             "name": file.name, "image": file.media_type.startswith("image/"),
             "file_status": detail.status if detail else "ready", "error": detail.error if detail else "",
             "created_at": row.created_at}

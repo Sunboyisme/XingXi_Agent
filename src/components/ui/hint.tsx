@@ -1,4 +1,11 @@
 import { Tooltip } from "radix-ui";
+import { createElement, type HTMLAttributes, type ReactElement, type ReactNode } from "react";
+
+export function HintText({ as = "span", label, children, ...props }: HTMLAttributes<HTMLElement> & {
+  as?: "span" | "strong" | "p" | "h1" | "small" | "td"; label: ReactNode;
+}) {
+  return <Hint label={label}>{createElement(as, { ...props, tabIndex: props.tabIndex ?? 0 }, children)}</Hint>;
+}
 
 /** 统一的悬浮提示样式，替代浏览器原生 title。 */
 export function Hint({
@@ -6,9 +13,9 @@ export function Hint({
   side = "top",
   children,
 }: {
-  label?: string;
+  label?: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
-  children: React.ReactElement;
+  children: ReactElement;
 }) {
   if (!label) return children;
   return (

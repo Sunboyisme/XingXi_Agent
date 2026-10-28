@@ -54,6 +54,37 @@ def is_confirmation(text: str) -> bool:
     return bool(compact) and bool(_CONFIRMATION.fullmatch(compact) or compound)
 
 
+def choice_context(db, message):
+    """Resolve a short selection only against the immediately preceding reply."""
+    compact = re.sub(r"[\s。！!，,]", "", message.content or "")
+    if not re.fullmatch(r"(?:选|选择|第)?[1-9](?:个|项)?|都要|全部|两个都要|都选", compact):
+        return None
+    previous = prior_messages(db, message, limit=1)
+    if not previous or previous[0].role != "assistant":
+        return {"error": "这次选择对应哪一个选项？请补充选项内容。"}
+    reply = previous[0]
+    # Numbered option paragraphs only, never a code block or an ordinary list
+    # that the assistant did not invite the user to select from.
+    text = re.sub(r"```[\s\S]*?```", "", reply.content)
+    if not re.search(r"选|回.{0,5}[1-9]|[1-9].{0,8}或.{0,8}[1-9]|都要", text):
+        return {"error": "这次选择对应哪一个选项？请补充选项内容。"}
+    matches = list(re.finditer(r"(?:^|\n)\s*(?:\*\*)?([1-9])\s*[.、．）):：]\s*", text))
+    options = {}
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[match.end():end].strip()
+        body = re.split(r"\n\s*(?:你(?:回|选)|请(?:回|选)|回复|选择)", body)[0].strip()
+        if match[1] in options:
+            return {"error": "上一条回复包含多组编号，请说明选择的具体内容。"}
+        options[match[1]] = body
+    selected = list(options) if compact in {"都要", "全部", "两个都要", "都选"} else re.search(r"[1-9]", compact)[0]
+    if len(options) < 2 or any(key not in options for key in selected):
+        return {"error": "没有找到这次选择对应的明确选项，请补充选项内容。"}
+    return {"source_message_id": reply.id, "source_created_at": reply.created_at,
+            "selected": [{"number": key, "content": options[key]} for key in selected],
+            "context": prior_context(db, message)}
+
+
 def prior_messages(db, message, limit=16):
     """Only messages preceding this run's source, including equal-time imports."""
     ordinal = select(MESSAGE_ORDER).where(Message.id == message.id).correlate(None).scalar_subquery()

@@ -161,7 +161,7 @@ def resolve(settings, selection=None):
         "vision_enabled": model["vision_enabled"],
         "thinking_control": model["thinking_control"],
         "thinking_enabled": enabled or model["thinking_control"] == "always",
-        "context_tokens": model.get("context_tokens", 64000),
+        "context_tokens": model.get("context_tokens", 500000),
         **chat_options(selection.model_dump() if selection else None),
     }
 

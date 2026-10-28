@@ -1,5 +1,6 @@
 import { DropdownMenu, Tooltip } from "radix-ui";
 import { MoreHorizontal } from "lucide-react";
+import { Hint } from "./ui/hint";
 import type { SoftIconProps } from "./SoftIcons";
 import {
   setGeneralPreferences,
@@ -86,13 +87,10 @@ export function NavigationOverflowMenu({
                   <item.icon size={18} />
                   <span>{item.label}</span>
                 </DropdownMenu.Item>
-                <DropdownMenu.CheckboxItem
+                <Hint label={visible ? `收起${item.label}` : `在侧栏显示${item.label}`}><DropdownMenu.CheckboxItem
                   className="navigation-overflow-toggle"
                   checked={visible}
                   aria-label={`在侧栏显示${item.label}`}
-                  title={
-                    visible ? `收起${item.label}` : `在侧栏显示${item.label}`
-                  }
                   onSelect={(event) => event.preventDefault()}
                   onCheckedChange={(checked) =>
                     setGeneralPreferences({
@@ -108,7 +106,7 @@ export function NavigationOverflowMenu({
                   >
                     <span />
                   </span>
-                </DropdownMenu.CheckboxItem>
+                </DropdownMenu.CheckboxItem></Hint>
               </div>
             );
           })}

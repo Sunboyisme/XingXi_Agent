@@ -14,6 +14,7 @@ import { ArtifactDownload, ArtifactPicture } from "./AnswerPresentation";
 import { FileCard } from "./OfficeFiles";
 import { Button } from "./ui/button";
 import { errorMessage } from "@/lib/utils";
+import { HintText } from "./ui/hint";
 
 const states: Record<string, string> = {
   planning: "正在安排步骤",
@@ -93,9 +94,9 @@ export function TaskCard({
         ) : (
           <Circle size={16} />
         )}
-        <strong title={task.title || "历史任务"}>
+        <HintText as="strong" label={task.title || "历史任务"}>
           {task.title || "历史任务"}
-        </strong>
+        </HintText>
         <span>{states[task.status] || task.status}</span>
         <button
           type="button"

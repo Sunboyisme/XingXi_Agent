@@ -600,12 +600,15 @@ def messages(conversation_id: str, db=Depends(database)):
     )).all()}
     learning_cards = set(db.scalars(select(store.RunEvent.run_id).join(store.Run, store.Run.id == store.RunEvent.run_id).where(
         store.Run.conversation_id == conversation_id, store.RunEvent.kind == "learning_continuation")))
+    course_cards = set(db.scalars(select(store.RunEvent.run_id).join(store.Run, store.Run.id == store.RunEvent.run_id).where(
+        store.Run.conversation_id == conversation_id, store.RunEvent.kind == "learning_course")))
     return [s.MessageRead.model_validate(record).model_copy(update={
         "run_status": run_details[record.run_id].status if record.run_id in run_details else None,
         "run_error": (run_details[record.run_id].error or None)
         if record.run_id in run_details and run_details[record.run_id].status == "failed" else None,
         "task_id": run_details[record.run_id].task_id if record.run_id in run_details else None,
         "has_learning_continuation": record.run_id in learning_cards,
+        "has_learning_course": record.run_id in course_cards,
     }) for record in records]
 
 
@@ -622,18 +625,17 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
         if not active.task_id:
             raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
         task = complex_tasks.require(db, active.task_id)
-        try:
-            provider.user_content(value.content, value.attachment_ids, task.model_config)
-        except Exception as error:
-            raise HTTPException(400, provider.safe_error(error))
+        config = checked_model(db, value.model_selection, value.content, value.attachment_ids)
         office.claim(db, value.attachment_ids, conversation_id)
         message = store.Message(conversation_id=conversation_id, role="user",
-            content=value.content, attachment_ids=value.attachment_ids, local_references=local_references)
+            content=value.content, attachment_ids=value.attachment_ids, local_references=local_references,
+            provider_context={"queued_model_selection": model_profiles.saved_selection(config).model_dump()})
         db.add(message)
         db.flush()
         complex_tasks.queue_message(db, task, message)
         db.commit()
         complex_tasks.publish(active.id, task.id)
+        runs.emit(active.id, "progress", {"stage": "queued_input", "message": "已收到新消息，当前操作结束后处理"})
         return active
     config = checked_model(db, value.model_selection, value.content, value.attachment_ids)
     run = create_run(db, "chat", conversation_id=conversation_id, commit=False)
@@ -820,8 +822,12 @@ def retry_action(db, run):
 
 def run_read(db, run):
     task = db.get(store.ComplexTask, run.task_id) if run.task_id else None
+    result = public_learning(run.result) if run.kind in LEARNING_KINDS else run.result
+    if result.get("learning_courses"):
+        from .learning_receipts import read
+        result = {**result, "learning_courses": read(db, run)}
     return s.RunRead.model_validate(run).model_copy(update={"retry_action": retry_action(db, run), "task_status": task.status if task else None,
-        "result": public_learning(run.result) if run.kind in LEARNING_KINDS else run.result})
+        "result": result})
 
 
 @router.get("/runs/{run_id}", response_model=s.RunRead)

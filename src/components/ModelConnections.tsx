@@ -21,6 +21,7 @@ import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { SoftSelect } from "./ui/soft-select";
+import { ContextCapacityInput } from "./ContextCapacityInput";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,7 @@ const thinkingControlLabels: Record<string, string> = {
 };
 const blankModel = () => ({
   name: "",
-  context_tokens: 64000,
+  context_tokens: 500000,
   vision_enabled: false,
   thinking_mode: "auto" as const,
   thinking_control: "auto" as const,
@@ -266,12 +267,12 @@ export function ModelConnections({
       if (
         models.some(
           (model) =>
-            !Number.isInteger(model.context_tokens ?? 64000) ||
-            (model.context_tokens ?? 64000) < 4096 ||
-            (model.context_tokens ?? 64000) > 2000000,
+            !Number.isInteger(model.context_tokens ?? 500000) ||
+            (model.context_tokens ?? 500000) < 4096 ||
+            (model.context_tokens ?? 500000) > 2000000,
         )
       )
-        throw new Error("上下文大小请输入 4,096–2,000,000 之间的整数。");
+        throw new Error("请调整标记的上下文容量，可直接选择8千至200万的快捷容量。");
       if (new Set(models.map((x) => x.name)).size !== models.length)
         throw new Error("模型名称不能重复。");
       const profile = {
@@ -747,30 +748,19 @@ export function ModelConnections({
                           </button>
                         </div>
                         <div className="model-capabilities">
-                          <label className="model-option-row model-context-setting">
+                          <div className="model-option-row model-context-setting">
                             <span className="model-option-copy">
                               <strong>上下文大小</strong>
-                              <small>按服务商支持的上限填写</small>
+                              <small>支持快捷选择与单位换算</small>
                             </span>
-                            <span className="model-context-input">
-                              <Input
-                                ref={model.name === contextFocusModel ? contextInput : undefined}
-                                type="number"
-                                min={4096}
-                                max={2000000}
-                                step={1}
-                                aria-label={`模型 ${index + 1} 上下文大小`}
-                                value={model.context_tokens ?? 64000}
+                            <ContextCapacityInput
+                                inputRef={model.name === contextFocusModel ? contextInput : undefined}
+                                label={`模型 ${index + 1} 上下文大小`}
+                                value={model.context_tokens ?? 500000}
                                 disabled={busy}
-                                onChange={(event) =>
-                                  updateModel(index, {
-                                    context_tokens: Number(event.target.value),
-                                  })
-                                }
+                                onChange={(context_tokens) => updateModel(index, { context_tokens })}
                               />
-                              <span aria-hidden="true">token</span>
-                            </span>
-                          </label>
+                          </div>
                           <label className="model-option-row model-vision">
                             <span className="model-option-copy">
                               <strong>图片输入</strong>

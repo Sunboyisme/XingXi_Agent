@@ -3328,6 +3328,11 @@ export interface components {
              * @default false
              */
             has_learning_continuation: boolean;
+            /**
+             * Has Learning Course
+             * @default false
+             */
+            has_learning_course: boolean;
         };
         /** ModelOption */
         ModelOption: {
@@ -3335,7 +3340,7 @@ export interface components {
             name: string;
             /**
              * Context Tokens
-             * @default 64000
+             * @default 500000
              */
             context_tokens: number;
             /**
@@ -3356,7 +3361,7 @@ export interface components {
             name: string;
             /**
              * Context Tokens
-             * @default 64000
+             * @default 500000
              */
             context_tokens: number;
             /**

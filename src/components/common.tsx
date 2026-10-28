@@ -24,6 +24,7 @@ import {
 export { ImagesInput, Picture } from "./ImageAttachments";
 export { Hint } from "./ui/hint";
 import { ExternalLink } from "./ExternalLink";
+import { CodeBlock, TableBlock } from "./MarkdownBlocks";
 
 
 export const Markdown = memo(function Markdown({
@@ -39,6 +40,8 @@ export const Markdown = memo(function Markdown({
   // token or scroll update remounts pictures and collapses their loaded height.
   const components = useMemo<Components>(
     () => ({
+      pre: CodeBlock,
+      table: TableBlock,
       img: ({ src, alt }) =>
         typeof src === "string" && runId ? (
           <RemotePicture runId={runId} src={src} alt={alt || "图片"} />

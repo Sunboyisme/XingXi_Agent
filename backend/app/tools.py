@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import re
 import time
 from typing import Literal
 
@@ -23,7 +22,6 @@ from . import (
     memory,
     provider,
     retrieval,
-    runs,
     search,
     skills,
     utilities,
@@ -31,7 +29,7 @@ from . import (
 )
 from . import followups, task_context, todos
 from .config import PROFILE_ID, secret_get
-from .db import Goal, KnowledgeNode, NotFound, Run, RunEvent, Session
+from .db import Goal, KnowledgeNode, NotFound, RunEvent, Session
 from .runs import emit
 
 _LEARNING_GOAL_PROPOSALS = followups.ProposalStore()
@@ -250,40 +248,9 @@ def builtin_tools(run_id: str, conversation_id: str):
 
         async def save(values: dict) -> str:
             value = GoalCreate(**values)
-            with Session() as db:
-                goal = Goal(**value.model_dump(exclude={"use_beginner_defaults"}))
-                db.add(goal)
-                db.flush()
-                planning = Run(kind="course", goal_id=goal.id)
-                db.add(planning)
-                db.commit()
-                goal_id, planning_id = goal.id, planning.id
+            from .learning_receipts import create
             _LEARNING_GOAL_PROPOSALS.pop(conversation_id)
-            runs.launch(planning_id, lambda: learning.generate_course(goal_id, planning_id))
-            await runs.tasks[planning_id]
-            with Session() as db:
-                planning = db.get(Run, planning_id)
-                nodes = db.scalars(
-                    select(KnowledgeNode)
-                    .where(KnowledgeNode.goal_id == goal_id)
-                    .order_by(KnowledgeNode.ordinal)
-                ).all()
-                result = {
-                    "goal_id": goal_id,
-                    "title": value.title,
-                    "status": planning.status,
-                    "overview": planning.result.get("overview", ""),
-                    "nodes": [
-                        {
-                            "title": n.title,
-                            "module": n.module,
-                            "objective": n.objective,
-                        }
-                        for n in nodes
-                    ],
-                    "error": planning.error,
-                    "next_action": "打开学习页，选择这个目标，开始第一个知识点",
-                }
+            result = await create(run_id, conversation_id, value.model_dump(exclude={"use_beginner_defaults"}))
             return json.dumps(result, ensure_ascii=False)
 
         # A later confirmation may omit fields already shown to the user.
@@ -385,8 +352,11 @@ def builtin_tools(run_id: str, conversation_id: str):
         result = list_continuations()
         with Session() as db:
             source = task_context.user_message(db, run_id, conversation_id)
-            if source and re.search(r"继续学|接着学|学到哪", source.content):
-                emit(run_id, "learning_continuation", {"cards": result})
+            from .learning_handoff import continuation_requested, continuation_candidates
+            if source and continuation_requested(source.content):
+                candidates = continuation_candidates(source.content, result)
+                if candidates:
+                    emit(run_id, "learning_continuation", {"cards": candidates})
             for value in result:
                 goal = db.get(Goal, value["goal_id"])
                 value["foundation"] = goal.foundation if goal else ""
@@ -499,6 +469,13 @@ def _guard_tool(entry, originals, run_id):
         status = "completed"
         secrets = []
         value = {}
+        emit(run_id, "progress", {"stage": "tool", "message": {
+            "search_memories": "正在查找相关背景", "learning_goals": "正在核对学习记录",
+            "list_files": "正在查找对话资料", "read_file": "正在读取资料",
+            "search_file": "正在检索资料", "read_local_file": "正在读取资料",
+            "create_learning_goal": "正在准备学习路线", "list_plans": "正在核对日历安排",
+            "create_plans": "正在保存日历安排", "delete_plans": "正在处理当天计划",
+        }.get(entry["id"], "正在" + entry["name"]), "tool_id": entry["id"]})
         try:
             from .execution_policy import correction_target, rewrite_source, root_error
             from .complex_tasks import READ_TOOLS
@@ -626,6 +603,7 @@ def _guard_tool(entry, originals, run_id):
                     "duration_ms": round((time.monotonic() - started) * 1000),
                 },
             )
+            emit(run_id, "progress", {"stage": "answer", "message": "正在整理操作结果" if status == "completed" else "正在处理操作反馈"})
 
     async def guarded_execute(**arguments):
         from .complex_tasks import guarded

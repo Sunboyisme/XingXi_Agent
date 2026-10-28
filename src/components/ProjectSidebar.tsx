@@ -9,7 +9,6 @@ import {
   PinOff,
   Plus,
   Search,
-  Trash2,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { api, type Conversation, type Project } from "@/lib/api";
@@ -26,6 +25,7 @@ import {
 import type { ProjectManagementRequest } from "./ProjectManagement";
 import { Hint } from "./common";
 import { errorMessage, keepIfSame } from "@/lib/utils";
+import { DeleteConversationButton } from "./DeleteConversationButton";
 
 type SearchHit = {
   conversation_id: string;
@@ -111,7 +111,7 @@ export function ProjectSidebar({
   onNew: (id: string | null, pinned?: boolean) => void;
   onProject: (id: string) => void;
   onOpen: (conversation: Conversation, messageId?: string | null) => void;
-  onDelete: (conversation: Conversation) => void;
+  onDelete: (conversation: Conversation) => Promise<void>;
   refresh: () => Promise<void>;
   visible?: boolean;
   onManage: (request: ProjectManagementRequest) => void;
@@ -306,11 +306,10 @@ export function ProjectSidebar({
         key={value.id}
         data-dragging={draggingId === value.id}
       >
-        <button
+        <Hint label={`${value.title}（双击重命名）`}><button
           type="button"
           aria-label={`打开对话 ${value.title}`}
           aria-current={currentId === value.id ? "page" : undefined}
-          title={`${value.title}（双击重命名）`}
           style={{ touchAction: "pan-y" }}
           onPointerDown={(event) => {
             if (event.button !== 0 || busy || activity[value.id]) return;
@@ -363,7 +362,7 @@ export function ProjectSidebar({
               <i aria-hidden="true" />
             </span>
           )}
-        </button>
+        </button></Hint>
         <div className="conversation-row-actions">
           <Hint label={value.pinned_at ? "取消置顶" : "置顶对话"}>
             <button
@@ -383,19 +382,7 @@ export function ProjectSidebar({
               {value.pinned_at ? <PinOff size={14} /> : <Pin size={14} />}
             </button>
           </Hint>
-          <Hint label="删除对话">
-            <button
-              type="button"
-              className="conversation-delete"
-              aria-label={`删除对话 ${value.title}`}
-              disabled={busy}
-              onClick={() => {
-                if (!mutationLock.current) onDelete(value);
-              }}
-            >
-              <Trash2 size={14} />
-            </button>
-          </Hint>
+          <DeleteConversationButton conversation={value} disabled={busy} onDelete={onDelete} />
         </div>
       </div>
     );

@@ -17,7 +17,8 @@ CAPABILITIES = [
     ({"get_weather"}, """天气必须查询真实工具，注明城市、当地数据时间和来源。城市不明先问；同名候选只列出工具实际返回的地点，不增添行政区。用户选择后复用该候选编号；用户指定的地点不在原候选中时，重新解析并说明是新查询，不冒充原候选。预报只覆盖工具给出的日期。"""),
     ({"calculate", "date_time", "convert_units"}, """算术、日期偏移/星期/时区及单位换算分别使用可用的计算、日期与单位工具。相对日期按用户时区和当前时间计算，不让用户替你计算本周六。跨时区回答说明两地当地时间。同一时区08:40加3小时是11:40；近似飞行时长不冒充航班实际到达时间。"""),
     ({"web_search", "read_url"}, """最新事实需搜索，重要来源读取正文并给真实链接，区分摘要、原文与推断。已启用MCP搜索可直接使用，无需额外Tavily配置。来源失败尝试其他可靠来源，不重复已耗尽的网址，不编造来源。"""),
-    ({"create_plans", "list_plans", "action_plan", "update_plan"}, """日历创建前list_plans核对实际记录和冲突；明确授权且参数齐全时create_plans(explicit_request=true)。只讨论时可以登记待确认方案；用户下一轮确认用confirm=true，若历史只有口头方案则按用户确认的内容explicit_request=true。不要同轮自提自批。
+    ({"create_plans", "list_plans", "action_plan", "update_plan", "delete_plans"}, """日历创建前list_plans核对实际记录和冲突；明确授权且参数齐全时create_plans(explicit_request=true)。只讨论时可以登记待确认方案；用户下一轮确认用confirm=true，若历史只有口头方案则按用户确认的内容explicit_request=true。不要同轮自提自批。
+用户选择1/2/都要时，使用本轮已核对的selected_options还原真实选项及原始日期；不能把数字当作标题或任务目标。删除某天全部安排时优先list_plans后delete_plans，重复计划仅取消本次；该回执已覆盖取消本次，不为凑工具名额外调用action_plan。
 多个提醒放在同一计划reminder_offsets中，提前为负；提前一天是-1440分钟，不能变成默认-30。用户未要求提醒不自行加提醒。从文件提取提醒时，逐项传reminder_evidence引用已读取的实际原文，使服务端核对提前量。只有开始时刻、未给时长的定时事项沿用日历1小时默认并说明；无需为纯提醒额外追问时长。
 冲突时列出真实重叠事项并询问是否照常或调整，不覆盖原安排；其他独立无冲突事项继续。指代不清先查询并列出候选名称。
 修改或删除前按用户本地日期查询，使用local_start/local_end及真实编号；this/future范围传原样occurrence_start和target_date，future保留过去记录及截止条件。整个系列操作核对实际系列与明确范围，不猜一个实例日期。多个日期的动作引用对应用户原话date_evidence。结束整个系列先展示对象和范围，获得明确确认后再执行，保留历史完成记录。

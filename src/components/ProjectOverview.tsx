@@ -8,10 +8,10 @@ import {
   Pin,
   Plus,
   Settings2,
-  Upload,
 } from "lucide-react";
 import { api, type Conversation, type Project } from "@/lib/api";
 import { Button } from "./ui/button";
+import { Hint, HintText } from "./ui/hint";
 import { FileCard } from "./OfficeFiles";
 import { Picture } from "./ImageAttachments";
 import { materialStatus, type ProjectMaterial } from "./ProjectManagement";
@@ -93,7 +93,7 @@ export function ProjectOverview({
               </>
             )}
           </p>
-          <h1 title={project.name}>{project.name}</h1>
+          <HintText as="h1" label={project.name}>{project.name}</HintText>
           <div className="project-description-text">
             <p>
               {project.instructions || "在这里集中管理项目对话与共享资料。"}
@@ -107,14 +107,13 @@ export function ProjectOverview({
             )}
           </div>
           {project.workspace_path && (
-            <p
+            <HintText as="p" label={project.workspace_path}
               className="project-workspace-path"
-              title={project.workspace_path}
             >
               <Folder size={14} />
               <span>{project.workspace_path}</span>
               <small>只读</small>
-            </p>
+            </HintText>
           )}
         </div>
         <div className="project-overview-actions">
@@ -167,11 +166,9 @@ export function ProjectOverview({
           </h2>
           <div className="project-overview-list">
             {chats.map((item) => (
-              <button
+              <Hint key={item.id} label={item.title}><button
                 className="project-overview-chat"
-                key={item.id}
                 onClick={() => onOpen(item)}
-                title={item.title}
               >
                 {item.pinned_at ? (
                   <Pin size={17} aria-label="已置顶" />
@@ -182,7 +179,7 @@ export function ProjectOverview({
                 <time dateTime={item.updated_at}>
                   {new Date(item.updated_at).toLocaleDateString("zh-CN")}
                 </time>
-              </button>
+              </button></Hint>
             ))}
             {!chats.length && (
               <div className="project-overview-empty">
@@ -214,7 +211,7 @@ export function ProjectOverview({
                 {item.image ? (
                   <div className="project-overview-image">
                     <Picture id={item.file_id} name={item.name} />
-                    <span title={item.name}>{item.name}</span>
+                    <HintText label={item.name}>{item.name}</HintText>
                   </div>
                 ) : (
                   <FileCard
@@ -231,14 +228,6 @@ export function ProjectOverview({
             {!loading && !error && !materials.length && (
               <p className="muted">上传资料后，同项目的对话都能按需读取。</p>
             )}
-            <Button
-              className="project-upload-link"
-              variant="ghost"
-              onClick={onLibrary}
-            >
-              <Upload size={15} />
-              上传资料
-            </Button>
           </div>
         </section>
       </div>

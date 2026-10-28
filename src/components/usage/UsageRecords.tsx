@@ -12,6 +12,7 @@ import {
 import { Button } from "../ui/button";
 import { SoftSelect } from "../ui/soft-select";
 import { DetailDialog } from "../ui/detail-dialog";
+import { HintText } from "../ui/hint";
 
 type View = "summary" | "calls" | "history";
 function Metric({ value, unknown = 0, calls = 0 }: { value: number; unknown?: number; calls?: number }) {
@@ -19,9 +20,9 @@ function Metric({ value, unknown = 0, calls = 0 }: { value: number; unknown?: nu
     <>
       {unknown > 0 && unknown === calls ? "—" : value.toLocaleString("zh-CN")}
       {unknown > 0 && (
-        <small title={`${unknown} 次调用未返回此项用量`}>
+        <HintText as="small" label={`${unknown} 次调用未返回此项用量`}>
           （{unknown} 次未返回）
-        </small>
+        </HintText>
       )}
     </>
   );
@@ -110,7 +111,7 @@ function SummaryTable({ groups }: { groups: UsageGroup[] }) {
           >
             <td className="usage-model">
               <strong>{row.provider_label}</strong>
-              <small title={row.model_name}>{row.model_name}</small>
+              <HintText as="small" label={row.model_name}>{row.model_name}</HintText>
             </td>
             <td>{usagePurposes[row.purpose] || row.purpose}</td>
             <td>{row.calls}</td>
@@ -157,7 +158,7 @@ function SummaryTable({ groups }: { groups: UsageGroup[] }) {
                 ? `${row.currency} ${formatUsageAmount(row.known_cost)}`
                 : "未知"}
             </td>
-            <td title="未计入费用总额的调用次数；可在调用明细查看缺少单价或用量的原因">{row.unknown_calls || "—"}</td>
+            <HintText as="td" label="未计入费用总额的调用次数；可在调用明细查看缺少单价或用量的原因">{row.unknown_calls || "—"}</HintText>
           </tr>
         ))}
       </tbody>
@@ -196,7 +197,7 @@ function CallsTable({ calls }: { calls: UsageCall[] }) {
             </td>
             <td className="usage-model">
               <strong>{row.provider_label}</strong>
-              <small title={row.model_name}>{row.model_name}</small>
+              <HintText as="small" label={row.model_name}>{row.model_name}</HintText>
             </td>
             <td>
               <span>{usagePurposes[row.purpose] || row.purpose}</span>
@@ -269,9 +270,9 @@ function HistoryTable({ rows }: { rows: UsageReport["historical"] }) {
             </td>
             <td>{row.total_tokens.toLocaleString("zh-CN")}</td>
             <td>未知</td>
-            <td className="usage-note-cell" title={row.unknown_reason}>
+            <HintText as="td" className="usage-note-cell" label={row.unknown_reason}>
               {row.unknown_reason || "旧记录缺少详细用量"}
-            </td>
+            </HintText>
           </tr>
         ))}
       </tbody>
