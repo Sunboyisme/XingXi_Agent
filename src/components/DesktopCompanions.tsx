@@ -116,6 +116,11 @@ export function DesktopPet() {
     ".pet-avatar,.pet-hover-tools,.pet-task-card,.pet-card-close,.pet-menu,.pet-window .desktop-error,.ui-hint",
   );
   useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+  useEffect(() => {
     const w = getCurrentWindow();
     let alive = true;
     let layoutSeen = false;
@@ -167,6 +172,7 @@ export function DesktopPet() {
           setGesture(undefined);
           setActivity(old => old?.phase === "success" ? { ...old, phase: "idle" } : old);
           setMenu(false);
+          setError("");
           setPresence({
             phase: value.shown ? "enter" : "leave",
             key: ++presenceKey.current,
@@ -291,12 +297,14 @@ export function DesktopPet() {
       if (e.key === "Escape") {
         e.preventDefault();
         setMenu(false);
+        setError("");
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [menu]);
   async function hidePet() {
+    setError("");
     try {
       await invoke("desktop_preferences_save", {
         preferences: { pet: false },
@@ -308,12 +316,14 @@ export function DesktopPet() {
   }
   async function openTask(value: PetTask | null) {
     if (!value) return;
+    setError("");
     if (value.conversationId || value.source !== "quick")
       await invoke("desktop_main", { conversationId: value.conversationId });
     else await invoke("desktop_resume", { runId: value.runId });
   }
   async function stopTask() {
     if (!task || stopping || !isActiveRun(task.runStatus)) return;
+    setError("");
     const value = task;
     setStopping(value.runId);
     try {
@@ -325,6 +335,7 @@ export function DesktopPet() {
     finally { setStopping(""); }
   }
   function startChat(voice = false) {
+    setError("");
     void invoke("desktop_chat", { newChat: !voice, voice }).catch(error => setError(desktopError(error)));
   }
   const avatarSize = (82 * layout.size) / 100;
@@ -363,9 +374,10 @@ export function DesktopPet() {
         </section>
       )}
       {error && (
-        <p className="desktop-error" role="alert">
-          {error}
-        </p>
+        <div className="desktop-error" role="alert">
+          <span>{error}</span>
+          <Hint label="关闭提示"><button className="pet-error-close" aria-label="关闭提示" onClick={() => setError("")}><X size={14} /></button></Hint>
+        </div>
       )}
       {menu && (
         <div className="pet-menu" role="menu">
@@ -472,7 +484,7 @@ export function DesktopPet() {
             <span className="pet-toolbar-divider" />
             <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startChat(true)}><AudioLines size={16} /></button></Hint>
             <span className="pet-toolbar-divider" />
-            <Hint label="提醒和任务"><button aria-label="提醒和任务" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setCollapsed(false); }}><Bell size={16} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
+            <Hint label="提醒和任务"><button aria-label="提醒和任务" aria-expanded={notificationsOpen} onClick={() => { setError(""); setNotificationsOpen(value => !value); setCollapsed(false); }}><Bell size={16} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
           </div>
         )}
       </div>

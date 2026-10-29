@@ -862,13 +862,22 @@ html[data-desktop] .quick-bar textarea[readonly] {
 }
 .pet-window > .desktop-error {
   position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   left: 8px;
   right: 8px;
   top: 5px;
   padding: 8px 12px;
-  background: #302724;
+  background: var(--ui-color-surface);
+  border: 1px solid var(--ui-color-border);
   border-radius: 12px;
+  color: var(--ui-color-danger) !important;
+  pointer-events: auto;
 }
+.pet-window > .desktop-error > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+html[data-desktop] .pet-error-close { flex-shrink: 0; width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 3px; color: var(--ui-color-text-muted); }
+html[data-desktop] .pet-error-close:hover { background: var(--surface-hover); color: var(--ui-color-text); }
 @media (max-width: 600px) {
   .speech-dialog-footer {
     flex-wrap: wrap;

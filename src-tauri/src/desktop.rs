@@ -631,9 +631,6 @@ pub fn desktop_chat(app: tauri::AppHandle, new_chat: Option<bool>, voice: Option
     if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
         return Ok(());
     }
-    if voice.unwrap_or(false) && app.state::<Desktop>().quick_busy.load(Ordering::Relaxed) {
-        return Err("当前桌面问答正在处理，请先完成或停止任务。".into());
-    }
     finish_capture(&app, None);
     if new_chat.unwrap_or(false) || app.state::<Desktop>().ask_session.lock().unwrap().is_empty() {
         begin_ask_session(&app)?;
@@ -641,6 +638,8 @@ pub fn desktop_chat(app: tauri::AppHandle, new_chat: Option<bool>, voice: Option
     set_quick_mode(&app, true);
     show_floating_quick(&app)?;
     if voice.unwrap_or(false) {
+        // Open the editor first. Its current run/upload/recording state decides
+        // whether to start recording; a cached busy flag must not block reopening.
         enqueue_quick(&app, "voice", None, None, None, None);
     }
     Ok(())
