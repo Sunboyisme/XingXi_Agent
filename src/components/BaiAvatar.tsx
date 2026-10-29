@@ -5,9 +5,14 @@ import { AVATAR_SUCCESS_MS, type AvatarActivity, type AvatarGesture } from "../l
 
 type AvatarMotion = "idle" | "thinking" | "still";
 const gestureDurations = { press: 700, pet: 850, drag: Infinity, drop: 500 };
+const blinkGestureDurations = { ...gestureDurations, press: 1000 };
 const restingEyes = {
   "--bai-eye-rest-left": RESTING_EYE_TRANSFORMS[0],
   "--bai-eye-rest-right": RESTING_EYE_TRANSFORMS[1],
+} as CSSProperties;
+const centeredEyes = {
+  "--bai-eye-rest-left": "translate(36.5px, 41px)",
+  "--bai-eye-rest-right": "translate(51.5px, 41px)",
 } as CSSProperties;
 
 export function BaiAvatar({
@@ -19,6 +24,7 @@ export function BaiAvatar({
   gesture,
   presence,
   gazeRange = 160,
+  pressFeedback,
   label = "和XiaoXi打个招呼",
 }: {
   className?: string;
@@ -30,12 +36,14 @@ export function BaiAvatar({
   gesture?: AvatarGesture | null;
   presence?: "enter" | "leave" | "idle";
   gazeRange?: number;
+  pressFeedback?: "blink";
 }) {
   const [press, setPress] = useState<AvatarGesture>();
   const pressCount = useRef(0);
   const [, refreshClock] = useState(0);
   const now = Date.now();
-  const activeGesture = [gesture, press].find(value => value && now < value.startedAt + gestureDurations[value.kind]);
+  const durations = pressFeedback === "blink" ? blinkGestureDurations : gestureDurations;
+  const activeGesture = [gesture, press].find(value => value && now < value.startedAt + durations[value.kind]);
   const success = activity?.phase === "success" && now < activity.startedAt + AVATAR_SUCCESS_MS;
   const working = activity ? activity.phase === "working" : motion === "thinking";
   const suspended = presence === "enter" || presence === "leave";
@@ -50,7 +58,7 @@ export function BaiAvatar({
   const blockedGaze = suspended || Boolean(reaction) || working;
   const deadline = Math.min(
     success ? activity!.startedAt + AVATAR_SUCCESS_MS : Infinity,
-    activeGesture ? activeGesture.startedAt + gestureDurations[activeGesture.kind] : Infinity,
+    activeGesture ? activeGesture.startedAt + durations[activeGesture.kind] : Infinity,
   );
   useEffect(() => {
     if (!Number.isFinite(deadline)) return;
@@ -75,9 +83,11 @@ export function BaiAvatar({
       data-motion={motion}
       data-reaction={reaction}
       data-press-variant={activeGesture?.variant}
+      data-press-feedback={pressFeedback}
       data-working={displayWorking || undefined}
       data-presence={presence}
-      style={{ ...restingEyes,
+      style={{ ...(pressFeedback === "blink" && reaction === "press" ? centeredEyes : restingEyes),
+        "--bai-press-duration": `${durations.press}ms`,
         "--bai-reaction-delay": `${reactionDelay}ms`,
         "--bai-work-delay": `${workDelay}ms`,
       } as CSSProperties}

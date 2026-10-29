@@ -404,6 +404,7 @@ export function DesktopPet() {
             gesture={gesture}
             presence={presence.phase}
             gazeRange={Infinity}
+            pressFeedback="blink"
             onClick={(event) => {
               if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; return false; }
               void invoke("desktop_main", { newChat: true }).catch(error => setError(desktopError(error)));

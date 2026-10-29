@@ -21,6 +21,15 @@
 .avatar-interaction:active .bai-avatar:not([data-reaction]):not([data-working]):not([data-presence="enter"]):not([data-presence="leave"]) .bai-avatar-response { transform:translateY(2px) scale(1.08,.9); }
 .bai-avatar[data-reaction="press"] .bai-avatar-response { animation:bai-avatar-happy 700ms ease both; animation-delay:var(--bai-reaction-delay,0ms); }
 .bai-avatar[data-reaction="press"][data-press-variant="wave"] .bai-avatar-response { animation-name:bai-avatar-wave; }
+.bai-avatar[data-press-feedback="blink"][data-reaction="press"] .bai-avatar-response {
+  transform-origin:50% 50%;
+  animation:bai-avatar-touch-spring var(--bai-press-duration,1000ms) cubic-bezier(.25,.7,.3,1) both;
+  animation-delay:var(--bai-reaction-delay,0ms);
+}
+.bai-avatar[data-press-feedback="blink"][data-reaction="press"] .bai-avatar-eyes {
+  animation:bai-avatar-touch-blink var(--bai-press-duration,1000ms) ease-in-out both;
+  animation-delay:var(--bai-reaction-delay,0ms);
+}
 .bai-avatar[data-reaction="pet"] .bai-avatar-response { animation:bai-avatar-pet 850ms ease-in-out both; animation-delay:var(--bai-reaction-delay,0ms); }
 .bai-avatar[data-reaction="pet"] .bai-avatar-eyes { animation:none; transform:scaleY(.23); }
 .bai-avatar[data-reaction="drag"] .bai-avatar-response { transform:rotate(var(--bai-tilt,0deg)) scale(.94,1.08); transition:transform 100ms ease-out; }
@@ -48,6 +57,19 @@
   0%,100% { transform:rotate(0) scale(1); }
   20%,60% { transform:rotate(-7deg) scale(1.06,.94); }
   40%,80% { transform:rotate(6deg) scale(1.06,.94); }
+}
+@keyframes bai-avatar-touch-spring {
+  0%,100% { transform:scale(1); }
+  10% { transform:translateY(1%) scale(1.08,.9); }
+  28% { transform:translateY(-1%) scale(1.24); }
+  44% { transform:translateY(-1%) scale(1.2); }
+  62% { transform:translateY(1%) scale(.91,.96); }
+  76% { transform:scale(1.1,1.06); }
+  88% { transform:scale(.98,.99); }
+}
+@keyframes bai-avatar-touch-blink {
+  0%,14%,40%,100% { transform:scaleY(1); }
+  24%,28% { transform:scaleY(.1); }
 }
 @keyframes bai-avatar-drop {
   0% { transform:scale(.94,1.08); }
@@ -90,4 +112,6 @@
   .bai-avatar .bai-avatar-eye[data-eye="right"] { transform:var(--bai-eye-rest-right) !important; }
   .bai-avatar[data-working] .bai-avatar-gaze { transform:none; }
   .bai-avatar[data-reaction="pet"] .bai-avatar-eyes { transform:scaleY(.23); }
+  .bai-avatar[data-press-feedback="blink"][data-reaction="press"] .bai-avatar-response { animation:none; }
+  .bai-avatar[data-press-feedback="blink"][data-reaction="press"] .bai-avatar-eyes { animation:none; transform:scaleY(.1); }
 }
