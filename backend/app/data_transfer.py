@@ -115,7 +115,7 @@ def create_archive():
             # Never move MCP environment variables, provider setup or channel binding.
             for table in LOCAL_TABLES:
                 connection.execute(f'DELETE FROM "{table}"')
-            connection.execute("UPDATE projects SET workspace_path=''")
+            connection.execute("UPDATE projects SET workspace_path='', workspace_paths='[]'")
             clear_local_references(connection)
             connection.commit()
             connection.execute("VACUUM")
@@ -306,7 +306,7 @@ def validate(stage):
         ).fetchone():
             raise ValueError("数据库校验失败")
         # A portable archive cannot grant filesystem access on another machine.
-        incoming.execute("UPDATE projects SET workspace_path=''")
+        incoming.execute("UPDATE projects SET workspace_path='', workspace_paths='[]'")
         clear_local_references(incoming)
         values = counts(incoming)
         for (storage_name,) in incoming.execute("SELECT storage_name FROM knowledge_documents"):

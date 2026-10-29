@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { ArrowLeft, FolderOpen, RefreshCw, Trash2, Upload, CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
+import { ArrowLeft, FolderOpen, Plus, RefreshCw, Trash2, Upload, X, CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
 import { api, fetchApi, type Conversation, type Project } from "@/lib/api";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -11,6 +11,7 @@ import { FileCard } from "./OfficeFiles";
 import { Picture } from "./ImageAttachments";
 import "@/styles/projects-workspace.css";
 import { errorMessage } from "@/lib/utils";
+import { useNativeDrop } from "@/lib/nativeDrop";
 
 export type ProjectManagementRequest = {
   id: string | null;
@@ -73,8 +74,9 @@ export function ProjectManagement({
   const [library, setLibrary] = useState<Project | null>(null);
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [workspacePath, setWorkspacePath] = useState("");
+  const [workspacePaths, setWorkspacePaths] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
+  const [droppingFolders, setDroppingFolders] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -90,11 +92,22 @@ export function ProjectManagement({
   const editorSequence = useRef(0);
   const handledRequest = useRef<ProjectManagementRequest | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const folderDropTarget = useRef<HTMLElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const current = conversations.find((item) => item.id === currentId);
   const libraryRef = useRef(library);
   libraryRef.current = library;
   const editorOpen = editing !== undefined;
+  useNativeDrop(
+    folderDropTarget,
+    (files) => appendWorkspaceFolders(files.map((file) => file.path)),
+    setError,
+    false,
+    !editorOpen || !request || picking || busy,
+    `project-folders:${request?.key ?? "closed"}`,
+    setDroppingFolders,
+    true,
+  );
 
   useEffect(() => {
     onEditorOpenChange?.(editorOpen || Boolean(library));
@@ -103,6 +116,7 @@ export function ProjectManagement({
     if (!request) {
       editorSequence.current++;
       setEditing(undefined);
+      setDroppingFolders(false);
     }
   }, [request]);
 
@@ -122,6 +136,7 @@ export function ProjectManagement({
     setConfirmBatch(false);
     setError("");
     setNotice("");
+    setDroppingFolders(false);
     if (
       request.action === "create" ||
       (project && request.action === "settings")
@@ -129,7 +144,7 @@ export function ProjectManagement({
       setEditing(project || null);
       setName(project?.name || "");
       setInstructions(project?.instructions || "");
-      setWorkspacePath(project?.workspace_path || "");
+      setWorkspacePaths(project?.workspace_paths || []);
     } else if (project && request.action === "library") {
       setLibrary(project);
       setBatch(false);
@@ -234,23 +249,40 @@ export function ProjectManagement({
   function closeEditor() {
     editorSequence.current++;
     setEditing(undefined);
+    setDroppingFolders(false);
+  }
+  function appendWorkspaceFolders(values: string[]) {
+    setError("");
+    const unique = new Map(
+      workspacePaths.map((path) => [
+        path.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase(),
+        path,
+      ]),
+    );
+    for (const path of values) {
+      const key = path.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
+      if (!unique.has(key)) unique.set(key, path);
+    }
+    if (unique.size > 20) {
+      setError("每个项目最多关联 20 个本地文件夹，请减少选择后重试。");
+      return;
+    }
+    setWorkspacePaths([...unique.values()]);
   }
   async function chooseWorkspace() {
-    if (!isTauri() || !editorOpen || picking || busy) return;
+    if (!isTauri() || !editorOpen || picking || droppingFolders || busy) return;
     const own = editorSequence.current;
     setPicking(true);
     setError("");
     try {
-      const value = await invoke<string | null>("pick_project_workspace", {
-        initialPath: workspacePath || null,
+      const value = await invoke<string[] | null>("pick_project_workspaces", {
+        initialPath: workspacePaths.at(-1) || null,
       });
-      if (own === editorSequence.current && value !== null)
-        setWorkspacePath(value);
+      if (own !== editorSequence.current || value === null) return;
+      appendWorkspaceFolders(value);
     } catch (cause) {
       if (own === editorSequence.current)
-        setError(
-          `无法选择文件夹：${errorMessage(cause)}`,
-        );
+        setError(`无法选择文件夹：${errorMessage(cause)}`);
     } finally {
       setPicking(false);
     }
@@ -289,8 +321,9 @@ export function ProjectManagement({
       )}
       {editorOpen && (
         <CreationPage
+          className="project-creation"
           title={editing ? "编辑项目" : "新建项目"}
-          description="一个项目的专属空间，相关的对话和资料都会作为 XiaoXi 的参考内容。"
+          description="集中管理相关对话与资料，作为 XiaoXi 的项目参考。"
           backLabel="返回"
           onBack={closeEditor}
           busy={busy}
@@ -301,7 +334,7 @@ export function ProjectManagement({
                 取消
               </Button>
               <Button
-                disabled={busy || picking || !name.trim()}
+                disabled={busy || picking || droppingFolders || !name.trim()}
                 onClick={() =>
                   void mutate(async () => {
                     const creating = !editing;
@@ -311,7 +344,7 @@ export function ProjectManagement({
                       {
                         name: name.trim(),
                         instructions,
-                        workspace_path: workspacePath.trim(),
+                        workspace_paths: workspacePaths,
                       },
                     );
                     closeEditor();
@@ -324,70 +357,115 @@ export function ProjectManagement({
             </>
           }
         >
-          <label>
-            项目名称
-            <Input
-              value={name}
-              maxLength={200}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <label>
-            项目说明（可选）
-            <Textarea
-              value={instructions}
-              maxLength={12000}
-              rows={6}
-              placeholder="项目目标、背景和回答要求…"
-              onChange={(event) => setInstructions(event.target.value)}
-            />
-          </label>
-          <section className="plain-section">
+          <div className="project-creation-basics">
+            <label>
+              项目名称
+              <Input
+                value={name}
+                maxLength={200}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <label>
+              项目说明（可选）
+              <Textarea
+                value={instructions}
+                maxLength={12000}
+                rows={3}
+                placeholder="项目目标、背景和回答要求…"
+                onChange={(event) => setInstructions(event.target.value)}
+              />
+            </label>
+          </div>
+          <section
+            ref={folderDropTarget}
+            className="project-creation-folders"
+            aria-busy={picking || droppingFolders}
+            onDragOver={(event) => {
+              if (!isTauri()) event.preventDefault();
+            }}
+            onDrop={(event) => {
+              if (!isTauri()) {
+                event.preventDefault();
+                setError("请在桌面端拖入本地文件夹。");
+              }
+            }}
+          >
             <header>
-              <h3>关联本地文件夹</h3>
-              <p>可选，指定项目可读取的本地资料位置。</p>
-            </header>
-            <div className="project-workspace-field" aria-busy={picking}>
-              <label htmlFor="shared-project-workspace">本地工作路径</label>
-              <Hint label={workspacePath || "尚未选择文件夹"}><Input
-                id="shared-project-workspace"
-                readOnly
-                value={workspacePath}
-                placeholder="尚未选择文件夹"
-              /></Hint>
-              <div className="project-workspace-actions">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!isTauri() || busy || picking}
-                  onClick={() => void chooseWorkspace()}
-                >
-                  <FolderOpen size={14} />
-                  {picking
-                    ? "正在选择…"
-                    : workspacePath
-                      ? "更换文件夹"
-                      : "选择文件夹"}
-                </Button>
-                {workspacePath && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy || picking}
-                    onClick={() => setWorkspacePath("")}
-                  >
-                    清除
-                  </Button>
-                )}
+              <div>
+                <h3>关联本地文件夹</h3>
+                <p>可选 · 已选择 {workspacePaths.length} / 20</p>
               </div>
-              <small className="project-workspace-hint">
-                {isTauri()
-                  ? "可选。此项目的对话可以只读扫描和读取；清除后保存可取消访问。"
-                  : "请在桌面端选择本地文件夹。清除后保存可取消访问。"}
-              </small>
-            </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  !isTauri() || busy || picking || droppingFolders || workspacePaths.length >= 20
+                }
+                onClick={() => void chooseWorkspace()}
+              >
+                <Plus size={14} />
+                {picking ? "正在选择…" : droppingFolders ? "正在添加…" : "添加文件夹"}
+              </Button>
+            </header>
+            {workspacePaths.length ? (
+              <ul
+                className="project-folder-list"
+                aria-label="已关联的本地文件夹"
+              >
+                {workspacePaths.map((path) => (
+                  <li key={path}>
+                    <FolderOpen size={16} aria-hidden="true" />
+                    <Hint
+                      label={
+                        <>
+                          <strong>{path}</strong>
+                          <span>仅供此项目只读访问</span>
+                        </>
+                      }
+                    >
+                      <span className="project-folder-copy" tabIndex={0}>
+                        <strong>
+                          {path.split(/[\\/]/).filter(Boolean).at(-1) || path}
+                        </strong>
+                        <small>{path}</small>
+                      </span>
+                    </Hint>
+                    <Hint label="移除关联，保存后生效">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`移除文件夹 ${path}`}
+                        disabled={busy || picking || droppingFolders}
+                        onClick={() =>
+                          setWorkspacePaths((paths) =>
+                            paths.filter((item) => item !== path),
+                          )
+                        }
+                      >
+                        <X size={15} />
+                      </button>
+                    </Hint>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="project-folders-empty">
+                <FolderOpen size={24} aria-hidden="true" />
+                <p>拖入文件夹到此处，或点击添加；支持同时添加多个。</p>
+              </div>
+            )}
+            <p className="project-workspace-hint">
+              {isTauri()
+                ? "仅供此项目读取。移除关联并保存后取消访问。"
+                : "请在桌面端添加本地文件夹。"}
+            </p>
           </section>
-          {error && <p role="alert">{error}</p>}
+          {error && (
+            <p className="project-creation-error" role="alert">
+              {error}
+            </p>
+          )}
         </CreationPage>
       )}
       <ConfirmDelete

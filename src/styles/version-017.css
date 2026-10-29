@@ -330,20 +330,6 @@
 .conversation-link[data-dragging="true"] {
   opacity: 0.45;
 }
-.project-workspace-field {
-  min-width: 0;
-}
-.project-workspace-field > [data-slot="input"] {
-  margin-top: 8px;
-  text-overflow: ellipsis;
-}
-.project-workspace-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
 .project-workspace-hint {
   display: block;
   margin-top: 7px;

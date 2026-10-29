@@ -123,10 +123,11 @@ def authorize(value, run_id, conversation_id):
     with Session() as db:
         chat = db.get(Conversation, conversation_id) if conversation_id else None
         project = db.get(Project, chat.project_id) if chat and chat.profile_id == PROFILE_ID and chat.project_id else None
-        if project and project.profile_id == PROFILE_ID and project.workspace_path:
-            permitted = _directory_permission(requested, project.workspace_path)
-            if permitted is not None:
-                return permitted
+        if project and project.profile_id == PROFILE_ID:
+            for folder in project.workspace_paths:
+                permitted = _directory_permission(requested, folder)
+                if permitted is not None:
+                    return permitted
         source = task_context.user_message(db, run_id, conversation_id)
         if source is None:
             raise ValueError("当前聊天没有可核对的用户路径，请先在聊天中提供文件或文件夹的完整路径")

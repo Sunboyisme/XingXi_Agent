@@ -3834,6 +3834,8 @@ export interface components {
              * @default
              */
             workspace_path: string;
+            /** Workspace Paths */
+            workspace_paths: string[];
         };
         /** ProjectWrite */
         ProjectWrite: {
@@ -3849,6 +3851,8 @@ export interface components {
              * @default
              */
             workspace_path: string;
+            /** Workspace Paths */
+            workspace_paths?: string[];
         };
         /** ProviderPresetRead */
         ProviderPresetRead: {

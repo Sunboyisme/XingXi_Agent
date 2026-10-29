@@ -106,12 +106,32 @@ export function ProjectOverview({
               </DetailDialog>
             )}
           </div>
-          {project.workspace_path && (
-            <HintText as="p" label={project.workspace_path}
+          {project.workspace_paths.length > 0 && (
+            <HintText
+              as="p"
+              label={
+                <>
+                  <strong>关联的本地文件夹</strong>
+                  {project.workspace_paths.slice(0, 3).map((path) => (
+                    <span key={path}>{path}</span>
+                  ))}
+                  {project.workspace_paths.length > 3 && (
+                    <span>
+                      另有 {project.workspace_paths.length - 3}{" "}
+                      个，可在项目设置中查看
+                    </span>
+                  )}
+                  <span>只读</span>
+                </>
+              }
               className="project-workspace-path"
             >
               <Folder size={14} />
-              <span>{project.workspace_path}</span>
+              <span>
+                {project.workspace_paths.length === 1
+                  ? project.workspace_paths[0]
+                  : `${project.workspace_paths.length} 个本地文件夹`}
+              </span>
               <small>只读</small>
             </HintText>
           )}

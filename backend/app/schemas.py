@@ -347,12 +347,14 @@ class ProjectWrite(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     instructions: str = Field(default="", max_length=12000)
     workspace_path: str = Field(default="", max_length=4096)
+    workspace_paths: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ProjectRead(RecordRead):
     name: str
     instructions: str
     workspace_path: str = ""
+    workspace_paths: list[str]
 
 
 class ProjectMaterialCreate(BaseModel):

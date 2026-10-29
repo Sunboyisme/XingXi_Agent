@@ -69,3 +69,175 @@
   .project-overview-fixed .project-overview-header h1 { margin: 5px 0; font-size: 24px; }
   .project-overview-fixed .project-workspace-path { margin-top: 7px; }
 }
+.project-creation .creation-page-inner {
+  width: min(100%, 1040px);
+  padding: 18px 32px 24px;
+}
+.project-creation .creation-page-heading {
+  margin: 12px 0 22px;
+}
+.project-creation h1 {
+  font-size: 26px;
+}
+.project-creation .creation-page-heading p {
+  margin-top: 7px;
+  font-size: 13px;
+}
+.project-creation .creation-fields {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px 32px;
+}
+.project-creation-basics,
+.project-creation-basics > label {
+  display: grid;
+  min-width: 0;
+}
+.project-creation-basics {
+  gap: 18px;
+}
+.project-creation-basics > label {
+  gap: 8px;
+  font-size: 13px;
+}
+.project-creation .creation-fields textarea {
+  height: 132px;
+  min-height: 96px;
+  max-height: 180px;
+  resize: vertical;
+}
+.project-creation-folders {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.project-creation-folders.image-drag-over::after {
+  content: "松开以关联本地文件夹";
+  inset: -6px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.project-creation-folders > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.project-creation-folders h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--ui-color-heading);
+}
+.project-creation-folders header p {
+  margin: 5px 0 0;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.project-folder-list {
+  min-height: 0;
+  max-height: 196px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+}
+.project-folder-list > li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.project-folder-list > li > svg {
+  flex-shrink: 0;
+  color: var(--ui-color-action);
+}
+.project-folder-list .icon-button {
+  flex-shrink: 0;
+}
+.project-folder-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+.project-folder-copy > strong,
+.project-folder-copy > small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.project-folder-copy > strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.project-folder-copy > small {
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+}
+.project-folder-copy:focus-visible {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.project-folders-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 30px 18px;
+  border: 1px dashed var(--ui-color-line);
+  border-radius: 12px;
+  color: var(--ui-color-text-muted);
+}
+.project-folders-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+.project-creation .project-workspace-hint {
+  margin: 0;
+  font-size: 11px;
+}
+.project-creation-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ui-color-danger);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.project-creation .creation-page-footer {
+  padding: 12px 32px;
+}
+.project-creation .creation-page-footer > div {
+  max-width: 976px;
+}
+@media (max-width: 850px) {
+  .project-creation .creation-page-inner {
+    padding: 12px 24px 18px;
+  }
+  .project-creation .creation-page-heading {
+    margin: 8px 0 16px;
+  }
+  .project-creation .creation-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .project-creation-basics {
+    gap: 12px;
+  }
+  .project-creation .creation-fields textarea {
+    height: 80px;
+    min-height: 80px;
+    max-height: 100px;
+  }
+  .project-folder-list {
+    max-height: 118px;
+  }
+  .project-folders-empty {
+    padding: 16px;
+  }
+}

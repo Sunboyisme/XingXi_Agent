@@ -61,21 +61,25 @@ fn finish_learning_close(app: tauri::AppHandle, quit: bool) -> Result<(), String
 }
 
 #[tauri::command]
-async fn pick_project_workspace(initial_path: Option<String>) -> Result<Option<String>, String> {
-    let mut dialog = rfd::AsyncFileDialog::new().set_title("选择项目本地工作文件夹");
+async fn pick_project_workspaces(initial_path: Option<String>) -> Result<Option<Vec<String>>, String> {
+    let mut dialog = rfd::AsyncFileDialog::new().set_title("选择项目本地文件夹（按住 Ctrl 可多选）");
     if let Some(path) = initial_path.filter(|value| !value.is_empty()) {
         let path = PathBuf::from(path);
         if path.is_absolute() && path.is_dir() {
             dialog = dialog.set_directory(path);
         }
     }
-    let Some(folder) = dialog.pick_folder().await else {
+    let Some(folders) = dialog.pick_folders().await else {
         return Ok(None);
     };
-    if !folder.path().is_dir() {
-        return Err("所选文件夹已失效，请重新选择".into());
+    let mut paths = Vec::with_capacity(folders.len());
+    for folder in folders {
+        if !folder.path().is_dir() {
+            return Err("所选文件夹已失效，请重新选择".into());
+        }
+        paths.push(folder.path().to_string_lossy().into_owned());
     }
-    Ok(Some(folder.path().to_string_lossy().into_owned()))
+    Ok(Some(paths))
 }
 
 #[tauri::command]
@@ -495,7 +499,7 @@ fn main() {
             drop_files::read_dropped_files,
             quit_app,
             finish_learning_close,
-            pick_project_workspace,
+            pick_project_workspaces,
             save_data_export,
             save_office_file,
             download_office_file,

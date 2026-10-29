@@ -76,9 +76,11 @@ fn collect(path: &Path, parent: &str, recursive: bool, depth: usize, rows: &mut 
 }
 
 #[tauri::command]
-pub async fn read_dropped_files(state: tauri::State<'_, DroppedPaths>, paths: Vec<String>, recursive: bool) -> Result<Vec<DropFile>, String> {
+pub async fn read_dropped_files(state: tauri::State<'_, DroppedPaths>, paths: Vec<String>, recursive: bool, folders_only: Option<bool>) -> Result<Vec<DropFile>, String> {
     let requested: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
-    if (!recursive && requested.len() > 4) || requested.len() > 500 { return Err("拖入项目过多，请分批添加".into()); }
+    let folders_only = folders_only.unwrap_or(false);
+    let limit = if folders_only { 20 } else if recursive { 500 } else { 4 };
+    if requested.len() > limit { return Err("拖入项目过多，请分批添加".into()); }
     {
         let mut allowed = state.0.lock().map_err(|_| "拖入文件状态不可用")?;
         if requested.is_empty() || requested.iter().any(|path| !allowed.contains(path)) { return Err("请重新拖入文件或文件夹".into()); }
@@ -91,7 +93,10 @@ pub async fn read_dropped_files(state: tauri::State<'_, DroppedPaths>, paths: Ve
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut seen = HashSet::new();
         for path in requested {
-            if seen.insert(path.clone()) { collect(&path, "", recursive, 0, &mut rows, &mut total, &mut visited, deadline)?; }
+            if folders_only && !path.is_dir() {
+                return Err("请拖入本地文件夹；单个文件可在项目资料库中添加".into());
+            }
+            if seen.insert(path.clone()) { collect(&path, "", recursive && !folders_only, 0, &mut rows, &mut total, &mut visited, deadline)?; }
         }
         Ok(rows)
     }).await.map_err(|_| "读取拖入文件失败".to_string())?

@@ -66,8 +66,6 @@
 .creation-fields .plain-section { margin: 0; padding: 26px 0 0; border-top: 1px solid var(--ui-color-line); display: grid; gap: 22px; }
 .creation-fields .plain-section > header { display: grid; gap: 8px; margin: 0; }
 .creation-fields .plain-section h3, .creation-fields .plain-section p { margin: 0; }
-.creation-fields .project-workspace-field { display: grid; gap: 10px; }
-.creation-fields .project-workspace-actions { margin: 0; }
 .usage-cache-help { color: var(--ui-color-text-muted); font-size: 12px; line-height: 1.8; margin: 18px 0; }
 .office-preview-body > .markdown { font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; }
 @media (max-height: 600px) {
