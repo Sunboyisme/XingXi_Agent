@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { lazy, Suspense } from "react";
+import { initializeDesktopSelectionBridge } from "./lib/desktopBridge";
 import { App } from "./App";
 import { initializeAppearance } from "./lib/appearance";
 import "./style.css";
@@ -23,10 +25,16 @@ import "./styles/screenshot-feedback.css";
 import "./styles/model-picker.css";
 
 const stopAppearance = initializeAppearance();
+const stopDesktopSelection = initializeDesktopSelectionBridge();
+import.meta.hot?.dispose(stopDesktopSelection);
 import.meta.hot?.dispose(stopAppearance);
+const desktopView = new URLSearchParams(location.search).get("view") || "";
+const isDesktopSurface = ["quick", "capture", "selection", "pet"].includes(desktopView) || desktopView.startsWith("pin-");
+if (isDesktopSurface) document.documentElement.dataset.desktop = desktopView;
+const DesktopRoot = lazy(() => import("./components/DesktopRoot").then(m => ({ default: m.DesktopRoot })));
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    {isDesktopSurface ? <Suspense fallback={null}><DesktopRoot view={desktopView} /></Suspense> : <App />}
   </React.StrictMode>,
 );

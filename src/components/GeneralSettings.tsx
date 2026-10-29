@@ -6,6 +6,7 @@ import {
 } from "@/lib/generalPreferences";
 import { ErrorNotice } from "./common";
 import { errorMessage } from "@/lib/utils";
+import { DesktopSettings } from "./DesktopSettings";
 
 type Autostart = { enabled: boolean; supported: boolean; reason: string };
 export function GeneralSettings() {
@@ -84,6 +85,7 @@ export function GeneralSettings() {
           <span>{preferences.inputSuggestions ? "已开启" : "已关闭"}</span>
         </label>
       </div>
+      <DesktopSettings />
       {error && <ErrorNotice message={error} />}
     </section>
   );

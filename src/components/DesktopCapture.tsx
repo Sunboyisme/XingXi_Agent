@@ -1,0 +1,871 @@
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  Pencil,
+  Minus,
+  ArrowUpRight,
+  Square,
+  Circle,
+  Type,
+  Grid2X2,
+  Undo2,
+  Redo2,
+  Pin,
+  ScanText,
+  Languages,
+  Download,
+  Copy,
+  X,
+  Check,
+  MousePointer2,
+  GripVertical,
+  Mic,
+  Plus,
+} from "lucide-react";
+import { BaiAvatar } from "./BaiAvatar";
+import { Hint } from "./common";
+import {
+  invoke,
+  emitTo,
+  desktopListen,
+  desktopError,
+  readQuickDraft,
+  saveQuickDraft,
+} from "@/lib/desktopAssistant";
+
+type Point = { x: number; y: number };
+type Rect = Point & { w: number; h: number };
+type Tool =
+  "move" | "pen" | "line" | "arrow" | "rect" | "ellipse" | "text" | "mosaic";
+type Mark = {
+  tool: Tool;
+  points: Point[];
+  color: string;
+  width: number;
+  size: number;
+  text?: string;
+};
+type Session = {
+  id: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  cursorX: number;
+  cursorY: number;
+  monitorX: number;
+  monitorY: number;
+  monitorWidth: number;
+  monitorHeight: number;
+};
+type Gesture = {
+  pointerId: number;
+  start: Point;
+  original?: Rect;
+  handle?: string;
+  mark?: Mark;
+};
+const rect = (a: Point, b: Point): Rect => ({
+  x: Math.min(a.x, b.x),
+  y: Math.min(a.y, b.y),
+  w: Math.abs(b.x - a.x),
+  h: Math.abs(b.y - a.y),
+});
+const inside = (r: Rect, p: Point) =>
+  p.x >= r.x && p.y >= r.y && p.x <= r.x + r.w && p.y <= r.y + r.h;
+const colors = [
+  "#ef4444",
+  "#facc15",
+  "#22c55e",
+  "#3b82f6",
+  "#ffffff",
+  "#111827",
+];
+const tools = [
+  ["move", "移动选区", MousePointer2],
+  ["pen", "画笔", Pencil],
+  ["line", "直线", Minus],
+  ["arrow", "箭头", ArrowUpRight],
+  ["rect", "矩形", Square],
+  ["ellipse", "椭圆", Circle],
+  ["text", "文字", Type],
+  ["mosaic", "马赛克", Grid2X2],
+] as const;
+
+function paint(
+  ctx: CanvasRenderingContext2D,
+  mark: Mark,
+  source: HTMLCanvasElement,
+) {
+  const a = mark.points[0],
+    b = mark.points.at(-1)!;
+  ctx.save();
+  ctx.strokeStyle = mark.color;
+  ctx.fillStyle = mark.color;
+  ctx.lineWidth = mark.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const r = rect(a, b);
+  if (mark.tool === "text") {
+    ctx.font = `${mark.size}px "Microsoft YaHei", sans-serif`;
+    ctx.textBaseline = "top";
+    (mark.text || "")
+      .split("\n")
+      .forEach((line, i) => ctx.fillText(line, a.x, a.y + i * mark.size * 1.4));
+  } else if (mark.tool === "mosaic" && r.w > 0 && r.h > 0) {
+    const small = document.createElement("canvas");
+    small.width = Math.max(1, Math.ceil(r.w / 12));
+    small.height = Math.max(1, Math.ceil(r.h / 12));
+    small
+      .getContext("2d")!
+      .drawImage(source, r.x, r.y, r.w, r.h, 0, 0, small.width, small.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, 0, 0, small.width, small.height, r.x, r.y, r.w, r.h);
+  } else if (mark.tool === "rect") ctx.strokeRect(r.x, r.y, r.w, r.h);
+  else if (mark.tool === "ellipse") {
+    ctx.beginPath();
+    ctx.ellipse(
+      r.x + r.w / 2,
+      r.y + r.h / 2,
+      r.w / 2,
+      r.h / 2,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    mark.points.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    if (mark.tool === "arrow") {
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      const size = Math.max(12, mark.width * 4);
+      ctx.beginPath();
+      ctx.moveTo(
+        b.x - size * Math.cos(angle - 0.5),
+        b.y - size * Math.sin(angle - 0.5),
+      );
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(
+        b.x - size * Math.cos(angle + 0.5),
+        b.y - size * Math.sin(angle + 0.5),
+      );
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+export function DesktopCapture() {
+  const [session, setSession] = useState<Session>();
+  const [selection, setSelection] = useState<Rect | null>(null);
+  const [marks, setMarks] = useState<Mark[]>([]);
+  const [redo, setRedo] = useState<Mark[][]>([]);
+  const [history, setHistory] = useState<Mark[][]>([]);
+  const [live, setLive] = useState<Mark | null>(null);
+  const [tool, setTool] = useState<Tool>("move");
+  const [color, setColor] = useState(colors[0]);
+  const [width, setWidth] = useState(3);
+  const [fontSize, setFontSize] = useState(24);
+  const [text, setText] = useState<{ at: Point; value: string } | null>(null);
+  const [draft, setDraft] = useState(() => readQuickDraft().text);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
+  const [toolbar, setToolbar] = useState<Point | null>(null);
+  const [viewport, setViewport] = useState({ w: innerWidth, h: innerHeight });
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const source = useRef<HTMLCanvasElement | null>(null);
+  const gesture = useRef<Gesture | null>(null);
+  const toolbarDrag = useRef<{
+    pointerId: number;
+    start: Point;
+    original: Point;
+  } | null>(null);
+  const toolbarElement = useRef<HTMLDivElement>(null);
+  const [toolbarSize, setToolbarSize] = useState({ w: 760, h: 44 });
+  const textInput = useRef<HTMLTextAreaElement>(null);
+  const launcherInput = useRef<HTMLTextAreaElement>(null);
+  const epoch = useRef(0);
+  const exportLock = useRef(false);
+  const commands = useRef({ undo, redoAction, finish, commitText });
+  commands.current = { undo, redoAction, finish, commitText };
+  const sx = session ? viewport.w / session.width : 1,
+    sy = session ? viewport.h / session.height : 1;
+  const styleRect = (r: Rect) => ({
+    left: r.x * sx,
+    top: r.y * sy,
+    width: r.w * sx,
+    height: r.h * sy,
+  });
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      const current = ++epoch.current;
+      let active = false;
+      setSelection(null);
+      setMarks([]);
+      setHistory([]);
+      setRedo([]);
+      setLive(null);
+      setText(null);
+      setTool("move");
+      setError("");
+      setBusy(false);
+      exportLock.current = false;
+      setToolbar(null);
+      gesture.current = null;
+      setDraft(readQuickDraft().text);
+      try {
+        const s = await invoke<Session>("capture_get");
+        active = true;
+        const raw = await invoke<ArrayBuffer | number[]>("capture_pixels", {
+          id: s.id,
+        });
+        if (!alive || current !== epoch.current) return;
+        const pixels = new Uint8ClampedArray(
+          raw instanceof ArrayBuffer ? raw : new Uint8Array(raw).buffer,
+        );
+        if (pixels.length !== s.width * s.height * 4)
+          throw new Error("截图像素不完整，请重新截图");
+        const bitmap = document.createElement("canvas");
+        bitmap.width = s.width;
+        bitmap.height = s.height;
+        bitmap
+          .getContext("2d")!
+          .putImageData(new ImageData(pixels, s.width, s.height), 0, 0);
+        source.current = bitmap;
+        setSession(s);
+        if (alive && current === epoch.current)
+          await invoke("capture_present", { id: s.id });
+      } catch (e) {
+        if (alive && current === epoch.current && active) {
+          setError(desktopError(e));
+          await emitTo("quick", "desktop-error", desktopError(e));
+          await invoke("capture_cancel");
+        }
+      }
+    }
+    const unlisten = desktopListen("capture-ready", () => void load());
+    void load();
+    const resize = () => setViewport({ w: innerWidth, h: innerHeight });
+    window.addEventListener("resize", resize);
+    const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.matches("textarea,input,select")) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        void invoke("capture_cancel");
+      } else if (e.ctrlKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) commands.current.redoAction();
+        else commands.current.undo();
+      } else if (e.ctrlKey && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        commands.current.redoAction();
+      } else if (e.ctrlKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        void commands.current.finish("copy");
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        void commands.current.finish("attach");
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => {
+      alive = false;
+      epoch.current++;
+      void unlisten.then((f) => f());
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("keydown", key);
+    };
+  }, []);
+  useEffect(() => {
+    if (text) textInput.current?.focus();
+  }, [Boolean(text)]);
+  useEffect(() => {
+    if (session) launcherInput.current?.focus();
+  }, [session?.id]);
+  useEffect(() => {
+    const node = toolbarElement.current;
+    if (!node) return;
+    const resize = new ResizeObserver(() =>
+      setToolbarSize({ w: node.offsetWidth, h: node.offsetHeight }),
+    );
+    resize.observe(node);
+    return () => resize.disconnect();
+  }, [Boolean(selection)]);
+  useEffect(() => {
+    if (!session || !source.current || !canvas.current) return;
+    const ctx = canvas.current.getContext("2d")!;
+    ctx.clearRect(0, 0, session.width, session.height);
+    ctx.drawImage(source.current, 0, 0);
+    ctx.fillStyle = "rgba(0,0,0,.38)";
+    ctx.fillRect(0, 0, session.width, session.height);
+    if (selection) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(selection.x, selection.y, selection.w, selection.h);
+      ctx.clip();
+      ctx.drawImage(source.current, 0, 0);
+      marks.forEach((m) => paint(ctx, m, source.current!));
+      if (live) paint(ctx, live, source.current);
+      ctx.restore();
+    }
+  }, [session, selection, marks, live]);
+  function addMark(mark: Mark) {
+    setHistory((h) => [...h, marks]);
+    setMarks((m) => [...m, mark]);
+    setRedo([]);
+  }
+  function undo() {
+    if (!history.length || exportLock.current) return;
+    setRedo((r) => [...r, marks]);
+    setMarks(history.at(-1)!);
+    setHistory((h) => h.slice(0, -1));
+  }
+  function redoAction() {
+    if (!redo.length || exportLock.current) return;
+    setHistory((h) => [...h, marks]);
+    setMarks(redo.at(-1)!);
+    setRedo((r) => r.slice(0, -1));
+  }
+  function commitText() {
+    if (!text) return;
+    if (text.value.trim())
+      addMark({
+        tool: "text",
+        points: [text.at],
+        color,
+        width,
+        size: fontSize,
+        text: text.value,
+      });
+    setText(null);
+  }
+  function point(e: ReactPointerEvent): Point {
+    return {
+      x: Math.max(0, Math.min(session?.width || 1, e.clientX / sx)),
+      y: Math.max(0, Math.min(session?.height || 1, e.clientY / sy)),
+    };
+  }
+  function begin(e: ReactPointerEvent, handle?: string) {
+    if (!session || busy || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const p = point(e);
+    setError("");
+    if (text) {
+      commitText();
+      return;
+    }
+    if (selection && tool === "text" && !handle && inside(selection, p)) {
+      setText({ at: p, value: "" });
+      return;
+    }
+    const original =
+      selection &&
+      (handle || tool === "move") &&
+      inside(
+        {
+          x: selection.x - 15 / sx,
+          y: selection.y - 15 / sy,
+          w: selection.w + 30 / sx,
+          h: selection.h + 30 / sy,
+        },
+        p,
+      )
+        ? { ...selection }
+        : undefined;
+    const mark =
+      selection && !original && inside(selection, p)
+        ? { tool, points: [p], color, width, size: fontSize }
+        : undefined;
+    gesture.current = {
+      pointerId: e.pointerId,
+      start: p,
+      original,
+      handle,
+      mark,
+    };
+    if (!original && !mark) {
+      setSelection({ ...p, w: 0, h: 0 });
+      setMarks([]);
+      setHistory([]);
+      setRedo([]);
+    }
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragging(true);
+  }
+  function move(e: ReactPointerEvent) {
+    setCursor({ x: e.clientX, y: e.clientY });
+    const g = gesture.current;
+    if (!g || !session || g.pointerId !== e.pointerId) return;
+    const p = point(e),
+      dx = p.x - g.start.x,
+      dy = p.y - g.start.y;
+    if (g.original) {
+      const r = g.original;
+      if (!g.handle)
+        setSelection({
+          ...r,
+          x: Math.max(0, Math.min(session.width - r.w, r.x + dx)),
+          y: Math.max(0, Math.min(session.height - r.h, r.y + dy)),
+        });
+      else {
+        let left = r.x,
+          top = r.y,
+          right = r.x + r.w,
+          bottom = r.y + r.h;
+        if (g.handle.includes("w"))
+          left = Math.max(0, Math.min(right - 2, left + dx));
+        if (g.handle.includes("e"))
+          right = Math.min(session.width, Math.max(left + 2, right + dx));
+        if (g.handle.includes("n"))
+          top = Math.max(0, Math.min(bottom - 2, top + dy));
+        if (g.handle.includes("s"))
+          bottom = Math.min(session.height, Math.max(top + 2, bottom + dy));
+        setSelection({ x: left, y: top, w: right - left, h: bottom - top });
+      }
+    } else if (g.mark) {
+      g.mark.points =
+        g.mark.tool === "pen" ? [...g.mark.points, p] : [g.start, p];
+      setLive({ ...g.mark });
+    } else setSelection(rect(g.start, p));
+  }
+  function end(e: ReactPointerEvent) {
+    const g = gesture.current;
+    if (!g || g.pointerId !== e.pointerId) return;
+    if (g.mark) addMark(g.mark);
+    gesture.current = null;
+    setLive(null);
+    setDragging(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+  async function finish(action: string) {
+    if (
+      !selection ||
+      selection.w < 2 ||
+      selection.h < 2 ||
+      !session ||
+      !source.current ||
+      exportLock.current
+    )
+      return;
+    if (text) {
+      commitText();
+      setError("文字已确认，请再次选择导出操作");
+      return;
+    }
+    exportLock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const output = document.createElement("canvas");
+      output.width = Math.round(selection.w);
+      output.height = Math.round(selection.h);
+      const ctx = output.getContext("2d")!;
+      ctx.translate(-selection.x, -selection.y);
+      ctx.drawImage(source.current, 0, 0);
+      marks.forEach((m) => paint(ctx, m, source.current!));
+      await invoke("capture_export", {
+        id: session.id,
+        dataUrl: output.toDataURL("image/png"),
+        action,
+        x: session.x + Math.round(selection.x),
+        y: session.y + Math.round(selection.y),
+      });
+    } catch (e) {
+      setError(desktopError(e));
+    } finally {
+      exportLock.current = false;
+      setBusy(false);
+    }
+  }
+  async function openQuick(action: "send" | "file" | "voice") {
+    const value = { ...readQuickDraft(), text: draft };
+    saveQuickDraft(value);
+    await emitTo("quick", "desktop-compose", { text: draft });
+    await invoke("capture_cancel");
+    await emitTo(
+      "quick",
+      action === "send"
+        ? "desktop-submit"
+        : action === "voice"
+          ? "desktop-record-click"
+          : "desktop-pick",
+      {},
+    );
+  }
+  const box = selection ? styleRect(selection) : null;
+  const barPosition = box
+    ? toolbar || {
+        x: Math.max(
+          8,
+          Math.min(
+            viewport.w - toolbarSize.w - 8,
+            box.left + box.width - toolbarSize.w,
+          ),
+        ),
+        y:
+          box.top + box.height + toolbarSize.h + 16 < viewport.h
+            ? box.top + box.height + 12
+            : Math.max(8, box.top - toolbarSize.h - 12),
+      }
+    : { x: 0, y: 0 };
+  const launcherWidth = session
+    ? Math.min(860, session.monitorWidth * sx - 24)
+    : Math.min(860, viewport.w - 24);
+  const launcherX = session
+    ? session.monitorX * sx + (session.monitorWidth * sx - launcherWidth) / 2
+    : 12;
+  const launcherY = session
+    ? session.monitorY * sy + session.monitorHeight * sy * 0.65
+    : viewport.h * 0.65;
+  return (
+    <main
+      className="capture-window"
+      onPointerMove={move}
+      onPointerUp={end}
+      onPointerCancel={end}
+    >
+      <canvas
+        ref={canvas}
+        className="capture-canvas"
+        width={session?.width || 1}
+        height={session?.height || 1}
+        onPointerDown={begin}
+      />
+      {!selection && (
+        <>
+          <span
+            className="capture-cursor-hint"
+            style={{
+              left: Math.min(viewport.w - 100, cursor.x + 18),
+              top: Math.min(viewport.h - 45, cursor.y + 22),
+            }}
+          >
+            拖拽截图
+          </span>
+          <div
+            className="capture-launcher quick-bar"
+            style={{ left: launcherX, top: launcherY, width: launcherWidth }}
+          >
+            <BaiAvatar interactive />
+            <textarea
+              ref={launcherInput}
+              aria-label="随心输入"
+              placeholder="随心输入"
+              value={draft}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                const value = { ...readQuickDraft(), text: e.target.value };
+                saveQuickDraft(value);
+                void emitTo("quick", "desktop-compose", {
+                  text: e.target.value,
+                });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") void invoke("capture_cancel");
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing &&
+                  e.keyCode !== 229
+                ) {
+                  e.preventDefault();
+                  void openQuick("send");
+                }
+              }}
+            />
+            <Hint label="添加桌面文件">
+              <button
+                aria-label="添加桌面文件"
+                onClick={() => void openQuick("file")}
+              >
+                <Plus size={22} />
+              </button>
+            </Hint>
+            <Hint
+              label={
+                <span>
+                  语音输入　按住 <kbd>右Alt</kbd>
+                </span>
+              }
+            >
+              <button
+                aria-label="语音输入"
+                onClick={() => void openQuick("voice")}
+              >
+                <Mic size={21} />
+              </button>
+            </Hint>
+            <Hint label="取消">
+              <button
+                aria-label="取消"
+                onClick={() => void invoke("capture_cancel")}
+              >
+                <X size={19} />
+              </button>
+            </Hint>
+          </div>
+        </>
+      )}
+      {selection && box && (
+        <div
+          className="capture-selection"
+          style={box}
+          onPointerDown={(e) => begin(e)}
+        >
+          <span className="capture-dimensions">
+            {Math.round(selection.w)} × {Math.round(selection.h)}
+          </span>
+          {["nw", "n", "ne", "e", "se", "s", "sw", "w"].map((h) => (
+            <button
+              key={h}
+              className={`capture-handle handle-${h}`}
+              aria-label={`调整截图范围 ${h}`}
+              onPointerDown={(e) => begin(e, h)}
+              onKeyDown={(e) => {
+                const delta = e.shiftKey ? 10 : 1;
+                const dx =
+                  e.key === "ArrowLeft"
+                    ? -delta
+                    : e.key === "ArrowRight"
+                      ? delta
+                      : 0;
+                const dy =
+                  e.key === "ArrowUp"
+                    ? -delta
+                    : e.key === "ArrowDown"
+                      ? delta
+                      : 0;
+                if (dx || dy) {
+                  e.preventDefault();
+                  setSelection((r) =>
+                    r && session
+                      ? {
+                          ...r,
+                          x: Math.max(
+                            0,
+                            Math.min(session.width - r.w, r.x + dx),
+                          ),
+                          y: Math.max(
+                            0,
+                            Math.min(session.height - r.h, r.y + dy),
+                          ),
+                        }
+                      : r,
+                  );
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
+      {text && (
+        <textarea
+          ref={textInput}
+          className="capture-text"
+          aria-label="截图文字"
+          style={{
+            left: text.at.x * sx,
+            top: text.at.y * sy,
+            color,
+            fontSize: fontSize * sx,
+          }}
+          value={text.value}
+          onChange={(e) => setText((t) => t && { ...t, value: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setText(null);
+            } else if (
+              e.ctrlKey &&
+              e.key === "Enter" &&
+              !e.nativeEvent.isComposing
+            ) {
+              e.preventDefault();
+              commitText();
+            }
+          }}
+        />
+      )}
+      {selection && selection.w >= 2 && !dragging && (
+        <div
+          ref={toolbarElement}
+          className="capture-toolbar"
+          style={{
+            left: Math.max(
+              8,
+              Math.min(viewport.w - toolbarSize.w - 8, barPosition.x),
+            ),
+            top: Math.max(
+              8,
+              Math.min(viewport.h - toolbarSize.h - 8, barPosition.y),
+            ),
+          }}
+        >
+          <button
+            aria-label="拖动工具栏"
+            className="toolbar-grip"
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              toolbarDrag.current = {
+                pointerId: e.pointerId,
+                start: { x: e.clientX, y: e.clientY },
+                original: barPosition,
+              };
+            }}
+            onPointerMove={(e) => {
+              const g = toolbarDrag.current;
+              if (g?.pointerId === e.pointerId)
+                setToolbar({
+                  x: g.original.x + e.clientX - g.start.x,
+                  y: g.original.y + e.clientY - g.start.y,
+                });
+            }}
+            onPointerUp={() => {
+              toolbarDrag.current = null;
+            }}
+          >
+            <GripVertical size={17} />
+          </button>
+          {tools.map(([id, label, Icon]) => (
+            <Hint key={id} label={label}>
+              <button
+                aria-label={label}
+                aria-pressed={tool === id}
+                onClick={() => {
+                  commitText();
+                  setTool(id);
+                }}
+              >
+                <Icon size={18} />
+              </button>
+            </Hint>
+          ))}
+          <label className="capture-option">
+            线宽
+            <select
+              aria-label="线宽"
+              value={width}
+              onChange={(e) => setWidth(Number(e.target.value))}
+            >
+              {[2, 3, 5, 8].map((n) => (
+                <option key={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <label className="capture-option">
+            字号
+            <select
+              aria-label="字号"
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+            >
+              {[16, 20, 24, 32, 48].map((n) => (
+                <option key={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <Hint label="标注颜色">
+            <select
+              aria-label="标注颜色"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="capture-color"
+              style={{ color }}
+            >
+              {colors.map((c, i) => (
+                <option key={c} value={c}>
+                  {["红", "黄", "绿", "蓝", "白", "黑"][i]}
+                </option>
+              ))}
+            </select>
+          </Hint>
+          {(
+            [
+              ["撤销", Undo2, undo, !history.length],
+              ["重做", Redo2, redoAction, !redo.length],
+              [
+                "重新框选",
+                MousePointer2,
+                () => {
+                  setSelection(null);
+                  setMarks([]);
+                  setHistory([]);
+                  setRedo([]);
+                  setToolbar(null);
+                },
+                false,
+              ],
+            ] as const
+          ).map(([label, Icon, action, disabled]) => (
+            <Hint key={label} label={label}>
+              <button
+                aria-label={label}
+                disabled={disabled || busy}
+                onClick={action}
+              >
+                <Icon size={18} />
+              </button>
+            </Hint>
+          ))}
+          {(
+            [
+              ["pin", "钉住截图", Pin],
+              ["ocr", "提取文字", ScanText],
+              ["translate", "翻译截图", Languages],
+              ["copy", "复制截图", Copy],
+              ["save", "保存 PNG", Download],
+            ] as const
+          ).map(([action, label, Icon]) => (
+            <Hint key={action} label={label}>
+              <button
+                aria-label={label}
+                disabled={busy}
+                onClick={() => void finish(action)}
+              >
+                <Icon size={18} />
+              </button>
+            </Hint>
+          ))}
+          <Hint label="取消截图">
+            <button
+              className="capture-cancel"
+              aria-label="取消截图"
+              disabled={busy}
+              onClick={() => void invoke("capture_cancel")}
+            >
+              <X size={21} />
+            </button>
+          </Hint>
+          <Hint label="添加到问答草稿">
+            <button
+              className="capture-confirm"
+              aria-label="添加到问答草稿"
+              disabled={busy}
+              onClick={() => void finish("attach")}
+            >
+              <Check size={21} />
+            </button>
+          </Hint>
+        </div>
+      )}
+      {error && (
+        <p className="capture-error desktop-error" role="alert">
+          {error}
+        </p>
+      )}
+    </main>
+  );
+}

@@ -210,6 +210,16 @@ export function App() {
     setFocusMessageId(messageId || null);
     navigate("chat");
   }
+  useEffect(() => {
+    if (!isTauri()) return;
+    const stop = listen<{ conversationId?: string; settings?: boolean }>("desktop-navigate", event => {
+      if (event.payload.settings) { navigate("settings"); setSettingsTab("general"); }
+      else if (event.payload.conversationId) {
+        void api<Conversation[]>("/conversations").then(values => { const value = values.find(c => c.id === event.payload.conversationId); if (value) openConversation(value); else setError("这段对话已不存在"); void refresh(); }).catch(error => setError(errorMessage(error)));
+      } else navigate("chat");
+    });
+    return () => { void stop.then(f => f()); };
+  }, []);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);

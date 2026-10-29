@@ -4,6 +4,7 @@ from uuid import uuid4
 from sqlalchemy import (
     JSON,
     Boolean,
+    Float,
     ForeignKey,
     Integer,
     Index,
@@ -52,6 +53,16 @@ class Settings(Base):
     embedding_config: Mapped[dict] = mapped_column(JSON, default=dict)
     knowledge_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     image_generation_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    speech_config: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class SpeechCall(Record, Base):
+    __tablename__ = "speech_calls"
+    provider: Mapped[str] = mapped_column(String(30))
+    model: Mapped[str] = mapped_column(String(200))
+    audio_seconds: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(30), default="started")
+    error: Mapped[str] = mapped_column(Text, default="")
 
 
 class Project(Record, Base):

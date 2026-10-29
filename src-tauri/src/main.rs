@@ -3,6 +3,10 @@
 mod backend_port;
 mod window_layout;
 mod drop_files;
+mod desktop;
+mod desktop_input;
+mod voice;
+mod java_selection;
 
 use serde::Serialize;
 #[cfg(windows)]
@@ -489,6 +493,9 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(desktop::Desktop::default())
+        .manage(voice::Voice::default())
         .manage(backend)
         .manage(drop_files::DroppedPaths::default())
         .invoke_handler(tauri::generate_handler![
@@ -507,7 +514,25 @@ fn main() {
             open_data_directory,
             open_external_url,
             ensure_window_visible,
-            restore_window_layout
+            restore_window_layout,
+            desktop::desktop_preferences,
+            desktop::desktop_preferences_save,
+            desktop::desktop_open,
+            desktop::desktop_pet_interactive,
+            desktop::desktop_quick_top,
+            desktop::desktop_main,
+            desktop::desktop_pick_files,
+            desktop::desktop_selection_offer,
+            desktop::capture_get,
+            desktop::capture_present,
+            desktop::capture_pixels,
+            desktop::capture_cancel,
+            desktop::capture_export,
+            desktop::pinned_image,
+            voice::voice_start,
+            voice::voice_stop,
+            voice::voice_cancel,
+            voice::voice_audio_get
         ])
         .setup(move |app| {
             if !cfg!(debug_assertions) && !app.config().identifier.ends_with(".preview") {
@@ -613,6 +638,7 @@ fn main() {
                 *app.state::<Backend>().child.lock().unwrap() = Some(child);
             }
             let is_preview = app.config().identifier.ends_with(".preview");
+            desktop::setup(app.handle()).map_err(std::io::Error::other)?;
             let tray_name = if is_preview {
                 "XiaoXi（测试版）"
             } else {
@@ -670,11 +696,24 @@ fn main() {
                     .timeout(Duration::from_secs(3))
                     .build()
                     .unwrap();
+                let mut tracked_desktop_run: Option<String> = None;
                 loop {
                     std::thread::sleep(Duration::from_secs(3));
                     let Ok(token) = std::fs::read_to_string(data_dir.join("auth-token")) else {
                         continue;
                     };
+                    if let Ok(response) = client.get(format!("{backend_url}/runs")).bearer_auth(token.trim()).send() {
+                        if let Ok(values) = response.json::<Vec<serde_json::Value>>() {
+                            let active = values.iter().find(|r| matches!(r["status"].as_str(),Some("running"|"pending")));
+                            let current = active.or_else(|| tracked_desktop_run.as_ref().and_then(|id| values.iter().find(|r|r["id"].as_str()==Some(id.as_str()))));
+                            if let Some(run) = current {
+                                let running = matches!(run["status"].as_str(),Some("running"|"pending"));
+                                tracked_desktop_run=if running{run["id"].as_str().map(str::to_owned)}else{None};
+                                let status=if running{"正在处理…"}else if run["status"]=="completed"{"任务完成，点击查看"}else if run["status"]=="cancelled"{"已停止"}else{"任务未完成，点击查看"};
+                                let _=handle.emit_to("pet","desktop-task",serde_json::json!({"title":"XiaoXi 任务","status":status,"conversationId":run["conversation_id"],"source":"main"}));
+                            }
+                        }
+                    }
                     let Ok(response) = client
                         .get(format!("{backend_url}/notifications?pending_only=true"))
                         .bearer_auth(token.trim())
@@ -736,11 +775,26 @@ fn main() {
                         }
                     }
                     let _ = handle.emit("bai-reminder", ());
+                    let _ = handle.emit_to("pet", "desktop-notification", &notes);
                 }
             });
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event { desktop::forget_pin(window.label()); }
+            if ["quick", "capture", "selection", "pet"].contains(&window.label()) {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if window.label() == "capture" { desktop::restore(window.app_handle()); }
+                    if window.label() == "quick" {
+                        voice::voice_cancel(window.state(), None);
+                        let _ = window.emit("desktop-voice-cancel", ());
+                    }
+                    if window.label() == "selection" { let _ = window.emit("desktop-selection-close", ()); }
+                    let _ = window.hide();
+                    return;
+                }
+            }
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 if let Ok(mut allowed) = window.state::<drop_files::DroppedPaths>().0.lock() {
                     *allowed = paths.iter().cloned().collect();

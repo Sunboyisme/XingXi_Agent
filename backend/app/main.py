@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, learning_workflows
 from .learning_public import LEARNING_KINDS, public as public_learning
-from . import composer_suggestions, todos, knowledge
+from . import composer_suggestions, todos, knowledge, desktop_assistant
 from . import (
     agent,
     data_transfer,
@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
     store.migrate()
     data_transfer.apply_pending()
     usage_cost.recover_interrupted()
+    desktop_assistant.recover()
     office.recover_uploads()
     complex_tasks.recover()
     skills.ensure_builtin()
@@ -1443,4 +1444,5 @@ router.include_router(usage_cost.router)
 router.include_router(composer_suggestions.router)
 router.include_router(todos.router)
 router.include_router(knowledge.router)
+router.include_router(desktop_assistant.router)
 app.include_router(router)

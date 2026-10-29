@@ -1,4 +1,6 @@
 import { GeneralSettings } from "./GeneralSettings";
+import { SpeechConnection } from "./DesktopSettings";
+import "../styles/desktop-assistant.css";
 import { useEffect, useState } from "react";
 import { ModelConnections, type ModelContextTarget } from "./ModelConnections";
 import { type Settings, type Memory } from "@/lib/api";
@@ -33,6 +35,7 @@ function ConnectionSettings({
         contextTarget={contextTarget} onContextTargetHandled={onContextTargetHandled} />
       <div className="connections-services">
         <EmbeddingSettings />
+        <SpeechConnection />
         <ImageGenerationConnection />
         <SearchConnection settings={settings} onSaved={onSaved} />
         <WechatSection compact />
