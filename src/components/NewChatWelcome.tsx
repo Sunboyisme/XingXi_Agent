@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
-import { BookOpen, CalendarCheck, Lightbulb, ListTree, PenLine, WandSparkles } from "lucide-react";
+import { BookOpen, FileText, Languages, ListTree, PenLine, WandSparkles } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 
 const starters = [
   {
-    label: "理清思路",
-    icon: Lightbulb,
-    prompt: "我有一些零散的想法，请帮我一起梳理：",
+    label: "总结内容",
+    icon: FileText,
+    prompt: "请帮我总结以下内容，提炼核心结论、关键要点和需要关注的问题，不补充原文没有的信息。内容：",
   },
   {
-    label: "写点东西",
+    label: "翻译文本",
+    icon: Languages,
+    prompt: "请帮我翻译以下文本，保留原意、语气和格式。中文译为英文，其他语言译为中文；术语或表达有歧义时简要说明。文本：",
+  },
+  {
+    label: "润色改写",
     icon: PenLine,
-    prompt: "我想写点东西，先跟我聊聊选题和方向",
-  },
-  {
-    label: "安排今天",
-    icon: CalendarCheck,
-    prompt: "请帮我规划一下今天的日程",
+    prompt: "请帮我润色以下文字，在保留原意和事实的基础上，让表达更清楚、自然、简洁。文字：",
   },
   {
     label: "优化提示词",

@@ -3,6 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
 import type { Run } from "./api";
 import { activityPhase, desktopTask, type AvatarActivity, type DesktopTaskActivity } from "./avatarActivity";
+import { markDesktopTaskRead } from "./desktopTaskInbox";
 
 export function useAvatarActivity(scope: string, source: "main" | "quick") {
   const [activity, setActivity] = useState<AvatarActivity>();
@@ -23,6 +24,8 @@ export function useAvatarActivity(scope: string, source: "main" | "quick") {
     current.current.finished = true;
     const task = desktopTask(run, source);
     const phase = activityPhase(task);
+    const surface = document.querySelector(source === "main" ? ".chat-layout" : ".quick-answer");
+    if (visible && !document.hidden && document.hasFocus() && surface?.getClientRects().length) markDesktopTaskRead({ runId: run.id });
     setActivity({ runId: run.id, phase: phase === "success" && !visible ? "idle" : phase, startedAt: Date.now() });
     publish(task);
   }, [publish, source]);

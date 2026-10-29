@@ -71,6 +71,7 @@ pub struct Desktop {
     pub quick_text: Mutex<String>,
     pub quick_busy: AtomicBool,
     pub quick_floating: AtomicBool,
+    pub quick_epoch: AtomicU64,
     pub floating_below: AtomicBool,
     pub dialog_active: AtomicBool,
     pub hit_regions: Mutex<std::collections::HashMap<String, Vec<HitRegion>>>,
@@ -159,7 +160,9 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn desktop_preferences(app: tauri::AppHandle) -> serde_json::Value {
     let d = app.state::<Desktop>();
-    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"floatingChat":d.quick_floating.load(Ordering::Relaxed),"floatingBelow":d.floating_below.load(Ordering::Relaxed)})
+    let quick_epoch = d.quick_epoch.load(Ordering::SeqCst);
+    let quick_shown = app.get_webview_window("quick").is_some_and(|w| w.is_visible().unwrap_or(false));
+    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"floatingChat":d.quick_floating.load(Ordering::Relaxed),"floatingBelow":d.floating_below.load(Ordering::Relaxed),"quickShown":quick_shown,"quickEpoch":quick_epoch})
 }
 #[tauri::command]
 pub async fn desktop_preferences_save(
@@ -355,7 +358,7 @@ pub fn finish_pet_drag(app: &tauri::AppHandle) {
     let _ = place_pet(app, false);
 }
 fn pet_window_dimensions(size: u16) -> (f64, f64) {
-    (452.0, 82.0 * size as f64 / 100.0 + 216.0)
+    (452.0, 82.0 * size as f64 / 100.0 + 360.0)
 }
 #[tauri::command]
 pub fn desktop_pet_reset(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
@@ -483,7 +486,16 @@ pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
     }
     if let Some(w) = app.get_webview_window(label) {
         let _ = w.hide();
+        if label == "quick" { quick_presence(app, w.is_visible().unwrap_or(false)); }
     }
+}
+fn quick_presence(app: &tauri::AppHandle, shown: bool) {
+    let epoch = app.state::<Desktop>().quick_epoch.fetch_add(1, Ordering::SeqCst) + 1;
+    let _ = app.emit_to("pet", "desktop-quick-presence", serde_json::json!({"shown":shown,"epoch":epoch}));
+}
+#[tauri::command]
+pub fn desktop_dismiss_quick(app: tauri::AppHandle) {
+    desktop_dismiss_label(&app, "quick");
 }
 #[tauri::command]
 pub fn desktop_dismiss(app: tauri::AppHandle, window: tauri::WebviewWindow) {
@@ -528,6 +540,7 @@ pub fn begin_ask_session(app: &tauri::AppHandle) -> Result<String, String> {
     finish_capture(app, None);
     if let Some(w) = app.get_webview_window("quick") {
         let _ = w.hide();
+        quick_presence(app, w.is_visible().unwrap_or(false));
     }
     crate::voice::cancel_owner(&app, "quick");
     let id = uuid::Uuid::new_v4().to_string();
@@ -613,6 +626,10 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
     // Keep error feedback available if the desktop cannot be captured.
     show_quick_window(&app)
 }
+pub fn desktop_record(app: tauri::AppHandle) -> Result<(), String> {
+    set_quick_mode(&app, false);
+    desktop_open(app, false)
+}
 #[tauri::command]
 pub fn desktop_resume(app: tauri::AppHandle, run_id: Option<String>) -> Result<(), String> {
     desktop_chat(app.clone(), Some(false), Some(false))?;
@@ -674,6 +691,7 @@ fn layout_floating_quick(app: &tauri::AppHandle, reveal: bool) -> Result<(), Str
     w.set_size(PhysicalSize::new(width, height)).map_err(|e| e.to_string())?;
     if reveal {
         w.show().map_err(|e| e.to_string())?;
+        quick_presence(app, true);
         w.set_focus().map_err(|e| e.to_string())?;
         let _ = w.emit("desktop-shown", ());
     }
@@ -700,6 +718,7 @@ fn show_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     }
     w.show().map_err(|e| e.to_string())?;
+    quick_presence(app, true);
     w.set_focus().map_err(|e| e.to_string())?;
     let _ = w.set_ignore_cursor_events(false);
     let _ = w.emit("desktop-shown", ());
@@ -745,6 +764,7 @@ fn show_capture_composer(app: &tauri::AppHandle) -> Result<(), String> {
     w.set_position(rect.position).map_err(|e| e.to_string())?;
     w.set_size(rect.size).map_err(|e| e.to_string())?;
     w.show().map_err(|e| e.to_string())?;
+    quick_presence(app, true);
     w.set_focus().map_err(|e| e.to_string())?;
     let _ = w.emit("desktop-shown", ());
     Ok(())
@@ -761,6 +781,7 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
             if w.is_visible().unwrap_or(false) {
                 hidden.push(w.label().to_owned());
                 w.hide().map_err(|e| e.to_string())?;
+                if w.label() == "quick" { quick_presence(app, false); }
             }
         }
     }
@@ -771,6 +792,7 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
             for label in std::mem::take(&mut *app.state::<Desktop>().hidden.lock().unwrap()) {
                 if let Some(w) = app.get_webview_window(&label) {
                     let _ = w.show();
+                    if label == "quick" { quick_presence(app, true); }
                 }
             }
             return Err(e);
@@ -832,6 +854,7 @@ pub fn capture_select(app: tauri::AppHandle, id: String) -> Result<(), String> {
     );
     if let Some(w) = app.get_webview_window("quick") {
         w.hide().map_err(|e| e.to_string())?;
+        quick_presence(&app, false);
     }
     Ok(())
 }

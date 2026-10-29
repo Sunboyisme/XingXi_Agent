@@ -11,6 +11,7 @@ import { isSendShortcut } from "@/lib/generalPreferences";
 import { useComposerPlaceholder } from "@/lib/useComposerPlaceholder";
 import { useSpeechInput } from "@/lib/useSpeechInput";
 import { SpeechInputButton } from "./SpeechInputButton";
+import { useDesktopTaskRead } from "@/lib/useDesktopTaskRead";
 import { isTauri } from "@tauri-apps/api/core";
 import {
   useCallback,
@@ -466,6 +467,7 @@ export function ChatPage({
       }
     : undefined;
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loadedConversation, setLoadedConversation] = useState<string | null>(null);
   const contextualPlaceholder = useComposerPlaceholder(
     conversationId,
     messages,
@@ -577,6 +579,7 @@ export function ChatPage({
   }, [modelKey, modelPreference, settings.providers, conversationId]);
   const scroller = useRef<HTMLDivElement>(null);
   const chatSurface = useRef<HTMLDivElement>(null);
+  useDesktopTaskRead(conversationId, loadedConversation === conversationId && messages.length > 0, chatSurface);
   const composerArea = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const dropTarget = useRef<HTMLDivElement>(null);
@@ -710,6 +713,7 @@ export function ChatPage({
       request === messageRequest.current
     ) {
       setMessages(values);
+      setLoadedConversation(id);
       return true;
     }
     return false;

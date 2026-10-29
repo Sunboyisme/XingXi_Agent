@@ -524,6 +524,7 @@ fn main() {
             desktop::desktop_ask_session,
             desktop::desktop_commands_take,
             desktop::desktop_dismiss,
+            desktop::desktop_dismiss_quick,
             desktop::desktop_floating_blur,
             desktop::desktop_toggle,
             desktop::desktop_main,
@@ -725,7 +726,7 @@ fn main() {
                         }
                     }
                     let Ok(response) = client
-                        .get(format!("{backend_url}/notifications?pending_only=true"))
+                        .get(format!("{backend_url}/notifications?unread_only=true"))
                         .bearer_auth(token.trim())
                         .send()
                     else {
@@ -734,6 +735,8 @@ fn main() {
                     let Ok(notes) = response.json::<Vec<serde_json::Value>>() else {
                         continue;
                     };
+                    let _ = handle.emit_to("pet", "desktop-notification", &notes);
+                    let notes: Vec<_> = notes.into_iter().filter(|note| note["status"] == "pending").collect();
                     if notes.is_empty() {
                         continue;
                     }
@@ -785,7 +788,6 @@ fn main() {
                         }
                     }
                     let _ = handle.emit("bai-reminder", ());
-                    let _ = handle.emit_to("pet", "desktop-notification", &notes);
                 }
             });
             Ok(())

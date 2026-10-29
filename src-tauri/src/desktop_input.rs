@@ -290,7 +290,7 @@ pub fn start(app: tauri::AppHandle) {
                             .unwrap_or_else(|| {
                                 a.state::<Desktop>().quick_text.lock().unwrap().clone()
                             });
-                        if crate::desktop::desktop_open(a.clone(), false).is_ok() {
+                        if crate::desktop::desktop_record(a.clone()).is_ok() {
                             crate::desktop::enqueue_quick(
                                 &a,
                                 "record",

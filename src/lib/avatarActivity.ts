@@ -54,7 +54,6 @@ export function presentDesktopTask(task: DesktopTaskSnapshot): DesktopTaskActivi
 export class PetActivities {
   private runs = new Map<string, DesktopTaskActivity>();
   private last: DesktopTaskActivity | undefined;
-  knowsRun(id: string) { return this.runs.has(id); }
   activeIds() { return [...this.runs.values()].filter(value => isActiveRun(value.runStatus)).map(value => value.runId); }
   accept(values: DesktopTaskActivity[]) {
     let finished: DesktopTaskActivity | undefined;

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
-import { AudioLines, Bell, CornerUpLeft, Square, SquarePen, X } from "lucide-react";
+import { AudioLines, Bell, Square, SquarePen, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import type { ComplexTask, Conversation } from "@/lib/api";
 import { PetActivities, activityPhase, desktopTask, isActiveRun, presentDesktopTask, type AvatarActivity, type AvatarGesture, type DesktopTaskActivity, type DesktopTaskSnapshot } from "@/lib/avatarActivity";
+import { DesktopTaskInbox, DESKTOP_TASK_READ_PREFIX, markDesktopTaskRead, type DesktopTaskRead } from "@/lib/desktopTaskInbox";
 import {
   invoke,
   api,
@@ -14,13 +15,7 @@ import {
   type DesktopPreferences,
   type Run,
 } from "@/lib/desktopAssistant";
-type PetTask = {
-  title: string;
-  status: string;
-  conversationId?: string | null;
-  source?: string;
-  runId?: string;
-};
+type PetNotice = { id: string; title: string; body: string };
 export function DesktopPet() {
   const [layout, setLayout] = useState<{
     size: number;
@@ -33,16 +28,18 @@ export function DesktopPet() {
   }>({ phase: "idle", key: 0 });
   const presenceEpoch = useRef(-1);
   const presenceKey = useRef(0);
-  const [task, setTask] = useState<DesktopTaskActivity | null>(null);
-  const [notification, setNotification] = useState<PetTask | null>(null);
-  const [notificationCount, setNotificationCount] = useState(0);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [inbox] = useState(() => new DesktopTaskInbox());
+  const [tasks, setTasks] = useState(() => inbox.list(false));
+  const [notifications, setNotifications] = useState<PetNotice[]>([]);
+  const [quickShown, setQuickShown] = useState(false);
+  const quickVisible = useRef(false);
+  const quickEpoch = useRef(-1);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const hoverState = useRef(false);
   const hoverTools = useRef<HTMLDivElement>(null);
   const [stopping, setStopping] = useState("");
-  const [taskName, setTaskName] = useState<{ runId: string; title: string }>();
+  const [taskNames, setTaskNames] = useState<Record<string, string>>({});
   const [activity, setActivity] = useState<AvatarActivity>();
   const [gesture, setGesture] = useState<AvatarGesture>();
   const [activities] = useState(() => new PetActivities());
@@ -61,7 +58,6 @@ export function DesktopPet() {
   const rubCooldown = useRef(0);
   const suppressClick = useRef(false);
   const taskFingerprint = useRef("");
-  const notificationFingerprint = useRef("");
   const position = useRef({ x: 0, y: 0, scale: 1 });
   function acceptTasks(values: DesktopTaskActivity[]) {
     const result = activities.accept(values);
@@ -74,14 +70,14 @@ export function DesktopPet() {
       if (old?.phase === "working") return { ...old, phase: result.current && activityPhase(result.current) === "waiting" ? "waiting" : "idle", startedAt: now };
       return old;
     });
-    if (result.current) {
-      const value = result.current;
-      const fingerprint = JSON.stringify([value.runId, value.runStatus, value.taskStatus, value.status, value.source]);
-      if (fingerprint !== taskFingerprint.current) {
-        taskFingerprint.current = fingerprint;
-        setTask(value);
-        setCollapsed(false);
-      }
+    const previous = inbox.list();
+    const unread = inbox.accept(values);
+    const fingerprint = JSON.stringify(unread);
+    if (fingerprint !== taskFingerprint.current) {
+      taskFingerprint.current = fingerprint;
+      setTasks(unread);
+      const fresh = unread.some(task => !previous.some(old => old.runId === task.runId && old.runStatus === task.runStatus && old.taskStatus === task.taskStatus));
+      if (fresh && !quickVisible.current) setCollapsed(false);
     }
   }
   function strokePointer(event: PointerEvent) {
@@ -113,7 +109,7 @@ export function DesktopPet() {
     }
   }
   useDesktopHitRegions(
-    ".pet-avatar,.pet-hover-tools,.pet-task-card,.pet-card-close,.pet-menu,.pet-window .desktop-error,.ui-hint",
+    ".pet-avatar,.pet-hover-tools,.pet-floating-panel,.pet-menu,.pet-window .desktop-error,.ui-hint",
   );
   useEffect(() => {
     if (!error) return;
@@ -145,6 +141,21 @@ export function DesktopPet() {
     const focus = w.onFocusChanged((event) => {
       if (!event.payload) { setMenu(false); setFocused(false); }
     });
+    const refreshUnread = (value?: DesktopTaskRead) => {
+      const unread = value ? inbox.read(value) : inbox.list();
+      taskFingerprint.current = JSON.stringify(unread);
+      setTasks(unread);
+    };
+    const storage = (event: StorageEvent) => {
+      if (event.key?.startsWith(DESKTOP_TASK_READ_PREFIX)) refreshUnread();
+    };
+    const acceptQuickPresence = (value: { shown: boolean; epoch: number }) => {
+      if (!alive || value.epoch <= quickEpoch.current) return;
+      quickEpoch.current = value.epoch;
+      quickVisible.current = value.shown;
+      setQuickShown(value.shown);
+      if (value.shown) setCollapsed(true);
+    };
     const listeners = [
       desktopListen<{
         preferences: DesktopPreferences;
@@ -216,45 +227,41 @@ export function DesktopPet() {
         );
       }),
       desktopListen<DesktopTaskActivity>("desktop-task", (value) => acceptTasks([value])),
+      desktopListen<DesktopTaskRead>("desktop-task-read", value => refreshUnread(value)),
+      desktopListen<{ shown: boolean; epoch: number }>("desktop-quick-presence", acceptQuickPresence),
       desktopListen<DesktopTaskSnapshot[]>("desktop-task-snapshot", values => {
-        acceptTasks(values.filter(value => isActiveRun(value.runStatus) || activities.knowsRun(value.runId)).map(presentDesktopTask));
+        acceptTasks(values.map(presentDesktopTask));
         // /runs is limited to 30 recent entries. Older active work must still settle.
         const present = new Set(values.map(value => value.runId));
-        void Promise.all(activities.activeIds().filter(id => !present.has(id)).map(async id => {
+        const active = new Set([...activities.activeIds(), ...inbox.list().filter(task => isActiveRun(task.runStatus)).map(task => task.runId)]);
+        void Promise.all([...active].filter(id => !present.has(id)).map(async id => {
           try {
             const run = await api<Run>(`/runs/${id}`);
             if (alive) acceptTasks([desktopTask(run, "poll")]);
           } catch { /* Keep a running task during a temporary connection failure. */ }
         }));
       }),
-      desktopListen<{ id?: string; title: string; body: string }[]>(
+      desktopListen<PetNotice[]>(
         "desktop-notification",
         (notes) => {
-          setNotificationCount(notes.length);
-          if (notes[0]) {
-            const signature =
-              notes[0].id || `${notes[0].title}:${notes[0].body}`;
-            if (notificationFingerprint.current === signature) return;
-            notificationFingerprint.current = signature;
-            setNotification({
-              title: notes[0].title,
-              status: notes[0].body,
-            });
-            setCollapsed(false);
-          }
+          setNotifications(old => JSON.stringify(old) === JSON.stringify(notes) ? old : notes);
         },
       ),
     ];
     window.addEventListener("pointermove", strokePointer, { passive: true });
+    window.addEventListener("storage", storage);
     void listeners[0]
       .then(() =>
         invoke<{
           preferences: DesktopPreferences;
+          quickShown: boolean;
+          quickEpoch: number;
         }>("desktop_preferences"),
       )
       .then(async (value) => {
         if (!alive) return;
         if (!layoutSeen) acceptPreferences(value);
+        acceptQuickPresence({ shown: value.quickShown, epoch: value.quickEpoch });
         const shown = await w.isVisible();
         if (alive && presenceEpoch.current < 0 && shown) {
           presencePhase.current = "enter";
@@ -265,29 +272,29 @@ export function DesktopPet() {
     return () => {
       alive = false;
       window.removeEventListener("pointermove", strokePointer);
-      listeners.forEach((p) => void p.then((f) => f()));
+      window.removeEventListener("storage", storage);
+      listeners.forEach((p) => void p.then((f) => f()).catch(() => {}));
       void moved.then((f) => f());
       void focus.then((f) => f());
     };
   }, []);
+  const taskTitlesKey = tasks.map(task => `${task.runId}:${task.taskId || ""}:${task.conversationId || ""}`).join("|");
   useEffect(() => {
-    if (!task) return;
+    if (!tasks.length) return;
     let alive = true;
-    const runId = task.runId;
     const load = async () => {
-      let title = "";
-      if (task.taskId) {
-        const detail = await api<ComplexTask>(`/tasks/${task.taskId}`);
-        title = detail.title || detail.goal;
-      } else if (task.conversationId) {
-        const values = await api<Conversation[]>("/conversations");
-        title = values.find(value => value.id === task.conversationId)?.title || "";
-      }
-      if (alive && title) setTaskName({ runId, title });
+      const [conversations, details] = await Promise.all([
+        api<Conversation[]>("/conversations"),
+        Promise.all(tasks.map(async task => task.taskId ? api<ComplexTask>(`/tasks/${task.taskId}`).catch(() => null) : null)),
+      ]);
+      const titles = Object.fromEntries(tasks.map((task, index) => [task.runId,
+        details[index]?.title || details[index]?.goal || conversations.find(value => value.id === task.conversationId)?.title || task.title,
+      ]));
+      if (alive) setTaskNames(titles);
     };
     void load().catch(() => {});
     return () => { alive = false; };
-  }, [task?.runId, task?.taskId, task?.conversationId]);
+  }, [taskTitlesKey]);
   useEffect(() => {
     if (menu)
       (
@@ -314,17 +321,19 @@ export function DesktopPet() {
       setError(desktopError(e));
     }
   }
-  async function openTask(value: PetTask | null) {
-    if (!value) return;
+  async function openTask(value: DesktopTaskActivity) {
     setError("");
     if (value.conversationId || value.source !== "quick")
       await invoke("desktop_main", { conversationId: value.conversationId });
     else await invoke("desktop_resume", { runId: value.runId });
+    if (!value.conversationId) {
+      markDesktopTaskRead({ runId: value.runId });
+      setTasks(inbox.list());
+    }
   }
-  async function stopTask() {
-    if (!task || stopping || !isActiveRun(task.runStatus)) return;
+  async function stopTask(value: DesktopTaskActivity) {
+    if (stopping || !isActiveRun(value.runStatus)) return;
     setError("");
-    const value = task;
     setStopping(value.runId);
     try {
       if (value.taskId) await api(`/tasks/${value.taskId}/cancel`, "POST");
@@ -336,7 +345,10 @@ export function DesktopPet() {
   }
   function startChat(voice = false) {
     setError("");
-    void invoke("desktop_chat", { newChat: !voice, voice }).catch(error => setError(desktopError(error)));
+    quickVisible.current = true;
+    setQuickShown(true);
+    setCollapsed(true);
+    void invoke("desktop_chat", { newChat: !voice, voice }).catch(error => { quickVisible.current = false; setQuickShown(false); setError(desktopError(error)); });
   }
   function startMainChat() {
     setError("");
@@ -345,10 +357,24 @@ export function DesktopPet() {
   const avatarSize = (82 * layout.size) / 100;
   const avatarTop = layout.y ?? 132;
   const avatarLeft = layout.x ?? window.innerWidth - avatarSize - 8;
-  const displayedTask = notificationsOpen ? notification || task || { title: "暂无提醒", status: "有新提醒时会在这里显示。" } : task;
-  const visibleCard = notificationsOpen || (task && !collapsed);
-  const updates = notificationCount + (collapsed && task ? 1 : 0);
-  const title = displayedTask === task && taskName?.runId === task?.runId ? taskName?.title : displayedTask?.title;
+  const updates = tasks.length + notifications.length;
+  const panelBelow = avatarTop < 104;
+  const panelHeight = Math.min(320, Math.max(1, updates) * 84,
+    panelBelow ? window.innerHeight - avatarTop - avatarSize - 50 : avatarTop - 16);
+  const panelTop = panelBelow ? avatarTop + avatarSize + 42 : avatarTop - panelHeight - 8;
+  async function toggleInbox() {
+    setError("");
+    if (!updates) return;
+    if (collapsed || quickShown) {
+      await invoke("desktop_dismiss_quick");
+      setCollapsed(false);
+    } else setCollapsed(true);
+  }
+  async function openNotice(value: PetNotice) {
+    await invoke("desktop_main", {});
+    await api(`/notifications/${value.id}/ack?read=true`, "POST");
+    setNotifications(old => old.filter(note => note.id !== value.id));
+  }
   return (
     <main
       className="pet-window"
@@ -358,23 +384,27 @@ export function DesktopPet() {
           "--pet-size": `${avatarSize}px`,
           "--pet-left": layout.x == null ? undefined : `${layout.x}px`,
           "--pet-top": layout.y == null ? undefined : `${layout.y}px`,
-          "--pet-panel-top": `${avatarTop >= 100 ? Math.max(12, avatarTop - 92) : avatarTop + avatarSize + 70}px`,
+          "--pet-panel-top": `${panelTop}px`,
+          "--pet-panel-height": `${Math.max(84, panelHeight)}px`,
           "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 118 - avatarLeft, avatarSize / 2 - 56))}px`,
           "--pet-menu-top": `${avatarTop >= 110 ? avatarTop - 108 : avatarTop + avatarSize + 8}px`,
         } as CSSProperties
       }
     >
-      {!menu && displayedTask && visibleCard && (
-        <section className="pet-floating-panel" aria-label="桌面悬浮助手">
-            <article className="pet-task-card" aria-label={displayedTask === task ? "当前任务" : "提醒"}>
-              <Hint label="关闭卡片（不停止任务）"><button className="pet-card-close" aria-label="关闭任务卡片" onClick={() => {
-                if (notificationsOpen) { setNotificationsOpen(false); setNotification(null); setNotificationCount(0); }
-                if (displayedTask === task) setCollapsed(true);
-              }}><X size={13} /></button></Hint>
-              <Hint label={<><strong>{title}</strong><br />{displayedTask.status}</>}><button className="pet-task-copy" disabled={!task && !notification} onClick={() => void openTask(displayedTask).catch(error => setError(desktopError(error)))}><strong>{title}</strong><span role="status">{displayedTask.status}</span></button></Hint>
-              {(task || notification) && <Hint label="打开任务原对话"><button className="pet-card-action" aria-label="打开任务原对话" onClick={() => void openTask(displayedTask).catch(error => setError(desktopError(error)))}><CornerUpLeft size={18} /></button></Hint>}
-              {displayedTask === task && task && <Hint label="停止任务"><button className="pet-card-action" aria-label="停止任务" disabled={Boolean(stopping) || !isActiveRun(task.runStatus)} onClick={() => void stopTask()}><Square size={16} fill="currentColor" /></button></Hint>}
-            </article>
+      {!menu && presence.phase !== "leave" && !quickShown && !collapsed && updates > 0 && (
+        <section className="pet-floating-panel" aria-label={`未读任务和提醒，共 ${updates} 条`}>
+          {tasks.map(task => {
+            const title = taskNames[task.runId] || task.title;
+            return <article key={task.runId} className="pet-task-card" aria-label="未读任务">
+              <Hint label="收起列表（保留未读任务）"><button className="pet-card-close" aria-label="收起未读列表" onClick={() => setCollapsed(true)}><X size={13} /></button></Hint>
+              <Hint label={<><strong>{title}</strong><br />{task.status}</>}><button className="pet-task-copy" onClick={() => void openTask(task).catch(error => setError(desktopError(error)))}><strong>{title}</strong><span role="status">{task.status}</span></button></Hint>
+              {isActiveRun(task.runStatus) && <Hint label="停止任务"><button className="pet-card-action" aria-label={`停止任务 ${title}`} disabled={Boolean(stopping)} onClick={() => void stopTask(task)}><Square size={16} fill="currentColor" /></button></Hint>}
+            </article>;
+          })}
+          {notifications.map(note => <article key={note.id} className="pet-task-card" aria-label="未读提醒">
+            <Hint label="收起列表"><button className="pet-card-close" aria-label="收起未读列表" onClick={() => setCollapsed(true)}><X size={13} /></button></Hint>
+            <Hint label={<><strong>{note.title}</strong><br />{note.body}</>}><button className="pet-task-copy" onClick={() => void openNotice(note).catch(error => setError(desktopError(error)))}><strong>{note.title}</strong><span>{note.body}</span></button></Hint>
+          </article>)}
         </section>
       )}
       {error && (
@@ -488,7 +518,7 @@ export function DesktopPet() {
             <span className="pet-toolbar-divider" />
             <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startChat(true)}><AudioLines size={16} /></button></Hint>
             <span className="pet-toolbar-divider" />
-            <Hint label="提醒和任务"><button aria-label="提醒和任务" aria-expanded={notificationsOpen} onClick={() => { setError(""); setNotificationsOpen(value => !value); setCollapsed(false); }}><Bell size={16} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
+            <Hint label={updates ? `未读任务和提醒 · ${updates} 条` : "暂无未读任务和提醒"}><button aria-label="提醒和任务" aria-expanded={!collapsed && !quickShown && updates > 0} onClick={() => void toggleInbox().catch(error => setError(desktopError(error)))}><Bell size={16} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
           </div>
         )}
       </div>

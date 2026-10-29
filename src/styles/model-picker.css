@@ -102,7 +102,10 @@
   background: var(--surface-hover);
 }
 .composer-model-menu [role^="menuitem"]:focus-visible,
-.composer-model-submenu [role^="menuitem"]:focus-visible,
+.composer-model-submenu [role^="menuitem"]:focus-visible {
+  outline: none;
+  background: var(--surface-hover);
+}
 .model-effort-settings button:focus-visible {
   outline: 2px solid var(--ui-color-focus);
   outline-offset: -2px;

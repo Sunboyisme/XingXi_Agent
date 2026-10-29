@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { useAvatarActivity } from "@/lib/useAvatarActivity";
+import { useDesktopTaskRead } from "@/lib/useDesktopTaskRead";
 import { copyText } from "@/lib/clipboard";
 import { isActiveRun } from "@/lib/avatarActivity";
 import { Hint, Markdown } from "./common";
@@ -274,6 +275,7 @@ export function DesktopQuickAsk() {
     if (!mounted.current || epoch !== generation.current || work.current.busy) return;
     avatar.clearCelebration();
     setQuestion("桌面任务");
+    updateDraft(value => ({ ...value, conversationId: run.conversation_id || null }));
     if (isActiveRun(run.status)) {
       updateDraft(value => ({ ...value, runId: id }));
       await track(run, epoch);
@@ -602,6 +604,7 @@ export function DesktopQuickAsk() {
   }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
   const hasAnswer = Boolean(answer || busy || error);
+  useDesktopTaskRead(draft.conversationId, Boolean(answer) && !answerCollapsed, input);
   const fileButton = (
     <Hint label="添加文件">
       <button className="quick-add-file" aria-label="添加文件" disabled={busy || uploading || Boolean(voiceBusy)} onClick={() => void pickFiles()}>
