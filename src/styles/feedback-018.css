@@ -208,35 +208,44 @@
   outline: 2px solid var(--ui-color-focus);
   outline-offset: 3px;
 }
-.todo-page .plan-toolbar {
-  margin-bottom: 25px;
-  gap: 24px;
-}
-.todo-page .plan-heading p {
-  font-size: 14px;
-  color: var(--ui-color-text-muted);
-  margin: 8px 0 0;
+.todo-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 18px 20px;
 }
 .todo-filters {
-  margin: 0 0 22px;
+  margin: 0 0 16px;
   width: fit-content;
 }
 .todo-list {
   display: grid;
-  gap: 10px;
+  width: 100%;
+  gap: 8px;
 }
 .todo-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
+  gap: 8px;
+  padding: 9px 12px;
   background: var(--ui-color-surface);
   border: 1px solid var(--ui-color-line);
-  border-radius: 16px;
+  border-radius: 10px;
+}
+.todo-row .complete-circle {
+  width: 20px;
+  height: 20px;
+}
+.todo-row > [data-slot="button"] {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
 }
 .todo-row-copy {
   display: grid;
-  gap: 7px;
+  gap: 3px;
   flex: 1;
   min-width: 0;
   text-align: left;
@@ -248,19 +257,20 @@
   color: var(--ui-color-text);
 }
 .todo-row-copy > strong {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 550;
+  line-height: 1.5;
 }
 .todo-row-copy > span {
   white-space: pre-wrap;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ui-color-text-muted);
 }
 .todo-row-copy > small {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ui-color-text-muted);
 }
 .todo-row.is-completed .todo-row-copy > strong {
@@ -269,8 +279,8 @@
 }
 .todo-drag-handle {
   display: flex;
-  padding: 8px 2px;
-  min-width: 22px;
+  padding: 6px 0;
+  min-width: 18px;
   border: 0;
   background: transparent;
   color: var(--ui-color-text-muted);
@@ -907,8 +917,7 @@
     align-items: flex-start;
     flex-wrap: wrap;
   }
-  .knowledge-page > .page-heading,
-  .todo-page .plan-toolbar {
+  .knowledge-page > .page-heading {
     flex-wrap: wrap;
   }
   .knowledge-workspace {
@@ -935,7 +944,10 @@
   }
   .todo-row {
     gap: 6px;
-    padding: 12px 10px;
+    padding: 8px 10px;
+  }
+  .todo-scroll {
+    padding: 16px;
   }
   .general-setting-row {
     gap: 16px;

@@ -814,95 +814,95 @@ export function CalendarPage({
   if (todoView) return <TodoPage timezone={timezone} refresh={refresh} openId={openTodoId} onOpened={onOpened} onCalendar={(value) => { setTodoView(false); setView(value); }} />;
   return (
     <div className="calendar-page page-content">
-      {error && !editor && (
-        <ErrorNotice message={error} retry={() => void load()} />
-      )}
-      {moveNotice && (
-        <p className="plan-move-notice" role="status">
-          {moveNotice}
-        </p>
-      )}
-      <div className="plan-calendar" data-view={view}>
-        <div className="plan-toolbar">
-          <div className="plan-heading">
-            <h1>
-              {Number(anchor.slice(0, 4))}
-              <span>年</span> {Number(anchor.slice(5, 7))}
-              <span>月</span>
-            </h1>
-          </div>
-          <div className="calendar-period" aria-label="切换日期">
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label="上一期"
-              onClick={() => move(-1)}
-            >
-              <ChevronLeft size={17} />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setAnchor(today)}>
-              今天
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label="下一期"
-              onClick={() => move(1)}
-            >
-              <ChevronRight size={17} />
-            </Button>
-          </div>
-          <div className="plan-toolbar-actions">
-            <PlanViewSwitch
-              value={view}
-              onChange={(next) => {
-                if (next === "todo") setTodoView(true);
-                else setView(next);
-              }}
-            />
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <Button size="sm" className="plan-add-trigger">
-                  <CalendarPlus size={15} />
-                  添加计划
-                  <ChevronDown size={13} />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  className="plan-add-menu"
-                  align="end"
-                  sideOffset={8}
-                  collisionPadding={16}
-                >
-                  <DropdownMenu.Label className="plan-add-menu-label">
-                    新建
-                  </DropdownMenu.Label>
-                  <DropdownMenu.Item
-                    className="plan-add-menu-item"
-                    onSelect={() => startCreate(anchor, "none")}
-                  >
-                    <CalendarPlus size={17} />
-                    <span>
-                      <strong>普通计划</strong>
-                      <small>安排一次性的日历计划</small>
-                    </span>
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    className="plan-add-menu-item"
-                    onSelect={() => startCreate(anchor, "daily")}
-                  >
-                    <Repeat2 size={17} />
-                    <span>
-                      <strong>重复日程</strong>
-                      <small>按每天、每周或每月自动安排</small>
-                    </span>
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          </div>
+      <div className="plan-toolbar">
+        <div className="plan-heading">
+          <h1>
+            {Number(anchor.slice(0, 4))}
+            <span>年</span> {Number(anchor.slice(5, 7))}
+            <span>月</span>
+          </h1>
         </div>
+        <div className="calendar-period" aria-label="切换日期">
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="上一期"
+            onClick={() => move(-1)}
+          >
+            <ChevronLeft size={17} />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setAnchor(today)}>
+            今天
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="下一期"
+            onClick={() => move(1)}
+          >
+            <ChevronRight size={17} />
+          </Button>
+        </div>
+        <div className="plan-toolbar-actions">
+          <PlanViewSwitch
+            value={view}
+            onChange={(next) => {
+              if (next === "todo") setTodoView(true);
+              else setView(next);
+            }}
+          />
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button size="sm" className="plan-add-trigger">
+                <CalendarPlus size={15} />
+                添加计划
+                <ChevronDown size={13} />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="plan-add-menu"
+                align="end"
+                sideOffset={8}
+                collisionPadding={16}
+              >
+                <DropdownMenu.Label className="plan-add-menu-label">
+                  新建
+                </DropdownMenu.Label>
+                <DropdownMenu.Item
+                  className="plan-add-menu-item"
+                  onSelect={() => startCreate(anchor, "none")}
+                >
+                  <CalendarPlus size={17} />
+                  <span>
+                    <strong>普通计划</strong>
+                    <small>安排一次性的日历计划</small>
+                  </span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="plan-add-menu-item"
+                  onSelect={() => startCreate(anchor, "daily")}
+                >
+                  <Repeat2 size={17} />
+                  <span>
+                    <strong>重复日程</strong>
+                    <small>按每天、每周或每月自动安排</small>
+                  </span>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </div>
+      </div>
+      <div className="plan-calendar" data-view={view}>
+        {error && !editor && (
+          <ErrorNotice message={error} retry={() => void load()} />
+        )}
+        {moveNotice && (
+          <p className="plan-move-notice" role="status">
+            {moveNotice}
+          </p>
+        )}
         {view === "month" && (
           <div className="plan-weekdays">
             {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map(
