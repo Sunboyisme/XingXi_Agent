@@ -6,7 +6,6 @@ import {
 } from "@/lib/generalPreferences";
 import { ErrorNotice } from "./common";
 import { errorMessage } from "@/lib/utils";
-import { DesktopSettings } from "./DesktopSettings";
 
 type Autostart = { enabled: boolean; supported: boolean; reason: string };
 export function GeneralSettings() {
@@ -36,57 +35,63 @@ export function GeneralSettings() {
     };
   }, []);
   return (
-    <section className="general-settings">
-      <div className="general-setting-row">
-        <div>
-          <strong>开机自启</strong>
-          <p>
-            {value?.reason ||
-              "登录 Windows 后在系统托盘运行，双击托盘图标打开窗口。"}
-          </p>
+    <div className="settings-groups">
+      <section className="settings-group">
+        <h2>应用偏好</h2>
+        <div className="general-settings">
+          <div className="general-setting-row">
+            <div>
+              <strong>开机自启</strong>
+              <p>
+                {value?.reason ||
+                  "登录 Windows 后在系统托盘运行，双击托盘图标打开窗口。"}
+              </p>
+            </div>
+            <label className="module-toggle">
+              <input
+                type="checkbox"
+                role="switch"
+                aria-label="开机自启"
+                checked={value?.enabled || false}
+                disabled={!value?.supported || busy}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setBusy(true);
+                  setError("");
+                  void invoke<Autostart>("set_autostart", { enabled })
+                    .then(setValue)
+                    .catch((e) => setError(errorMessage(e)))
+                    .finally(() => setBusy(false));
+                }}
+              />
+              <span>
+                {busy ? "正在更新…" : value?.enabled ? "已开启" : "已关闭"}
+              </span>
+            </label>
+          </div>
+          <div className="general-setting-row">
+            <div>
+              <strong>聊天输入建议</strong>
+              <p>根据最近的对话生成输入提示，会使用默认模型并计入用量。</p>
+            </div>
+            <label className="module-toggle">
+              <input
+                type="checkbox"
+                role="switch"
+                aria-label="聊天输入建议"
+                checked={preferences.inputSuggestions}
+                onChange={(event) =>
+                  setGeneralPreferences({
+                    inputSuggestions: event.target.checked,
+                  })
+                }
+              />
+              <span>{preferences.inputSuggestions ? "已开启" : "已关闭"}</span>
+            </label>
+          </div>
         </div>
-        <label className="module-toggle">
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="开机自启"
-            checked={value?.enabled || false}
-            disabled={!value?.supported || busy}
-            onChange={(event) => {
-              const enabled = event.target.checked;
-              setBusy(true);
-              setError("");
-              void invoke<Autostart>("set_autostart", { enabled })
-                .then(setValue)
-                .catch((e) => setError(errorMessage(e)))
-                .finally(() => setBusy(false));
-            }}
-          />
-          <span>
-            {busy ? "正在更新…" : value?.enabled ? "已开启" : "已关闭"}
-          </span>
-        </label>
-      </div>
-      <div className="general-setting-row">
-        <div>
-          <strong>聊天输入建议</strong>
-          <p>根据最近的对话生成输入提示，会使用默认模型并计入用量。</p>
-        </div>
-        <label className="module-toggle">
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="聊天输入建议"
-            checked={preferences.inputSuggestions}
-            onChange={(event) =>
-              setGeneralPreferences({ inputSuggestions: event.target.checked })
-            }
-          />
-          <span>{preferences.inputSuggestions ? "已开启" : "已关闭"}</span>
-        </label>
-      </div>
-      <DesktopSettings />
+      </section>
       {error && <ErrorNotice message={error} />}
-    </section>
+    </div>
   );
 }

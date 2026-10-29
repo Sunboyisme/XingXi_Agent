@@ -37,8 +37,8 @@ export function AppearanceSettings() {
   return (
     <section className="appearance-settings" aria-label="外观设置">
       <div className="section-title">
-        <h2>让界面更合眼缘</h2>
-        <p>选择喜欢的配色。</p>
+        <h2>主题配色</h2>
+        <p>选择浅色、深色，或跟随系统自动切换。</p>
       </div>
       <fieldset className="theme-options">
         <legend className="sr-only">主题颜色</legend>

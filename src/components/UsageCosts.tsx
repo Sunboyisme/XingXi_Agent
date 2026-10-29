@@ -27,14 +27,14 @@ export function UsageCosts() {
     revision,
   );
   function showPricing(open: boolean) {
-    const scroller = root.current?.closest<HTMLElement>(".page-body");
+    const scroller = root.current?.closest<HTMLElement>(".settings-content, .page-body");
     if (open) reportScroll.current = scroller?.scrollTop || 0;
     switchingPage.current = true;
     setPricingOpen(open);
   }
   useLayoutEffect(() => {
     if (!switchingPage.current) return;
-    const scroller = root.current?.closest<HTMLElement>(".page-body");
+    const scroller = root.current?.closest<HTMLElement>(".settings-content, .page-body");
     if (scroller) scroller.scrollTop = pricingOpen ? 0 : reportScroll.current;
     if (!pricingOpen) pricingTrigger.current?.focus({ preventScroll: true });
     switchingPage.current = false;

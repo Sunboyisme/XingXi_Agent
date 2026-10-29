@@ -1,35 +1,3 @@
-.settings-tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 24px;
-  padding: 5px;
-  border-radius: 18px;
-  background: var(--muted, #f1eade);
-  width: fit-content;
-  max-width: 100%;
-}
-.settings-tabs [role="tab"] {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  border: 0;
-  background: transparent;
-  padding: 10px 23px;
-  border-radius: 14px;
-  color: inherit;
-  cursor: pointer;
-}
-.settings-tabs [aria-selected="true"] {
-  background: var(--card, #fffaf2);
-  box-shadow: 0 2px 8px #3426190a;
-  font-weight: 650;
-}
-.settings-tabs .candidate-dot {
-  position: static;
-}
-.settings-page [hidden] {
-  display: none !important;
-}
 .tools-settings {
   display: grid;
   gap: 18px;
@@ -196,14 +164,6 @@
   .tool-search {
     max-width: none;
     flex-basis: 100%;
-  }
-  .settings-tabs {
-    width: 100%;
-  }
-  .settings-tabs [role="tab"] {
-    flex: 1;
-    justify-content: center;
-    padding: 9px 12px;
   }
   .managed-tool-row {
     gap: 10px;

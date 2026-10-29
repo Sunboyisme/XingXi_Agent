@@ -329,7 +329,7 @@ export function UsageRecords({
   }, [rangeKey]);
   function changeView(value: View) {
     if (value === view) return;
-    const element = root.current?.closest<HTMLElement>(".page-body");
+    const element = root.current?.closest<HTMLElement>(".settings-content, .page-body");
     if (element)
       savedScroll.current = {
         element,

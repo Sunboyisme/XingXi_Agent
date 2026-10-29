@@ -60,13 +60,6 @@
   padding-top: 8px;
   container: appearance / inline-size;
 }
-.settings-tabs[role="tablist"] {
-  overflow-x: auto;
-}
-.settings-tabs [role="tab"] {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
 .appearance-settings .section-title {
   display: block;
   margin-bottom: 24px;
@@ -246,11 +239,5 @@
 @container appearance (max-width: 560px) {
   .theme-options {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (max-width: 900px) {
-  .settings-tabs [role="tab"] {
-    padding: 10px 12px;
-    font-size: 13px;
   }
 }

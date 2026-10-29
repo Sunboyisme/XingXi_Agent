@@ -1,18 +1,4 @@
 /* 0.1.8 screenshot feedback: shared theme surfaces and compact information. */
-.settings-tabs[role="tablist"] {
-  background: color-mix(in srgb, var(--ui-color-surface) 85%, transparent);
-  border: 1px solid var(--ui-color-line);
-  padding: 4px;
-  gap: 4px;
-}
-.settings-tabs [role="tab"] {
-  border: 1px solid transparent;
-}
-.settings-tabs [aria-selected="true"] {
-  background: var(--ui-color-surface);
-  border-color: var(--ui-color-line);
-  box-shadow: 0 2px 5px rgb(0 0 0 / 4%);
-}
 .context-capacity-control {
   display: contents;
 }

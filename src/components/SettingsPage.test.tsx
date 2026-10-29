@@ -79,7 +79,7 @@ test("cancelling search edits discards the draft without overwriting models or m
           : [],
   );
   function Host() {
-    const [tab, setTab] = React.useState<SettingsTab>("connections");
+    const [tab, setTab] = React.useState<SettingsTab>("services");
     return (
       <SettingsPage
         settings={settings}
@@ -101,7 +101,7 @@ test("cancelling search edits discards the draft without overwriting models or m
   await screen.findByRole("button", { name: "添加 MCP" });
   fireEvent.click(screen.getByRole("tab", { name: "记忆" }));
   expect(screen.getByLabelText("记忆保存方式")).toBeDefined();
-  fireEvent.click(screen.getByRole("tab", { name: "连接" }));
+  fireEvent.click(screen.getByRole("tab", { name: "能力连接" }));
   fireEvent.click(screen.getByRole("button", { name: "配置联网查资料" }));
   expect(
     (screen.getByLabelText("Tavily API 密钥") as HTMLInputElement).value,

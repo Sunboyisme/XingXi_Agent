@@ -816,9 +816,6 @@ textarea::placeholder {
 }
 
 /* Settings, memories and reminders */
-.settings-page {
-  max-width: 920px;
-}
 .settings-section {
   padding: var(--ui-space-6);
   border: 1px solid var(--ui-color-line);
