@@ -162,15 +162,6 @@
 .composer-model-subitem[data-state="checked"] > span {
   color: var(--ui-color-action);
 }
-.composer-model-subitem.is-default {
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-}
-.composer-model-separator {
-  height: 1px;
-  margin: 6px 3px;
-  background: var(--ui-color-line);
-}
 .composer-model-settings {
   display: flex;
   align-items: center;

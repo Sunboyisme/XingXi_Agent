@@ -11,7 +11,6 @@ import type { Settings } from "@/lib/api";
 import type { ModelOptions } from "@/lib/chatModelPreferences";
 import { effortLabel, effortOptions } from "@/lib/reasoningEffort";
 import { useHoverPopover } from "@/lib/useHoverPopover";
-import { ContextMeter, type ContextUsage } from "./ContextMeter";
 
 type ModelChoice = {
   key: string;
@@ -30,8 +29,6 @@ export function ComposerModelPicker({
   options,
   thinkingEnabled,
   contextTokens,
-  usage,
-  compacting,
   disabled,
   defaultProvider,
   onSelect,
@@ -43,8 +40,6 @@ export function ComposerModelPicker({
   options: ModelOptions;
   thinkingEnabled: boolean;
   contextTokens: number;
-  usage: ContextUsage | null;
-  compacting: boolean;
   disabled: boolean;
   defaultProvider: string;
   onSelect: (key: string) => void;
@@ -119,11 +114,6 @@ export function ComposerModelPicker({
   }
   return (
     <div className="composer-model-controls">
-      <ContextMeter
-        usage={usage}
-        limit={contextTokens}
-        compacting={compacting}
-      />
       <DropdownMenu.Root
         open={menu.open}
         onOpenChange={menu.onOpenChange}
@@ -315,16 +305,6 @@ export function ComposerModelPicker({
                             </DropdownMenu.RadioItem>
                           )}
                         </DropdownMenu.RadioGroup>
-                        <DropdownMenu.Separator className="composer-model-separator" />
-                        <DropdownMenu.Item
-                          className="composer-model-subitem is-default"
-                          onSelect={(event) => {
-                            event.preventDefault();
-                            changeThinking("default");
-                          }}
-                        >
-                          使用模型默认
-                        </DropdownMenu.Item>
                       </DropdownMenu.SubContent>
                     </DropdownMenu.Portal>
                   </DropdownMenu.Sub>
@@ -389,22 +369,6 @@ export function ComposerModelPicker({
                           </DropdownMenu.RadioItem>
                         ))}
                       </DropdownMenu.RadioGroup>
-                      <DropdownMenu.Separator className="composer-model-separator" />
-                      <DropdownMenu.Item
-                        className="composer-model-subitem is-default"
-                        onSelect={(event) => {
-                          event.preventDefault();
-                          onOptions({ contextTokens: undefined });
-                          menu.closeAndFocus();
-                        }}
-                      >
-                        使用模型默认
-                        <span>
-                          {capacityLabel(
-                            selected.model.context_tokens ?? 500000,
-                          )}
-                        </span>
-                      </DropdownMenu.Item>
                     </DropdownMenu.SubContent>
                   </DropdownMenu.Portal>
                 </DropdownMenu.Sub>

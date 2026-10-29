@@ -1009,12 +1009,16 @@ pub fn desktop_main(
     conversation_id: Option<String>,
     settings: Option<bool>,
     settings_tab: Option<String>,
+    new_chat: Option<bool>,
 ) {
+    if new_chat.unwrap_or(false) {
+        desktop_dismiss_label(&app, "quick");
+    }
     crate::open_main(&app);
     let _ = app.emit_to(
         "main",
         "desktop-navigate",
-        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab}),
+        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false)}),
     );
 }
 #[tauri::command]

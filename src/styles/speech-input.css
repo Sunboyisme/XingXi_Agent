@@ -42,6 +42,16 @@ html[data-desktop] .speech-input-button {
 html[data-desktop] .speech-input-button.is-active {
   color: #ffe0c8;
 }
+html[data-desktop] .quick-window.is-floating .speech-input-button {
+  color: var(--ui-color-text-muted);
+}
+html[data-desktop] .quick-window.is-floating .speech-input-button.is-active {
+  background: var(--ui-color-surface-deep);
+  color: var(--ui-color-action);
+}
+html[data-desktop] .quick-window.is-floating .speech-input-button:hover {
+  background: var(--surface-hover);
+}
 .speech-input-button.is-recording::before,
 .speech-input-button.is-recording::after {
   content: "";

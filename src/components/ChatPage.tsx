@@ -1,5 +1,5 @@
 import { resizeMessageInput } from "@/lib/composerSize";
-import type { ContextUsage } from "./ContextMeter";
+import { ContextMeter, type ContextUsage } from "./ContextMeter";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import {
   chatModelKey,
@@ -2074,6 +2074,16 @@ export function ChatPage({
                     </Hint>
                   ))}
                 </div>
+                <ContextMeter
+                  usage={
+                    contextUsage?.model_name === selected?.model.name &&
+                    contextUsage?.provider_id === selected?.profile.id
+                      ? contextUsage
+                      : null
+                  }
+                  compacting={contextStatus === "正在整理上下文…"}
+                  limit={contextTokens}
+                />
               </div>
               <div className="composer-submit">
                 <ComposerModelPicker
@@ -2082,13 +2092,6 @@ export function ChatPage({
                   options={modelOptions}
                   thinkingEnabled={thinkingEnabled}
                   contextTokens={contextTokens}
-                  usage={
-                    contextUsage?.model_name === selected?.model.name &&
-                    contextUsage?.provider_id === selected?.profile.id
-                      ? contextUsage
-                      : null
-                  }
-                  compacting={contextStatus === "正在整理上下文…"}
                   disabled={busy}
                   defaultProvider={settings.default_provider}
                   onSelect={selectModel}

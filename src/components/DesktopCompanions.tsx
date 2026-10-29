@@ -338,6 +338,10 @@ export function DesktopPet() {
     setError("");
     void invoke("desktop_chat", { newChat: !voice, voice }).catch(error => setError(desktopError(error)));
   }
+  function startMainChat() {
+    setError("");
+    void invoke("desktop_main", { newChat: true }).catch(error => setError(desktopError(error)));
+  }
   const avatarSize = (82 * layout.size) / 100;
   const avatarTop = layout.y ?? 132;
   const avatarLeft = layout.x ?? window.innerWidth - avatarSize - 8;
@@ -466,7 +470,7 @@ export function DesktopPet() {
         >
           <BaiAvatar
             interactive
-            label="开始桌面新聊天"
+            label="打开主窗口新对话"
             activity={activity}
             gesture={gesture}
             presence={presence.phase}
@@ -474,7 +478,7 @@ export function DesktopPet() {
             pressFeedback="blink"
             onClick={(event) => {
               if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; return false; }
-              startChat();
+              startMainChat();
             }}
           />
         </span>
