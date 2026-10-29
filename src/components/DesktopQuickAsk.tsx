@@ -11,6 +11,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
+import { useAvatarActivity } from "@/lib/useAvatarActivity";
 import { Hint, Markdown } from "./common";
 import { Picture } from "./ImageAttachments";
 import { SpeechInputButton } from "./SpeechInputButton";
@@ -19,7 +20,6 @@ import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import {
   api,
   invoke,
-  emitTo,
   desktopListen,
   desktopError,
   emptyQuickDraft,
@@ -54,6 +54,7 @@ export function DesktopQuickAsk() {
   const [draft, setDraft] = useState<QuickDraft>(emptyQuickDraft);
   const [sessionId, setSessionId] = useState("");
   const session = useRef("");
+  const avatar = useAvatarActivity(`quick:${sessionId}`, "quick");
   const commandsWorking = useRef(false);
   const commandsPending = useRef(false);
   const [settings, setSettings] = useState<Settings>();
@@ -163,6 +164,7 @@ export function DesktopQuickAsk() {
       desktopListen<{ sessionId: string }>("desktop-hidden", (v) => {
         if (v.sessionId !== session.current) return;
         visible.current = false;
+        avatar.clearCelebration();
         cancelVoice();
         setHiddenEpoch((value) => value + 1);
         setError("");
@@ -231,6 +233,7 @@ export function DesktopQuickAsk() {
   async function dismiss() {
     cancelVoice();
     visible.current = false;
+    avatar.clearCelebration();
     setError("");
     await invoke("desktop_dismiss");
   }
@@ -298,7 +301,8 @@ export function DesktopQuickAsk() {
       commandsWorking.current = false;
     }
   }
-  async function track(id: string, epoch: number) {
+  async function track(run: Run, epoch: number) {
+    const id = run.id;
     setAnswerCollapsed(false);
     const sequence = ++tracking.current;
     tracker.current?.abort();
@@ -306,12 +310,7 @@ export function DesktopQuickAsk() {
     tracker.current = controller;
     setRunBusy(true);
     setAnswer("");
-    void emitTo("pet", "desktop-task", {
-      title: "桌面问答",
-      status: "正在思考…",
-      conversationId: current.current.conversationId,
-      runId: id,
-    });
+    avatar.begin(run);
     try {
       const result = await readEvents(
         id,
@@ -339,17 +338,14 @@ export function DesktopQuickAsk() {
         const text = (result.result as { text?: string })?.text;
         if (text) setAnswer(text);
         if (result.error) setError(result.error);
-        void emitTo("pet", "desktop-task", {
-          title: "桌面问答",
-          status:
-            result.status === "completed"
-              ? "回答完成，点击查看"
-              : result.status === "cancelled"
-                ? "已停止"
-                : "处理失败，点击查看",
-          conversationId: current.current.conversationId,
-          runId: id,
-        });
+        avatar.finish(result, visible.current);
+        if (typeof result.result.next_run_id === "string") {
+          const next = await api<Run>(`/runs/${result.result.next_run_id}`);
+          if (mounted.current && epoch === generation.current && sequence === tracking.current) {
+            updateDraft(d => ({ ...d, runId: next.id }));
+            await track(next, epoch);
+          }
+        }
       }
     } catch (e) {
       if (
@@ -357,8 +353,10 @@ export function DesktopQuickAsk() {
         mounted.current &&
         epoch === generation.current &&
         sequence === tracking.current
-      )
+      ) {
+        avatar.finish({ ...run, status: "interrupted" }, visible.current);
         setError(desktopError(e));
+      }
     } finally {
       if (
         mounted.current &&
@@ -430,7 +428,7 @@ export function DesktopQuickAsk() {
         runId: run.id,
       }));
       setQuestion(text);
-      await track(run.id, epoch);
+      await track(run, epoch);
     } catch (e) {
       if (mounted.current && epoch === generation.current) {
         setRunBusy(false);
@@ -534,7 +532,7 @@ export function DesktopQuickAsk() {
         pending.current.shift();
         setPendingCount(pending.current.length);
         setFileBusy(false);
-        await track(run.id, epoch);
+        await track(run, epoch);
       } else {
         pending.current.shift();
         setPendingCount(pending.current.length);
@@ -663,7 +661,7 @@ export function DesktopQuickAsk() {
           </div>
         )}
         <div className="quick-bar">
-          <BaiAvatar interactive motion={busy ? "thinking" : "idle"} />
+          <BaiAvatar interactive activity={avatar.activity} motion={busy ? "thinking" : "idle"} />
           <textarea
             ref={input}
             aria-label="随心输入"

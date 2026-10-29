@@ -1,4 +1,4 @@
-type EyePair = { left: SVGGElement; right: SVGGElement };
+type EyePair = { left: SVGGElement; right: SVGGElement; range: number };
 const targets = new Map<HTMLElement, EyePair>();
 let tracker: { schedule: () => void; stop: () => void } | undefined;
 
@@ -76,6 +76,10 @@ function startTracking() {
       const originY = bounds.top + bounds.height * (36 / 88);
       const dx = pointer.x - originX,
         dy = pointer.y - originY;
+      if (Math.hypot(dx, dy) > eyes.range) {
+        resetEyes(eyes);
+        continue;
+      }
       // Use the available room on each side, including avatars near a window edge.
       const rangeX = Math.min(
         180,
@@ -148,12 +152,12 @@ function startTracking() {
   };
 }
 
-export function followAvatarGaze(avatar: HTMLElement, eyes: SVGGElement) {
+export function followAvatarGaze(avatar: HTMLElement, eyes: SVGGElement, range = 160) {
   if (typeof window.matchMedia !== "function") return;
   const left = eyes.querySelector<SVGGElement>('[data-eye="left"]');
   const right = eyes.querySelector<SVGGElement>('[data-eye="right"]');
   if (!left || !right) return;
-  const pair = { left, right };
+  const pair = { left, right, range };
   targets.set(avatar, pair);
   tracker ??= startTracking();
   tracker.schedule();

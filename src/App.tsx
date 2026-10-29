@@ -213,12 +213,13 @@ export function App() {
   }
   useEffect(() => {
     if (!isTauri()) return;
-    const stop = listen<{ conversationId?: string; settings?: boolean; settingsTab?: string }>("desktop-navigate", event => {
+    const stop = listen<{ conversationId?: string; settings?: boolean; settingsTab?: string; newChat?: boolean }>("desktop-navigate", event => {
       if (event.payload.settings) {
         navigate("settings");
         setSettingsTab(event.payload.settingsTab === "services" ? "services" : "desktop");
         setSpeechConfigureRequested(event.payload.settingsTab === "services");
       }
+      else if (event.payload.newChat) startNewChat();
       else if (event.payload.conversationId) {
         void api<Conversation[]>("/conversations").then(values => { const value = values.find(c => c.id === event.payload.conversationId); if (value) openConversation(value); else setError("这段对话已不存在"); void refresh(); }).catch(error => setError(errorMessage(error)));
       } else navigate("chat");

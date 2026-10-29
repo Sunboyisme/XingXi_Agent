@@ -174,7 +174,7 @@ export function DesktopSettings() {
           {featureRow(
             "pet",
             "显示桌宠",
-            "在桌面显示 XiaoXi，拖动调整位置，点击唤出问答。",
+            "在桌面显示 XiaoXi，拖动调整位置，点击打开主窗口的新对话。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">

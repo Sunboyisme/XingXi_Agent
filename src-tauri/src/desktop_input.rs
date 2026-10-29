@@ -128,9 +128,12 @@ fn pointer_surfaces(app: &tauri::AppHandle) {
     let state = app.state::<Desktop>();
     if state.pet_dragging.load(Ordering::SeqCst) && !pressed(VK_LBUTTON) {
         state.pet_dragging.store(false, Ordering::SeqCst);
+        let drag_id = state.pet_drag_id.load(Ordering::SeqCst);
         let a = app.clone();
-        let _ = app.run_on_main_thread(move || crate::desktop::finish_pet_drag(&a));
-        let _ = app.emit_to("pet", "desktop-pet-drag-ended", ());
+        let _ = app.run_on_main_thread(move || {
+            crate::desktop::finish_pet_drag(&a);
+            let _ = a.emit_to("pet", "desktop-pet-drag-ended", serde_json::json!({"dragId":drag_id}));
+        });
     }
     if let Some(w) = app.get_webview_window("pet") {
         if w.is_visible().unwrap_or(false) {

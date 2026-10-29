@@ -1,144 +1,93 @@
-.bai-avatar,
-.bai-avatar-response,
-.bai-avatar-float {
-  display: block;
-  width: 100%;
-  height: 100%;
+.bai-avatar,.bai-avatar-response,.bai-avatar-float {
+  display:block; width:100%; height:100%;
 }
-.bai-avatar {
-  flex-shrink: 0;
-  pointer-events: none;
-}
+.bai-avatar { flex-shrink:0; pointer-events:none; }
 .avatar-interaction {
-  display: block;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+  display:block; padding:0; border:0; border-radius:50%; background:transparent;
+  cursor:pointer; -webkit-tap-highlight-color:transparent;
 }
-.avatar-interaction:is(:hover, :focus-visible) .bai-avatar-response {
-  transform: translateY(-3px) rotate(-7deg) scale(1.06);
-}
-.avatar-interaction:active .bai-avatar-response {
-  transform: translateY(2px) scale(1.08, 0.9);
-}
-.avatar-interaction[data-reaction="happy"] .bai-avatar-response {
-  animation: bai-avatar-happy 700ms ease;
-}
-.avatar-interaction[data-reaction="wave"] .bai-avatar-response {
-  animation: bai-avatar-wave 700ms ease;
-}
+.avatar-interaction:focus-visible { outline:2px solid var(--bai-avatar-fill, #c58265); outline-offset:3px; }
+.bai-avatar svg { display:block; width:100%; height:100%; overflow:visible; }
+.bai-avatar-response,.bai-avatar-float { position:relative; transform-origin:50% 78%; }
+.bai-avatar-response { transition:transform 240ms ease; }
+.bai-avatar-eye { transform-box:view-box; transform-origin:0 0; transition:transform 180ms cubic-bezier(.2,.7,.2,1); }
+.bai-avatar-eye[data-eye="left"] { transform:var(--bai-eye-rest-left); }
+.bai-avatar-eye[data-eye="right"] { transform:var(--bai-eye-rest-right); }
+.bai-avatar-eye-cheer { display:none; }
+.bai-avatar-eyes { transform-box:fill-box; transform-origin:center; }
+.bai-avatar:not([data-motion="still"]) .bai-avatar-eyes { animation:bai-avatar-blink 7.8s ease-in-out infinite; }
+.bai-avatar[data-motion="still"] .bai-avatar-eye { transition:none; }
+.avatar-interaction:is(:hover,:focus-visible) .bai-avatar:not([data-reaction]):not([data-working]):not([data-presence="enter"]):not([data-presence="leave"]) .bai-avatar-response { transform:translateY(-3px) rotate(-7deg) scale(1.06); }
+.avatar-interaction:active .bai-avatar:not([data-reaction]):not([data-working]):not([data-presence="enter"]):not([data-presence="leave"]) .bai-avatar-response { transform:translateY(2px) scale(1.08,.9); }
+.bai-avatar[data-reaction="press"] .bai-avatar-response { animation:bai-avatar-happy 700ms ease both; animation-delay:var(--bai-reaction-delay,0ms); }
+.bai-avatar[data-reaction="press"][data-press-variant="wave"] .bai-avatar-response { animation-name:bai-avatar-wave; }
+.bai-avatar[data-reaction="pet"] .bai-avatar-response { animation:bai-avatar-pet 850ms ease-in-out both; animation-delay:var(--bai-reaction-delay,0ms); }
+.bai-avatar[data-reaction="pet"] .bai-avatar-eyes { animation:none; transform:scaleY(.23); }
+.bai-avatar[data-reaction="drag"] .bai-avatar-response { transform:rotate(var(--bai-tilt,0deg)) scale(.94,1.08); transition:transform 100ms ease-out; }
+.bai-avatar[data-reaction="drop"] .bai-avatar-response { animation:bai-avatar-drop 500ms ease-out both; animation-delay:var(--bai-reaction-delay,0ms); }
+.bai-avatar[data-working] .bai-avatar-float { animation:bai-avatar-think 1600ms ease-in-out 2 both; animation-delay:var(--bai-work-delay,0ms); }
+.bai-avatar[data-working] .bai-avatar-gaze { transform:translate(0,-3px); }
+.bai-avatar[data-reaction="success"] .bai-avatar-response { animation:bai-avatar-success 650ms ease-out both; animation-delay:var(--bai-reaction-delay,0ms); }
+.bai-avatar[data-reaction="success"] .bai-avatar-eyes { animation:none; transform:none; }
+.bai-avatar[data-reaction="success"] .bai-avatar-eye-normal { display:none; }
+.bai-avatar[data-reaction="success"] .bai-avatar-eye-cheer { display:block; }
+.bai-avatar-spark { position:absolute; right:1%; top:0; opacity:0; color:var(--bai-avatar-light,#d99c78); }
+.bai-avatar[data-reaction="success"] .bai-avatar-spark { animation:bai-avatar-spark 750ms ease-out both; animation-delay:var(--bai-reaction-delay,0ms); }
+.bai-avatar[data-presence="enter"] .bai-avatar-eyes { animation:bai-avatar-wake 620ms ease-out both; }
 @keyframes bai-avatar-happy {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  30% {
-    transform: translateY(-12%) rotate(-10deg) scale(1.05);
-  }
-  60% {
-    transform: translateY(-5%) rotate(8deg);
-  }
+  0%,100% { transform:translateY(0) rotate(0); }
+  30% { transform:translateY(-12%) rotate(-10deg) scale(1.05); }
+  60% { transform:translateY(-5%) rotate(8deg); }
 }
 @keyframes bai-avatar-wave {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  30% {
-    transform: translateY(-12%) rotate(10deg) scale(1.05);
-  }
-  60% {
-    transform: translateY(-5%) rotate(-8deg);
-  }
+  0%,100% { transform:translateY(0) rotate(0); }
+  30% { transform:translateY(-12%) rotate(10deg) scale(1.05); }
+  60% { transform:translateY(-5%) rotate(-8deg); }
 }
-.bai-avatar svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+@keyframes bai-avatar-pet {
+  0%,100% { transform:rotate(0) scale(1); }
+  20%,60% { transform:rotate(-7deg) scale(1.06,.94); }
+  40%,80% { transform:rotate(6deg) scale(1.06,.94); }
 }
-.bai-avatar-response {
-  transition: transform 240ms ease;
-  transform-origin: 50% 70%;
-}
-.bai-avatar-eye {
-  transform-box: view-box;
-  transform-origin: 0 0;
-  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.bai-avatar-eye[data-eye="left"] {
-  transform: var(--bai-eye-rest-left, translate(36.5px, 36px));
-}
-.bai-avatar-eye[data-eye="right"] {
-  transform: var(--bai-eye-rest-right, translate(51.5px, 36px));
-}
-.bai-avatar[data-motion="still"] .bai-avatar-eye {
-  transition: none;
-}
-.bai-avatar:not([data-motion="still"]) .bai-avatar-float {
-  transform-origin: 50% 78%;
-  animation: bai-avatar-breathe 5.4s ease-in-out infinite;
-}
-.bai-avatar:not([data-motion="still"]) .bai-avatar-eyes {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: bai-avatar-blink 7.8s ease-in-out infinite;
-}
-.bai-avatar[data-motion="thinking"] .bai-avatar-float {
-  animation: bai-avatar-think 2.6s ease-in-out infinite;
-}
-@keyframes bai-avatar-breathe {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-1.4%) scale(1.018, 1.025);
-  }
-}
-@keyframes bai-avatar-blink {
-  0%,
-  43%,
-  47%,
-  100% {
-    transform: scaleY(1);
-  }
-  45% {
-    transform: scaleY(0.08);
-  }
+@keyframes bai-avatar-drop {
+  0% { transform:scale(.94,1.08); }
+  35% { transform:translateY(5%) scale(1.12,.86); }
+  65% { transform:translateY(-2%) scale(.97,1.04); }
+  100% { transform:scale(1); }
 }
 @keyframes bai-avatar-think {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-2deg);
-  }
-  50% {
-    transform: translateY(-2%) rotate(2deg);
-  }
+  0%,100% { transform:rotate(0); }
+  25% { transform:rotate(-3deg); }
+  75% { transform:rotate(3deg); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .avatar-interaction[data-reaction] .bai-avatar-response,
-  .avatar-interaction:is(:hover, :focus-visible, :active) .bai-avatar-response {
-    animation: none;
-    transform: none;
-  }
+@keyframes bai-avatar-success {
+  0%,100% { transform:translateY(0) scale(1); }
+  18% { transform:translateY(4%) scale(1.08,.89); }
+  48% { transform:translateY(-13%) scale(.97,1.04); }
+  75% { transform:translateY(3%) scale(1.04,.95); }
+}
+@keyframes bai-avatar-spark {
+  0% { opacity:0; transform:scale(.3); }
+  30% { opacity:1; transform:translateY(-5px) scale(1.1); }
+  100% { opacity:0; transform:translateY(-15px) scale(.8); }
+}
+@keyframes bai-avatar-blink {
+  0%,43%,47%,100% { transform:scaleY(1); }
+  45% { transform:scaleY(.08); }
+}
+@keyframes bai-avatar-wake {
+  0%,65% { transform:scaleY(.09); }
+  100% { transform:scaleY(1); }
+}
+@media (prefers-reduced-motion:reduce) {
   .bai-avatar[data-motion] .bai-avatar-response,
   .bai-avatar[data-motion] .bai-avatar-float,
-  .bai-avatar[data-motion] .bai-avatar-eyes {
-    animation: none;
-    transition: none;
-    transform: none;
-  }
-  .bai-avatar[data-motion] .bai-avatar-eye {
-    transition: none;
-  }
-  .bai-avatar[data-motion] .bai-avatar-eye[data-eye="left"] {
-    transform: var(--bai-eye-rest-left, translate(36.5px, 36px)) !important;
-  }
-  .bai-avatar[data-motion] .bai-avatar-eye[data-eye="right"] {
-    transform: var(--bai-eye-rest-right, translate(51.5px, 36px)) !important;
-  }
+  .bai-avatar[data-motion] .bai-avatar-eyes,
+  .bai-avatar[data-motion] .bai-avatar-spark { animation:none; transition:none; transform:none; }
+  .bai-avatar[data-motion] .bai-avatar-response { transform:none !important; }
+  .bai-avatar .bai-avatar-eye { transition:none; }
+  .bai-avatar .bai-avatar-eye[data-eye="left"] { transform:var(--bai-eye-rest-left) !important; }
+  .bai-avatar .bai-avatar-eye[data-eye="right"] { transform:var(--bai-eye-rest-right) !important; }
+  .bai-avatar[data-working] .bai-avatar-gaze { transform:none; }
+  .bai-avatar[data-reaction="pet"] .bai-avatar-eyes { transform:scaleY(.23); }
 }

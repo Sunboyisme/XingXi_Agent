@@ -4,11 +4,14 @@ import { ChevronDown, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
+import { PetActivities, activityPhase, desktopTask, isActiveRun, type AvatarActivity, type AvatarGesture, type DesktopTaskActivity } from "@/lib/avatarActivity";
 import {
   invoke,
+  api,
   desktopListen,
   desktopError,
   type DesktopPreferences,
+  type Run,
 } from "@/lib/desktopAssistant";
 type PetTask = {
   title: string;
@@ -30,14 +33,76 @@ export function DesktopPet() {
   const presenceEpoch = useRef(-1);
   const presenceKey = useRef(0);
   const [task, setTask] = useState<PetTask | null>(null);
+  const [notification, setNotification] = useState<PetTask | null>(null);
+  const [activity, setActivity] = useState<AvatarActivity>();
+  const [gesture, setGesture] = useState<AvatarGesture>();
+  const [activities] = useState(() => new PetActivities());
   const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState("");
-  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const drag = useRef<{ id: number; x: number; y: number; moved: boolean; started: boolean } | null>(null);
+  const gestureSequence = useRef(0);
+  const petElement = useRef<HTMLDivElement>(null);
+  const presencePhase = useRef(presence.phase);
+  presencePhase.current = presence.phase;
+  const menuOpen = useRef(menu);
+  menuOpen.current = menu;
+  const cursor = useRef<{ x: number; y: number } | null>(null);
+  const rub = useRef<{ extreme: number; direction: number; turns: number; since: number } | null>(null);
+  const rubCooldown = useRef(0);
   const suppressClick = useRef(false);
   const taskFingerprint = useRef("");
   const notificationFingerprint = useRef("");
   const position = useRef({ x: 0, y: 0, scale: 1 });
+  function acceptTasks(values: DesktopTaskActivity[]) {
+    const result = activities.accept(values);
+    const now = Date.now();
+    setActivity(old => {
+      if (result.active && result.current) return old?.phase === "working" && old.runId === result.current.runId
+        ? old : { runId: result.current.runId, phase: "working", startedAt: now };
+      if (result.success && presencePhase.current === "idle" && !document.hidden)
+        return { runId: result.success.runId, phase: "success", startedAt: now };
+      if (old?.phase === "working") return { ...old, phase: result.current && activityPhase(result.current) === "waiting" ? "waiting" : "idle", startedAt: now };
+      return old;
+    });
+    if (result.current) {
+      const value = result.current;
+      const fingerprint = JSON.stringify([value.runId, value.runStatus, value.taskStatus, value.status, value.source]);
+      if (fingerprint !== taskFingerprint.current) {
+        taskFingerprint.current = fingerprint;
+        setTask(value);
+        setCollapsed(false);
+      }
+    }
+  }
+  function strokePointer(event: PointerEvent) {
+    const bounds = petElement.current?.getBoundingClientRect();
+    const now = Date.now();
+    if (!bounds || event.pointerType !== "mouse" || drag.current || menuOpen.current || presencePhase.current !== "idle" || now < rubCooldown.current ||
+      event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.top + bounds.height * .4) {
+      rub.current = null;
+      return;
+    }
+    const stroke = rub.current;
+    if (!stroke || now - stroke.since > 1000) {
+      rub.current = { extreme: event.clientX, direction: 0, turns: 0, since: now };
+      return;
+    }
+    const delta = event.clientX - stroke.extreme;
+    const threshold = bounds.width * .08;
+    if (!stroke.direction) {
+      if (Math.abs(delta) >= threshold) { stroke.direction = Math.sign(delta); stroke.extreme = event.clientX; }
+    } else if (delta * stroke.direction >= 0) stroke.extreme = event.clientX;
+    else if (Math.abs(delta) >= threshold) {
+      stroke.direction *= -1;
+      stroke.extreme = event.clientX;
+      if (++stroke.turns >= 3) {
+        rubCooldown.current = now + 2000;
+        rub.current = null;
+        setGesture({ kind: "pet", id: ++gestureSequence.current, startedAt: now });
+      }
+    }
+  }
   useDesktopHitRegions(
     ".pet-avatar,.pet-bubble,.pet-menu,.pet-window .desktop-error,.ui-hint",
   );
@@ -84,6 +149,11 @@ export function DesktopPet() {
         (value) => {
           if (!alive || value.epoch <= presenceEpoch.current) return;
           presenceEpoch.current = value.epoch;
+          presencePhase.current = value.shown ? "enter" : "leave";
+          drag.current = null;
+          rub.current = null;
+          setGesture(undefined);
+          setActivity(old => old?.phase === "success" ? { ...old, phase: "idle" } : old);
           setMenu(false);
           setPresence({
             phase: value.shown ? "enter" : "leave",
@@ -92,11 +162,26 @@ export function DesktopPet() {
         },
       ),
       desktopListen("desktop-pet-hide-menu", () => setMenu(false)),
-      desktopListen("desktop-pet-drag-ended", () => {
+      desktopListen<{ dragId: number }>("desktop-pet-drag-started", (value) => {
+        if (drag.current?.id !== value.dragId) return;
+        drag.current.started = true;
+        setGesture({ kind: "drag", id: value.dragId, startedAt: Date.now() });
+      }),
+      desktopListen<{ dragId: number }>("desktop-pet-drag-ended", (value) => {
+        if (drag.current?.id !== value.dragId) return;
         drag.current = null;
         suppressClick.current = true;
+        petElement.current?.style.removeProperty("--bai-tilt");
+        if (presencePhase.current === "idle")
+          setGesture({ kind: "drop", id: ++gestureSequence.current, startedAt: Date.now() });
       }),
       desktopListen<{ x: number; y: number }>("desktop-cursor", (p) => {
+        const old = cursor.current;
+        cursor.current = p;
+        if (drag.current?.started && old && petElement.current) {
+          const tilt = Math.max(-12, Math.min(12, -(p.x - old.x) / position.current.scale / petElement.current.clientWidth * 60));
+          petElement.current.style.setProperty("--bai-tilt", `${tilt}deg`);
+        }
         window.dispatchEvent(
           new PointerEvent("pointermove", {
             clientX: (p.x - position.current.x) / position.current.scale,
@@ -105,12 +190,17 @@ export function DesktopPet() {
           }),
         );
       }),
-      desktopListen<PetTask>("desktop-task", (value) => {
-        const fingerprint = JSON.stringify(value);
-        if (fingerprint === taskFingerprint.current) return;
-        taskFingerprint.current = fingerprint;
-        setTask(value);
-        setCollapsed(false);
+      desktopListen<DesktopTaskActivity>("desktop-task", (value) => acceptTasks([value])),
+      desktopListen<DesktopTaskActivity[]>("desktop-task-snapshot", values => {
+        acceptTasks(values.filter(value => isActiveRun(value.runStatus) || activities.knowsRun(value.runId)));
+        // /runs is limited to 30 recent entries. Older active work must still settle.
+        const present = new Set(values.map(value => value.runId));
+        void Promise.all(activities.activeIds().filter(id => !present.has(id)).map(async id => {
+          try {
+            const run = await api<Run>(`/runs/${id}`);
+            if (alive) acceptTasks([{ ...desktopTask(run, "main"), source: "poll" }]);
+          } catch { /* Keep a running task during a temporary connection failure. */ }
+        }));
       }),
       desktopListen<{ id?: string; title: string; body: string }[]>(
         "desktop-notification",
@@ -120,7 +210,7 @@ export function DesktopPet() {
               notes[0].id || `${notes[0].title}:${notes[0].body}`;
             if (notificationFingerprint.current === signature) return;
             notificationFingerprint.current = signature;
-            setTask({
+            setNotification({
               title: notes[0].title,
               status: notes[0].body,
               notification: true,
@@ -130,6 +220,7 @@ export function DesktopPet() {
         },
       ),
     ];
+    window.addEventListener("pointermove", strokePointer, { passive: true });
     void listeners[0]
       .then(() =>
         invoke<{
@@ -140,12 +231,15 @@ export function DesktopPet() {
         if (!alive) return;
         if (!layoutSeen) acceptPreferences(value);
         const shown = await w.isVisible();
-        if (alive && presenceEpoch.current < 0 && shown)
+        if (alive && presenceEpoch.current < 0 && shown) {
+          presencePhase.current = "enter";
           setPresence({ phase: "enter", key: ++presenceKey.current });
+        }
       })
       .catch(() => {});
     return () => {
       alive = false;
+      window.removeEventListener("pointermove", strokePointer);
       listeners.forEach((p) => void p.then((f) => f()));
       void moved.then((f) => f());
       void focus.then((f) => f());
@@ -176,12 +270,14 @@ export function DesktopPet() {
     }
   }
   async function openTask() {
-    if (task?.notification || task?.source === "main")
-      await invoke("desktop_main", { conversationId: task?.conversationId });
+    const displayed = notification || task;
+    if (displayed?.notification || displayed?.source !== "quick")
+      await invoke("desktop_main", { conversationId: displayed?.conversationId });
     else await invoke("desktop_open", { capture: false });
   }
   const avatarSize = (82 * layout.size) / 100;
   const avatarTop = layout.y ?? 132;
+  const displayedTask = notification || task;
   return (
     <main
       className="pet-window"
@@ -196,18 +292,18 @@ export function DesktopPet() {
         } as CSSProperties
       }
     >
-      {task && !collapsed && (
+      {displayedTask && !collapsed && (
         <div className="pet-bubble">
           <button
             onClick={() =>
               void openTask().catch((e) => setError(desktopError(e)))
             }
           >
-            <strong>{task.title}</strong>
-            <span>{task.status}</span>
+            <strong>{displayedTask.title}</strong>
+            <span>{displayedTask.status}</span>
           </button>
           <Hint label="收起气泡">
-            <button aria-label="收起气泡" onClick={() => setCollapsed(true)}>
+            <button aria-label="收起气泡" onClick={() => { setCollapsed(true); setNotification(null); }}>
               <ChevronDown size={17} />
             </button>
           </Hint>
@@ -244,14 +340,8 @@ export function DesktopPet() {
         </div>
       )}
       <div
+        ref={petElement}
         className="pet-avatar"
-        onClick={() => {
-          if (!suppressClick.current)
-            void invoke("desktop_toggle").catch((e) =>
-              setError(desktopError(e)),
-            );
-          suppressClick.current = false;
-        }}
         onContextMenu={(e) => {
           e.preventDefault();
           setError("");
@@ -260,9 +350,10 @@ export function DesktopPet() {
         }}
         onPointerDown={(e) => {
           if (e.button === 0) {
-            e.currentTarget.setPointerCapture(e.pointerId);
+            e.currentTarget.querySelector("button")?.setPointerCapture(e.pointerId);
             suppressClick.current = false;
-            drag.current = { x: e.clientX, y: e.clientY, moved: false };
+            rub.current = null;
+            drag.current = { id: ++gestureSequence.current, x: e.clientX, y: e.clientY, moved: false, started: false };
           }
         }}
         onPointerMove={(e) => {
@@ -273,22 +364,26 @@ export function DesktopPet() {
           if (Math.abs(dx) + Math.abs(dy) > 4) {
             g.moved = true;
             suppressClick.current = true;
-            if (e.currentTarget.hasPointerCapture(e.pointerId))
-              e.currentTarget.releasePointerCapture(e.pointerId);
-            void invoke("desktop_pet_drag").catch((e) => {
+            const button = e.currentTarget.querySelector("button");
+            if (button?.hasPointerCapture(e.pointerId)) button.releasePointerCapture(e.pointerId);
+            void invoke<boolean>("desktop_pet_drag", { dragId: g.id }).then(started => {
+              if (!started && drag.current?.id === g.id) { drag.current = null; setGesture(undefined); }
+            }).catch((error) => {
+              if (drag.current?.id !== g.id) return;
               drag.current = null;
-              setError(desktopError(e));
+              setGesture(undefined);
+              setError(desktopError(error));
             });
           }
         }}
         onPointerUp={() => {
           const g = drag.current;
           if (g?.moved) suppressClick.current = true;
-          drag.current = null;
+          if (!g?.moved) drag.current = null;
         }}
         onPointerCancel={() => {
           if (drag.current?.moved) suppressClick.current = true;
-          drag.current = null;
+          if (!drag.current?.moved) drag.current = null;
         }}
       >
         <span
@@ -296,14 +391,23 @@ export function DesktopPet() {
           className="pet-appearance"
           data-phase={presence.phase}
           onAnimationEnd={(e) => {
-            if (e.target === e.currentTarget && presence.phase === "enter")
+            if (e.target === e.currentTarget && presence.phase === "enter") {
+              presencePhase.current = "idle";
               setPresence((value) => ({ ...value, phase: "idle" }));
+            }
           }}
         >
           <BaiAvatar
             interactive
-            label="打开 XiaoXi 桌面问答"
-            motion={task?.status.includes("正在") ? "thinking" : "idle"}
+            label="打开 XiaoXi 新对话"
+            activity={activity}
+            gesture={gesture}
+            presence={presence.phase}
+            gazeRange={Infinity}
+            onClick={(event) => {
+              if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; return false; }
+              void invoke("desktop_main", { newChat: true }).catch(error => setError(desktopError(error)));
+            }}
           />
         </span>
       </div>

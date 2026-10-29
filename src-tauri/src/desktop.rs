@@ -65,6 +65,7 @@ pub struct Desktop {
     pub prefs: Mutex<Preferences>,
     pub owned: AtomicBool,
     pub pet_dragging: AtomicBool,
+    pub pet_drag_id: AtomicU64,
     pub pet_visibility_epoch: AtomicU64,
     pub pet_exiting: AtomicBool,
     pub quick_text: Mutex<String>,
@@ -381,7 +382,7 @@ pub fn set_pet_visible(app: &tauri::AppHandle, shown: bool) {
         );
         let a = app.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            std::thread::sleep(std::time::Duration::from_millis(520));
             let b = a.clone();
             let _ = a.run_on_main_thread(move || {
                 if b.state::<Desktop>()
@@ -903,12 +904,13 @@ pub fn desktop_main(
     conversation_id: Option<String>,
     settings: Option<bool>,
     settings_tab: Option<String>,
+    new_chat: Option<bool>,
 ) {
     crate::open_main(&app);
     let _ = app.emit_to(
         "main",
         "desktop-navigate",
-        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab}),
+        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false)}),
     );
 }
 #[tauri::command]
@@ -965,7 +967,7 @@ impl Drop for NativeDialog {
     }
 }
 #[tauri::command]
-pub fn desktop_pet_drag(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+pub fn desktop_pet_drag(app: tauri::AppHandle, window: tauri::WebviewWindow, drag_id: u64) -> Result<bool, String> {
     if window.label() != "pet" {
         return Err("仅桌宠可以使用这个操作".into());
     }
@@ -975,21 +977,21 @@ pub fn desktop_pet_drag(app: tauri::AppHandle, window: tauri::WebviewWindow) -> 
         )
     } >= 0
     {
-        return Ok(());
+        return Ok(false);
     }
-    app.state::<Desktop>()
-        .pet_dragging
-        .store(true, Ordering::SeqCst);
     window
         .set_ignore_cursor_events(false)
         .map_err(|e| e.to_string())?;
+    app.state::<Desktop>().pet_drag_id.store(drag_id, Ordering::SeqCst);
+    app.state::<Desktop>().pet_dragging.store(true, Ordering::SeqCst);
+    let _ = window.emit("desktop-pet-drag-started", serde_json::json!({"dragId":drag_id}));
     if let Err(e) = window.start_dragging() {
         app.state::<Desktop>()
             .pet_dragging
             .store(false, Ordering::SeqCst);
         return Err(e.to_string());
     }
-    Ok(())
+    Ok(true)
 }
 #[tauri::command]
 pub fn desktop_hit_regions(

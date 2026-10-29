@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { followAvatarGaze, RESTING_EYE_TRANSFORMS } from "../lib/avatar-gaze";
 import "../styles/bai-avatar.css";
+import { AVATAR_SUCCESS_MS, type AvatarActivity, type AvatarGesture } from "../lib/avatarActivity";
 
 type AvatarMotion = "idle" | "thinking" | "still";
 const restingEyes = {
@@ -13,23 +14,59 @@ export function BaiAvatar({
   motion = "idle",
   interactive = false,
   onClick,
+  activity,
+  gesture,
+  presence,
+  gazeRange = 160,
   label = "和XiaoXi打个招呼",
 }: {
   className?: string;
   motion?: AvatarMotion;
   interactive?: boolean;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void | boolean;
   label?: string;
+  activity?: AvatarActivity;
+  gesture?: AvatarGesture | null;
+  presence?: "enter" | "leave" | "idle";
+  gazeRange?: number;
 }) {
-  const [reaction, setReaction] = useState(0);
+  const [press, setPress] = useState<AvatarGesture>();
+  const pressCount = useRef(0);
+  const [, refreshClock] = useState(0);
+  const now = Date.now();
+  const externalDuration = gesture?.kind === "pet" ? 850 : gesture?.kind === "drop" ? 500 : 700;
+  const candidate = gesture && (gesture.kind === "drag" || now < gesture.startedAt + externalDuration) ? gesture : press;
+  const duration = candidate?.kind === "pet" ? 850 : candidate?.kind === "drop" ? 500 : 700;
+  const activeGesture = candidate && (candidate.kind === "drag" || now < candidate.startedAt + duration) ? candidate : undefined;
+  const success = activity?.phase === "success" && now < activity.startedAt + AVATAR_SUCCESS_MS;
+  const working = activity ? activity.phase === "working" : motion === "thinking";
+  const suspended = presence === "enter" || presence === "leave";
+  const reaction = suspended ? undefined
+    : activeGesture && ["drag", "drop"].includes(activeGesture.kind) ? activeGesture.kind
+    : success ? "success" : activeGesture?.kind;
+  const reactionAt = reaction === "success" ? activity!.startedAt : activeGesture?.startedAt || now;
+  const reactionDelay = useMemo(() => -Math.max(0, Date.now() - reactionAt), [reaction, reactionAt]);
+  const displayWorking = !suspended && !reaction && working;
+  const workStartedAt = activity?.startedAt;
+  const workDelay = useMemo(() => -Math.max(0, Date.now() - (workStartedAt || Date.now())), [displayWorking, workStartedAt]);
+  const blockedGaze = suspended || Boolean(reaction) || working;
+  const deadline = Math.min(
+    success ? activity!.startedAt + AVATAR_SUCCESS_MS : Infinity,
+    activeGesture && activeGesture.kind !== "drag" ? activeGesture.startedAt + duration : Infinity,
+  );
+  useEffect(() => {
+    if (!Number.isFinite(deadline)) return;
+    const timer = window.setTimeout(() => refreshClock(value => value + 1), Math.max(0, deadline - Date.now()) + 1);
+    return () => window.clearTimeout(timer);
+  }, [deadline]);
   const gradientId = useId();
   const avatarRef = useRef<HTMLSpanElement>(null);
   const gazeRef = useRef<SVGGElement>(null);
 
   useEffect(() => {
-    if (motion === "still" || !avatarRef.current || !gazeRef.current) return;
-    return followAvatarGaze(avatarRef.current, gazeRef.current);
-  }, [motion]);
+    if (motion === "still" || blockedGaze || !avatarRef.current || !gazeRef.current) return;
+    return followAvatarGaze(avatarRef.current, gazeRef.current, gazeRange);
+  }, [motion, blockedGaze, gazeRange]);
 
   const artwork = (
     <span
@@ -38,10 +75,18 @@ export function BaiAvatar({
         .filter(Boolean)
         .join(" ")}
       data-motion={motion}
-      style={restingEyes}
+      data-reaction={reaction}
+      data-press-variant={activeGesture?.variant}
+      data-working={displayWorking || undefined}
+      data-presence={presence}
+      style={{ ...restingEyes,
+        "--bai-tilt": activeGesture?.tilt == null ? undefined : `${activeGesture.tilt}deg`,
+        "--bai-reaction-delay": `${reactionDelay}ms`,
+        "--bai-work-delay": `${workDelay}ms`,
+      } as CSSProperties}
       aria-hidden="true"
     >
-      <span className="bai-avatar-response">
+      <span key={reaction ? `${reaction}:${reactionAt}` : "rest"} className="bai-avatar-response">
         <span className="bai-avatar-float">
           <svg viewBox="0 0 88 88" fill="none" focusable="false">
             <defs>
@@ -74,17 +119,28 @@ export function BaiAvatar({
                 <g className="bai-avatar-eye" data-eye={side} key={side}>
                   <g className="bai-avatar-eyes">
                     <rect
+                      className="bai-avatar-eye-normal"
                       x="-3.3"
                       y="-6.3"
                       width="6.6"
                       height="12.6"
                       rx="3.3"
                     />
+                    <path
+                      className="bai-avatar-eye-cheer"
+                      d={side === "left" ? "M -3.2 -4.4 L 2.5 0 L -3.2 4.4" : "M 3.2 -4.4 L -2.5 0 L 3.2 4.4"}
+                      fill="none"
+                      stroke="var(--bai-avatar-eyes, #fffcf8)"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </g>
                 </g>
               ))}
             </g>
           </svg>
+          <span className="bai-avatar-spark" aria-hidden="true">✦</span>
         </span>
       </span>
     </span>
@@ -94,10 +150,10 @@ export function BaiAvatar({
       type="button"
       className={["avatar-interaction", className].filter(Boolean).join(" ")}
       aria-label={label}
-      data-reaction={reaction ? (reaction % 2 ? "happy" : "wave") : undefined}
-      onClick={() => {
-        setReaction((value) => value + 1);
-        onClick?.();
+      onClick={(event) => {
+        if (onClick?.(event) === false) return;
+        const id = ++pressCount.current;
+        setPress({ kind: "press", id, startedAt: Date.now(), variant: id % 2 ? "happy" : "wave" });
       }}
     >
       {artwork}

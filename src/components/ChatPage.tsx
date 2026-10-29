@@ -62,6 +62,7 @@ import { AnswerPresentation } from "./AnswerPresentation";
 import { AnswerActions } from "./AnswerActions";
 import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
+import { useAvatarActivity } from "@/lib/useAvatarActivity";
 import { NewChatStarters, NewChatWelcome } from "./NewChatWelcome";
 import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
@@ -519,6 +520,7 @@ export function ChatPage({
   const [imageGeneration, setImageGeneration] =
     useState<ImageGenerationProgress | null>(null);
   const [run, setRun] = useState<Run | null>(null);
+  const acceptedNewRun = useRef<{ run: Run; at: number } | null>(null);
   function openModelSettings() {
     if (selected && onContextSettings) onContextSettings(selected.profile.id, selected.model.name);
     else onAction("connections");
@@ -526,6 +528,8 @@ export function ChatPage({
   const [error, setError] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
   const [busy, setBusy] = useState(false);
+  const { activity: avatarActivity, begin: beginAvatar, finish: finishAvatar } =
+    useAvatarActivity(`main:${conversationId || "new"}`, "main");
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editedText, setEditedText] = useState("");
   const turnElements = useRef(new Map<string, HTMLElement>());
@@ -726,6 +730,7 @@ export function ChatPage({
       controller.current?.abort();
       const watch = new AbortController();
       controller.current = watch;
+      beginAvatar(value);
       setRun(value);
       setBusy(true);
       setStream("");
@@ -849,6 +854,7 @@ export function ChatPage({
         );
         if (watch.signal.aborted) return;
         setRun(result);
+        finishAvatar(result);
         // A failed reply explains itself in the conversation; no duplicate banner.
         if (["failed", "cancelled"].includes(result.status)) setError("");
         let loaded = false;
@@ -873,12 +879,13 @@ export function ChatPage({
         });
       } catch (error) {
         if (!watch.signal.aborted) {
+          finishAvatar({ ...value, status: "interrupted" });
           setError(errorMessage(error));
           setBusy(false);
         }
       }
     },
-    [loadMessages, refresh, receiveMemory, updateTask],
+    [loadMessages, refresh, receiveMemory, updateTask, beginAvatar, finishAvatar],
   );
   trackNext.current = track;
   useEffect(() => {
@@ -941,6 +948,14 @@ export function ChatPage({
           if (active) void track(active, conversationId);
           else if (values[0]) {
             setRun(values[0]);
+            // A reply submitted on the new-chat screen can finish before its
+            // conversation mounts. Only that fresh submission may celebrate.
+            const accepted = acceptedNewRun.current;
+            if (accepted?.run.id === values[0].id && Date.now() - accepted.at < 30000) {
+              acceptedNewRun.current = null;
+              beginAvatar(accepted.run);
+              finishAvatar(values[0]);
+            }
             // A fast run can finish between the first message load and this request.
             // Restore the persisted answer and tool results, including fast runs.
             await loadMessages(conversationId).catch(() => {
@@ -1007,7 +1022,7 @@ export function ChatPage({
       live = false;
       controller.current?.abort();
     };
-  }, [conversationId, loadMessages, refresh, track, receiveMemory]);
+  }, [conversationId, loadMessages, refresh, track, receiveMemory, beginAvatar, finishAvatar]);
   const candidates =
     memories?.filter(
       (value) =>
@@ -1140,6 +1155,8 @@ export function ChatPage({
       }
       if (created) {
         // The conversation effect owns resuming a new conversation's run.
+        acceptedNewRun.current = { run: value, at: Date.now() };
+        beginAvatar(value);
         onConversation(id);
       } else if (currentId.current === id) {
         if (!supplement || value.id !== run?.id) void track(value, id);
@@ -1426,6 +1443,7 @@ export function ChatPage({
                     <div className="message-avatar assistant-avatar">
                       <BaiAvatar
                         interactive
+                        activity={value.run_id === avatarActivity?.runId ? avatarActivity : undefined}
                         motion={
                           synthetic && busy && value.run_id === run?.id
                             ? "thinking"
@@ -1650,6 +1668,7 @@ export function ChatPage({
                     <BaiAvatar
                       interactive
                       motion="thinking"
+                      activity={avatarActivity}
                       label="XiaoXi正在思考，点我继续聊天"
                       onClick={() => focusComposer("别急，我还在整理思路。")}
                     />

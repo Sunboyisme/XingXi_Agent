@@ -701,7 +701,6 @@ fn main() {
                     .timeout(Duration::from_secs(3))
                     .build()
                     .unwrap();
-                let mut tracked_desktop_run: Option<String> = None;
                 loop {
                     std::thread::sleep(Duration::from_secs(3));
                     let Ok(token) = std::fs::read_to_string(data_dir.join("auth-token")) else {
@@ -709,14 +708,25 @@ fn main() {
                     };
                     if let Ok(response) = client.get(format!("{backend_url}/runs")).bearer_auth(token.trim()).send() {
                         if let Ok(values) = response.json::<Vec<serde_json::Value>>() {
-                            let active = values.iter().find(|r| matches!(r["status"].as_str(),Some("running"|"pending")));
-                            let current = active.or_else(|| tracked_desktop_run.as_ref().and_then(|id| values.iter().find(|r|r["id"].as_str()==Some(id.as_str()))));
-                            if let Some(run) = current {
-                                let running = matches!(run["status"].as_str(),Some("running"|"pending"));
-                                tracked_desktop_run=if running{run["id"].as_str().map(str::to_owned)}else{None};
-                                let status=if running{"正在处理…"}else if run["status"]=="completed"{"任务完成，点击查看"}else if run["status"]=="cancelled"{"已停止"}else{"任务未完成，点击查看"};
-                                let _=handle.emit_to("pet","desktop-task",serde_json::json!({"title":"XiaoXi 任务","status":status,"conversationId":run["conversation_id"],"source":"main","runId":run["id"]}));
+                            let mut batch = Vec::new();
+                            for run in values.iter().rev() {
+                                let Some(id) = run["id"].as_str() else { continue; };
+                                let running = matches!(run["status"].as_str(), Some("queued" | "pending" | "running"));
+                                let next = run["result"]["next_run_id"].is_string();
+                                let waiting = next || (run["task_id"].is_string() && run["task_status"] != "completed");
+                                let status = if running { "正在处理…" }
+                                    else if run["status"] == "completed" && waiting { "等待继续，点击查看" }
+                                    else if run["status"] == "completed" { "回答完成，点击查看" }
+                                    else if run["status"] == "cancelled" { "已停止" }
+                                    else { "任务未完成，点击查看" };
+                                batch.push(serde_json::json!({
+                                    "title":"XiaoXi 任务", "status":status,
+                                    "conversationId":run["conversation_id"], "source":"poll", "runId":id,
+                                    "runStatus":run["status"], "taskId":run["task_id"],
+                                    "taskStatus":run["task_status"], "hasNextRun":next, "updatedAt":run["updated_at"]
+                                }));
                             }
+                            let _ = handle.emit_to("pet", "desktop-task-snapshot", batch);
                         }
                     }
                     let Ok(response) = client
