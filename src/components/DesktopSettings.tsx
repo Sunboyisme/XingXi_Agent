@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { Mic, RotateCcw, Loader2, Undo2 } from "lucide-react";
 import {
@@ -23,6 +29,7 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { ConnectionCard } from "./ConnectionCard";
+import { BaiAvatar } from "./BaiAvatar";
 import "../styles/desktop-settings.css";
 type DesktopStatus = {
   preferences: DesktopPreferences;
@@ -49,6 +56,10 @@ export function DesktopSettings() {
   const [keyError, setKeyError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [petSize, setPetSize] = useState("100");
+  const [petSizeError, setPetSizeError] = useState("");
+  const [petNotice, setPetNotice] = useState("");
+  const sizeFocused = useRef(false);
   const button = useRef<HTMLButtonElement>(null);
   const recordingRef = useRef(false);
   const recordEpoch = useRef(0);
@@ -60,6 +71,7 @@ export function DesktopSettings() {
     const accept = (value: DesktopStatus) => {
       if (!mounted.current) return;
       setStatus(value);
+      if (!sizeFocused.current) setPetSize(String(value.preferences.petSize));
       if (!recordingRef.current)
         setShortcut((current) => current || value.preferences.shortcut);
     };
@@ -168,6 +180,8 @@ export function DesktopSettings() {
       });
       if (!mounted.current) return;
       setStatus(value);
+      if (change.petSize !== undefined)
+        setPetSize(String(value.preferences.petSize));
       if (change.shortcut) {
         setShortcut(value.preferences.shortcut);
         setNotice("快捷键已保存");
@@ -180,9 +194,43 @@ export function DesktopSettings() {
       if (mounted.current) setBusy(false);
     }
   }
+  function savePetSize() {
+    sizeFocused.current = false;
+    const value = Number(petSize);
+    if (
+      !petSize.trim() ||
+      !Number.isInteger(value) ||
+      value < 50 ||
+      value > 200
+    ) {
+      setPetSizeError("请输入 50% 到 200% 之间的整数");
+      return;
+    }
+    setPetSizeError("");
+    if (value !== status?.preferences.petSize) void save({ petSize: value });
+  }
+  async function resetPet() {
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    setError("");
+    setPetNotice("");
+    try {
+      const value = await invoke<DesktopStatus>("desktop_pet_reset");
+      if (mounted.current) {
+        setStatus(value);
+        setPetNotice("已移至鼠标所在屏幕的右下角");
+      }
+    } catch (e) {
+      if (mounted.current) setError(desktopError(e));
+    } finally {
+      saving.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  }
   if (!isTauri()) return <p>桌面截图问答、桌宠和划词助手仅在桌面版中可用。</p>;
   function featureRow(
-    key: "enabled" | "pet" | "selection",
+    key: "enabled" | "pet" | "selection" | "petSnap",
     label: string,
     detail: string,
   ) {
@@ -219,12 +267,94 @@ export function DesktopSettings() {
             "桌面截图问答",
             "短按右 Alt 唤出问答，按住右 Alt 语音输入。",
           )}
+        </div>
+      </section>
+      <section className="settings-group">
+        <h2>桌面宠物</h2>
+        <div className="desktop-preference-card">
+          <div className="desktop-feature-row">
+            <div className="desktop-feature-copy">
+              <strong>当前桌宠</strong>
+              <p>XiaoXi</p>
+            </div>
+            <div className="desktop-pet-preview">
+              <BaiAvatar />
+            </div>
+          </div>
           {featureRow(
             "pet",
-            "桌面 XiaoXi",
+            "显示桌宠",
             "在桌面显示 XiaoXi，拖动调整位置，点击唤出问答。",
           )}
+          <div className="desktop-feature-row">
+            <div className="desktop-feature-copy">
+              <strong>桌宠大小</strong>
+              <p>调整桌面宠物显示大小，支持 50%–200%。</p>
+            </div>
+            <div className="desktop-pet-size-control">
+              <div className="desktop-pet-size-input">
+                <Input
+                  aria-label="桌宠大小百分比"
+                  type="number"
+                  min={50}
+                  max={200}
+                  step={5}
+                  value={petSize}
+                  disabled={!status || busy || recording}
+                  aria-invalid={Boolean(petSizeError)}
+                  aria-describedby={
+                    petSizeError ? "desktop-pet-size-error" : undefined
+                  }
+                  onFocus={() => {
+                    sizeFocused.current = true;
+                  }}
+                  onChange={(e) => {
+                    setPetSize(e.target.value);
+                    setPetSizeError("");
+                  }}
+                  onBlur={savePetSize}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                />
+                <span>%</span>
+              </div>
+              {petSizeError && (
+                <p id="desktop-pet-size-error" className="field-error">
+                  {petSizeError}
+                </p>
+              )}
+            </div>
+          </div>
+          {featureRow(
+            "petSnap",
+            "边缘吸附",
+            "拖到屏幕边缘并松开，XiaoXi 会以融球效果贴合桌面边缘。",
+          )}
+          <div className="desktop-feature-row">
+            <div className="desktop-feature-copy">
+              <strong>重置位置</strong>
+              <p>将当前桌宠移至鼠标所在屏幕的右下角。</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!status || busy || recording}
+              onClick={() => void resetPet()}
+            >
+              <RotateCcw size={14} />
+              重置
+            </Button>
+          </div>
         </div>
+        {petNotice && (
+          <p className="desktop-pet-feedback" role="status">
+            {petNotice}
+          </p>
+        )}
       </section>
       <section className="settings-group">
         <h2>划词助手</h2>
@@ -347,7 +477,13 @@ type SpeechCall = {
   status: string;
   created_at: string;
 };
-export function SpeechConnection() {
+export function SpeechConnection({
+  configureRequested = false,
+  onConfigureHandled,
+}: {
+  configureRequested?: boolean;
+  onConfigureHandled?: () => void;
+}) {
   const [status, setStatus] = useState<SpeechSettings>();
   const [form, setForm] = useState<SpeechSettings>();
   const [open, setOpen] = useState(false);
@@ -359,6 +495,7 @@ export function SpeechConnection() {
   const [calls, setCalls] = useState<SpeechCall[]>([]);
   const mounted = useRef(false);
   const saveLock = useRef(false);
+  const requestHandled = useRef(false);
   useEffect(() => {
     mounted.current = true;
     void api<SpeechSettings>("/settings/speech")
@@ -375,7 +512,7 @@ export function SpeechConnection() {
   const saved = status?.profiles.find((p) => p.provider === status.selected);
   const profile = form?.profiles.find((p) => p.provider === form.selected);
   const ready = Boolean(saved?.key_configured && saved.url && saved.model);
-  async function configure() {
+  const configure = useCallback(async () => {
     setOpen(true);
     setLoading(true);
     setError("");
@@ -396,7 +533,17 @@ export function SpeechConnection() {
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }
+  }, []);
+  useEffect(() => {
+    if (!configureRequested) {
+      requestHandled.current = false;
+      return;
+    }
+    if (requestHandled.current) return;
+    requestHandled.current = true;
+    void configure();
+    onConfigureHandled?.();
+  }, [configureRequested, onConfigureHandled, configure]);
   function change(
     field: "url" | "model" | "api_key",
     value: string | undefined,

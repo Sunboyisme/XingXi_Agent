@@ -9,7 +9,11 @@ export function useDesktopHitRegions(selector: string) {
     const observed = new Set<Element>();
     const update = () => {
       if (disposed) return;
-      const nodes = Array.from(document.querySelectorAll(selector));
+      const nodes = Array.from(
+        document.querySelectorAll(
+          `${selector},.picture-overlay,.picture-viewer,.picture-close`,
+        ),
+      );
       for (const node of observed)
         if (!nodes.includes(node)) {
           resize.unobserve(node);

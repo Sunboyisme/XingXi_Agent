@@ -519,6 +519,7 @@ fn main() {
             desktop::desktop_preferences_save,
             desktop::desktop_open,
             desktop::desktop_pet_drag,
+            desktop::desktop_pet_reset,
             desktop::desktop_hit_regions,
             desktop::desktop_quick_state,
             desktop::desktop_ask_session,

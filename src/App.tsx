@@ -147,6 +147,7 @@ export function App() {
   const [calendarEventId, setCalendarEventId] = useState<string>();
   const [planAgenda, setPlanAgenda] = useState<PendingAgenda>();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+  const [speechConfigureRequested, setSpeechConfigureRequested] = useState(false);
   const [contextSettingsTarget, setContextSettingsTarget] = useState<ModelContextTarget>();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -212,8 +213,12 @@ export function App() {
   }
   useEffect(() => {
     if (!isTauri()) return;
-    const stop = listen<{ conversationId?: string; settings?: boolean }>("desktop-navigate", event => {
-      if (event.payload.settings) { navigate("settings"); setSettingsTab("desktop"); }
+    const stop = listen<{ conversationId?: string; settings?: boolean; settingsTab?: string }>("desktop-navigate", event => {
+      if (event.payload.settings) {
+        navigate("settings");
+        setSettingsTab(event.payload.settingsTab === "services" ? "services" : "desktop");
+        setSpeechConfigureRequested(event.payload.settingsTab === "services");
+      }
       else if (event.payload.conversationId) {
         void api<Conversation[]>("/conversations").then(values => { const value = values.find(c => c.id === event.payload.conversationId); if (value) openConversation(value); else setError("这段对话已不存在"); void refresh(); }).catch(error => setError(errorMessage(error)));
       } else navigate("chat");
@@ -772,6 +777,8 @@ export function App() {
                   tab={settingsTab}
                   contextTarget={contextSettingsTarget}
                   onContextTargetHandled={() => setContextSettingsTarget(undefined)}
+                  speechConfigureRequested={speechConfigureRequested}
+                  onSpeechConfigureHandled={() => setSpeechConfigureRequested(false)}
                   onTab={setSettingsTab}
                   createRequested={createKey}
                 />

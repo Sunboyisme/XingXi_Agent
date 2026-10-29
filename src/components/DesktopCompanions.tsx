@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
 import { ChevronDown, Copy, X, RotateCw, GripVertical } from "lucide-react";
-import { BaiAvatar } from "./BaiAvatar";
+import { BaiAvatar, type AvatarDockEdge } from "./BaiAvatar";
 import { Hint, Markdown } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import {
@@ -15,6 +15,7 @@ import {
   copyText,
   type Settings,
   type Run,
+  type DesktopPreferences,
 } from "@/lib/desktopAssistant";
 type Selection = { id: string; text: string; error?: string };
 export function DesktopSelection() {
@@ -386,6 +387,12 @@ type PetTask = {
   source?: string;
 };
 export function DesktopPet() {
+  const [layout, setLayout] = useState<{
+    size: number;
+    x?: number | null;
+    y?: number | null;
+    edges: AvatarDockEdge[];
+  }>({ size: 100, edges: [] });
   const [task, setTask] = useState<PetTask | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -401,6 +408,20 @@ export function DesktopPet() {
   useEffect(() => {
     const w = getCurrentWindow();
     let alive = true;
+    let layoutSeen = false;
+    const acceptPreferences = (value: {
+      preferences: DesktopPreferences;
+      petDockEdges?: AvatarDockEdge[];
+    }) => {
+      if (!alive) return;
+      layoutSeen = true;
+      setLayout({
+        size: value.preferences.petSize,
+        x: value.preferences.petOffsetX,
+        y: value.preferences.petOffsetY,
+        edges: value.preferences.petSnap ? value.petDockEdges || [] : [],
+      });
+    };
     const update = async () => {
       const [p, scale] = await Promise.all([
         w.outerPosition(),
@@ -414,6 +435,23 @@ export function DesktopPet() {
       if (!event.payload) setMenu(false);
     });
     const listeners = [
+      desktopListen<{
+        preferences: DesktopPreferences;
+        petDockEdges?: AvatarDockEdge[];
+      }>("desktop-preferences", acceptPreferences),
+      desktopListen<{
+        size: number;
+        x: number;
+        y: number;
+        edges: AvatarDockEdge[];
+      }>("desktop-pet-layout", (value) => {
+        if (!alive) return;
+        layoutSeen = true;
+        setLayout(value);
+      }),
+      desktopListen("desktop-pet-undock", () =>
+        setLayout((value) => ({ ...value, edges: [] })),
+      ),
       desktopListen("desktop-pet-hide-menu", () => setMenu(false)),
       desktopListen("desktop-pet-drag-ended", () => {
         drag.current = null;
@@ -453,6 +491,17 @@ export function DesktopPet() {
         },
       ),
     ];
+    void listeners[0]
+      .then(() =>
+        invoke<{
+          preferences: DesktopPreferences;
+          petDockEdges?: AvatarDockEdge[];
+        }>("desktop_preferences"),
+      )
+      .then((value) => {
+        if (alive && !layoutSeen) acceptPreferences(value);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
       listeners.forEach((p) => void p.then((f) => f()));
@@ -489,8 +538,21 @@ export function DesktopPet() {
       await invoke("desktop_main", { conversationId: task?.conversationId });
     else await invoke("desktop_open", { capture: false });
   }
+  const avatarSize = (82 * layout.size) / 100;
+  const avatarTop = layout.y ?? 132;
   return (
-    <main className="pet-window">
+    <main
+      className="pet-window"
+      style={
+        {
+          "--pet-size": `${avatarSize}px`,
+          "--pet-left": layout.x == null ? undefined : `${layout.x}px`,
+          "--pet-top": layout.y == null ? undefined : `${layout.y}px`,
+          "--pet-bubble-top": `${avatarTop >= 100 ? Math.max(5, avatarTop - 96) : avatarTop + avatarSize + 12}px`,
+          "--pet-menu-top": `${avatarTop >= 110 ? avatarTop - 108 : avatarTop + avatarSize + 8}px`,
+        } as CSSProperties
+      }
+    >
       {task && !collapsed && (
         <div className="pet-bubble">
           <button
@@ -567,6 +629,7 @@ export function DesktopPet() {
             dy = e.clientY - g.y;
           if (Math.abs(dx) + Math.abs(dy) > 4) {
             g.moved = true;
+            setLayout((value) => ({ ...value, edges: [] }));
             suppressClick.current = true;
             if (e.currentTarget.hasPointerCapture(e.pointerId))
               e.currentTarget.releasePointerCapture(e.pointerId);
@@ -587,6 +650,7 @@ export function DesktopPet() {
         }}
       >
         <BaiAvatar
+          dockEdges={layout.edges}
           interactive
           label="打开 XiaoXi 桌面问答"
           motion={task?.status.includes("正在") ? "thinking" : "idle"}

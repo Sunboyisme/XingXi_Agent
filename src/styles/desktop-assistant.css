@@ -168,6 +168,29 @@ html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
 .quick-answer-scroll .markdown {
   color: inherit;
 }
+html[data-desktop] .quick-settings-link {
+  color: #edc4a5;
+  padding: 5px 0;
+  gap: 7px;
+}
+.quick-error .desktop-error {
+  margin-bottom: 3px;
+}
+html[data-desktop] .picture-viewer {
+  inset: 12px;
+  padding: 44px 12px 12px;
+  box-sizing: border-box;
+}
+html[data-desktop] .picture-viewer > img {
+  max-width: 100%;
+  max-height: calc(100vh - 80px);
+}
+html[data-desktop] .picture-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #302924;
+}
 .quick-attachments {
   display: flex;
   gap: 8px;
@@ -388,21 +411,109 @@ html[data-desktop] .capture-toolbar button {
 .capture-toolbar .capture-cancel {
   color: #ff646d;
 }
-.capture-option {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 10px;
-  white-space: nowrap;
+.capture-toolbar svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.7;
 }
-.capture-option select,
-.capture-color {
-  max-width: 45px;
-  background: #35312d;
-  color: #eee;
-  border: 0;
+.capture-separator {
+  width: 1px;
+  height: 20px;
+  background: #ffffff20;
+  margin: 0 5px;
+  flex-shrink: 0;
+}
+html[data-desktop] .capture-toolbar .capture-style-trigger {
+  width: auto;
+  min-width: 44px;
+  gap: 6px;
+  padding: 5px 7px;
+}
+.capture-style-trigger small {
   font-size: 11px;
-  padding: 3px;
+}
+.capture-toolbar .capture-style-trigger > svg:last-child {
+  width: 11px;
+  height: 11px;
+  opacity: 0.6;
+}
+.capture-stroke-preview {
+  display: block;
+  width: 18px;
+  border-radius: 9px;
+  background: currentColor;
+}
+.capture-color-preview {
+  width: 17px;
+  height: 17px;
+  border: 1px solid #ffffff40;
+  border-radius: 50%;
+}
+.capture-style-menu {
+  z-index: 160;
+  min-width: 150px;
+  padding: 10px;
+  background: #2c2825;
+  color: #fff2e7;
+  border: 1px solid #736258;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px #0005;
+}
+.capture-style-menu strong {
+  display: block;
+  padding: 1px 4px 8px;
+  font-size: 11px;
+  color: #cdbfb4;
+  font-weight: 500;
+}
+html[data-desktop] .capture-style-menu button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px #edc4a5;
+  background-color: #ffffff12;
+}
+html[data-desktop] .capture-width-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  height: 32px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+.capture-width-option span {
+  display: block;
+  width: 45px;
+  border-radius: 6px;
+  background: currentColor;
+}
+.capture-size-options,
+.capture-color-options {
+  display: flex;
+  gap: 6px;
+}
+html[data-desktop] .capture-size-options button {
+  min-width: 32px;
+  font-size: 12px;
+}
+html[data-desktop] .capture-color-options .capture-color-swatch {
+  min-width: 26px;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  border: 1px solid #ffffff35;
+  border-radius: 50%;
+  padding: 0;
+}
+html[data-desktop]
+  .capture-color-options
+  .capture-color-swatch[aria-pressed="true"] {
+  outline: 2px solid #edc4a5;
+  outline-offset: 2px;
+}
+.capture-erase-box {
+  position: absolute;
+  border: 1px dashed #e9b18d;
+  background: #e9b18d25;
+  pointer-events: none;
 }
 .capture-text {
   position: absolute;
@@ -482,23 +593,23 @@ html[data-desktop] .capture-toolbar button {
 }
 .pet-avatar {
   position: absolute;
-  right: 8px;
-  bottom: 6px;
-  width: 82px;
-  height: 82px;
+  left: var(--pet-left, calc(100% - var(--pet-size, 82px) - 8px));
+  top: var(--pet-top, calc(100% - var(--pet-size, 82px) - 6px));
+  width: var(--pet-size, 82px);
+  height: var(--pet-size, 82px);
   pointer-events: auto;
   touch-action: none;
 }
 .pet-avatar .avatar-interaction,
 .pet-avatar .bai-avatar {
-  width: 82px;
-  height: 82px;
+  width: 100%;
+  height: 100%;
 }
 .pet-bubble {
   position: absolute;
   left: 7px;
   right: 8px;
-  bottom: 103px;
+  top: var(--pet-bubble-top, 36px);
   background: #25221ff0;
   border: 1px solid #ffffff1c;
   border-radius: 24px;
@@ -532,7 +643,7 @@ html[data-desktop] .pet-bubble > button:first-child {
 .pet-menu {
   position: absolute;
   right: 8px;
-  bottom: 94px;
+  top: var(--pet-menu-top, 24px);
   background: #2e2824;
   border: 1px solid #6c594a;
   border-radius: 12px;

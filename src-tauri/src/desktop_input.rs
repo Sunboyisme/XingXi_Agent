@@ -318,7 +318,8 @@ fn pointer_surfaces(app: &tauri::AppHandle) {
     let state = app.state::<Desktop>();
     if state.pet_dragging.load(Ordering::SeqCst) && !pressed(VK_LBUTTON) {
         state.pet_dragging.store(false, Ordering::SeqCst);
-        crate::desktop::persist_pet_position(app);
+        let a = app.clone();
+        let _ = app.run_on_main_thread(move || crate::desktop::finish_pet_drag(&a));
         let _ = app.emit_to("pet", "desktop-pet-drag-ended", ());
     }
     if let Some(w) = app.get_webview_window("pet") {

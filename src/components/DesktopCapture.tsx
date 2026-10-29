@@ -3,11 +3,11 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
+import { Popover } from "radix-ui";
 import {
   Pencil,
-  Minus,
-  ArrowUpRight,
   Square,
   Circle,
   Type,
@@ -18,7 +18,7 @@ import {
   ScanText,
   Languages,
   Download,
-  Copy,
+  ImagePlus,
   X,
   Check,
   MousePointer2,
@@ -26,6 +26,10 @@ import {
   Mic,
   Plus,
   ArrowUp,
+  Crop,
+  Eraser,
+  ChevronDown,
+  CaseSensitive,
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
@@ -39,7 +43,15 @@ import {
 type Point = { x: number; y: number };
 type Rect = Point & { w: number; h: number };
 type Tool =
-  "move" | "pen" | "line" | "arrow" | "rect" | "ellipse" | "text" | "mosaic";
+  | "move"
+  | "pen"
+  | "line"
+  | "arrow"
+  | "rect"
+  | "ellipse"
+  | "text"
+  | "mosaic"
+  | "erase";
 type Mark = {
   tool: Tool;
   points: Point[];
@@ -68,6 +80,7 @@ type Gesture = {
   original?: Rect;
   handle?: string;
   mark?: Mark;
+  erase?: boolean;
 };
 const rect = (a: Point, b: Point): Rect => ({
   x: Math.min(a.x, b.x),
@@ -85,16 +98,113 @@ const colors = [
   "#ffffff",
   "#111827",
 ];
+function LineToolIcon() {
+  return (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M4 16 16 4" />
+      <circle cx="4" cy="16" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="4" r="1.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function ArrowToolIcon() {
+  return (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 16 16 4M7 4h9v9" />
+    </svg>
+  );
+}
+function CaptureStylePicker({
+  label,
+  preview,
+  children,
+}: {
+  label: string;
+  preview: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Popover.Root>
+      <Hint label={label}>
+        <Popover.Trigger className="capture-style-trigger" aria-label={label}>
+          {preview}
+          <ChevronDown size={11} />
+        </Popover.Trigger>
+      </Hint>
+      <Popover.Portal>
+        <Popover.Content
+          className="capture-style-menu"
+          side="top"
+          sideOffset={8}
+          collisionPadding={8}
+          aria-label={label}
+          onEscapeKeyDown={(e) => e.stopPropagation()}
+        >
+          {children}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
 const tools = [
   ["move", "移动选区", MousePointer2],
   ["pen", "画笔", Pencil],
-  ["line", "直线", Minus],
-  ["arrow", "箭头", ArrowUpRight],
+  ["line", "直线", LineToolIcon],
+  ["arrow", "箭头", ArrowToolIcon],
   ["rect", "矩形", Square],
   ["ellipse", "椭圆", Circle],
   ["text", "文字", Type],
   ["mosaic", "马赛克", Grid2X2],
+  ["erase", "框选删除标注：拖拽框选，松开删除，可撤销", Eraser],
 ] as const;
+
+function markBounds(mark: Mark, ctx: CanvasRenderingContext2D): Rect {
+  if (mark.tool === "text") {
+    ctx.font = `${mark.size}px "Microsoft YaHei", sans-serif`;
+    const lines = (mark.text || "").split("\n");
+    return {
+      ...mark.points[0],
+      w: Math.max(1, ...lines.map((line) => ctx.measureText(line).width)),
+      h: lines.length * mark.size * 1.4,
+    };
+  }
+  const padding = Math.max(mark.width / 2, mark.tool === "arrow" ? 12 : 2);
+  let left = Infinity,
+    top = Infinity,
+    right = -Infinity,
+    bottom = -Infinity;
+  for (const p of mark.points) {
+    left = Math.min(left, p.x);
+    top = Math.min(top, p.y);
+    right = Math.max(right, p.x);
+    bottom = Math.max(bottom, p.y);
+  }
+  return {
+    x: left - padding,
+    y: top - padding,
+    w: right - left + padding * 2,
+    h: bottom - top + padding * 2,
+  };
+}
 
 function paint(
   ctx: CanvasRenderingContext2D,
@@ -169,6 +279,7 @@ export function DesktopCapture() {
   const [redo, setRedo] = useState<Mark[][]>([]);
   const [history, setHistory] = useState<Mark[][]>([]);
   const [live, setLive] = useState<Mark | null>(null);
+  const [eraseBox, setEraseBox] = useState<Rect | null>(null);
   const [tool, setTool] = useState<Tool>("move");
   const [color, setColor] = useState(colors[0]);
   const [width, setWidth] = useState(3);
@@ -225,6 +336,7 @@ export function DesktopCapture() {
       setHistory([]);
       setRedo([]);
       setLive(null);
+      setEraseBox(null);
       setText(null);
       setTool("move");
       setError("");
@@ -293,6 +405,7 @@ export function DesktopCapture() {
       setHistory([]);
       setRedo([]);
       setLive(null);
+      setEraseBox(null);
       setText(null);
       setBusy(false);
       setDragging(false);
@@ -304,6 +417,7 @@ export function DesktopCapture() {
     const resize = () => setViewport({ w: innerWidth, h: innerHeight });
     window.addEventListener("resize", resize);
     const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest(".capture-style-menu")) return;
       if (e.key === "Escape") {
         if (e.defaultPrevented) return;
         e.preventDefault();
@@ -325,9 +439,12 @@ export function DesktopCapture() {
       } else if (e.ctrlKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
         void commands.current.finish("copy");
-      } else if (e.key === "Enter") {
+      } else if (
+        e.key === "Enter" &&
+        !(e.target as HTMLElement)?.closest("button,[role=button]")
+      ) {
         e.preventDefault();
-        void commands.current.finish("attach");
+        void commands.current.finish("copy");
       }
     };
     window.addEventListener("keydown", key);
@@ -434,6 +551,14 @@ export function DesktopCapture() {
       commitText();
       return;
     }
+    if (selection && tool === "erase" && !handle && inside(selection, p)) {
+      gesture.current = { pointerId: e.pointerId, start: p, erase: true };
+      setEraseBox({ ...p, w: 0, h: 0 });
+      e.currentTarget.setPointerCapture(e.pointerId);
+      gestureTarget.current = e.currentTarget;
+      setDragging(true);
+      return;
+    }
     if (selection && tool === "text" && !handle && inside(selection, p)) {
       setText({ at: p, value: "" });
       return;
@@ -480,7 +605,8 @@ export function DesktopCapture() {
     const p = point(e),
       dx = p.x - g.start.x,
       dy = p.y - g.start.y;
-    if (g.original) {
+    if (g.erase) setEraseBox(rect(g.start, p));
+    else if (g.original) {
       const r = g.original;
       if (!g.handle)
         setSelection({
@@ -512,13 +638,43 @@ export function DesktopCapture() {
   function end(e: ReactPointerEvent) {
     const g = gesture.current;
     if (!g || g.pointerId !== e.pointerId) return;
-    if (g.mark) addMark(g.mark);
-    if (!g.mark && !g.original) {
+    if (g.erase) {
+      const box = rect(g.start, point(e));
+      const context = source.current?.getContext("2d");
+      if (context) {
+        const remaining = marks.filter((mark) => {
+          const bounds = markBounds(mark, context);
+          return (
+            bounds.x > box.x + box.w ||
+            bounds.x + bounds.w < box.x ||
+            bounds.y > box.y + box.h ||
+            bounds.y + bounds.h < box.y
+          );
+        });
+        if (remaining.length !== marks.length) {
+          setHistory((h) => [...h, marks]);
+          setMarks(remaining);
+          setRedo([]);
+        }
+      }
+      setEraseBox(null);
+    } else if (g.mark) addMark(g.mark);
+    if (!g.erase && !g.mark && !g.original) {
       const box = rect(g.start, point(e));
       if (box.w < 2 || box.h < 2) setSelection(null);
     }
     gesture.current = null;
     setLive(null);
+    setDragging(false);
+    if (gestureTarget.current?.hasPointerCapture(e.pointerId))
+      gestureTarget.current.releasePointerCapture(e.pointerId);
+    gestureTarget.current = null;
+  }
+  function cancelGesture(e: ReactPointerEvent) {
+    if (gesture.current?.pointerId !== e.pointerId) return;
+    gesture.current = null;
+    setLive(null);
+    setEraseBox(null);
     setDragging(false);
     if (gestureTarget.current?.hasPointerCapture(e.pointerId))
       gestureTarget.current.releasePointerCapture(e.pointerId);
@@ -616,7 +772,7 @@ export function DesktopCapture() {
       className="capture-window"
       onPointerMove={move}
       onPointerUp={end}
-      onPointerCancel={end}
+      onPointerCancel={cancelGesture}
     >
       <canvas
         ref={canvas}
@@ -789,6 +945,9 @@ export function DesktopCapture() {
           }}
         />
       )}
+      {eraseBox && (
+        <div className="capture-erase-box" style={styleRect(eraseBox)} />
+      )}
       {selection && selection.w >= 2 && !dragging && (
         <div
           ref={toolbarElement}
@@ -839,62 +998,115 @@ export function DesktopCapture() {
                   setTool(id);
                 }}
               >
-                <Icon size={18} />
+                <Icon />
               </button>
             </Hint>
           ))}
-          <label className="capture-option">
-            线宽
-            <select
-              aria-label="线宽"
-              value={width}
-              onChange={(e) => setWidth(Number(e.target.value))}
-            >
-              {[2, 3, 5, 8].map((n) => (
-                <option key={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-          <label className="capture-option">
-            字号
-            <select
-              aria-label="字号"
-              value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-            >
+          <span className="capture-separator" />
+          <CaptureStylePicker
+            label={`线宽：${width} 像素`}
+            preview={
+              <span
+                className="capture-stroke-preview"
+                style={{ height: Math.min(width, 7) }}
+              />
+            }
+          >
+            <strong>线宽</strong>
+            {[2, 3, 5, 8].map((n) => (
+              <Popover.Close key={n} asChild>
+                <button
+                  className="capture-width-option"
+                  aria-label={`${n} 像素`}
+                  aria-pressed={width === n}
+                  onClick={() => setWidth(n)}
+                >
+                  <span style={{ height: n }} />
+                  {n} px
+                </button>
+              </Popover.Close>
+            ))}
+          </CaptureStylePicker>
+          <CaptureStylePicker
+            label={`字号：${fontSize}`}
+            preview={
+              <>
+                <CaseSensitive size={18} />
+                <small>{fontSize}</small>
+              </>
+            }
+          >
+            <strong>字号</strong>
+            <div className="capture-size-options">
               {[16, 20, 24, 32, 48].map((n) => (
-                <option key={n}>{n}</option>
+                <Popover.Close key={n} asChild>
+                  <button
+                    aria-label={`字号 ${n}`}
+                    aria-pressed={fontSize === n}
+                    onClick={() => setFontSize(n)}
+                  >
+                    {n}
+                  </button>
+                </Popover.Close>
               ))}
-            </select>
-          </label>
-          <Hint label="标注颜色">
-            <select
-              aria-label="标注颜色"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="capture-color"
-              style={{ color }}
-            >
+            </div>
+          </CaptureStylePicker>
+          <CaptureStylePicker
+            label="标注颜色"
+            preview={
+              <span
+                className="capture-color-preview"
+                style={{ background: color }}
+              />
+            }
+          >
+            <strong>颜色</strong>
+            <div className="capture-color-options">
               {colors.map((c, i) => (
-                <option key={c} value={c}>
-                  {["红", "黄", "绿", "蓝", "白", "黑"][i]}
-                </option>
+                <Hint
+                  key={c}
+                  label={["红色", "黄色", "绿色", "蓝色", "白色", "黑色"][i]}
+                >
+                  <Popover.Close
+                    className="capture-color-swatch"
+                    aria-label={
+                      ["红色", "黄色", "绿色", "蓝色", "白色", "黑色"][i]
+                    }
+                    aria-pressed={color === c}
+                    style={{ background: c }}
+                    onClick={() => setColor(c)}
+                  >
+                    {color === c && (
+                      <Check
+                        size={14}
+                        style={{
+                          color:
+                            c === "#ffffff" || c === "#facc15"
+                              ? "#201e1c"
+                              : "#fff",
+                        }}
+                      />
+                    )}
+                  </Popover.Close>
+                </Hint>
               ))}
-            </select>
-          </Hint>
+            </div>
+          </CaptureStylePicker>
+          <span className="capture-separator" />
           {(
             [
               ["撤销", Undo2, undo, !history.length],
               ["重做", Redo2, redoAction, !redo.length],
               [
                 "重新框选",
-                MousePointer2,
+                Crop,
                 () => {
                   setSelection(null);
                   setMarks([]);
                   setHistory([]);
                   setRedo([]);
                   setToolbar(null);
+                  setEraseBox(null);
                 },
                 false,
               ],
@@ -915,7 +1127,7 @@ export function DesktopCapture() {
               ["pin", "钉住截图", Pin],
               ["ocr", "提取文字", ScanText],
               ["translate", "翻译截图", Languages],
-              ["copy", "复制截图", Copy],
+              ["attach", "添加到问答草稿", ImagePlus],
               ["save", "保存 PNG", Download],
             ] as const
           ).map(([action, label, Icon]) => (
@@ -939,12 +1151,12 @@ export function DesktopCapture() {
               <X size={21} />
             </button>
           </Hint>
-          <Hint label="添加到问答草稿">
+          <Hint label="复制截图并完成（Enter）">
             <button
               className="capture-confirm"
-              aria-label="添加到问答草稿"
+              aria-label="复制截图并完成"
               disabled={busy}
-              onClick={() => void finish("attach")}
+              onClick={() => void finish("copy")}
             >
               <Check size={21} />
             </button>

@@ -10,6 +10,8 @@ import {
   ExternalLink,
   RotateCw,
   LoaderCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint, Markdown } from "./common";
@@ -68,6 +70,7 @@ export function DesktopQuickAsk() {
   const [answer, setAnswer] = useState("");
   const [question, setQuestion] = useState("");
   const [error, setError] = useState("");
+  const [answerCollapsed, setAnswerCollapsed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [voice, setVoice] = useState<VoiceState | null>(null);
@@ -282,6 +285,7 @@ export function DesktopQuickAsk() {
     setAnswer("");
     setQuestion("");
     setError("");
+    setAnswerCollapsed(false);
     setHiddenEpoch((value) => value + 1);
   }
   async function drainCommands() {
@@ -323,6 +327,7 @@ export function DesktopQuickAsk() {
     }
   }
   async function track(id: string, epoch: number) {
+    setAnswerCollapsed(false);
     const sequence = ++tracking.current;
     tracker.current?.abort();
     const controller = new AbortController();
@@ -406,6 +411,7 @@ export function DesktopQuickAsk() {
     startRequest.current = true;
     const epoch = ++generation.current;
     setError("");
+    setAnswerCollapsed(false);
     setRunBusy(true);
     try {
       const selected = selectedModel(settings, value.modelKey);
@@ -588,6 +594,7 @@ export function DesktopQuickAsk() {
       return;
     work.current.locked = true;
     setError("");
+    setAnswerCollapsed(false);
     const epoch = ++voiceEpoch.current;
     startingVoice.current = true;
     pendingVoice.current = null;
@@ -707,10 +714,11 @@ export function DesktopQuickAsk() {
     if (id) void invoke("voice_cancel", { id });
   }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
+  const hasAnswer = Boolean(answer || busy || error);
   return (
     <main className="quick-window">
-      {(answer || busy || error) && (
-        <section className="quick-answer">
+      {hasAnswer && !answerCollapsed && (
+        <section className="quick-answer" id="desktop-quick-answer">
           <header>
             <strong>{question || "XiaoXi"}</strong>
             <div>
@@ -739,9 +747,16 @@ export function DesktopQuickAsk() {
                   <ExternalLink size={15} />
                 </button>
               </Hint>
-              <Hint label="收起问答">
-                <button aria-label="收起问答" onClick={() => void dismiss()}>
-                  <X size={16} />
+              <Hint label="收起回答">
+                <button
+                  aria-label="收起回答"
+                  aria-controls="desktop-quick-answer"
+                  onClick={() => {
+                    setAnswerCollapsed(true);
+                    input.current?.focus({ preventScroll: true });
+                  }}
+                >
+                  <ChevronDown size={16} />
                 </button>
               </Hint>
             </div>
@@ -750,9 +765,24 @@ export function DesktopQuickAsk() {
             <Markdown>{answer}</Markdown>
             {busy && <p role="status">正在处理…</p>}
             {error && (
-              <p className="desktop-error" role="alert">
-                {error}
-              </p>
+              <div className="quick-error" role="alert">
+                <p className="desktop-error">{error}</p>
+                {/配置语音|语音.*API Key/.test(error) && (
+                  <button
+                    className="quick-settings-link"
+                    onClick={() => {
+                      void invoke("desktop_main", {
+                        settings: true,
+                        settingsTab: "services",
+                      })
+                        .then(() => dismiss())
+                        .catch((e) => setError(desktopError(e)));
+                    }}
+                  >
+                    配置语音服务 <ExternalLink size={14} />
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </section>
@@ -905,6 +935,21 @@ export function DesktopQuickAsk() {
               <X size={19} />
             </button>
           </Hint>
+          {hasAnswer && answerCollapsed && (
+            <Hint label="展开回答">
+              <button
+                aria-label="展开回答"
+                aria-expanded={false}
+                aria-controls="desktop-quick-answer"
+                onClick={() => {
+                  setAnswerCollapsed(false);
+                  input.current?.focus({ preventScroll: true });
+                }}
+              >
+                <ChevronUp size={19} />
+              </button>
+            </Hint>
+          )}
         </div>
         {uploading && (
           <p className="quick-activity" role="status">

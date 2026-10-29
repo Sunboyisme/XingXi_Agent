@@ -18,6 +18,10 @@ export type DesktopPreferences = {
   shortcut: string;
   petX: number | null;
   petY: number | null;
+  petSize: number;
+  petSnap: boolean;
+  petOffsetX?: number | null;
+  petOffsetY?: number | null;
 };
 export type SpeechProfile = {
   provider: "siliconflow" | "bailian" | "custom";

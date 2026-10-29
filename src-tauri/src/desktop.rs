@@ -20,6 +20,10 @@ pub struct Preferences {
     pub shortcut: String,
     pub pet_x: Option<i32>,
     pub pet_y: Option<i32>,
+    pub pet_size: u16,
+    pub pet_snap: bool,
+    pub pet_offset_x: Option<f64>,
+    pub pet_offset_y: Option<f64>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +32,8 @@ pub struct PreferencePatch {
     pub pet: Option<bool>,
     pub selection: Option<bool>,
     pub shortcut: Option<String>,
+    pub pet_size: Option<u16>,
+    pub pet_snap: Option<bool>,
 }
 #[derive(Clone, Serialize)]
 pub struct SelectionSnapshot {
@@ -62,6 +68,10 @@ impl Default for Preferences {
             shortcut: "Ctrl+Shift+E".into(),
             pet_x: None,
             pet_y: None,
+            pet_size: 100,
+            pet_snap: true,
+            pet_offset_x: None,
+            pet_offset_y: None,
         }
     }
 }
@@ -70,6 +80,8 @@ pub struct Desktop {
     pub prefs: Mutex<Preferences>,
     pub owned: AtomicBool,
     pub pet_dragging: AtomicBool,
+    pub pet_move_epoch: AtomicU64,
+    pub pet_dock_edges: Mutex<Vec<String>>,
     pub shortcut_recording: AtomicBool,
     pub shortcut_error: Mutex<String>,
     pub quick_text: Mutex<String>,
@@ -132,15 +144,16 @@ fn window(
 }
 pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     if let Ok(bytes) = std::fs::read(path(app)) {
-        if let Ok(p) = serde_json::from_slice(&bytes) {
+        if let Ok(mut p) = serde_json::from_slice::<Preferences>(&bytes) {
+            p.pet_size = p.pet_size.clamp(50, 200);
             *app.state::<Desktop>().prefs.lock().unwrap() = p;
         }
     }
     window(app, "quick", 900.0, 540.0)?;
     window(app, "capture", 900.0, 600.0)?;
     window(app, "selection", 560.0, 360.0)?;
-    let pet = window(app, "pet", 340.0, 220.0)?;
     let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
+    let pet = window(app, "pet", 340.0, 82.0 * p.pet_size as f64 / 100.0 + 138.0)?;
     if let Some(m) = pet.primary_monitor().map_err(|e| e.to_string())? {
         let area = m.work_area();
         let size = pet.outer_size().map_err(|e| e.to_string())?;
@@ -152,7 +165,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
             .unwrap_or(area.position.y + area.size.height as i32 - size.height as i32 - 24);
         pet.set_position(PhysicalPosition::new(x, y))
             .map_err(|e| e.to_string())?;
-        let _ = crate::window_layout::ensure_visible(&pet);
+        let _ = place_pet(app, false, false);
     }
     crate::desktop_input::start(app.clone());
     Ok(())
@@ -160,7 +173,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn desktop_preferences(app: tauri::AppHandle) -> serde_json::Value {
     let d = app.state::<Desktop>();
-    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"shortcutError":d.shortcut_error.lock().unwrap().clone()})
+    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"petDockEdges":d.pet_dock_edges.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"shortcutError":d.shortcut_error.lock().unwrap().clone()})
 }
 #[tauri::command]
 pub async fn desktop_preferences_save(
@@ -169,6 +182,8 @@ pub async fn desktop_preferences_save(
 ) -> Result<serde_json::Value, String> {
     let _save = PREFERENCE_SAVE_LOCK.lock().await;
     let mut next = app.state::<Desktop>().prefs.lock().unwrap().clone();
+    let old_pet_size = next.pet_size;
+    let old_pet_snap = next.pet_snap;
     if let Some(v) = preferences.enabled {
         next.enabled = v;
     }
@@ -180,6 +195,15 @@ pub async fn desktop_preferences_save(
     }
     if let Some(v) = preferences.shortcut {
         next.shortcut = v;
+    }
+    if let Some(v) = preferences.pet_size {
+        if !(50..=200).contains(&v) {
+            return Err("桌宠大小需在 50% 到 200% 之间".into());
+        }
+        next.pet_size = v;
+    }
+    if let Some(v) = preferences.pet_snap {
+        next.pet_snap = v;
     }
     let preferences = next;
     crate::desktop_input::parse_shortcut(&preferences.shortcut)?;
@@ -193,6 +217,8 @@ pub async fn desktop_preferences_save(
         let mut next = preferences.clone();
         next.pet_x = current.pet_x;
         next.pet_y = current.pet_y;
+        next.pet_offset_x = current.pet_offset_x;
+        next.pet_offset_y = current.pet_offset_y;
         let result = persist_preferences(&app, &next);
         if result.is_ok() {
             *current = next;
@@ -208,6 +234,19 @@ pub async fn desktop_preferences_save(
         return Err(error);
     }
     if let Some(pet) = app.get_webview_window("pet") {
+        if old_pet_size != preferences.pet_size {
+            app.state::<Desktop>()
+                .pet_move_epoch
+                .fetch_add(1, Ordering::SeqCst);
+            pet.set_size(tauri::LogicalSize::new(
+                340.0,
+                82.0 * preferences.pet_size as f64 / 100.0 + 138.0,
+            ))
+            .map_err(|e| e.to_string())?;
+        }
+        if old_pet_size != preferences.pet_size || old_pet_snap != preferences.pet_snap {
+            place_pet(&app, false, false)?;
+        }
         if preferences.pet && app.state::<Desktop>().owned.load(Ordering::Relaxed) {
             let _ = pet.show();
         } else {
@@ -235,16 +274,185 @@ fn persist_preferences(app: &tauri::AppHandle, p: &Preferences) -> Result<(), St
     .map_err(|e| e.to_string())?;
     std::fs::rename(temp, target).map_err(|e| e.to_string())
 }
-pub fn persist_pet_position(app: &tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("pet") {
-        if let Ok(pos) = w.outer_position() {
-            let state = app.state::<Desktop>();
-            let mut p = state.prefs.lock().unwrap();
-            p.pet_x = Some(pos.x);
-            p.pet_y = Some(pos.y);
-            let _ = persist_preferences(app, &p);
+// Clamp the visible avatar, and reposition its transparent frame so the bubble
+// and context menu stay accessible at the top and left monitor edges as well.
+fn place_pet(app: &tauri::AppHandle, snap: bool, reset: bool) -> Result<(), String> {
+    let w = app.get_webview_window("pet").ok_or("桌宠窗口不可用")?;
+    let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
+    let at = w.outer_position().map_err(|e| e.to_string())?;
+    let size = w.outer_size().map_err(|e| e.to_string())?;
+    let scale = w.scale_factor().map_err(|e| e.to_string())?;
+    let diameter = (82.0 * p.pet_size as f64 / 100.0 * scale).round() as i32;
+    let right = (8.0 * scale).round() as i32;
+    let bottom = (6.0 * scale).round() as i32;
+    let left = at.x
+        + p.pet_offset_x
+            .map(|x| (x * scale).round() as i32)
+            .unwrap_or(size.width as i32 - right - diameter);
+    let top = at.y
+        + p.pet_offset_y
+            .map(|y| (y * scale).round() as i32)
+            .unwrap_or(size.height as i32 - bottom - diameter);
+    let (cx, cy) = if reset {
+        crate::desktop_input::cursor()
+    } else {
+        (left + diameter / 2, top + diameter / 2)
+    };
+    let monitor = w
+        .available_monitors()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .min_by_key(|m| {
+            let a = m.work_area();
+            let dx = (cx as i64
+                - (cx as i64).clamp(
+                    a.position.x as i64,
+                    a.position.x as i64 + a.size.width as i64,
+                ))
+            .abs();
+            let dy = (cy as i64
+                - (cy as i64).clamp(
+                    a.position.y as i64,
+                    a.position.y as i64 + a.size.height as i64,
+                ))
+            .abs();
+            dx * dx + dy * dy
+        })
+        .ok_or("无法读取显示器工作区")?;
+    let a = monitor.work_area();
+    let target_scale = monitor.scale_factor();
+    let target_diameter = (82.0 * p.pet_size as f64 / 100.0 * target_scale).round() as i32;
+    let height = 82.0 * p.pet_size as f64 / 100.0 + 138.0;
+    let target_size = PhysicalSize::new(
+        (340.0 * target_scale).round() as u32,
+        (height * target_scale).round() as u32,
+    );
+    if reset {
+        // Use the destination DPI: moving from a differently scaled screen must
+        // place the avatar, rather than the transparent window frame, at the corner.
+        let gap = (24.0 * target_scale).round() as i32;
+        let x = (a.position.x + a.size.width as i32 - target_diameter - gap).max(a.position.x);
+        let y = (a.position.y + a.size.height as i32 - target_diameter - gap).max(a.position.y);
+        return position_pet(app, &w, a, x, y, target_size, target_scale);
+    }
+    let min_x = a.position.x;
+    let min_y = a.position.y;
+    let max_x = (min_x + a.size.width as i32 - target_diameter).max(min_x);
+    let max_y = (min_y + a.size.height as i32 - target_diameter).max(min_y);
+    let mut x = (cx - target_diameter / 2).clamp(min_x, max_x);
+    let mut y = (cy - target_diameter / 2).clamp(min_y, max_y);
+    if snap {
+        let threshold = (24.0 * target_scale).round() as i32;
+        if x - min_x <= threshold {
+            x = min_x;
+        } else if max_x - x <= threshold {
+            x = max_x;
+        }
+        if y - min_y <= threshold {
+            y = min_y;
+        } else if max_y - y <= threshold {
+            y = max_y;
         }
     }
+    position_pet(app, &w, a, x, y, target_size, target_scale)
+}
+fn position_pet(
+    app: &tauri::AppHandle,
+    w: &tauri::WebviewWindow,
+    area: &tauri::PhysicalRect<i32, u32>,
+    x: i32,
+    y: i32,
+    size: PhysicalSize<u32>,
+    scale: f64,
+) -> Result<(), String> {
+    let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
+    let diameter = (82.0 * p.pet_size as f64 / 100.0 * scale).round() as i32;
+    let origin_x = (x + diameter + (8.0 * scale).round() as i32 - size.width as i32).clamp(
+        area.position.x,
+        (area.position.x + area.size.width as i32 - size.width as i32).max(area.position.x),
+    );
+    let origin_y = (y + diameter + (6.0 * scale).round() as i32 - size.height as i32).clamp(
+        area.position.y,
+        (area.position.y + area.size.height as i32 - size.height as i32).max(area.position.y),
+    );
+    w.set_position(PhysicalPosition::new(origin_x, origin_y))
+        .map_err(|e| e.to_string())?;
+    // Apply physical size after the move, once Windows has adopted the destination DPI.
+    if w.outer_size().map_err(|e| e.to_string())? != size {
+        w.set_size(size).map_err(|e| e.to_string())?;
+    }
+    let offset_x = (x - origin_x) as f64 / scale;
+    let offset_y = (y - origin_y) as f64 / scale;
+    let mut edges = vec![];
+    if p.pet_snap {
+        if (x - area.position.x).abs() <= 2 {
+            edges.push("left".to_string());
+        }
+        if (y - area.position.y).abs() <= 2 {
+            edges.push("top".to_string());
+        }
+        if (area.position.x + area.size.width as i32 - x - diameter).abs() <= 2 {
+            edges.push("right".to_string());
+        }
+        if (area.position.y + area.size.height as i32 - y - diameter).abs() <= 2 {
+            edges.push("bottom".to_string());
+        }
+    }
+    *app.state::<Desktop>().pet_dock_edges.lock().unwrap() = edges.clone();
+    {
+        let state = app.state::<Desktop>();
+        let mut p = state.prefs.lock().unwrap();
+        p.pet_x = Some(origin_x);
+        p.pet_y = Some(origin_y);
+        p.pet_offset_x = Some(offset_x);
+        p.pet_offset_y = Some(offset_y);
+        persist_preferences(app, &p)?;
+    }
+    let _ = w.emit(
+        "desktop-pet-layout",
+        serde_json::json!({"x":offset_x,"y":offset_y,"size":p.pet_size,"edges":edges}),
+    );
+    Ok(())
+}
+pub fn finish_pet_drag(app: &tauri::AppHandle) {
+    if app.state::<Desktop>().pet_dragging.load(Ordering::SeqCst) {
+        return;
+    }
+    let epoch = app
+        .state::<Desktop>()
+        .pet_move_epoch
+        .fetch_add(1, Ordering::SeqCst)
+        + 1;
+    let _ = place_pet(app, false, false);
+    let a = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let b = a.clone();
+        let _ = a.run_on_main_thread(move || {
+            let state = b.state::<Desktop>();
+            if state.pet_move_epoch.load(Ordering::SeqCst) != epoch
+                || state.pet_dragging.load(Ordering::SeqCst)
+                || !state.prefs.lock().unwrap().pet_snap
+                || state.capture.lock().unwrap().is_some()
+                || !b
+                    .get_webview_window("pet")
+                    .is_some_and(|w| w.is_visible().unwrap_or(false))
+            {
+                return;
+            }
+            let _ = place_pet(&b, true, false);
+        });
+    });
+}
+#[tauri::command]
+pub fn desktop_pet_reset(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    app.state::<Desktop>()
+        .pet_move_epoch
+        .fetch_add(1, Ordering::SeqCst);
+    place_pet(&app, false, true)?;
+    let value = desktop_preferences(app.clone());
+    let _ = app.emit("desktop-preferences", &value);
+    Ok(value)
 }
 pub fn restore(app: &tauri::AppHandle) {
     finish_capture(app, None);
@@ -688,12 +896,13 @@ pub fn desktop_main(
     app: tauri::AppHandle,
     conversation_id: Option<String>,
     settings: Option<bool>,
+    settings_tab: Option<String>,
 ) {
     crate::open_main(&app);
     let _ = app.emit_to(
         "main",
         "desktop-navigate",
-        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false)}),
+        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab}),
     );
 }
 #[tauri::command]
@@ -770,6 +979,15 @@ pub fn desktop_pet_drag(app: tauri::AppHandle, window: tauri::WebviewWindow) -> 
     app.state::<Desktop>()
         .pet_dragging
         .store(true, Ordering::SeqCst);
+    app.state::<Desktop>()
+        .pet_dock_edges
+        .lock()
+        .unwrap()
+        .clear();
+    let _ = window.emit("desktop-pet-undock", ());
+    app.state::<Desktop>()
+        .pet_move_epoch
+        .fetch_add(1, Ordering::SeqCst);
     window
         .set_ignore_cursor_events(false)
         .map_err(|e| e.to_string())?;

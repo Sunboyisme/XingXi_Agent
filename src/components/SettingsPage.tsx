@@ -150,6 +150,8 @@ export function SettingsPage({
   createRequested,
   contextTarget,
   onContextTargetHandled,
+  speechConfigureRequested,
+  onSpeechConfigureHandled,
 }: {
   settings: Settings;
   onSaved: (value: Settings) => void;
@@ -160,6 +162,8 @@ export function SettingsPage({
   createRequested?: number;
   contextTarget?: ModelContextTarget;
   onContextTargetHandled?: () => void;
+  speechConfigureRequested?: boolean;
+  onSpeechConfigureHandled?: () => void;
 }) {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -248,7 +252,12 @@ export function SettingsPage({
             <h2>扩展能力</h2>
             <div className="connections-services">
               <EmbeddingSettings />
-              <SpeechConnection />
+              <SpeechConnection
+                configureRequested={
+                  tab === "services" && speechConfigureRequested
+                }
+                onConfigureHandled={onSpeechConfigureHandled}
+              />
               <ImageGenerationConnection />
               <SearchConnection settings={settings} onSaved={onSaved} />
             </div>
