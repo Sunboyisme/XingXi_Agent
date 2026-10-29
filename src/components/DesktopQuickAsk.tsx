@@ -92,7 +92,6 @@ export function DesktopQuickAsk() {
   const pendingVoice = useRef<VoiceState | null>(null);
   const heldGesture = useRef<number | null>(null);
   const voiceRange = useRef({ start: 0, end: 0, text: "" });
-  const composingSequence = useRef(0);
   const pending = useRef<IncomingImage[]>([]);
   const seen = useRef(new Set<string>());
   const imageWorking = useRef(false);
@@ -149,18 +148,6 @@ export function DesktopQuickAsk() {
   useEffect(() => {
     mounted.current = true;
     const listeners = [
-      desktopListen<{ text: string; sequence: number; sessionId: string }>(
-        "desktop-compose",
-        (v) => {
-          if (
-            v.sessionId !== session.current ||
-            v.sequence <= composingSequence.current
-          )
-            return;
-          composingSequence.current = v.sequence;
-          updateDraft((d) => ({ ...d, text: v.text }));
-        },
-      ),
       desktopListen<string>("desktop-error", (v) => {
         if (mounted.current) setError(v);
       }),
@@ -277,7 +264,6 @@ export function DesktopQuickAsk() {
     pending.current = [];
     seen.current.clear();
     imageWorking.current = false;
-    composingSequence.current = 0;
     setPendingCount(0);
     setRunBusy(false);
     setFileBusy(false);
@@ -310,7 +296,7 @@ export function DesktopQuickAsk() {
           if (item.action === "file") void functions.current.pickFiles();
           if (item.action === "voice" || item.action === "record") {
             heldGesture.current = item.gesture ?? null;
-            void functions.current.startVoice(item.gesture, true);
+            void functions.current.startVoice(item.gesture);
           }
           if (item.action === "image" && item.dataUrl)
             functions.current.receiveImage({
@@ -589,7 +575,7 @@ export function DesktopQuickAsk() {
       setError(value.error || "录音失败");
     }
   }
-  async function startVoice(gesture?: number, transferred = false) {
+  async function startVoice(gesture?: number) {
     if (work.current.locked || work.current.uploading || work.current.busy)
       return;
     work.current.locked = true;
@@ -599,12 +585,8 @@ export function DesktopQuickAsk() {
     startingVoice.current = true;
     pendingVoice.current = null;
     voiceRange.current = {
-      start: transferred
-        ? current.current.text.length
-        : (input.current?.selectionStart ?? current.current.text.length),
-      end: transferred
-        ? current.current.text.length
-        : (input.current?.selectionEnd ?? current.current.text.length),
+      start: input.current?.selectionStart ?? current.current.text.length,
+      end: input.current?.selectionEnd ?? current.current.text.length,
       text: current.current.text,
     };
     setVoice({ id: "", phase: "starting", seconds: 0, level: 0 });

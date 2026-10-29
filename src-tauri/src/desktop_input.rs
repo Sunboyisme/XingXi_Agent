@@ -375,9 +375,7 @@ pub fn start(app: tauri::AppHandle) {
                         if p.pet {
                             let a = app.clone();
                             let _ = app.run_on_main_thread(move || {
-                                if let Some(w) = a.get_webview_window("pet") {
-                                    let _ = w.show();
-                                }
+                                crate::desktop::set_pet_visible(&a, true);
                             });
                         }
                     }

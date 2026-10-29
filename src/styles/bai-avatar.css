@@ -90,31 +90,6 @@
 .bai-avatar[data-motion="thinking"] .bai-avatar-float {
   animation: bai-avatar-think 2.6s ease-in-out infinite;
 }
-.bai-avatar[data-docked="true"] .bai-avatar-float,
-.avatar-interaction .bai-avatar[data-docked="true"] .bai-avatar-response {
-  animation: none;
-  transform: none;
-}
-.bai-avatar-dock-contact {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: bai-avatar-meld 300ms ease-out both;
-}
-@keyframes bai-avatar-meld {
-  from {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bai-avatar-dock-contact {
-    animation: none;
-  }
-}
 @keyframes bai-avatar-breathe {
   0%,
   100% {

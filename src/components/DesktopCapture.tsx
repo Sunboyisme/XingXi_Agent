@@ -23,15 +23,11 @@ import {
   Check,
   MousePointer2,
   GripVertical,
-  Mic,
-  Plus,
-  ArrowUp,
   Crop,
   Eraser,
   ChevronDown,
   CaseSensitive,
 } from "lucide-react";
-import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
 import {
   invoke,
@@ -285,8 +281,6 @@ export function DesktopCapture() {
   const [width, setWidth] = useState(3);
   const [fontSize, setFontSize] = useState(24);
   const [text, setText] = useState<{ at: Point; value: string } | null>(null);
-  const [draft, setDraft] = useState("");
-  const draftRef = useRef("");
   const currentSession = useRef<Session | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -306,7 +300,6 @@ export function DesktopCapture() {
   const toolbarElement = useRef<HTMLDivElement>(null);
   const [toolbarSize, setToolbarSize] = useState({ w: 760, h: 44 });
   const textInput = useRef<HTMLTextAreaElement>(null);
-  const launcherInput = useRef<HTMLTextAreaElement>(null);
   const epoch = useRef(0);
   const exportLock = useRef(false);
   const commands = useRef({
@@ -315,8 +308,16 @@ export function DesktopCapture() {
     finish,
     commitText,
     cancelCapture,
+    resetSelection,
   });
-  commands.current = { undo, redoAction, finish, commitText, cancelCapture };
+  commands.current = {
+    undo,
+    redoAction,
+    finish,
+    commitText,
+    cancelCapture,
+    resetSelection,
+  };
   const sx = session ? viewport.w / session.width : 1,
     sy = session ? viewport.h / session.height : 1;
   const styleRect = (r: Rect) => ({
@@ -350,8 +351,6 @@ export function DesktopCapture() {
         if (!alive || current !== epoch.current) return;
         loadingId = s.id;
         currentSession.current = s;
-        draftRef.current = s.draftText;
-        setDraft(s.draftText);
         active = true;
         const raw = await invoke<ArrayBuffer | number[]>("capture_pixels", {
           id: s.id,
@@ -411,7 +410,10 @@ export function DesktopCapture() {
       setDragging(false);
       exportLock.current = false;
     });
-    void Promise.all([unlisten, dismissListener]).then(() => {
+    const resetListener = desktopListen<string>("capture-reset", (id) => {
+      if (id === currentSession.current?.id) commands.current.resetSelection();
+    });
+    void Promise.all([unlisten, dismissListener, resetListener]).then(() => {
       if (alive) void load();
     });
     const resize = () => setViewport({ w: innerWidth, h: innerHeight });
@@ -453,6 +455,7 @@ export function DesktopCapture() {
       epoch.current++;
       void unlisten.then((f) => f());
       void dismissListener.then((f) => f());
+      void resetListener.then((f) => f());
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", key);
     };
@@ -460,24 +463,30 @@ export function DesktopCapture() {
   async function cancelCapture() {
     const id = currentSession.current?.id;
     if (id)
-      await invoke("capture_cancel", { id, text: draftRef.current }).catch(
-        (e) => {
-          if (currentSession.current?.id === id) setError(desktopError(e));
-        },
-      );
+      await invoke("capture_cancel", { id }).catch((e) => {
+        if (currentSession.current?.id === id) setError(desktopError(e));
+      });
   }
-  function compose(text: string) {
-    draftRef.current = text;
-    setDraft(text);
-    const id = currentSession.current?.id;
-    if (id) void invoke("capture_compose", { id, text }).catch(() => {});
+  function resetSelection() {
+    const g = gesture.current;
+    if (g && gestureTarget.current?.hasPointerCapture(g.pointerId))
+      gestureTarget.current.releasePointerCapture(g.pointerId);
+    gestureTarget.current = null;
+    gesture.current = null;
+    setSelection(null);
+    setMarks([]);
+    setHistory([]);
+    setRedo([]);
+    setToolbar(null);
+    setLive(null);
+    setEraseBox(null);
+    setText(null);
+    setTool("move");
+    setDragging(false);
   }
   useEffect(() => {
     if (text) textInput.current?.focus();
   }, [Boolean(text)]);
-  useEffect(() => {
-    if (session) launcherInput.current?.focus();
-  }, [session?.id]);
   useEffect(() => {
     const node = toolbarElement.current;
     if (!node) return;
@@ -546,6 +555,10 @@ export function DesktopCapture() {
     e.preventDefault();
     e.stopPropagation();
     const p = point(e);
+    if (!selection)
+      void invoke("capture_select", { id: session.id }).catch((e) =>
+        setError(desktopError(e)),
+      );
     setError("");
     if (text) {
       commitText();
@@ -661,7 +674,12 @@ export function DesktopCapture() {
     } else if (g.mark) addMark(g.mark);
     if (!g.erase && !g.mark && !g.original) {
       const box = rect(g.start, point(e));
-      if (box.w < 2 || box.h < 2) setSelection(null);
+      if (box.w < 2 || box.h < 2) {
+        setSelection(null);
+        void invoke("desktop_open", { capture: false }).catch((e) =>
+          setError(desktopError(e)),
+        );
+      }
     }
     gesture.current = null;
     setLive(null);
@@ -732,16 +750,6 @@ export function DesktopCapture() {
       }
     }
   }
-  async function openQuick(action: "send" | "file" | "voice") {
-    if (action === "send" && !draftRef.current.trim()) return;
-    const id = currentSession.current?.id;
-    if (id)
-      await invoke("capture_continue", {
-        id,
-        text: draftRef.current,
-        action,
-      }).catch((e) => setError(desktopError(e)));
-  }
   const box = selection ? styleRect(selection) : null;
   const barPosition = box
     ? toolbar || {
@@ -758,15 +766,6 @@ export function DesktopCapture() {
             : Math.max(8, box.top - toolbarSize.h - 12),
       }
     : { x: 0, y: 0 };
-  const launcherWidth = session
-    ? Math.min(860, session.monitorWidth * sx - 24)
-    : Math.min(860, viewport.w - 24);
-  const launcherX = session
-    ? session.monitorX * sx + (session.monitorWidth * sx - launcherWidth) / 2
-    : 12;
-  const launcherY = session
-    ? session.monitorY * sy + session.monitorHeight * sy * 0.65
-    : viewport.h * 0.65;
   return (
     <main
       className="capture-window"
@@ -792,77 +791,6 @@ export function DesktopCapture() {
           >
             拖拽截图
           </span>
-          <div
-            className="capture-launcher quick-bar"
-            style={{ left: launcherX, top: launcherY, width: launcherWidth }}
-          >
-            <BaiAvatar interactive />
-            <textarea
-              ref={launcherInput}
-              aria-label="随心输入"
-              placeholder="随心输入"
-              value={draft}
-              onChange={(e) => {
-                compose(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void cancelCapture();
-                  return;
-                }
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing &&
-                  e.keyCode !== 229
-                ) {
-                  e.preventDefault();
-                  void openQuick("send");
-                }
-              }}
-            />
-            <Hint label="添加桌面文件">
-              <button
-                aria-label="添加桌面文件"
-                onClick={() => void openQuick("file")}
-              >
-                <Plus size={22} />
-              </button>
-            </Hint>
-            <Hint
-              label={
-                <span>
-                  语音输入　按住 <kbd>右Alt</kbd>
-                </span>
-              }
-            >
-              <button
-                aria-label="语音输入"
-                onClick={() => void openQuick("voice")}
-              >
-                <Mic size={21} />
-              </button>
-            </Hint>
-            <Hint label="发送">
-              <button
-                aria-label="发送"
-                disabled={!draft.trim()}
-                onClick={() => void openQuick("send")}
-              >
-                <ArrowUp size={21} />
-              </button>
-            </Hint>
-            <Hint label="关闭问答">
-              <button
-                aria-label="关闭问答"
-                onClick={() => void cancelCapture()}
-              >
-                <X size={19} />
-              </button>
-            </Hint>
-          </div>
         </>
       )}
       {selection && box && (
@@ -1101,12 +1029,10 @@ export function DesktopCapture() {
                 "重新框选",
                 Crop,
                 () => {
-                  setSelection(null);
-                  setMarks([]);
-                  setHistory([]);
-                  setRedo([]);
-                  setToolbar(null);
-                  setEraseBox(null);
+                  resetSelection();
+                  void invoke("desktop_open", { capture: false }).catch((e) =>
+                    setError(desktopError(e)),
+                  );
                 },
                 false,
               ],

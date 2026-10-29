@@ -299,12 +299,6 @@ html[data-desktop] .quick-mic.is-active {
   width: 100%;
   height: 100%;
 }
-.capture-launcher {
-  position: absolute;
-  width: min(860px, calc(100vw - 24px));
-  box-sizing: border-box;
-  cursor: default;
-}
 .capture-cursor-hint {
   position: absolute;
   pointer-events: none;
@@ -604,6 +598,56 @@ html[data-desktop]
 .pet-avatar .bai-avatar {
   width: 100%;
   height: 100%;
+}
+.pet-appearance {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: center bottom;
+}
+.pet-appearance[data-phase="enter"] {
+  animation: pet-appear 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.pet-appearance[data-phase="leave"] {
+  animation: pet-leave 260ms cubic-bezier(0.4, 0, 0.9, 0.3) both;
+}
+.pet-window[data-presence="leave"] .pet-avatar,
+.pet-window[data-presence="leave"] .pet-bubble,
+.pet-window[data-presence="leave"] .pet-menu {
+  pointer-events: none;
+}
+.pet-window[data-presence="leave"] .pet-bubble {
+  opacity: 0;
+  transition: opacity 120ms;
+}
+@keyframes pet-appear {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(12%) scale(0.55, 0.7);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate(0, 0) scale(1.04, 0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+@keyframes pet-leave {
+  to {
+    opacity: 0;
+    filter: blur(1px);
+    transform: translateY(10%) scale(0.7, 0.5);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-appearance[data-phase="enter"],
+  .pet-appearance[data-phase="leave"] {
+    animation-duration: 1ms;
+  }
 }
 .pet-bubble {
   position: absolute;

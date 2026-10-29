@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
 import { ChevronDown, Copy, X, RotateCw, GripVertical } from "lucide-react";
-import { BaiAvatar, type AvatarDockEdge } from "./BaiAvatar";
+import { BaiAvatar } from "./BaiAvatar";
 import { Hint, Markdown } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import {
@@ -391,8 +391,13 @@ export function DesktopPet() {
     size: number;
     x?: number | null;
     y?: number | null;
-    edges: AvatarDockEdge[];
-  }>({ size: 100, edges: [] });
+  }>({ size: 100 });
+  const [presence, setPresence] = useState<{
+    phase: "enter" | "leave" | "idle";
+    key: number;
+  }>({ phase: "idle", key: 0 });
+  const presenceEpoch = useRef(-1);
+  const presenceKey = useRef(0);
   const [task, setTask] = useState<PetTask | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -409,17 +414,13 @@ export function DesktopPet() {
     const w = getCurrentWindow();
     let alive = true;
     let layoutSeen = false;
-    const acceptPreferences = (value: {
-      preferences: DesktopPreferences;
-      petDockEdges?: AvatarDockEdge[];
-    }) => {
+    const acceptPreferences = (value: { preferences: DesktopPreferences }) => {
       if (!alive) return;
       layoutSeen = true;
       setLayout({
         size: value.preferences.petSize,
         x: value.preferences.petOffsetX,
         y: value.preferences.petOffsetY,
-        edges: value.preferences.petSnap ? value.petDockEdges || [] : [],
       });
     };
     const update = async () => {
@@ -437,20 +438,27 @@ export function DesktopPet() {
     const listeners = [
       desktopListen<{
         preferences: DesktopPreferences;
-        petDockEdges?: AvatarDockEdge[];
       }>("desktop-preferences", acceptPreferences),
       desktopListen<{
         size: number;
         x: number;
         y: number;
-        edges: AvatarDockEdge[];
       }>("desktop-pet-layout", (value) => {
         if (!alive) return;
         layoutSeen = true;
         setLayout(value);
       }),
-      desktopListen("desktop-pet-undock", () =>
-        setLayout((value) => ({ ...value, edges: [] })),
+      desktopListen<{ shown: boolean; epoch: number }>(
+        "desktop-pet-presence",
+        (value) => {
+          if (!alive || value.epoch <= presenceEpoch.current) return;
+          presenceEpoch.current = value.epoch;
+          setMenu(false);
+          setPresence({
+            phase: value.shown ? "enter" : "leave",
+            key: ++presenceKey.current,
+          });
+        },
       ),
       desktopListen("desktop-pet-hide-menu", () => setMenu(false)),
       desktopListen("desktop-pet-drag-ended", () => {
@@ -495,11 +503,14 @@ export function DesktopPet() {
       .then(() =>
         invoke<{
           preferences: DesktopPreferences;
-          petDockEdges?: AvatarDockEdge[];
         }>("desktop_preferences"),
       )
-      .then((value) => {
-        if (alive && !layoutSeen) acceptPreferences(value);
+      .then(async (value) => {
+        if (!alive) return;
+        if (!layoutSeen) acceptPreferences(value);
+        const shown = await w.isVisible();
+        if (alive && presenceEpoch.current < 0 && shown)
+          setPresence({ phase: "enter", key: ++presenceKey.current });
       })
       .catch(() => {});
     return () => {
@@ -543,6 +554,7 @@ export function DesktopPet() {
   return (
     <main
       className="pet-window"
+      data-presence={presence.phase}
       style={
         {
           "--pet-size": `${avatarSize}px`,
@@ -629,7 +641,6 @@ export function DesktopPet() {
             dy = e.clientY - g.y;
           if (Math.abs(dx) + Math.abs(dy) > 4) {
             g.moved = true;
-            setLayout((value) => ({ ...value, edges: [] }));
             suppressClick.current = true;
             if (e.currentTarget.hasPointerCapture(e.pointerId))
               e.currentTarget.releasePointerCapture(e.pointerId);
@@ -649,12 +660,21 @@ export function DesktopPet() {
           drag.current = null;
         }}
       >
-        <BaiAvatar
-          dockEdges={layout.edges}
-          interactive
-          label="打开 XiaoXi 桌面问答"
-          motion={task?.status.includes("正在") ? "thinking" : "idle"}
-        />
+        <span
+          key={presence.key}
+          className="pet-appearance"
+          data-phase={presence.phase}
+          onAnimationEnd={(e) => {
+            if (e.target === e.currentTarget && presence.phase === "enter")
+              setPresence((value) => ({ ...value, phase: "idle" }));
+          }}
+        >
+          <BaiAvatar
+            interactive
+            label="打开 XiaoXi 桌面问答"
+            motion={task?.status.includes("正在") ? "thinking" : "idle"}
+          />
+        </span>
       </div>
     </main>
   );

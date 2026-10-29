@@ -332,7 +332,7 @@ export function DesktopSettings() {
           {featureRow(
             "petSnap",
             "边缘吸附",
-            "拖到屏幕边缘并松开，XiaoXi 会以融球效果贴合桌面边缘。",
+            "拖到屏幕边缘并松开，短暂停留后自动贴边。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">
