@@ -391,7 +391,7 @@
   border-radius: 7px;
   background: transparent;
   color: var(--ui-color-text-muted);
-  cursor: pointer;
+  cursor: default;
   flex-shrink: 0;
 }
 .context-meter svg {
@@ -414,7 +414,8 @@
   transform-origin: center;
 }
 .context-meter:hover,
-.context-meter[data-state="open"] {
+.context-meter[data-state="delayed-open"],
+.context-meter[data-state="instant-open"] {
   background: var(--surface-hover);
   color: var(--ui-color-heading);
 }

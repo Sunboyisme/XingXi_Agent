@@ -31,15 +31,11 @@
 .composer-model-controls .composer-model > span {
   min-width: 0;
 }
-.composer-model-controls .context-meter:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
 .composer-model-menu,
-.context-size-menu {
+.composer-model-submenu {
   z-index: 80;
-  width: min(340px, calc(100vw - 24px));
-  max-height: min(560px, var(--radix-popover-content-available-height));
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(560px, var(--radix-dropdown-menu-content-available-height));
   overflow: auto;
   overscroll-behavior: contain;
   padding: 8px;
@@ -100,71 +96,80 @@
   flex-shrink: 0;
 }
 .composer-model-choice:hover,
-.composer-model-settings:hover {
+.composer-model-choice[data-highlighted],
+.composer-model-settings:hover,
+.composer-model-settings[data-highlighted] {
   background: var(--surface-hover);
 }
-.composer-model-menu button:focus-visible,
-.context-size-menu button:focus-visible,
+.composer-model-menu [role^="menuitem"]:focus-visible,
+.composer-model-submenu [role^="menuitem"]:focus-visible,
 .model-effort-settings button:focus-visible {
   outline: 2px solid var(--ui-color-focus);
   outline-offset: -2px;
 }
-.context-size-menu {
-  width: min(280px, calc(100vw - 24px));
-  padding: 14px;
+.composer-model-submenu {
+  z-index: 90;
+  width: min(210px, calc(100vw - 24px));
+  max-height: min(360px, var(--radix-dropdown-menu-content-available-height));
+  padding: 7px;
+  border-radius: 16px;
 }
-.context-size-heading {
+.composer-model-parameters {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-color-line);
+}
+.composer-model-scope {
+  padding: 2px 10px 7px;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.composer-model-parameter,
+.composer-model-subitem {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 38px;
+  padding: 9px 10px;
   gap: 12px;
-}
-.context-size-heading strong {
-  color: var(--ui-color-heading);
+  border-radius: 10px;
+  color: var(--ui-color-text);
   font-size: 13px;
-  font-weight: 600;
+  outline: none;
+  cursor: default;
 }
-.context-size-heading span {
+.composer-model-parameter > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--ui-color-text-muted);
-  font-size: 11px;
-}
-.context-size-usage {
-  margin: 8px 0 12px;
-  color: var(--ui-color-text-muted);
-  font-size: 11px;
-  line-height: 1.7;
-  font-variant-numeric: tabular-nums;
-}
-.context-size-options {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-.context-size-options > button {
-  border: 1px solid var(--ui-color-line);
-  border-radius: 8px;
-  padding: 7px 4px;
-  color: var(--ui-color-text-muted);
-  background: transparent;
   font-size: 12px;
 }
-.context-size-options > button:hover {
-  background: var(--surface-hover);
-}
-.context-size-options > button[data-state="checked"] {
-  border-color: var(--ui-color-action);
+.composer-model-parameter[data-highlighted],
+.composer-model-parameter[data-state="open"],
+.composer-model-subitem[data-highlighted],
+.composer-model-subitem[data-state="checked"] {
   background: var(--ui-color-bg);
-  color: var(--ui-color-heading);
 }
-.context-size-options > .context-size-default {
-  grid-column: 1 / -1;
-  text-align: left;
-  padding-inline: 10px;
+.composer-model-parameter[data-disabled] {
+  opacity: 0.5;
 }
-.context-size-options.is-compact > .context-size-default {
-  grid-column: auto;
-  padding-inline: 4px;
-  text-align: center;
+.composer-model-subitem > span {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+}
+.composer-model-subitem[data-state="checked"] > span {
+  color: var(--ui-color-action);
+}
+.composer-model-subitem.is-default {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.composer-model-separator {
+  height: 1px;
+  margin: 6px 3px;
+  background: var(--ui-color-line);
 }
 .composer-model-settings {
   display: flex;
@@ -214,15 +219,13 @@
   font-size: 11px;
 }
 .model-effort-levels,
-.model-effort-default,
-.composer-thinking-choices {
+.model-effort-default {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
 }
 .model-effort-levels > button,
-.model-effort-default > button,
-.composer-thinking-choices > button {
+.model-effort-default > button {
   min-width: 44px;
   padding: 7px 11px;
   border: 1px solid var(--ui-color-line);
@@ -232,8 +235,7 @@
   font-size: 12px;
 }
 .model-effort-levels > button[data-state="on"],
-.model-effort-default > button[data-state="checked"],
-.composer-thinking-choices > button[data-state="checked"] {
+.model-effort-default > button[data-state="checked"] {
   border-color: color-mix(
     in srgb,
     var(--ui-color-action) 50%,
@@ -247,36 +249,8 @@
   color: var(--ui-color-heading);
   font-weight: 550;
 }
-.model-effort-settings button:enabled:hover,
-.composer-thinking-choices > button:enabled:hover {
+.model-effort-settings button:enabled:hover {
   background: var(--surface-hover);
-}
-.composer-quick-settings {
-  display: grid;
-  gap: 14px;
-  margin-top: 10px;
-  padding: 12px 10px 14px;
-  border-top: 1px solid var(--ui-color-line);
-}
-.composer-quick-settings > p {
-  margin: 0;
-  color: var(--ui-color-text-muted);
-  font-size: 11px;
-}
-.composer-quick-section {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-.composer-quick-section > h3 {
-  margin: 0;
-  color: var(--ui-color-heading);
-  font-size: 12px;
-  font-weight: 600;
-}
-.composer-quick-section > small {
-  color: var(--ui-color-text-muted);
-  font-size: 11px;
 }
 @media (max-width: 620px) {
   .model-effort-row {

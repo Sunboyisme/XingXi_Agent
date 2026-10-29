@@ -1,20 +1,28 @@
-import { Check, ChevronDown, Settings2, Sparkles } from "lucide-react";
-import { Popover, RadioGroup } from "radix-ui";
+import { useRef, type KeyboardEvent } from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Settings2,
+  Sparkles,
+} from "lucide-react";
+import { DropdownMenu } from "radix-ui";
 import type { Settings } from "@/lib/api";
 import type { ModelOptions } from "@/lib/chatModelPreferences";
 import { effortLabel, effortOptions } from "@/lib/reasoningEffort";
 import { useHoverPopover } from "@/lib/useHoverPopover";
-import {
-  ContextMeter,
-  ContextSizeChoices,
-  type ContextUsage,
-} from "./ContextMeter";
+import { ContextMeter, type ContextUsage } from "./ContextMeter";
 
 type ModelChoice = {
   key: string;
   model: Settings["providers"][number]["models"][number];
   profile: Settings["providers"][number];
 };
+
+const contextPresets = [300000, 600000, 1000000];
+const capacityLabel = (tokens: number) =>
+  tokens >= 1000000 ? `${tokens / 1000000}M` : `${tokens / 1000}K`;
+const keepMenuOpen = (event: Event) => event.preventDefault();
 
 export function ComposerModelPicker({
   choices,
@@ -43,8 +51,10 @@ export function ComposerModelPicker({
   onOptions: (patch: Partial<ModelOptions>) => void;
   onSettings: () => void;
 }) {
-  const menu = useHoverPopover(disabled);
-  const contextMenu = useHoverPopover(disabled || !selected);
+  const thinkingContent = useRef<HTMLDivElement>(null);
+  const contextContent = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  const menu = useHoverPopover(disabled, [thinkingContent, contextContent]);
   const control = selected?.model.thinking_control || "none";
   const levels = effortOptions.filter((option) =>
     selected?.model.reasoning_efforts?.includes(option.value),
@@ -55,94 +65,144 @@ export function ComposerModelPicker({
       ? control !== "always"
       : !levels.length ||
         levels.some((level) => level.value === options.reasoningEffort));
-  const thinkingValue = !hasThinkingOverride
-    ? "default"
-    : !thinkingEnabled
-      ? "off"
-      : levels.some((level) => level.value === options.reasoningEffort)
-        ? options.reasoningEffort
+  const activeEffort =
+    hasThinkingOverride && options.thinkingOverride === true
+      ? options.reasoningEffort
+      : selected?.model.default_reasoning_effort;
+  const thinkingValue = !thinkingEnabled
+    ? "off"
+    : levels.length
+      ? activeEffort || "default"
+      : "on";
+  const thinkingSummary =
+    control === "none"
+      ? "不支持"
+      : !thinkingEnabled
+        ? "关闭"
         : levels.length
-          ? selected?.model.default_reasoning_effort || "default"
-          : "on";
-  function showModels() {
-    contextMenu.onOpenChange(false);
+          ? effortLabel(activeEffort)
+          : control === "always"
+            ? "始终开启"
+            : "开启";
+  const canChooseThinking =
+    control !== "none" && (control !== "always" || levels.length > 0);
+  const capacities = contextPresets.includes(contextTokens)
+    ? contextPresets
+    : [...contextPresets, contextTokens].sort((a, b) => a - b);
+  function showOnPointer() {
+    if (!menu.open && document.activeElement instanceof HTMLElement) {
+      previousFocus.current = document.activeElement;
+    }
+    menu.showOnPointer();
+  }
+  function changeThinking(value: string) {
+    onOptions({
+      thinkingOverride: value === "default" ? undefined : value !== "off",
+      reasoningEffort: ["default", "off", "on"].includes(value)
+        ? undefined
+        : value,
+    });
+    menu.closeAndFocus();
+  }
+  function enterMenu(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    menu.onKeyboardInteraction();
     menu.show();
+    const last = event.key === "ArrowUp";
+    requestAnimationFrame(() => {
+      const items = menu.content.current?.querySelectorAll<HTMLElement>(
+        '[role="menuitem"]:not([data-disabled]), [role="menuitemradio"]:not([data-disabled])',
+      );
+      if (items?.length) items[last ? items.length - 1 : 0].focus();
+    });
   }
   return (
     <div className="composer-model-controls">
       <ContextMeter
-        menu={contextMenu}
-        onOpen={() => menu.onOpenChange(false)}
         usage={usage}
         limit={contextTokens}
-        defaultLimit={selected?.model.context_tokens ?? 500000}
-        contextOverride={options.contextTokens}
         compacting={compacting}
-        disabled={disabled || !selected}
-        onCapacity={(contextTokens) => onOptions({ contextTokens })}
       />
-      <Popover.Root open={menu.open} onOpenChange={menu.onOpenChange}>
-        <Popover.Trigger asChild>
+      <DropdownMenu.Root
+        open={menu.open}
+        onOpenChange={menu.onOpenChange}
+        modal={false}
+      >
+        <DropdownMenu.Trigger asChild>
           <button
             ref={menu.trigger}
             type="button"
             className="composer-model"
             aria-label="选择模型"
             disabled={disabled}
-            onPointerEnter={showModels}
+            onPointerEnter={showOnPointer}
             onPointerLeave={menu.scheduleClose}
-            onFocus={() => {
-              contextMenu.onOpenChange(false);
-              menu.onFocus();
-            }}
+            onFocus={menu.onFocus}
             onBlur={menu.onBlur}
+            onKeyDown={enterMenu}
+            onPointerDown={(event) => {
+              if (event.button === 0) {
+                event.preventDefault();
+                showOnPointer();
+              }
+            }}
             onClick={(event) => {
               event.preventDefault();
-              showModels();
+              showOnPointer();
             }}
           >
             {thinkingEnabled && <Sparkles size={13} aria-hidden="true" />}
             <span>{selected?.model.name || "选择模型"}</span>
             <ChevronDown size={13} aria-hidden="true" />
           </button>
-        </Popover.Trigger>
-        <Popover.Portal>
-          <Popover.Content
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
             ref={menu.content}
             className="composer-model-menu"
             side="top"
             align="end"
             sideOffset={8}
             collisionPadding={12}
-            aria-label="模型选择"
+            aria-label="模型与对话选项"
             onPointerEnter={menu.cancelClose}
             onPointerLeave={menu.scheduleClose}
             onFocusCapture={menu.cancelClose}
             onBlurCapture={menu.onBlur}
-            onOpenAutoFocus={(event) => event.preventDefault()}
-            onCloseAutoFocus={(event) => event.preventDefault()}
+            onKeyDownCapture={menu.onKeyboardInteraction}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (
+                document.activeElement === document.body &&
+                previousFocus.current?.isConnected
+              ) {
+                previousFocus.current.focus({ preventScroll: true });
+              }
+              previousFocus.current = null;
+            }}
             onEscapeKeyDown={(event) => {
               event.preventDefault();
               menu.closeAndFocus();
             }}
           >
-            <div className="composer-model-menu-heading">选择模型</div>
-            <RadioGroup.Root
+            <DropdownMenu.Label className="composer-model-menu-heading">
+              选择模型
+            </DropdownMenu.Label>
+            <DropdownMenu.RadioGroup
               className="composer-model-choices"
-              aria-label="可用模型"
               value={selected?.key || ""}
-              disabled={disabled}
-              onValueChange={(key) => {
-                onSelect(key);
-              }}
+              onValueChange={onSelect}
             >
               {choices
                 .filter((choice) => choice.profile.key_configured)
                 .map((choice) => (
-                  <RadioGroup.Item
+                  <DropdownMenu.RadioItem
                     key={choice.key}
                     value={choice.key}
                     className="composer-model-choice"
+                    disabled={disabled}
+                    onSelect={keepMenuOpen}
                   >
                     <span>
                       <strong>{choice.model.name}</strong>
@@ -154,101 +214,215 @@ export function ComposerModelPicker({
                           : ""}
                       </small>
                     </span>
-                    <RadioGroup.Indicator>
-                      <Check size={15} />
-                    </RadioGroup.Indicator>
-                  </RadioGroup.Item>
+                    <DropdownMenu.ItemIndicator>
+                      <Check size={15} aria-hidden="true" />
+                    </DropdownMenu.ItemIndicator>
+                  </DropdownMenu.RadioItem>
                 ))}
               {!choices.some((choice) => choice.profile.key_configured) && (
                 <p className="model-menu-current">尚未连接模型</p>
               )}
-            </RadioGroup.Root>
+            </DropdownMenu.RadioGroup>
             {selected && (
-              <div className="composer-quick-settings">
-                <p>仅对当前对话生效</p>
-                {control !== "none" &&
-                  (control !== "always" || levels.length > 0) && (
-                    <section
-                      className="composer-quick-section"
-                      aria-label="快捷思考设置"
+              <DropdownMenu.Group className="composer-model-parameters">
+                <DropdownMenu.Label className="composer-model-scope">
+                  仅对当前对话生效
+                </DropdownMenu.Label>
+                {canChooseThinking ? (
+                  <DropdownMenu.Sub>
+                    <DropdownMenu.SubTrigger
+                      className="composer-model-parameter"
+                      disabled={disabled}
                     >
-                      <h3>思考{levels.length ? "强度" : "模式"}</h3>
-                      <RadioGroup.Root
-                        className="composer-thinking-choices"
-                        aria-label="选择思考强度"
-                        value={thinkingValue}
-                        disabled={disabled}
-                        onValueChange={(value) =>
-                          onOptions({
-                            thinkingOverride:
-                              value === "default" ? undefined : value !== "off",
-                            reasoningEffort: ["default", "off", "on"].includes(
-                              value,
-                            )
-                              ? undefined
-                              : value,
-                          })
-                        }
+                      <span>思考强度</span>
+                      <span>
+                        {thinkingSummary}
+                        <ChevronRight size={13} aria-hidden="true" />
+                      </span>
+                    </DropdownMenu.SubTrigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.SubContent
+                        ref={thinkingContent}
+                        className="composer-model-submenu"
+                        sideOffset={6}
+                        collisionPadding={12}
+                        aria-label="思考强度"
+                        onPointerEnter={menu.cancelClose}
+                        onPointerLeave={menu.scheduleClose}
+                        onFocusCapture={menu.cancelClose}
+                        onBlurCapture={menu.onBlur}
+                        onKeyDownCapture={menu.onKeyboardInteraction}
+                        onEscapeKeyDown={(event) => {
+                          event.preventDefault();
+                          menu.closeAndFocus();
+                        }}
                       >
-                        <RadioGroup.Item value="default">默认</RadioGroup.Item>
-                        {control !== "always" && (
-                          <RadioGroup.Item value="off">关闭</RadioGroup.Item>
-                        )}
-                        {levels.length ? (
-                          levels.map((level) => (
-                            <RadioGroup.Item
-                              key={level.value}
-                              value={level.value}
+                        <DropdownMenu.Label className="composer-model-menu-heading">
+                          思考强度
+                        </DropdownMenu.Label>
+                        <DropdownMenu.RadioGroup
+                          value={thinkingValue}
+                          onValueChange={changeThinking}
+                        >
+                          {control !== "always" && (
+                            <DropdownMenu.RadioItem
+                              value="off"
+                              className="composer-model-subitem"
+                              onSelect={keepMenuOpen}
                             >
-                              {level.label}
-                            </RadioGroup.Item>
-                          ))
-                        ) : (
-                          <RadioGroup.Item value="on">开启</RadioGroup.Item>
-                        )}
-                      </RadioGroup.Root>
-                      <small>
-                        模型默认：
-                        {selected.model.default_thinking_enabled ||
-                        control === "always"
-                          ? levels.length
-                            ? effortLabel(
-                                selected.model.default_reasoning_effort,
-                              )
-                            : "开启"
-                          : "关闭"}
-                      </small>
-                    </section>
-                  )}
-                <section
-                  className="composer-quick-section"
-                  aria-label="快捷上下文设置"
-                >
-                  <h3>上下文大小</h3>
-                  <ContextSizeChoices
-                    compact
-                    value={options.contextTokens}
-                    defaultLimit={selected.model.context_tokens ?? 500000}
+                              关闭
+                              <DropdownMenu.ItemIndicator>
+                                <Check size={14} aria-hidden="true" />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          )}
+                          {levels.length ? (
+                            levels.map((level) => (
+                              <DropdownMenu.RadioItem
+                                key={level.value}
+                                value={level.value}
+                                className="composer-model-subitem"
+                                onSelect={keepMenuOpen}
+                              >
+                                {level.label}
+                                <DropdownMenu.ItemIndicator>
+                                  <Check size={14} aria-hidden="true" />
+                                </DropdownMenu.ItemIndicator>
+                              </DropdownMenu.RadioItem>
+                            ))
+                          ) : (
+                            <DropdownMenu.RadioItem
+                              value="on"
+                              className="composer-model-subitem"
+                              onSelect={keepMenuOpen}
+                            >
+                              开启
+                              <DropdownMenu.ItemIndicator>
+                                <Check size={14} aria-hidden="true" />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          )}
+                          {thinkingValue === "default" && (
+                            <DropdownMenu.RadioItem
+                              value="default"
+                              className="composer-model-subitem"
+                              onSelect={keepMenuOpen}
+                            >
+                              服务商默认
+                              <DropdownMenu.ItemIndicator>
+                                <Check size={14} aria-hidden="true" />
+                              </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                          )}
+                        </DropdownMenu.RadioGroup>
+                        <DropdownMenu.Separator className="composer-model-separator" />
+                        <DropdownMenu.Item
+                          className="composer-model-subitem is-default"
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            changeThinking("default");
+                          }}
+                        >
+                          使用模型默认
+                        </DropdownMenu.Item>
+                      </DropdownMenu.SubContent>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Sub>
+                ) : (
+                  <DropdownMenu.Item
+                    className="composer-model-parameter"
+                    disabled
+                  >
+                    <span>思考强度</span>
+                    <span>{thinkingSummary}</span>
+                  </DropdownMenu.Item>
+                )}
+                <DropdownMenu.Sub>
+                  <DropdownMenu.SubTrigger
+                    className="composer-model-parameter"
                     disabled={disabled}
-                    onChange={(contextTokens) => onOptions({ contextTokens })}
-                  />
-                </section>
-              </div>
+                  >
+                    <span>上下文窗口</span>
+                    <span>
+                      {capacityLabel(contextTokens)}
+                      <ChevronRight size={13} aria-hidden="true" />
+                    </span>
+                  </DropdownMenu.SubTrigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.SubContent
+                      ref={contextContent}
+                      className="composer-model-submenu"
+                      sideOffset={6}
+                      collisionPadding={12}
+                      aria-label="上下文窗口"
+                      onPointerEnter={menu.cancelClose}
+                      onPointerLeave={menu.scheduleClose}
+                      onFocusCapture={menu.cancelClose}
+                      onBlurCapture={menu.onBlur}
+                      onKeyDownCapture={menu.onKeyboardInteraction}
+                      onEscapeKeyDown={(event) => {
+                        event.preventDefault();
+                        menu.closeAndFocus();
+                      }}
+                    >
+                      <DropdownMenu.Label className="composer-model-menu-heading">
+                        上下文窗口
+                      </DropdownMenu.Label>
+                      <DropdownMenu.RadioGroup
+                        value={String(contextTokens)}
+                        onValueChange={(value) => {
+                          onOptions({ contextTokens: Number(value) });
+                          menu.closeAndFocus();
+                        }}
+                      >
+                        {capacities.map((tokens) => (
+                          <DropdownMenu.RadioItem
+                            key={tokens}
+                            value={String(tokens)}
+                            className="composer-model-subitem"
+                            onSelect={keepMenuOpen}
+                          >
+                            {capacityLabel(tokens)}
+                            <DropdownMenu.ItemIndicator>
+                              <Check size={14} aria-hidden="true" />
+                            </DropdownMenu.ItemIndicator>
+                          </DropdownMenu.RadioItem>
+                        ))}
+                      </DropdownMenu.RadioGroup>
+                      <DropdownMenu.Separator className="composer-model-separator" />
+                      <DropdownMenu.Item
+                        className="composer-model-subitem is-default"
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onOptions({ contextTokens: undefined });
+                          menu.closeAndFocus();
+                        }}
+                      >
+                        使用模型默认
+                        <span>
+                          {capacityLabel(
+                            selected.model.context_tokens ?? 500000,
+                          )}
+                        </span>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Sub>
+              </DropdownMenu.Group>
             )}
-            <button
-              type="button"
+            <DropdownMenu.Item
               className="composer-model-settings"
-              onClick={() => {
+              onSelect={() => {
                 menu.onOpenChange(false);
                 onSettings();
               }}
             >
-              <Settings2 size={15} />
+              <Settings2 size={15} aria-hidden="true" />
               连接与设置
-            </button>
-          </Popover.Content>
-        </Popover.Portal>
-      </Popover.Root>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
     </div>
   );
 }
