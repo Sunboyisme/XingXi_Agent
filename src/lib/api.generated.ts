@@ -2369,6 +2369,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/speech": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Speech Settings */
+        get: operations["speech_settings_api_v1_settings_speech_get"];
+        /** Save Speech */
+        put: operations["save_speech_api_v1_settings_speech_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/speech/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Speech Calls */
+        get: operations["speech_calls_api_v1_speech_calls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/speech/transcriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Transcribe */
+        post: operations["transcribe_api_v1_speech_transcriptions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/desktop/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Desktop Action */
+        post: operations["desktop_action_api_v1_desktop_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2451,6 +2520,13 @@ export interface components {
         Body_skill_preview_api_v1_skills_preview_post: {
             /** Files */
             files: string[];
+        };
+        /** Body_transcribe_api_v1_speech_transcriptions_post */
+        Body_transcribe_api_v1_speech_transcriptions_post: {
+            /** File */
+            file: string;
+            /** Request Id */
+            request_id: string;
         };
         /** Body_upload_api_v1_attachments_post */
         Body_upload_api_v1_attachments_post: {
@@ -2586,6 +2662,23 @@ export interface components {
             timezone: string;
             /** Keys */
             keys?: string[];
+        };
+        /** DesktopAction */
+        DesktopAction: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "translate" | "ocr";
+            /** Attachment Id */
+            attachment_id: string;
+            /**
+             * Target Language
+             * @default auto
+             * @enum {string}
+             */
+            target_language: "auto" | "简体中文" | "English";
+            model_selection?: components["schemas"]["ModelSelection"] | null;
         };
         /** DocumentRead */
         DocumentRead: {
@@ -4274,6 +4367,30 @@ export interface components {
             summary: string;
             /** Kind */
             kind: string;
+        };
+        /** SpeechProfile */
+        SpeechProfile: {
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "siliconflow" | "bailian" | "custom";
+            /** Url */
+            url: string;
+            /** Model */
+            model: string;
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** SpeechWrite */
+        SpeechWrite: {
+            /**
+             * Selected
+             * @enum {string}
+             */
+            selected: "siliconflow" | "bailian" | "custom";
+            /** Profiles */
+            profiles: components["schemas"]["SpeechProfile"][];
         };
         /** Submission */
         Submission: {
@@ -9825,6 +9942,145 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeSource"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    speech_settings_api_v1_settings_speech_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    save_speech_api_v1_settings_speech_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeechWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    speech_calls_api_v1_speech_calls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    transcribe_api_v1_speech_transcriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_transcribe_api_v1_speech_transcriptions_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    desktop_action_api_v1_desktop_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesktopAction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

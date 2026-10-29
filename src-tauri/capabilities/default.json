@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Bai desktop windows",
-  "windows": ["main", "reminder", "quick", "capture", "selection", "pet", "pin-*"],
+  "windows": ["main", "reminder", "quick", "capture", "pet", "pin-*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

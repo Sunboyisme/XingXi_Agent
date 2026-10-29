@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -78,6 +79,18 @@ type Gesture = {
   mark?: Mark;
   erase?: boolean;
 };
+type TextGesture = {
+  pointerId: number;
+  sessionId: string;
+  index: number;
+  before: Mark[];
+  original: Mark;
+  preview: Mark;
+  bounds: Rect;
+  start: Point;
+  handle?: string;
+  moved: boolean;
+};
 const rect = (a: Point, b: Point): Rect => ({
   x: Math.min(a.x, b.x),
   y: Math.min(a.y, b.y),
@@ -86,6 +99,24 @@ const rect = (a: Point, b: Point): Rect => ({
 });
 const inside = (r: Rect, p: Point) =>
   p.x >= r.x && p.y >= r.y && p.x <= r.x + r.w && p.y <= r.y + r.h;
+function wrapAnnotation(
+  ctx: CanvasRenderingContext2D,
+  value: string,
+  maxWidth: number,
+) {
+  return value.split("\n").flatMap((raw) => {
+    const lines: string[] = [];
+    let line = "";
+    for (const char of raw) {
+      if (line && ctx.measureText(line + char).width > maxWidth) {
+        lines.push(line);
+        line = char;
+      } else line += char;
+    }
+    lines.push(line);
+    return lines;
+  });
+}
 const colors = [
   "#ef4444",
   "#facc15",
@@ -280,7 +311,13 @@ export function DesktopCapture() {
   const [color, setColor] = useState(colors[0]);
   const [width, setWidth] = useState(3);
   const [fontSize, setFontSize] = useState(24);
-  const [text, setText] = useState<{ at: Point; value: string } | null>(null);
+  const [text, setText] = useState<{
+    at: Point;
+    value: string;
+    index?: number;
+  } | null>(null);
+  const root = useRef<HTMLElement>(null);
+  const textGesture = useRef<TextGesture | null>(null);
   const currentSession = useRef<Session | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -330,6 +367,7 @@ export function DesktopCapture() {
   useEffect(() => {
     let alive = true;
     async function load() {
+      releaseTextGesture();
       const current = ++epoch.current;
       let active = false;
       setSelection(null);
@@ -382,6 +420,7 @@ export function DesktopCapture() {
     const unlisten = desktopListen("capture-ready", () => void load());
     const dismissListener = desktopListen<string>("capture-dismiss", (id) => {
       if (currentSession.current?.id !== id) return;
+      releaseTextGesture();
       const activeGesture = gesture.current;
       if (
         activeGesture &&
@@ -420,6 +459,13 @@ export function DesktopCapture() {
     window.addEventListener("resize", resize);
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest(".capture-style-menu")) return;
+      if (textGesture.current) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          endText({ pointerId: textGesture.current.pointerId }, true);
+        }
+        return;
+      }
       if (e.key === "Escape") {
         if (e.defaultPrevented) return;
         e.preventDefault();
@@ -468,6 +514,7 @@ export function DesktopCapture() {
       });
   }
   function resetSelection() {
+    releaseTextGesture();
     const g = gesture.current;
     if (g && gestureTarget.current?.hasPointerCapture(g.pointerId))
       gestureTarget.current.releasePointerCapture(g.pointerId);
@@ -486,7 +533,31 @@ export function DesktopCapture() {
   }
   useEffect(() => {
     if (text) textInput.current?.focus();
-  }, [Boolean(text)]);
+  }, [Boolean(text), text?.index]);
+  useLayoutEffect(() => {
+    const node = textInput.current,
+      context = source.current?.getContext("2d");
+    if (!text || !node || !context) return;
+    context.save();
+    context.font = `${fontSize}px "Microsoft YaHei", sans-serif`;
+    const natural = text.value
+      .split("\n")
+      .reduce(
+        (width, line) => Math.max(width, context.measureText(line).width),
+        fontSize * 2,
+      );
+    const available = Math.max(
+      fontSize,
+      Math.min(
+        (viewport.w - text.at.x * sx - 8) / sx,
+        selection ? selection.x + selection.w - text.at.x : Infinity,
+      ),
+    );
+    node.style.width = `${Math.min(natural + 2, available) * sx}px`;
+    node.style.height = "0px";
+    node.style.height = `${Math.max(fontSize * sx * 1.4, node.scrollHeight)}px`;
+    context.restore();
+  }, [text, fontSize, sx, viewport.w, selection]);
   useEffect(() => {
     const node = toolbarElement.current;
     if (!node) return;
@@ -501,7 +572,7 @@ export function DesktopCapture() {
     const ctx = canvas.current.getContext("2d")!;
     ctx.clearRect(0, 0, session.width, session.height);
     ctx.drawImage(source.current, 0, 0);
-    ctx.fillStyle = "rgba(0,0,0,.38)";
+    ctx.fillStyle = selection ? "rgba(0,0,0,.42)" : "rgba(0,0,0,.14)";
     ctx.fillRect(0, 0, session.width, session.height);
     if (selection) {
       ctx.save();
@@ -509,23 +580,33 @@ export function DesktopCapture() {
       ctx.rect(selection.x, selection.y, selection.w, selection.h);
       ctx.clip();
       ctx.drawImage(source.current, 0, 0);
-      marks.forEach((m) => paint(ctx, m, source.current!));
+      marks.forEach((m, index) => {
+        if (index !== text?.index) paint(ctx, m, source.current!);
+      });
       if (live) paint(ctx, live, source.current);
       ctx.restore();
     }
-  }, [session, selection, marks, live]);
+  }, [session, selection, marks, live, text?.index]);
   function addMark(mark: Mark) {
     setHistory((h) => [...h, marks]);
     setMarks((m) => [...m, mark]);
     setRedo([]);
   }
   function undo() {
+    if (text) {
+      setText(null);
+      return;
+    }
     if (!history.length || exportLock.current) return;
     setRedo((r) => [...r, marks]);
     setMarks(history.at(-1)!);
     setHistory((h) => h.slice(0, -1));
   }
   function redoAction() {
+    if (text) {
+      setText(null);
+      return;
+    }
     if (!redo.length || exportLock.current) return;
     setHistory((h) => [...h, marks]);
     setMarks(redo.at(-1)!);
@@ -533,22 +614,177 @@ export function DesktopCapture() {
   }
   function commitText() {
     if (!text) return;
-    if (text.value.trim())
-      addMark({
-        tool: "text",
-        points: [text.at],
-        color,
-        width,
-        size: fontSize,
-        text: text.value,
-      });
+    const next = editedMarks();
+    if (JSON.stringify(next) !== JSON.stringify(marks)) {
+      setHistory((h) => [...h, marks]);
+      setMarks(next);
+      setRedo([]);
+    }
     setText(null);
+  }
+  function editedMarks() {
+    if (!text) return marks;
+    const mark: Mark | null = text.value.trim()
+      ? {
+          tool: "text",
+          points: [text.at],
+          color,
+          width,
+          size: fontSize,
+          text: annotationValue(),
+        }
+      : null;
+    if (text.index !== undefined)
+      return marks.flatMap((item, index) =>
+        index === text.index ? (mark ? [mark] : []) : [item],
+      );
+    return mark ? [...marks, mark] : marks;
+  }
+  function annotationValue() {
+    if (!text) return "";
+    const context = source.current?.getContext("2d");
+    if (!context || !textInput.current) return text.value;
+    context.save();
+    context.font = `${fontSize}px "Microsoft YaHei", sans-serif`;
+    const result = wrapAnnotation(
+      context,
+      text.value,
+      textInput.current.clientWidth / sx,
+    ).join("\n");
+    context.restore();
+    return result;
   }
   function point(e: ReactPointerEvent): Point {
     return {
       x: Math.max(0, Math.min(session?.width || 1, e.clientX / sx)),
       y: Math.max(0, Math.min(session?.height || 1, e.clientY / sy)),
     };
+  }
+  function beginText(e: ReactPointerEvent, index?: number, handle?: string) {
+    if (e.button !== 0 || busy || !session || !root.current) return;
+    if (index === undefined && !text?.value.trim()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const context = source.current?.getContext("2d");
+    if (!context) return;
+    const before = editedMarks();
+    const target =
+      index === undefined
+        ? (text?.index ?? before.length - 1)
+        : before.indexOf(marks[index]);
+    const mark = before[target];
+    if (!mark || mark.tool !== "text") return;
+    if (text) commitText();
+    textGesture.current = {
+      pointerId: e.pointerId,
+      sessionId: session.id,
+      index: target,
+      before,
+      original: mark,
+      preview: mark,
+      bounds: markBounds(mark, context),
+      start: point(e),
+      handle,
+      moved: false,
+    };
+    root.current.setPointerCapture(e.pointerId);
+    root.current.style.cursor = handle
+      ? ["nw", "se"].includes(handle)
+        ? "nwse-resize"
+        : "nesw-resize"
+      : "move";
+  }
+  function moveText(e: ReactPointerEvent) {
+    const g = textGesture.current;
+    if (
+      !g ||
+      g.pointerId !== e.pointerId ||
+      g.sessionId !== currentSession.current?.id ||
+      !session
+    )
+      return;
+    const p = point(e),
+      dx = p.x - g.start.x,
+      dy = p.y - g.start.y;
+    if (!g.moved && Math.abs(dx) + Math.abs(dy) < 3 / sx) return;
+    g.moved = true;
+    let at = { x: g.original.points[0].x + dx, y: g.original.points[0].y + dy },
+      size = g.original.size;
+    let width = g.bounds.w,
+      height = g.bounds.h;
+    if (g.handle) {
+      const ax = g.handle.includes("w") ? g.bounds.x + g.bounds.w : g.bounds.x;
+      const ay = g.handle.includes("n") ? g.bounds.y + g.bounds.h : g.bounds.y;
+      const distance = Math.max(1, Math.hypot(g.start.x - ax, g.start.y - ay));
+      size = Math.max(
+        6,
+        Math.min(
+          200,
+          Math.round(
+            (g.original.size * Math.hypot(p.x - ax, p.y - ay)) / distance,
+          ),
+        ),
+      );
+      const scale = size / g.original.size;
+      width *= scale;
+      height *= scale;
+      at = {
+        x: g.handle.includes("w") ? ax - width : ax,
+        y: g.handle.includes("n") ? ay - height : ay,
+      };
+    }
+    const area = selection || {
+      x: 0,
+      y: 0,
+      w: session.width,
+      h: session.height,
+    };
+    at.x = Math.max(area.x, Math.min(area.x + area.w - width, at.x));
+    at.y = Math.max(area.y, Math.min(area.y + area.h - height, at.y));
+    g.preview = { ...g.original, points: [at], size };
+    setText(null);
+    setDragging(true);
+    setMarks(g.before.map((mark, i) => (i === g.index ? g.preview : mark)));
+  }
+  function endText(e: { pointerId: number }, cancel = false) {
+    const g = textGesture.current;
+    if (!g || g.pointerId !== e.pointerId) return;
+    textGesture.current = null;
+    if (root.current) root.current.style.cursor = "";
+    if (root.current?.hasPointerCapture(e.pointerId))
+      root.current.releasePointerCapture(e.pointerId);
+    if (g.sessionId !== currentSession.current?.id) return;
+    if (cancel) setMarks(g.before);
+    else if (g.moved) {
+      setHistory((h) => [...h, g.before]);
+      setRedo([]);
+    }
+    const mark = cancel ? g.original : g.preview;
+    setText({ at: mark.points[0], value: mark.text || "", index: g.index });
+    setFontSize(mark.size);
+    setColor(mark.color);
+    setDragging(false);
+  }
+  function releaseTextGesture() {
+    const g = textGesture.current;
+    textGesture.current = null;
+    if (root.current) root.current.style.cursor = "";
+    if (g && root.current?.hasPointerCapture(g.pointerId))
+      root.current.releasePointerCapture(g.pointerId);
+  }
+  function editText(index: number) {
+    const original = marks[index],
+      next = editedMarks(),
+      target = next.indexOf(original);
+    if (!original || target < 0) return;
+    if (text) commitText();
+    setText({
+      at: original.points[0],
+      value: original.text || "",
+      index: target,
+    });
+    setFontSize(original.size);
+    setColor(original.color);
   }
   function begin(e: ReactPointerEvent, handle?: string) {
     if (!session || busy || e.button !== 0) return;
@@ -612,6 +848,10 @@ export function DesktopCapture() {
     setDragging(true);
   }
   function move(e: ReactPointerEvent) {
+    if (textGesture.current) {
+      moveText(e);
+      return;
+    }
     setCursor({ x: e.clientX, y: e.clientY });
     const g = gesture.current;
     if (!g || !session || g.pointerId !== e.pointerId) return;
@@ -649,6 +889,10 @@ export function DesktopCapture() {
     } else setSelection(rect(g.start, p));
   }
   function end(e: ReactPointerEvent) {
+    if (textGesture.current) {
+      endText(e);
+      return;
+    }
     const g = gesture.current;
     if (!g || g.pointerId !== e.pointerId) return;
     if (g.erase) {
@@ -689,6 +933,10 @@ export function DesktopCapture() {
     gestureTarget.current = null;
   }
   function cancelGesture(e: ReactPointerEvent) {
+    if (textGesture.current) {
+      endText(e, true);
+      return;
+    }
     if (gesture.current?.pointerId !== e.pointerId) return;
     gesture.current = null;
     setLive(null);
@@ -708,19 +956,7 @@ export function DesktopCapture() {
       exportLock.current
     )
       return;
-    const outputMarks = text?.value.trim()
-      ? [
-          ...marks,
-          {
-            tool: "text" as const,
-            points: [text.at],
-            color,
-            width,
-            size: fontSize,
-            text: text.value,
-          },
-        ]
-      : marks;
+    const outputMarks = editedMarks();
     if (text) commitText();
     const id = session.id;
     exportLock.current = true;
@@ -768,6 +1004,7 @@ export function DesktopCapture() {
     : { x: 0, y: 0 };
   return (
     <main
+      ref={root}
       className="capture-window"
       onPointerMove={move}
       onPointerUp={end}
@@ -845,33 +1082,90 @@ export function DesktopCapture() {
           ))}
         </div>
       )}
-      {text && (
-        <textarea
-          ref={textInput}
-          className="capture-text"
-          aria-label="截图文字"
-          style={{
-            left: text.at.x * sx,
-            top: text.at.y * sy,
-            color,
-            fontSize: fontSize * sx,
-          }}
-          value={text.value}
-          onChange={(e) => setText((t) => t && { ...t, value: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              setText(null);
-            } else if (
-              e.ctrlKey &&
-              e.key === "Enter" &&
-              !e.nativeEvent.isComposing
-            ) {
-              e.preventDefault();
-              commitText();
+      {selection &&
+        !dragging &&
+        source.current &&
+        marks.map((mark, index) => {
+          if (
+            mark.tool !== "text" ||
+            text?.index === index ||
+            !["move", "text"].includes(tool)
+          )
+            return null;
+          const bounds = markBounds(mark, source.current!.getContext("2d")!);
+          return (
+            <div
+              key={index}
+              className="capture-text-object"
+              style={styleRect(bounds)}
+              onPointerDown={(e) => beginText(e, index)}
+              role="button"
+              tabIndex={0}
+              aria-label="编辑文字标注"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  editText(index);
+                }
+              }}
+            >
+              {(["nw", "ne", "se", "sw"] as const).map((corner) => (
+                <span
+                  key={corner}
+                  className={`capture-text-corner corner-${corner}`}
+                  onPointerDown={(e) => beginText(e, index, corner)}
+                />
+              ))}
+            </div>
+          );
+        })}
+      {text && !dragging && (
+        <div
+          className="capture-text-editor"
+          style={{ left: text.at.x * sx, top: text.at.y * sy }}
+        >
+          <span
+            className="capture-text-move-area"
+            onPointerDown={(e) => beginText(e)}
+            aria-hidden="true"
+          />
+          <textarea
+            ref={textInput}
+            className="capture-text"
+            aria-label="截图文字"
+            style={{
+              color,
+              fontSize: fontSize * sx,
+            }}
+            value={text.value}
+            wrap="soft"
+            onChange={(e) =>
+              setText((t) => t && { ...t, value: e.target.value })
             }
-          }}
-        />
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setText(null);
+              } else if (
+                e.ctrlKey &&
+                e.key === "Enter" &&
+                !e.nativeEvent.isComposing
+              ) {
+                e.preventDefault();
+                commitText();
+              }
+            }}
+          />
+          {(["nw", "ne", "se", "sw"] as const).map((corner) => (
+            <span
+              key={corner}
+              className={`capture-text-corner corner-${corner}`}
+              aria-hidden="true"
+              onPointerDown={(e) => beginText(e, undefined, corner)}
+            />
+          ))}
+        </div>
       )}
       {eraseBox && (
         <div className="capture-erase-box" style={styleRect(eraseBox)} />

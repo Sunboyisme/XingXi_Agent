@@ -14,12 +14,9 @@ import {
 export type DesktopPreferences = {
   enabled: boolean;
   pet: boolean;
-  selection: boolean;
-  shortcut: string;
   petX: number | null;
   petY: number | null;
   petSize: number;
-  petSnap: boolean;
   petOffsetX?: number | null;
   petOffsetY?: number | null;
 };

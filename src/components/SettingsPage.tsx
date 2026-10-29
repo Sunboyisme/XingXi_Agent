@@ -54,7 +54,7 @@ const settingGroups = [
         id: "desktop",
         label: "桌面助手",
         icon: Monitor,
-        keywords: "截图 问答 桌宠 XiaoXi 划词 快捷键 右Alt 语音输入",
+        keywords: "截图 问答 桌宠 XiaoXi 右Alt 语音输入",
       },
     ],
   },

@@ -1,10 +1,6 @@
 import { DesktopQuickAsk } from "./DesktopQuickAsk";
 import { DesktopCapture } from "./DesktopCapture";
-import {
-  DesktopPet,
-  DesktopSelection,
-  DesktopPinned,
-} from "./DesktopCompanions";
+import { DesktopPet, DesktopPinned } from "./DesktopCompanions";
 import "../styles/desktop-assistant.css";
 export function DesktopRoot({ view }: { view: string }) {
   return view === "quick" ? (
@@ -13,8 +9,6 @@ export function DesktopRoot({ view }: { view: string }) {
     <DesktopCapture />
   ) : view === "pet" ? (
     <DesktopPet />
-  ) : view === "selection" ? (
-    <DesktopSelection />
   ) : (
     <DesktopPinned />
   );

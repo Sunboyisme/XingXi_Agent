@@ -3,19 +3,18 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowUp,
   Plus,
-  Mic,
   Square,
   X,
   Copy,
   ExternalLink,
-  RotateCw,
-  LoaderCircle,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint, Markdown } from "./common";
 import { Picture } from "./ImageAttachments";
+import { SpeechInputButton } from "./SpeechInputButton";
+import { useSpeechInput } from "@/lib/useSpeechInput";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import {
   api,
@@ -29,21 +28,12 @@ import {
   addDesktopFile,
   imageFile,
   copyText,
-  fetchApi,
   readEvents,
   type QuickDraft,
   type Settings,
   type Run,
   type Attachment,
 } from "@/lib/desktopAssistant";
-type VoiceState = {
-  id: string;
-  phase: string;
-  seconds: number;
-  level: number;
-  error?: string;
-  retryable?: boolean;
-};
 type IncomingImage = {
   id: string;
   dataUrl: string;
@@ -73,7 +63,6 @@ export function DesktopQuickAsk() {
   const [answerCollapsed, setAnswerCollapsed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [voice, setVoice] = useState<VoiceState | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [hiddenEpoch, setHiddenEpoch] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -85,20 +74,26 @@ export function DesktopQuickAsk() {
   const work = useRef({ busy: false, uploading: false, locked: false });
   const startRequest = useRef(false);
   const tracker = useRef<AbortController | null>(null);
-  const request = useRef<AbortController | null>(null);
-  const voiceId = useRef("");
-  const voiceEpoch = useRef(0);
-  const startingVoice = useRef(false);
-  const pendingVoice = useRef<VoiceState | null>(null);
-  const heldGesture = useRef<number | null>(null);
-  const voiceRange = useRef({ start: 0, end: 0, text: "" });
   const pending = useRef<IncomingImage[]>([]);
   const seen = useRef(new Set<string>());
   const imageWorking = useRef(false);
+  const speech = useSpeechInput({
+    scopeKey: sessionId,
+    input,
+    readText: () => current.current.text,
+    writeText: (text) => updateDraft((d) => ({ ...d, text })),
+    onError: setError,
+    onLockChange: (locked) => {
+      work.current.locked = locked;
+    },
+    onBegin: () => setAnswerCollapsed(false),
+    isBlocked: () => work.current.busy || work.current.uploading,
+    isVisible: () => visible.current,
+  });
+  const { voice } = speech;
   const functions = useRef({
     send,
-    startVoice,
-    transcribe,
+    startVoice: speech.start,
     receiveImage,
     pickFiles,
     shown,
@@ -108,8 +103,7 @@ export function DesktopQuickAsk() {
   });
   functions.current = {
     send,
-    startVoice,
-    transcribe,
+    startVoice: speech.start,
     receiveImage,
     pickFiles,
     shown,
@@ -146,6 +140,9 @@ export function DesktopQuickAsk() {
     if (!busy && !uploading && !voice) void functions.current.drainImages();
   }, [busy, uploading, voice, pendingCount]);
   useEffect(() => {
+    if (sessionId) void functions.current.drainCommands();
+  }, [sessionId]);
+  useEffect(() => {
     mounted.current = true;
     const listeners = [
       desktopListen<string>("desktop-error", (v) => {
@@ -159,13 +156,9 @@ export function DesktopQuickAsk() {
         if (v.sessionId === session.current)
           void functions.current.drainCommands();
       }),
-      desktopListen<{ gesture: number }>("desktop-release", (v) => {
-        if (heldGesture.current === v.gesture) {
-          heldGesture.current = null;
-          if (voiceId.current)
-            void invoke("voice_stop", { id: voiceId.current });
-        }
-      }),
+      desktopListen<{ gesture: number }>("desktop-release", (v) =>
+        speech.release(v.gesture),
+      ),
       desktopListen("desktop-voice-cancel", () => cancelVoice()),
       desktopListen<{ sessionId: string }>("desktop-hidden", (v) => {
         if (v.sessionId !== session.current) return;
@@ -175,13 +168,6 @@ export function DesktopQuickAsk() {
         setError("");
       }),
       desktopListen("desktop-shown", () => void functions.current.shown()),
-      desktopListen<VoiceState>("desktop-voice", (v) => {
-        if (voiceId.current !== v.id) {
-          if (startingVoice.current) pendingVoice.current = v;
-          return;
-        }
-        acceptVoice(v);
-      }),
     ];
     void Promise.all(listeners)
       .then(async () => {
@@ -203,8 +189,7 @@ export function DesktopQuickAsk() {
       )
         return;
       e.preventDefault();
-      if (work.current.locked || voiceId.current) cancelVoice();
-      else void dismiss();
+      void dismiss();
     };
     window.addEventListener("keydown", key);
     return () => {
@@ -213,9 +198,6 @@ export function DesktopQuickAsk() {
       generation.current++;
       tracking.current++;
       tracker.current?.abort();
-      request.current?.abort();
-      voiceEpoch.current++;
-      if (voiceId.current) void invoke("voice_cancel", { id: voiceId.current });
       listeners.forEach((p) => void p.then((f) => f()));
       window.removeEventListener("keydown", key);
     };
@@ -276,7 +258,12 @@ export function DesktopQuickAsk() {
   }
   async function drainCommands() {
     commandsPending.current = true;
-    if (commandsWorking.current || !session.current) return;
+    if (
+      commandsWorking.current ||
+      !session.current ||
+      sessionId !== session.current
+    )
+      return;
     commandsWorking.current = true;
     try {
       while (commandsPending.current && mounted.current) {
@@ -295,7 +282,6 @@ export function DesktopQuickAsk() {
           if (item.action === "send") void functions.current.send();
           if (item.action === "file") void functions.current.pickFiles();
           if (item.action === "voice" || item.action === "record") {
-            heldGesture.current = item.gesture ?? null;
             void functions.current.startVoice(item.gesture);
           }
           if (item.action === "image" && item.dataUrl)
@@ -567,133 +553,8 @@ export function DesktopQuickAsk() {
       }
     }
   }
-  function acceptVoice(value: VoiceState) {
-    setVoice(value);
-    if (value.phase === "ready") void functions.current.transcribe(value.id);
-    if (value.phase === "error") {
-      work.current.locked = false;
-      setError(value.error || "录音失败");
-    }
-  }
-  async function startVoice(gesture?: number) {
-    if (work.current.locked || work.current.uploading || work.current.busy)
-      return;
-    work.current.locked = true;
-    setError("");
-    setAnswerCollapsed(false);
-    const epoch = ++voiceEpoch.current;
-    startingVoice.current = true;
-    pendingVoice.current = null;
-    voiceRange.current = {
-      start: input.current?.selectionStart ?? current.current.text.length,
-      end: input.current?.selectionEnd ?? current.current.text.length,
-      text: current.current.text,
-    };
-    setVoice({ id: "", phase: "starting", seconds: 0, level: 0 });
-    try {
-      const id = await invoke<string>("voice_start", { gesture });
-      if (epoch !== voiceEpoch.current || !mounted.current) {
-        await invoke("voice_cancel", { id });
-        return;
-      }
-      voiceId.current = id;
-      startingVoice.current = false;
-      const early = pendingVoice.current as VoiceState | null;
-      if (early?.id === id) acceptVoice(early);
-      else setVoice({ id, phase: "recording", seconds: 0, level: 0 });
-      if (gesture !== undefined && heldGesture.current !== gesture)
-        await invoke("voice_stop", { id });
-    } catch (e) {
-      if (epoch !== voiceEpoch.current || !mounted.current) return;
-      startingVoice.current = false;
-      work.current.locked = false;
-      setVoice(null);
-      if (!desktopError(e).includes("手势已结束")) setError(desktopError(e));
-    }
-  }
-  async function transcribe(id: string) {
-    if (voiceId.current !== id || request.current) return;
-    work.current.locked = true;
-    const epoch = voiceEpoch.current;
-    setVoice((v) => v && { ...v, phase: "transcribing" });
-    const controller = new AbortController();
-    request.current = controller;
-    const timeout = setTimeout(() => controller.abort(), 80000);
-    if (current.current.text !== voiceRange.current.text)
-      voiceRange.current = {
-        text: current.current.text,
-        start: input.current?.selectionStart ?? current.current.text.length,
-        end: input.current?.selectionEnd ?? current.current.text.length,
-      };
-    try {
-      const bytes = await invoke<ArrayBuffer | number[]>("voice_audio_get", {
-        id,
-      });
-      if (voiceId.current !== id || epoch !== voiceEpoch.current) return;
-      const form = new FormData();
-      form.append(
-        "file",
-        new Blob(
-          [bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes)],
-          { type: "audio/wav" },
-        ),
-        "recording.wav",
-      );
-      form.append("request_id", id);
-      const result: { request_id: string; text: string } = await (
-        await fetchApi("/speech/transcriptions", {
-          method: "POST",
-          body: form,
-          signal: controller.signal,
-        })
-      ).json();
-      if (
-        !mounted.current ||
-        voiceId.current !== id ||
-        epoch !== voiceEpoch.current ||
-        result.request_id !== id
-      )
-        return;
-      const r = voiceRange.current;
-      updateDraft((d) => ({
-        ...d,
-        text: d.text.slice(0, r.start) + result.text + d.text.slice(r.end),
-      }));
-      voiceId.current = "";
-      setVoice(null);
-      await invoke("voice_cancel", { id });
-      if (visible.current) input.current?.focus({ preventScroll: true });
-    } catch (e) {
-      if (
-        mounted.current &&
-        voiceId.current === id &&
-        epoch === voiceEpoch.current
-      ) {
-        setVoice((v) => v && { ...v, phase: "error", retryable: true });
-        setError(
-          controller.signal.aborted
-            ? "识别超时，录音已保留，可重试或取消。"
-            : desktopError(e),
-        );
-      }
-    } finally {
-      clearTimeout(timeout);
-      if (request.current === controller) request.current = null;
-      if (epoch === voiceEpoch.current) work.current.locked = false;
-    }
-  }
   function cancelVoice() {
-    const id = voiceId.current;
-    voiceEpoch.current++;
-    voiceId.current = "";
-    heldGesture.current = null;
-    startingVoice.current = false;
-    pendingVoice.current = null;
-    request.current?.abort();
-    request.current = null;
-    work.current.locked = false;
-    setVoice(null);
-    if (id) void invoke("voice_cancel", { id });
+    speech.cancel();
   }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
   const hasAnswer = Boolean(answer || busy || error);
@@ -833,71 +694,11 @@ export function DesktopQuickAsk() {
               <Plus size={21} />
             </button>
           </Hint>
-          <Hint
-            label={
-              <span className="quick-mic-hint">
-                <span>
-                  语音输入　按住 <kbd>右Alt</kbd>
-                </span>
-                {voice && (
-                  <span>
-                    {voice.phase === "recording"
-                      ? `正在录音 ${Math.floor(voice.seconds)} 秒，点击结束`
-                      : voice.phase === "transcribing"
-                        ? "正在识别，Esc 取消"
-                        : voice.phase === "error"
-                          ? "识别未完成，点击重试，Esc 取消"
-                          : "正在打开麦克风…"}
-                  </span>
-                )}
-              </span>
-            }
-          >
-            <button
-              aria-label={
-                voice?.phase === "recording"
-                  ? `正在录音 ${Math.floor(voice.seconds)} 秒，点击结束`
-                  : voice?.phase === "transcribing"
-                    ? "正在识别，点击取消"
-                    : voice?.retryable
-                      ? "重试语音识别"
-                      : "语音输入，按住右 Alt"
-              }
-              className={`quick-mic ${voiceBusy ? "is-active" : ""} ${voice?.phase === "recording" ? "is-recording" : ""}`}
-              disabled={busy || uploading || voice?.phase === "starting"}
-              onClick={() => {
-                if (voice?.phase === "recording")
-                  void invoke("voice_stop", { id: voiceId.current });
-                else if (voice?.phase === "transcribing") cancelVoice();
-                else if (voice?.retryable) void transcribe(voice.id);
-                else {
-                  heldGesture.current = null;
-                  void startVoice();
-                }
-              }}
-            >
-              {voice?.phase === "transcribing" ||
-              voice?.phase === "starting" ? (
-                <LoaderCircle className="quick-mic-spinner" size={20} />
-              ) : voice?.retryable ? (
-                <RotateCw size={20} />
-              ) : (
-                <Mic size={20} />
-              )}
-              {voice?.phase === "recording" && (
-                <span className="quick-mic-waves" aria-hidden="true">
-                  {[0.65, 1, 0.8].map((factor, index) => (
-                    <i
-                      key={index}
-                      style={{
-                        height: `${4 + Math.min(1, voice.level * 3) * 10 * factor}px`,
-                      }}
-                    />
-                  ))}
-                </span>
-              )}
-            </button>
-          </Hint>
+          <SpeechInputButton
+            speech={speech}
+            disabled={busy || uploading}
+            desktopShortcut
+          />
           <Hint label={busy ? "停止回答" : "发送"}>
             <button
               aria-label={busy ? "停止回答" : "发送"}
@@ -933,11 +734,6 @@ export function DesktopQuickAsk() {
             </Hint>
           )}
         </div>
-        {uploading && (
-          <p className="quick-activity" role="status">
-            正在添加附件…
-          </p>
-        )}
         {pendingCount > 0 && !uploading && (
           <div className="quick-pending">
             <span>有 {pendingCount} 张暂存截图</span>

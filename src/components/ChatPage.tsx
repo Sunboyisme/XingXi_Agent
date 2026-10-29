@@ -9,6 +9,9 @@ import {
 } from "@/lib/chatModelPreferences";
 import { isSendShortcut } from "@/lib/generalPreferences";
 import { useComposerPlaceholder } from "@/lib/useComposerPlaceholder";
+import { useSpeechInput } from "@/lib/useSpeechInput";
+import { SpeechInputButton } from "./SpeechInputButton";
+import { isTauri } from "@tauri-apps/api/core";
 import {
   useCallback,
   useEffect,
@@ -603,9 +606,19 @@ export function ChatPage({
   const imagesRef = useRef(images);
   draftRef.current = draft;
   imagesRef.current = images;
+  const speech = useSpeechInput({
+    scopeKey: `${conversationId || "new"}:${projectId || ""}:${attachmentBatch}`,
+    input: composer,
+    readText: () => draftRef.current,
+    writeText: changeDraft,
+    onError: setError,
+    isVisible: () => document.visibilityState === "visible",
+    isBlocked: () => submitting || stopping || uploading || movingProject,
+  });
   useEffect(() => {
     const discard = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== conversationId) return;
+      speech.cancel();
       draftRef.current = "";
       imagesRef.current = [];
       setDraft("");
@@ -643,7 +656,7 @@ export function ChatPage({
     persistDraft(draftRef.current, values);
   }
   function chooseStarter(prompt: string) {
-    if (submitting || stopping || movingProject) return;
+    if (submitting || stopping || movingProject || speech.isLocked()) return;
     changeDraft(prompt);
     requestAnimationFrame(() => {
       const input = composer.current;
@@ -1061,6 +1074,7 @@ export function ChatPage({
     const supplement = busy && Boolean(run?.task_id);
     if (
       actionLock.current ||
+      speech.isLocked() ||
       moveProjectLock.current ||
       (busy && !run) ||
       uploading ||
@@ -1755,7 +1769,9 @@ export function ChatPage({
               onClose={closeError}
               action={
                 configurationProblem.test(error)
-                  ? { label: "配置接口", onClick: () => openModelSettings() }
+                  ? /语音|识别|麦克风/.test(error)
+                    ? { label: "配置语音", onClick: () => onAction("speech") }
+                    : { label: "配置接口", onClick: () => openModelSettings() }
                   : undefined
               }
             />
@@ -1886,7 +1902,9 @@ export function ChatPage({
               }
               rows={2}
               disabled={submitting || stopping}
+              readOnly={speech.busy}
               onKeyDown={(e) => {
+                if (speech.isLocked()) return;
                 if (
                   e.key === "Tab" &&
                   !e.shiftKey &&
@@ -2068,6 +2086,12 @@ export function ChatPage({
                   onOptions={updateModelOptions}
                   onSettings={() => openModelSettings()}
                 />
+                {isTauri() && (
+                  <SpeechInputButton
+                    speech={speech}
+                    disabled={submitting || stopping || uploading || movingProject}
+                  />
+                )}
                 <Button
                   aria-label={showStop ? "停止生成" : "发送消息"}
                   size="icon"
@@ -2075,6 +2099,7 @@ export function ChatPage({
                     submitting ||
                     movingProject ||
                     stopping ||
+                    (!showStop && speech.busy) ||
                     (showStop ? !run : uploading || !modelReady || !hasDraft)
                   }
                   onClick={() => {
@@ -2092,7 +2117,7 @@ export function ChatPage({
           <NewChatStarters
             onPrompt={chooseStarter}
             onLearning={() => onAction("learning")}
-            disabled={submitting || stopping || movingProject}
+            disabled={submitting || stopping || movingProject || speech.busy}
           />
         )}
       </div>

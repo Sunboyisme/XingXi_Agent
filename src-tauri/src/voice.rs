@@ -16,18 +16,35 @@ pub struct Recording {
     stop: Arc<AtomicBool>,
     audio: Vec<u8>,
     gesture: Option<u64>,
+    owner: String,
 }
 
-fn event(app: &tauri::AppHandle, id: &str, phase: &str, seconds: f64, level: f32, error: &str) {
+fn event(
+    app: &tauri::AppHandle,
+    owner: &str,
+    id: &str,
+    phase: &str,
+    seconds: f64,
+    level: f32,
+    error: &str,
+) {
     let _ = app.emit_to(
-        "quick",
+        owner,
         "desktop-voice",
         serde_json::json!({"id":id,"phase":phase,"seconds":seconds,"level":level,"error":error}),
     );
 }
 
 #[tauri::command]
-pub fn voice_start(app: tauri::AppHandle, gesture: Option<u64>) -> Result<String, String> {
+pub fn voice_start(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    gesture: Option<u64>,
+) -> Result<String, String> {
+    let owner = window.label().to_string();
+    if !["main", "quick"].contains(&owner.as_str()) {
+        return Err("当前窗口不支持语音输入".into());
+    }
     if gesture.is_some_and(|id| !crate::desktop_input::gesture_held(id)) {
         return Err("录音手势已结束".into());
     }
@@ -36,8 +53,9 @@ pub fn voice_start(app: tauri::AppHandle, gesture: Option<u64>) -> Result<String
     if gesture.is_some_and(|id| !crate::desktop_input::gesture_held(id)) {
         return Err("录音手势已结束".into());
     }
-    if let Some(old) = active.as_ref() {
+    if let Some(old) = active.take() {
         old.stop.store(true, Ordering::SeqCst);
+        event(&app, &old.owner, &old.id, "cancelled", 0.0, 0.0, "");
     }
     let id = uuid::Uuid::new_v4().to_string();
     let stop = Arc::new(AtomicBool::new(false));
@@ -46,14 +64,15 @@ pub fn voice_start(app: tauri::AppHandle, gesture: Option<u64>) -> Result<String
         stop: stop.clone(),
         audio: vec![],
         gesture,
+        owner: owner.clone(),
     });
     drop(active);
     drop(state);
     let key = id.clone();
     std::thread::spawn(move || {
-        let result = record(&app, &key, &stop);
+        let result = record(&app, &owner, &key, &stop);
         if let Err(error) = result {
-            event(&app, &key, "error", 0.0, 0.0, &error);
+            event(&app, &owner, &key, "error", 0.0, 0.0, &error);
         }
     });
     Ok(id)
@@ -71,7 +90,7 @@ pub fn stop_gesture(app: &tauri::AppHandle, gesture: u64) {
     }
 }
 
-fn record(app: &tauri::AppHandle, id: &str, stop: &AtomicBool) -> Result<(), String> {
+fn record(app: &tauri::AppHandle, owner: &str, id: &str, stop: &AtomicBool) -> Result<(), String> {
     if stop.load(Ordering::SeqCst) {
         return Ok(());
     }
@@ -145,6 +164,7 @@ fn record(app: &tauri::AppHandle, id: &str, stop: &AtomicBool) -> Result<(), Str
         let level = (recent.iter().map(|v| v * v).sum::<f32>() / recent.len().max(1) as f32).sqrt();
         event(
             app,
+            owner,
             id,
             "recording",
             started.elapsed().as_secs_f64(),
@@ -183,7 +203,7 @@ fn record(app: &tauri::AppHandle, id: &str, stop: &AtomicBool) -> Result<(), Str
     let mut current = state.0.lock().unwrap();
     if let Some(recording) = current.as_mut().filter(|r| r.id == id) {
         recording.audio = output.into_inner();
-        event(app, id, "ready", length as f64 / 16000.0, 0.0, "");
+        event(app, owner, id, "ready", length as f64 / 16000.0, 0.0, "");
     }
     Ok(())
 }
@@ -223,7 +243,7 @@ pub fn voice_stop(state: tauri::State<'_, Voice>, id: Option<String>) {
     }
 }
 #[tauri::command]
-pub fn voice_cancel(state: tauri::State<'_, Voice>, id: Option<String>) {
+pub fn voice_cancel(app: tauri::AppHandle, state: tauri::State<'_, Voice>, id: Option<String>) {
     let mut current = state.0.lock().unwrap();
     if id
         .as_ref()
@@ -233,6 +253,21 @@ pub fn voice_cancel(state: tauri::State<'_, Voice>, id: Option<String>) {
     }
     if let Some(r) = current.take() {
         r.stop.store(true, Ordering::SeqCst);
+        drop(current);
+        event(&app, &r.owner, &r.id, "cancelled", 0.0, 0.0, "");
+    }
+}
+pub fn cancel_owner(app: &tauri::AppHandle, owner: &str) {
+    let id = app
+        .state::<Voice>()
+        .0
+        .lock()
+        .unwrap()
+        .as_ref()
+        .filter(|recording| recording.owner == owner)
+        .map(|recording| recording.id.clone());
+    if let Some(id) = id {
+        voice_cancel(app.clone(), app.state(), Some(id));
     }
 }
 #[tauri::command]

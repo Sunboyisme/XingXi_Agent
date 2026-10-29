@@ -1141,11 +1141,9 @@ body:has(.reminder-popup),
   .model-thinking-detected {
     text-align: left;
   }
-
 }
 
 @media (max-width: 700px) {
-
   .chat-jump-latest {
     position: absolute;
     bottom: calc(100% + 8px);
@@ -1673,60 +1671,11 @@ body:has(.reminder-popup),
   font-size: 13px;
 }
 
-.image-generation-test-note {
-  margin: 0;
-  color: var(--ui-color-text-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.image-generation-test-result {
-  min-height: 72px;
-  min-width: 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--ui-color-line);
-  color: var(--ui-color-text-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.image-generation-test-result p {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  margin: 0 0 4px;
-  font-size: 12px;
-}
-
-.image-generation-test-result[data-state="error"] p {
-  color: var(--ui-color-danger);
-}
-
-.image-generation-test-result[data-state="success"] p {
-  color: var(--ui-color-text);
-}
-
-.image-generation-test-result > span {
-  display: block;
-}
-
-.image-generation-test-endpoint {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .image-generation-dialog-actions {
   display: flex;
   flex-direction: row;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.image-generation-dialog-actions > button:first-child {
-  margin-right: auto;
 }
 
 @media (max-height: 600px) {
@@ -1746,17 +1695,6 @@ body:has(.reminder-popup),
   .image-generation-config-dialog [data-slot="input"],
   .image-generation-config-dialog .soft-select {
     height: 30px;
-  }
-
-  .image-generation-test-result {
-    padding-top: 4px;
-    min-height: 60px;
-    font-size: 10px;
-    line-height: 1.3;
-  }
-
-  .image-generation-test-result p {
-    font-size: 11px;
   }
 }
 

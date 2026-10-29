@@ -84,7 +84,7 @@ html[data-desktop] .ui-hint {
   border-radius: 48px;
   min-height: 84px;
   padding: 10px 20px;
-  box-shadow: 0 9px 35px #0004;
+  box-shadow: none;
 }
 .quick-bar .avatar-interaction {
   width: 52px;
@@ -120,16 +120,6 @@ html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
 .quick-composer-group {
   flex-shrink: 0;
 }
-.selection-controls select {
-  border: 0;
-  background: #302b27;
-  color: #ddd1c6;
-  border-radius: 5px;
-  max-width: 65%;
-  min-width: 0;
-  padding: 4px;
-  font-size: 12px;
-}
 .quick-answer {
   min-height: 0;
   display: flex;
@@ -139,7 +129,7 @@ html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
   border: 1px solid #75635270;
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 8px 30px #0003;
+  box-shadow: none;
 }
 .quick-answer header {
   display: flex;
@@ -216,75 +206,6 @@ html[data-desktop] .picture-close {
   color: #ffb2a9 !important;
   font-size: 13px;
   white-space: pre-wrap;
-}
-.quick-mic-hint {
-  display: grid;
-  gap: 5px;
-}
-html[data-desktop] .quick-mic {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 50%;
-}
-html[data-desktop] .quick-mic.is-active {
-  color: #ffe0c8;
-  background: transparent;
-}
-.quick-mic.is-recording::before,
-.quick-mic.is-recording::after {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  border: 1px solid #e4ae8870;
-  border-radius: 50%;
-  pointer-events: none;
-  animation: quick-mic-pulse 1.6s ease-out infinite;
-}
-.quick-mic.is-recording::after {
-  animation-delay: 0.8s;
-}
-.quick-mic-waves {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  bottom: -8px;
-  height: 12px;
-  pointer-events: none;
-}
-.quick-mic-waves i {
-  width: 2px;
-  border-radius: 2px;
-  background: #e4ae88;
-  transition: height 90ms linear;
-}
-.quick-mic-spinner {
-  animation: quick-mic-spin 1s linear infinite;
-}
-@keyframes quick-mic-pulse {
-  from {
-    opacity: 0.8;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.4);
-  }
-}
-@keyframes quick-mic-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .quick-mic.is-recording::before,
-  .quick-mic.is-recording::after,
-  .quick-mic-spinner {
-    animation: none;
-  }
 }
 .capture-window {
   width: 100%;
@@ -509,17 +430,85 @@ html[data-desktop]
   background: #e9b18d25;
   pointer-events: none;
 }
-.capture-text {
+.capture-text-editor {
   position: absolute;
-  resize: both;
-  min-width: 150px;
-  min-height: 70px;
-  max-width: 70vw;
-  background: #25232122;
-  border: 1px dashed #fff8;
-  padding: 0;
-  line-height: 1.4;
+  width: fit-content;
+}
+.capture-text-object {
+  position: absolute;
+  cursor: move;
   outline: 0;
+}
+.capture-text-object .capture-text-corner {
+  opacity: 0;
+}
+.capture-text-object:is(:hover, :focus-visible) .capture-text-corner {
+  opacity: 1;
+}
+.capture-text-move-area {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -4px;
+  height: 6px;
+  cursor: move;
+}
+html[data-desktop] .capture-text {
+  display: block;
+  resize: none;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0;
+  margin: 0;
+  font-family: "Microsoft YaHei", sans-serif;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  cursor: text;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+.capture-text-corner {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-color: #6ca9f2;
+  border-style: solid;
+  border-width: 0;
+  pointer-events: auto;
+}
+.capture-text-corner:is(.corner-nw, .corner-se) {
+  cursor: nwse-resize;
+}
+.capture-text-corner:is(.corner-ne, .corner-sw) {
+  cursor: nesw-resize;
+}
+.capture-text-corner.corner-nw {
+  left: -3px;
+  top: -3px;
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+.capture-text-corner.corner-ne {
+  right: -3px;
+  top: -3px;
+  border-top-width: 1px;
+  border-right-width: 1px;
+}
+.capture-text-corner.corner-se {
+  right: -3px;
+  bottom: -3px;
+  border-bottom-width: 1px;
+  border-right-width: 1px;
+}
+.capture-text-corner.corner-sw {
+  left: -3px;
+  bottom: -3px;
+  border-bottom-width: 1px;
+  border-left-width: 1px;
 }
 .capture-error {
   position: absolute;
@@ -530,53 +519,6 @@ html[data-desktop]
   padding: 12px;
   border-radius: 10px;
   cursor: default;
-}
-.selection-window {
-  position: absolute;
-  inset: 6px;
-  display: flex;
-  flex-direction: column;
-  background: rgba(35, 30, 27, 0.98);
-  color: #f3e9df;
-  border: 1px solid #8b72604d;
-  border-radius: 16px;
-  overflow: hidden;
-  font-size: 14px;
-}
-.selection-window header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 7px 10px;
-}
-.selection-actions {
-  display: flex;
-  gap: 8px;
-}
-.selection-controls {
-  display: flex;
-  gap: 8px;
-  padding: 0 12px 8px;
-}
-.selection-controls select {
-  max-width: 60%;
-}
-.selection-result {
-  overflow: auto;
-  flex: 1;
-  padding: 8px 15px;
-  line-height: 1.65;
-  min-height: 0;
-}
-.selection-preview {
-  white-space: pre-wrap;
-  color: #b8a89b;
-}
-.selection-window footer {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 12px;
-  border-top: 1px solid #fff1;
 }
 .pet-window {
   position: absolute;
@@ -741,14 +683,6 @@ html[data-desktop] .pet-bubble > button:first-child {
 .desktop-preferences > .general-setting-row:first-child {
   border-top: 1px solid var(--ui-color-line);
 }
-.desktop-shortcut-legend {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-  color: var(--ui-color-text-muted);
-  font-size: 12px;
-}
 .desktop-keycaps {
   display: inline-flex;
   align-items: center;
@@ -770,80 +704,6 @@ html[data-desktop] .pet-bubble > button:first-child {
   font-weight: 500;
   box-shadow: 0 1px 0 var(--ui-color-line);
 }
-.desktop-shortcut-setting {
-  padding: 22px 0;
-  border-top: 1px solid var(--ui-color-line);
-}
-.desktop-shortcut-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.desktop-shortcut-heading > svg {
-  color: var(--ui-color-text-muted);
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-.desktop-shortcut-heading strong {
-  font-weight: 600;
-}
-.desktop-shortcut-editor {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
-}
-.desktop-shortcut-recorder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  min-width: 214px;
-  max-width: 100%;
-  padding: 8px 14px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 10px;
-  background: var(--ui-color-surface);
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
-}
-.desktop-shortcut-recorder:hover {
-  background: var(--ui-color-surface-deep, var(--ui-color-surface));
-}
-.desktop-shortcut-recorder:focus-visible,
-.desktop-shortcut-recorder.is-recording {
-  outline: 2px solid var(--ui-color-action);
-  outline-offset: 2px;
-}
-.desktop-shortcut-recorder:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.desktop-recording-label {
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  color: var(--ui-color-action);
-  font-size: 13px;
-}
-.desktop-recording-label i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.desktop-shortcut-feedback {
-  min-height: 26px;
-  margin-top: 8px;
-}
-.desktop-shortcut-feedback p {
-  margin: 0;
-  font-size: 12px;
-}
-.desktop-shortcut-feedback .field-error,
 .speech-form .field-error {
   color: var(--destructive, var(--ui-color-action));
   font-size: 12px;
@@ -923,8 +783,7 @@ html[data-desktop] .pet-bubble > button:first-child {
 html[data-desktop] .quick-bar textarea[readonly] {
   opacity: 0.7;
 }
-.quick-pending,
-.quick-activity {
+.quick-pending {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -994,13 +853,6 @@ html[data-desktop] .selection-grip {
   border-radius: 12px;
 }
 @media (max-width: 600px) {
-  .desktop-shortcut-recorder {
-    min-width: 180px;
-    flex: 1;
-  }
-  .desktop-shortcut-legend {
-    flex-wrap: wrap;
-  }
   .speech-dialog-footer {
     flex-wrap: wrap;
   }

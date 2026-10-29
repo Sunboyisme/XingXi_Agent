@@ -342,10 +342,12 @@ export function App() {
       value === "tools" ||
       value === "skills" ||
       value === "runtimes" ||
-      value === "connections"
+      value === "connections" ||
+      value === "speech"
     ) {
       setPage("settings");
-      setSettingsTab(value as SettingsTab);
+      setSettingsTab(value === "speech" ? "services" : value as SettingsTab);
+      if (value === "speech") setSpeechConfigureRequested(true);
     } else {
       setPage(value as Page);
       if (value === "settings") setSettingsTab("general");

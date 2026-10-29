@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { Mic, RotateCcw, Loader2, Undo2 } from "lucide-react";
 import {
@@ -34,37 +28,17 @@ import "../styles/desktop-settings.css";
 type DesktopStatus = {
   preferences: DesktopPreferences;
   ownsShortcuts: boolean;
-  shortcutError?: string;
 };
-function Keycaps({ value }: { value: string }) {
-  return (
-    <span className="desktop-keycaps" aria-label={value}>
-      {value
-        .split("+")
-        .filter(Boolean)
-        .map((key, index) => (
-          <kbd key={`${index}-${key}`}>{key}</kbd>
-        ))}
-    </span>
-  );
-}
 export function DesktopSettings() {
   const [status, setStatus] = useState<DesktopStatus>();
-  const [shortcut, setShortcut] = useState("");
-  const [recording, setRecording] = useState(false);
   const [error, setError] = useState("");
-  const [keyError, setKeyError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
   const [petSize, setPetSize] = useState("100");
   const [petSizeError, setPetSizeError] = useState("");
   const [petNotice, setPetNotice] = useState("");
-  const sizeFocused = useRef(false);
-  const button = useRef<HTMLButtonElement>(null);
-  const recordingRef = useRef(false);
-  const recordEpoch = useRef(0);
   const mounted = useRef(false);
   const saving = useRef(false);
+  const sizeFocused = useRef(false);
   useEffect(() => {
     mounted.current = true;
     if (!isTauri()) return;
@@ -72,8 +46,6 @@ export function DesktopSettings() {
       if (!mounted.current) return;
       setStatus(value);
       if (!sizeFocused.current) setPetSize(String(value.preferences.petSize));
-      if (!recordingRef.current)
-        setShortcut((current) => current || value.preferences.shortcut);
     };
     const listener = desktopListen<DesktopStatus>(
       "desktop-preferences",
@@ -81,114 +53,32 @@ export function DesktopSettings() {
     );
     void listener
       .then(() => invoke<DesktopStatus>("desktop_preferences"))
-      .then((value) => {
-        if (mounted.current) {
-          accept(value);
-          setShortcut(value.preferences.shortcut);
-        }
-      })
+      .then(accept)
       .catch((e) => {
         if (mounted.current) setError(desktopError(e));
       });
     return () => {
       mounted.current = false;
-      recordEpoch.current++;
-      recordingRef.current = false;
-      void invoke("desktop_shortcut_recording", { recording: false }).catch(
-        () => {},
-      );
       void listener.then((f) => f());
     };
   }, []);
-  async function stopRecording() {
-    recordEpoch.current++;
-    recordingRef.current = false;
-    setRecording(false);
-    await invoke("desktop_shortcut_recording", { recording: false }).catch(
-      (e) => {
-        if (mounted.current) setKeyError(desktopError(e));
-      },
-    );
-  }
-  async function beginRecording() {
-    const epoch = ++recordEpoch.current;
-    setNotice("");
-    setKeyError("");
-    try {
-      await invoke("desktop_shortcut_recording", { recording: true });
-      if (!mounted.current || epoch !== recordEpoch.current) {
-        await invoke("desktop_shortcut_recording", { recording: false });
-        return;
-      }
-      recordingRef.current = true;
-      setRecording(true);
-      button.current?.focus();
-    } catch (e) {
-      if (mounted.current) setKeyError(desktopError(e));
-    }
-  }
-  function captureKey(e: KeyboardEvent<HTMLButtonElement>) {
-    if (!recordingRef.current) return;
-    if (e.key === "Tab") {
-      void stopRecording();
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === "Escape") {
-      setShortcut(status?.preferences.shortcut || "Ctrl+Shift+E");
-      void stopRecording();
-      return;
-    }
-    if (e.repeat || e.nativeEvent.isComposing) return;
-    const key = /^Key[A-Z]$/.test(e.code)
-      ? e.code.slice(3)
-      : /^Digit[0-9]$/.test(e.code)
-        ? e.code.slice(5)
-        : /^F([1-9]|1[0-2])$/.test(e.code)
-          ? e.code
-          : "";
-    if (!key) {
-      setKeyError("请同时按下修饰键和字母、数字或功能键");
-      return;
-    }
-    const parts = [
-      e.ctrlKey ? "Ctrl" : "",
-      e.shiftKey ? "Shift" : "",
-      e.altKey ? "Alt" : "",
-      e.metaKey ? "Win" : "",
-      key,
-    ].filter(Boolean);
-    if (parts.length < 2) {
-      setKeyError("请至少加上 Ctrl、Shift、Alt 或 Win 中的一个");
-      return;
-    }
-    setShortcut(parts.join("+"));
-    setKeyError("");
-    void stopRecording();
-  }
   async function save(change: Partial<DesktopPreferences>) {
     if (saving.current || !status) return;
     saving.current = true;
     setBusy(true);
     setError("");
-    setNotice("");
-    if (change.shortcut) setKeyError("");
+    setPetNotice("");
     try {
       const value = await invoke<DesktopStatus>("desktop_preferences_save", {
         preferences: change,
       });
-      if (!mounted.current) return;
-      setStatus(value);
-      if (change.petSize !== undefined)
-        setPetSize(String(value.preferences.petSize));
-      if (change.shortcut) {
-        setShortcut(value.preferences.shortcut);
-        setNotice("快捷键已保存");
+      if (mounted.current) {
+        setStatus(value);
+        if (change.petSize !== undefined)
+          setPetSize(String(value.preferences.petSize));
       }
     } catch (e) {
-      if (change.shortcut) setKeyError(desktopError(e));
-      else setError(desktopError(e));
+      if (mounted.current) setError(desktopError(e));
     } finally {
       saving.current = false;
       if (mounted.current) setBusy(false);
@@ -228,12 +118,7 @@ export function DesktopSettings() {
       if (mounted.current) setBusy(false);
     }
   }
-  if (!isTauri()) return <p>桌面截图问答、桌宠和划词助手仅在桌面版中可用。</p>;
-  function featureRow(
-    key: "enabled" | "pet" | "selection" | "petSnap",
-    label: string,
-    detail: string,
-  ) {
+  function featureRow(key: "enabled" | "pet", label: string, detail: string) {
     return (
       <div className="desktop-feature-row">
         <div className="desktop-feature-copy">
@@ -241,15 +126,19 @@ export function DesktopSettings() {
           <p>{detail}</p>
         </div>
         <div className="desktop-feature-action">
-          {key === "enabled" && <Keycaps value="右 Alt" />}
+          {key === "enabled" && (
+            <span className="desktop-keycaps">
+              <kbd>右 Alt</kbd>
+            </span>
+          )}
           <label className="module-toggle">
             <input
               type="checkbox"
               role="switch"
               aria-label={label}
-              disabled={!status || busy || recording}
+              disabled={!status || busy}
               checked={status?.preferences[key] || false}
-              onChange={(event) => void save({ [key]: event.target.checked })}
+              onChange={(e) => void save({ [key]: e.target.checked })}
             />
             <span>{status?.preferences[key] ? "已开启" : "已关闭"}</span>
           </label>
@@ -257,6 +146,7 @@ export function DesktopSettings() {
       </div>
     );
   }
+  if (!isTauri()) return <p>桌面截图问答和桌宠仅在桌面版中可用。</p>;
   return (
     <section className="desktop-preferences" aria-label="桌面助手设置">
       <section className="settings-group">
@@ -300,7 +190,7 @@ export function DesktopSettings() {
                   max={200}
                   step={5}
                   value={petSize}
-                  disabled={!status || busy || recording}
+                  disabled={!status || busy}
                   aria-invalid={Boolean(petSizeError)}
                   aria-describedby={
                     petSizeError ? "desktop-pet-size-error" : undefined
@@ -329,11 +219,6 @@ export function DesktopSettings() {
               )}
             </div>
           </div>
-          {featureRow(
-            "petSnap",
-            "边缘吸附",
-            "拖到屏幕边缘并松开，短暂停留后自动贴边。",
-          )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">
               <strong>重置位置</strong>
@@ -342,7 +227,7 @@ export function DesktopSettings() {
             <Button
               variant="outline"
               size="sm"
-              disabled={!status || busy || recording}
+              disabled={!status || busy}
               onClick={() => void resetPet()}
             >
               <RotateCcw size={14} />
@@ -356,106 +241,8 @@ export function DesktopSettings() {
           </p>
         )}
       </section>
-      <section className="settings-group">
-        <h2>划词助手</h2>
-        <div className="desktop-preference-card">
-          {featureRow(
-            "selection",
-            "手动划词助手",
-            "选中文字后，按快捷键打开解释、翻译和总结工具。",
-          )}
-          <div className="desktop-shortcut-setting">
-            <div className="desktop-shortcut-heading">
-              <strong>唤起快捷键</strong>
-              <p>点击键帽录制组合键，Esc 取消。</p>
-            </div>
-            <div className="desktop-shortcut-editor">
-              <button
-                ref={button}
-                type="button"
-                className={`desktop-shortcut-recorder ${recording ? "is-recording" : ""}`}
-                aria-label={recording ? "正在录制划词快捷键" : "录制划词快捷键"}
-                aria-pressed={recording}
-                aria-describedby="desktop-shortcut-feedback"
-                disabled={!status || busy}
-                onClick={() => {
-                  if (recordingRef.current) void stopRecording();
-                  else void beginRecording();
-                }}
-                onKeyDown={captureKey}
-                onBlur={() => {
-                  if (recordingRef.current) void stopRecording();
-                }}
-              >
-                {recording ? (
-                  <span className="desktop-recording-label">
-                    <i />
-                    请按下组合键
-                  </span>
-                ) : (
-                  <Keycaps value={shortcut || "Ctrl+Shift+E"} />
-                )}
-              </button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  busy || recording || !status || shortcut === "Ctrl+Shift+E"
-                }
-                onClick={() => {
-                  setShortcut("Ctrl+Shift+E");
-                  setKeyError("");
-                  setNotice("");
-                }}
-              >
-                <RotateCcw size={14} />
-                恢复默认
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={
-                  busy ||
-                  recording ||
-                  !status ||
-                  !shortcut ||
-                  shortcut === status.preferences.shortcut
-                }
-                onClick={() => void save({ shortcut })}
-              >
-                {busy && <Loader2 className="spin" size={14} />}保存
-              </Button>
-            </div>
-            <div
-              id="desktop-shortcut-feedback"
-              className="desktop-shortcut-feedback"
-              aria-live="polite"
-            >
-              {keyError ? (
-                <p className="field-error" role="alert">
-                  {keyError}
-                </p>
-              ) : status?.shortcutError ? (
-                <p className="field-error" role="alert">
-                  {status.shortcutError}
-                </p>
-              ) : notice ? (
-                <p>{notice}</p>
-              ) : status && shortcut !== status.preferences.shortcut ? (
-                <p>
-                  当前使用：{status.preferences.shortcut}
-                  ，保存后应用新的快捷键。
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
       {status &&
-        (status.preferences.enabled ||
-          status.preferences.pet ||
-          status.preferences.selection) &&
+        (status.preferences.enabled || status.preferences.pet) &&
         !status.ownsShortcuts && (
           <p className="desktop-owner-notice">
             另一个 XiaoXi 实例正在使用桌面助手；退出该实例后会自动接管。

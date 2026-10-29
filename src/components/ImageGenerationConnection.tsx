@@ -1,4 +1,3 @@
-import { Hint } from "./common";
 import { useEffect, useState } from "react";
 import { Images, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -19,7 +18,6 @@ import {
 } from "./ui/dialog";
 
 type ImageSettings = components["schemas"]["ImageGenerationRead"];
-type TestResult = components["schemas"]["ImageGenerationTestRead"];
 const initial: ImageSettings = {
   enabled: false,
   url: "https://api.openai.com/v1",
@@ -51,17 +49,14 @@ export function ImageGenerationConnection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [needsRestart, setNeedsRestart] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
 
-  function clearResult() {
-    setTestResult(null);
+  function clearFeedback() {
     setError("");
   }
 
   function change(patch: Partial<ImageSettings>) {
     setForm((value) => ({ ...value, ...patch }));
-    clearResult();
+    clearFeedback();
   }
 
   function payload() {
@@ -99,7 +94,7 @@ export function ImageGenerationConnection() {
   }, []);
 
   async function configure() {
-    clearResult();
+    clearFeedback();
     setLoading(true);
     try {
       const value = await api<ImageSettings>("/settings/image-generation");
@@ -140,30 +135,8 @@ export function ImageGenerationConnection() {
     }
   }
 
-  async function testConnection() {
-    setBusy(true);
-    setTesting(true);
-    clearResult();
-    try {
-      setTestResult(
-        await api<TestResult>(
-          "/settings/image-generation/test",
-          "POST",
-          payload(),
-        ),
-      );
-      setNeedsRestart(false);
-    } catch (error) {
-      setNeedsRestart(isMissingSettings(error));
-      setError(settingsError(error));
-    } finally {
-      setTesting(false);
-      setBusy(false);
-    }
-  }
-
   const configured = Boolean(status.model && status.key_configured);
-  const canTest = Boolean(
+  const canSave = Boolean(
     form.url.trim() &&
     form.model.trim() &&
     (key.trim() || (status.key_configured && !clearKey)),
@@ -282,7 +255,7 @@ export function ImageGenerationConnection() {
                     onClick={() => {
                       setClearKey(!clearKey);
                       setKey("");
-                      clearResult();
+                      clearFeedback();
                     }}
                   >
                     {clearKey ? "撤销清除" : "清除"}
@@ -297,7 +270,7 @@ export function ImageGenerationConnection() {
                 onChange={(event) => {
                   setKey(event.target.value);
                   setClearKey(false);
-                  clearResult();
+                  clearFeedback();
                 }}
                 placeholder={
                   clearKey
@@ -340,60 +313,12 @@ export function ImageGenerationConnection() {
               />
             </div>
           </div>
-          <p className="image-generation-test-note">
-            测试会实际生成 1 张图片，可能计费；支持文字生图。
-          </p>
-          <div
-            className="image-generation-test-result"
-            data-state={
-              error || testResult?.ok === false
-                ? "error"
-                : testResult?.ok
-                  ? "success"
-                  : "idle"
-            }
-            role={error || testResult?.ok === false ? "alert" : "status"}
-            aria-live="polite"
-          >
-            <Hint label={error || testResult?.message || ""}>
-              <p>
-                {testing
-                  ? "正在生成测试图，请稍候…"
-                  : error ||
-                    testResult?.message ||
-                    "可先测试当前填写内容，再保存。百炼 Qwen 自动适配。"}
-              </p>
-            </Hint>
-            {testResult && (
-              <>
-                <span>
-                  {testResult.protocol === "dashscope"
-                    ? "百炼原生"
-                    : "Images 兼容"}
-                  {testResult.width && testResult.height
-                    ? ` · ${testResult.width} × ${testResult.height}`
-                    : testResult.http_status
-                      ? ` · HTTP ${testResult.http_status}`
-                      : ""}
-                </span>
-                <Hint label={testResult.endpoint}>
-                  <span className="image-generation-test-endpoint">
-                    {testResult.endpoint}
-                  </span>
-                </Hint>
-              </>
-            )}
-          </div>
+          {error && (
+            <p className="field-error" role="alert">
+              {error}
+            </p>
+          )}
           <DialogFooter className="image-generation-dialog-actions">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy || !canTest}
-              onClick={() => void testConnection()}
-            >
-              {testing && <Loader2 size={14} className="spin" />}
-              {testing ? "测试中…" : "测试连接"}
-            </Button>
             <Button
               size="sm"
               variant="ghost"
@@ -401,18 +326,18 @@ export function ImageGenerationConnection() {
               onClick={() => {
                 setOpen(false);
                 setKey("");
-                clearResult();
+                clearFeedback();
               }}
             >
               取消
             </Button>
             <Button
               size="sm"
-              disabled={busy || !form.url.trim() || (form.enabled && !canTest)}
+              disabled={busy || !form.url.trim() || (form.enabled && !canSave)}
               onClick={() => void save()}
             >
-              {busy && !testing && <Loader2 size={14} className="spin" />}
-              {busy && !testing ? "保存中…" : "保存设置"}
+              {busy && <Loader2 size={14} className="spin" />}
+              {busy ? "保存中…" : "保存设置"}
             </Button>
           </DialogFooter>
         </DialogContent>

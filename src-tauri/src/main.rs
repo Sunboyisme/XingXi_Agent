@@ -6,7 +6,6 @@ mod drop_files;
 mod desktop;
 mod desktop_input;
 mod voice;
-mod java_selection;
 
 use serde::Serialize;
 #[cfg(windows)]
@@ -526,14 +525,8 @@ fn main() {
             desktop::desktop_commands_take,
             desktop::desktop_dismiss,
             desktop::desktop_toggle,
-            desktop_input::desktop_key_state,
-            desktop_input::desktop_shortcut_recording,
             desktop::desktop_main,
             desktop::desktop_pick_files,
-            desktop::desktop_selection_offer,
-            desktop::desktop_selection_get,
-            desktop::desktop_selection_dismiss,
-            desktop::desktop_selection_expand,
             desktop::capture_get,
             desktop::capture_present,
             desktop::capture_select,
@@ -795,7 +788,7 @@ fn main() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::ScaleFactorChanged { .. } = event { desktop::refresh_hit_regions(window.app_handle(),window.label()); }
             if let tauri::WindowEvent::Destroyed = event { desktop::forget_pin(window.label()); }
-            if ["quick", "capture", "selection", "pet"].contains(&window.label()) {
+            if ["quick", "capture", "pet"].contains(&window.label()) {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     desktop::desktop_dismiss_label(window.app_handle(),window.label());

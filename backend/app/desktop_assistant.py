@@ -148,20 +148,17 @@ async def transcribe(file: UploadFile = File(), request_id: str = Form(max_lengt
 
 
 class DesktopAction(BaseModel):
-    action: Literal["explain", "translate", "summarize", "ocr"]
-    text: str = Field(default="", max_length=20000)
-    attachment_id: str | None = None
+    action: Literal["translate", "ocr"]
+    attachment_id: str
     target_language: Literal["auto", "简体中文", "English"] = "auto"
     model_selection: ModelSelection | None = None
 
 
 @router.post("/desktop/actions")
 async def desktop_action(value: DesktopAction):
-    if not value.text.strip() and not value.attachment_id:
-        raise HTTPException(400, "请先选择文字或截图")
+    if not value.attachment_id:
+        raise HTTPException(400, "请先提供截图")
     prompts = {
-        "explain": "用中文清楚解释用户提供的材料。",
-        "summarize": "用中文简洁总结用户提供的材料，保留关键事实。",
         "ocr": "逐字提取图片中的可辨认文字，保留段落与表格；不猜测模糊内容。",
         "translate": "翻译用户提供的材料，只输出译文。目标语言：" + (
             "中文材料译为英文，其他语言译为简体中文" if value.target_language == "auto" else value.target_language),
@@ -169,7 +166,7 @@ async def desktop_action(value: DesktopAction):
     with store.Session() as db:
         try:
             selected = model_profiles.resolve(db.get(store.Settings, config.PROFILE_ID), value.model_selection)
-            content = provider.user_content(value.text or "处理这张截图", [value.attachment_id] if value.attachment_id else [], selected)
+            content = provider.user_content("处理这张截图", [value.attachment_id], selected)
             model = provider.model(selected, usage_purpose="desktop_" + value.action)
         except Exception as error:
             raise HTTPException(400, provider.safe_error(error)) from None

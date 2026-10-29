@@ -16,12 +16,9 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 pub struct Preferences {
     pub enabled: bool,
     pub pet: bool,
-    pub selection: bool,
-    pub shortcut: String,
     pub pet_x: Option<i32>,
     pub pet_y: Option<i32>,
     pub pet_size: u16,
-    pub pet_snap: bool,
     pub pet_offset_x: Option<f64>,
     pub pet_offset_y: Option<f64>,
 }
@@ -30,16 +27,7 @@ pub struct Preferences {
 pub struct PreferencePatch {
     pub enabled: Option<bool>,
     pub pet: Option<bool>,
-    pub selection: Option<bool>,
-    pub shortcut: Option<String>,
     pub pet_size: Option<u16>,
-    pub pet_snap: Option<bool>,
-}
-#[derive(Clone, Serialize)]
-pub struct SelectionSnapshot {
-    pub id: String,
-    pub text: String,
-    pub error: Option<String>,
 }
 #[derive(Clone, Deserialize)]
 pub struct HitRegion {
@@ -64,12 +52,9 @@ impl Default for Preferences {
         Self {
             enabled: true,
             pet: true,
-            selection: true,
-            shortcut: "Ctrl+Shift+E".into(),
             pet_x: None,
             pet_y: None,
             pet_size: 100,
-            pet_snap: true,
             pet_offset_x: None,
             pet_offset_y: None,
         }
@@ -80,17 +65,13 @@ pub struct Desktop {
     pub prefs: Mutex<Preferences>,
     pub owned: AtomicBool,
     pub pet_dragging: AtomicBool,
-    pub pet_move_epoch: AtomicU64,
     pub pet_visibility_epoch: AtomicU64,
     pub pet_exiting: AtomicBool,
-    pub shortcut_recording: AtomicBool,
-    pub shortcut_error: Mutex<String>,
     pub quick_text: Mutex<String>,
     pub quick_busy: AtomicBool,
     pub dialog_active: AtomicBool,
     pub hit_regions: Mutex<std::collections::HashMap<String, Vec<HitRegion>>>,
     pub capture: Mutex<Option<Capture>>,
-    pub selection: Mutex<Option<SelectionSnapshot>>,
     pub hidden: Mutex<Vec<String>>,
     pub ask_session: Mutex<String>,
     pub quick_commands: Mutex<Vec<QuickCommand>>,
@@ -105,6 +86,7 @@ pub struct Capture {
     pub draft_text: String,
     pub session_id: String,
     pub composer_rect: Option<tauri::PhysicalRect<i32, u32>>,
+    pub selecting: bool,
 }
 
 fn path(app: &tauri::AppHandle) -> PathBuf {
@@ -152,7 +134,6 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     }
     window(app, "quick", 900.0, 540.0)?;
     window(app, "capture", 900.0, 600.0)?;
-    window(app, "selection", 560.0, 360.0)?;
     let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
     let pet = window(app, "pet", 340.0, 82.0 * p.pet_size as f64 / 100.0 + 138.0)?;
     if let Some(m) = pet.primary_monitor().map_err(|e| e.to_string())? {
@@ -166,7 +147,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
             .unwrap_or(area.position.y + area.size.height as i32 - size.height as i32 - 24);
         pet.set_position(PhysicalPosition::new(x, y))
             .map_err(|e| e.to_string())?;
-        let _ = place_pet(app, false, false);
+        let _ = place_pet(app, false);
     }
     crate::desktop_input::start(app.clone());
     Ok(())
@@ -174,7 +155,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn desktop_preferences(app: tauri::AppHandle) -> serde_json::Value {
     let d = app.state::<Desktop>();
-    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"shortcutError":d.shortcut_error.lock().unwrap().clone()})
+    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed)})
 }
 #[tauri::command]
 pub async fn desktop_preferences_save(
@@ -184,18 +165,11 @@ pub async fn desktop_preferences_save(
     let _save = PREFERENCE_SAVE_LOCK.lock().await;
     let mut next = app.state::<Desktop>().prefs.lock().unwrap().clone();
     let old_pet_size = next.pet_size;
-    let old_pet_snap = next.pet_snap;
     if let Some(v) = preferences.enabled {
         next.enabled = v;
     }
     if let Some(v) = preferences.pet {
         next.pet = v;
-    }
-    if let Some(v) = preferences.selection {
-        next.selection = v;
-    }
-    if let Some(v) = preferences.shortcut {
-        next.shortcut = v;
     }
     if let Some(v) = preferences.pet_size {
         if !(50..=200).contains(&v) {
@@ -203,15 +177,7 @@ pub async fn desktop_preferences_save(
         }
         next.pet_size = v;
     }
-    if let Some(v) = preferences.pet_snap {
-        next.pet_snap = v;
-    }
     let preferences = next;
-    crate::desktop_input::parse_shortcut(&preferences.shortcut)?;
-    let config = preferences.clone();
-    tauri::async_runtime::spawn_blocking(move || crate::desktop_input::configure_shortcut(config))
-        .await
-        .map_err(|e| e.to_string())??;
     let state = app.state::<Desktop>();
     let persisted = {
         let mut current = state.prefs.lock().unwrap();
@@ -226,27 +192,17 @@ pub async fn desktop_preferences_save(
         }
         result
     };
-    if let Err(error) = persisted {
-        let previous = state.prefs.lock().unwrap().clone();
-        let _ = tauri::async_runtime::spawn_blocking(move || {
-            crate::desktop_input::configure_shortcut(previous)
-        })
-        .await;
-        return Err(error);
-    }
+    persisted?;
     if let Some(pet) = app.get_webview_window("pet") {
         if old_pet_size != preferences.pet_size {
-            app.state::<Desktop>()
-                .pet_move_epoch
-                .fetch_add(1, Ordering::SeqCst);
             pet.set_size(tauri::LogicalSize::new(
                 340.0,
                 82.0 * preferences.pet_size as f64 / 100.0 + 138.0,
             ))
             .map_err(|e| e.to_string())?;
         }
-        if old_pet_size != preferences.pet_size || old_pet_snap != preferences.pet_snap {
-            place_pet(&app, false, false)?;
+        if old_pet_size != preferences.pet_size {
+            place_pet(&app, false)?;
         }
         set_pet_visible(
             &app,
@@ -256,9 +212,6 @@ pub async fn desktop_preferences_save(
     if !preferences.enabled {
         finish_capture(&app, None);
         desktop_dismiss_label(&app, "quick");
-    }
-    if !preferences.selection {
-        desktop_selection_dismiss(app.clone(), None);
     }
     let value = desktop_preferences(app.clone());
     let _ = app.emit("desktop-preferences", &value);
@@ -276,7 +229,7 @@ fn persist_preferences(app: &tauri::AppHandle, p: &Preferences) -> Result<(), St
 }
 // Clamp the visible avatar, and reposition its transparent frame so the bubble
 // and context menu stay accessible at the top and left monitor edges as well.
-fn place_pet(app: &tauri::AppHandle, snap: bool, reset: bool) -> Result<(), String> {
+fn place_pet(app: &tauri::AppHandle, reset: bool) -> Result<(), String> {
     let w = app.get_webview_window("pet").ok_or("桌宠窗口不可用")?;
     let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
     let at = w.outer_position().map_err(|e| e.to_string())?;
@@ -339,21 +292,8 @@ fn place_pet(app: &tauri::AppHandle, snap: bool, reset: bool) -> Result<(), Stri
     let min_y = a.position.y;
     let max_x = (min_x + a.size.width as i32 - target_diameter).max(min_x);
     let max_y = (min_y + a.size.height as i32 - target_diameter).max(min_y);
-    let mut x = (cx - target_diameter / 2).clamp(min_x, max_x);
-    let mut y = (cy - target_diameter / 2).clamp(min_y, max_y);
-    if snap {
-        let threshold = (24.0 * target_scale).round() as i32;
-        if x - min_x <= threshold {
-            x = min_x;
-        } else if max_x - x <= threshold {
-            x = max_x;
-        }
-        if y - min_y <= threshold {
-            y = min_y;
-        } else if max_y - y <= threshold {
-            y = max_y;
-        }
-    }
+    let x = (cx - target_diameter / 2).clamp(min_x, max_x);
+    let y = (cy - target_diameter / 2).clamp(min_y, max_y);
     position_pet(app, &w, a, x, y, target_size, target_scale)
 }
 fn position_pet(
@@ -402,38 +342,11 @@ pub fn finish_pet_drag(app: &tauri::AppHandle) {
     if app.state::<Desktop>().pet_dragging.load(Ordering::SeqCst) {
         return;
     }
-    let epoch = app
-        .state::<Desktop>()
-        .pet_move_epoch
-        .fetch_add(1, Ordering::SeqCst)
-        + 1;
-    let _ = place_pet(app, false, false);
-    let a = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let b = a.clone();
-        let _ = a.run_on_main_thread(move || {
-            let state = b.state::<Desktop>();
-            if state.pet_move_epoch.load(Ordering::SeqCst) != epoch
-                || state.pet_dragging.load(Ordering::SeqCst)
-                || !state.prefs.lock().unwrap().pet_snap
-                || state.capture.lock().unwrap().is_some()
-                || !b
-                    .get_webview_window("pet")
-                    .is_some_and(|w| w.is_visible().unwrap_or(false))
-            {
-                return;
-            }
-            let _ = place_pet(&b, true, false);
-        });
-    });
+    let _ = place_pet(app, false);
 }
 #[tauri::command]
 pub fn desktop_pet_reset(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    app.state::<Desktop>()
-        .pet_move_epoch
-        .fetch_add(1, Ordering::SeqCst);
-    place_pet(&app, false, true)?;
+    place_pet(&app, true)?;
     let value = desktop_preferences(app.clone());
     let _ = app.emit("desktop-preferences", &value);
     Ok(value)
@@ -448,9 +361,6 @@ pub fn set_pet_visible(app: &tauri::AppHandle, shown: bool) {
     }
     let epoch = state.pet_visibility_epoch.fetch_add(1, Ordering::SeqCst) + 1;
     state.pet_exiting.store(!shown, Ordering::SeqCst);
-    if !shown {
-        state.pet_move_epoch.fetch_add(1, Ordering::SeqCst);
-    }
     if shown {
         if state.capture.lock().unwrap().is_some() {
             let mut hidden = state.hidden.lock().unwrap();
@@ -506,7 +416,7 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
     }
     let hidden = std::mem::take(&mut *app.state::<Desktop>().hidden.lock().unwrap());
     for label in hidden {
-        if label == "selection" || label == "quick" {
+        if label == "quick" {
             continue;
         }
         if label == "pet" && !state.prefs.lock().unwrap().pet {
@@ -524,17 +434,25 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
 }
 pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
     if label == "capture" {
+        let selection = app
+            .state::<Desktop>()
+            .capture
+            .lock()
+            .unwrap()
+            .as_ref()
+            .filter(|c| c.selecting)
+            .map(|c| c.id.clone());
+        if let Some(id) = selection {
+            let _ = capture_cancel(app.clone(), Some(id));
+            return;
+        }
         finish_capture(app, None);
         desktop_dismiss_label(app, "quick");
         return;
     }
-    if label == "selection" {
-        desktop_selection_dismiss(app.clone(), None);
-        return;
-    }
     if label == "quick" {
         finish_capture(app, None);
-        crate::voice::voice_cancel(app.state(), None);
+        crate::voice::cancel_owner(&app, "quick");
         app.state::<Desktop>()
             .quick_commands
             .lock()
@@ -578,7 +496,7 @@ pub fn begin_ask_session(app: &tauri::AppHandle) -> Result<String, String> {
     if let Some(w) = app.get_webview_window("quick") {
         let _ = w.hide();
     }
-    crate::voice::voice_cancel(app.state(), None);
+    crate::voice::cancel_owner(&app, "quick");
     let id = uuid::Uuid::new_v4().to_string();
     let state = app.state::<Desktop>();
     let mut session = state.ask_session.lock().unwrap();
@@ -711,8 +629,11 @@ fn show_capture_composer(app: &tauri::AppHandle) -> Result<(), String> {
         .capture
         .lock()
         .unwrap()
-        .as_ref()
-        .and_then(|c| c.composer_rect)
+        .as_mut()
+        .and_then(|c| {
+            c.selecting = false;
+            c.composer_rect
+        })
         .ok_or("截图会话已结束")?;
     let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
     w.set_position(rect.position).map_err(|e| e.to_string())?;
@@ -727,11 +648,10 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let composer_rect = capture_composer_rect(app)?;
-    desktop_selection_dismiss(app.clone(), None);
     let _ = app.emit_to("pet", "desktop-pet-hide-menu", ());
     let mut hidden = vec![];
     for w in app.webview_windows().values() {
-        if ["pet", "quick", "selection"].contains(&w.label()) || w.label().starts_with("pin-") {
+        if ["pet", "quick"].contains(&w.label()) || w.label().starts_with("pin-") {
             if w.is_visible().unwrap_or(false) {
                 hidden.push(w.label().to_owned());
                 w.hide().map_err(|e| e.to_string())?;
@@ -791,11 +711,14 @@ pub fn capture_select(app: tauri::AppHandle, id: String) -> Result<(), String> {
         .capture
         .lock()
         .unwrap()
-        .as_ref()
+        .as_mut()
         .filter(|c| c.id == id)
-        .map(|c| c.session_id.clone())
+        .map(|c| {
+            c.selecting = true;
+            c.session_id.clone()
+        })
         .ok_or("截图会话已结束")?;
-    crate::voice::voice_cancel(app.state(), None);
+    crate::voice::cancel_owner(&app, "quick");
     let _ = app.emit_to(
         "quick",
         "desktop-hidden",
@@ -834,11 +757,18 @@ pub fn capture_pixels(app: tauri::AppHandle, id: String) -> Result<tauri::ipc::R
 }
 #[tauri::command]
 pub fn capture_cancel(app: tauri::AppHandle, id: Option<String>) -> Result<bool, String> {
-    let finished = finish_capture(&app, id.as_deref());
-    if finished {
-        desktop_dismiss_label(&app, "quick");
+    let current = app
+        .state::<Desktop>()
+        .capture
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|c| id.as_ref().is_none_or(|id| c.id == *id));
+    if !current {
+        return Ok(false);
     }
-    Ok(finished)
+    desktop_open(app, false)?;
+    Ok(true)
 }
 #[tauri::command]
 pub async fn capture_export(
@@ -1035,14 +965,6 @@ impl Drop for NativeDialog {
     }
 }
 #[tauri::command]
-pub fn desktop_selection_offer(
-    window: tauri::WebviewWindow,
-    text: String,
-    request_id: Option<String>,
-) {
-    crate::desktop_input::offer_dom(window.label().to_string(), text, request_id);
-}
-#[tauri::command]
 pub fn desktop_pet_drag(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
     if window.label() != "pet" {
         return Err("仅桌宠可以使用这个操作".into());
@@ -1058,9 +980,6 @@ pub fn desktop_pet_drag(app: tauri::AppHandle, window: tauri::WebviewWindow) -> 
     app.state::<Desktop>()
         .pet_dragging
         .store(true, Ordering::SeqCst);
-    app.state::<Desktop>()
-        .pet_move_epoch
-        .fetch_add(1, Ordering::SeqCst);
     window
         .set_ignore_cursor_events(false)
         .map_err(|e| e.to_string())?;
@@ -1172,110 +1091,6 @@ pub fn desktop_quick_state(app: tauri::AppHandle, session_id: String, text: Stri
     }
     state.quick_busy.store(busy, Ordering::Relaxed);
 }
-#[tauri::command]
-pub fn desktop_selection_get(app: tauri::AppHandle) -> Option<SelectionSnapshot> {
-    app.state::<Desktop>().selection.lock().unwrap().clone()
-}
-#[tauri::command]
-pub fn desktop_selection_dismiss(app: tauri::AppHandle, id: Option<String>) {
-    let state = app.state::<Desktop>();
-    let mut selection = state.selection.lock().unwrap();
-    if id
-        .as_ref()
-        .is_some_and(|id| !selection.as_ref().is_some_and(|s| s.id == *id))
-    {
-        return;
-    }
-    crate::desktop_input::invalidate_selection();
-    selection.take();
-    drop(selection);
-    if let Some(w) = app.get_webview_window("selection") {
-        let _ = w.emit("desktop-selection-close", ());
-        let _ = w.hide();
-    }
-}
-pub fn place_surface(
-    window: &tauri::WebviewWindow,
-    x: i32,
-    y: i32,
-    width: f64,
-    height: f64,
-) -> Result<(), String> {
-    let monitor = window
-        .monitor_from_point(x as f64, y as f64)
-        .map_err(|e| e.to_string())?
-        .or(window.primary_monitor().map_err(|e| e.to_string())?);
-    if let Some(m) = monitor {
-        let a = m.work_area();
-        let scale = m.scale_factor();
-        let width = (width * scale).min(a.size.width as f64 - 16.0).max(1.0) as u32;
-        let height = (height * scale).min(a.size.height as f64 - 16.0).max(1.0) as u32;
-        window
-            .set_size(PhysicalSize::new(width, height))
-            .map_err(|e| e.to_string())?;
-        let left = (x - ((120.0 * scale) as i32)).clamp(
-            a.position.x + 8,
-            a.position.x + a.size.width as i32 - width as i32 - 8,
-        );
-        let top = (y + (16.0 * scale) as i32).clamp(
-            a.position.y + 8,
-            a.position.y + a.size.height as i32 - height as i32 - 8,
-        );
-        window
-            .set_position(PhysicalPosition::new(left, top))
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-#[tauri::command]
-pub fn desktop_selection_expand(
-    app: tauri::AppHandle,
-    id: String,
-    expanded: bool,
-) -> Result<(), String> {
-    if !app
-        .state::<Desktop>()
-        .selection
-        .lock()
-        .unwrap()
-        .as_ref()
-        .is_some_and(|s| s.id == id)
-    {
-        return Ok(());
-    }
-    if let Some(w) = app.get_webview_window("selection") {
-        let pos = w.outer_position().map_err(|e| e.to_string())?;
-        let scale = w.scale_factor().map_err(|e| e.to_string())?;
-        place_surface(
-            &w,
-            pos.x + (120.0 * scale) as i32,
-            pos.y - (16.0 * scale) as i32,
-            if expanded { 560.0 } else { 420.0 },
-            if expanded { 400.0 } else { 64.0 },
-        )?;
-    }
-    Ok(())
-}
-pub fn offer_selection(app: &tauri::AppHandle, text: String, error: Option<String>) {
-    let id = uuid::Uuid::new_v4().to_string();
-    let snapshot = SelectionSnapshot { id, text, error };
-    *app.state::<Desktop>().selection.lock().unwrap() = Some(snapshot.clone());
-    let _ = app.emit_to("selection", "desktop-selection", &snapshot);
-    if let Some(w) = app.get_webview_window("selection") {
-        let (x, y) = crate::desktop_input::cursor();
-        let issue = snapshot.error.is_some() || snapshot.text.len() > 20000;
-        let _ = place_surface(
-            &w,
-            x,
-            y,
-            if issue { 560.0 } else { 420.0 },
-            if issue { 230.0 } else { 64.0 },
-        );
-        let _ = w.show();
-        let _ = w.set_focus();
-    }
-}
-
 fn desktop_image() -> Result<Capture, String> {
     use windows::Win32::{
         Graphics::{Dwm::DwmFlush, Gdi::*},
@@ -1360,6 +1175,7 @@ fn desktop_image() -> Result<Capture, String> {
             draft_text: String::new(),
             session_id: String::new(),
             composer_rect: None,
+            selecting: false,
         })
     }
 }
