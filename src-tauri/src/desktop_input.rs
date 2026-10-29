@@ -488,15 +488,38 @@ pub fn start(app: tauri::AppHandle) {
                     voice = true;
                     let a = app.clone();
                     let _ = app.run_on_main_thread(move || {
-                        if gesture_held(gesture)
-                            && !a.state::<Desktop>().quick_busy.load(Ordering::Relaxed)
-                            && !a.state::<Desktop>().dialog_active.load(Ordering::SeqCst)
+                        if !gesture_held(gesture)
+                            || a.state::<Desktop>().dialog_active.load(Ordering::SeqCst)
                         {
-                            let _ = crate::desktop::desktop_open(a.clone(), false);
-                            let _ = a.emit_to(
-                                "quick",
-                                "desktop-record",
-                                serde_json::json!({"gesture":gesture}),
+                            return;
+                        }
+                        let active = a.state::<Desktop>().capture.lock().unwrap().is_some()
+                            || a.get_webview_window("quick")
+                                .is_some_and(|w| w.is_visible().unwrap_or(false));
+                        if active && a.state::<Desktop>().quick_busy.load(Ordering::SeqCst) {
+                            return;
+                        }
+                        if !active && crate::desktop::begin_ask_session(&a).is_err() {
+                            return;
+                        }
+                        let text = a
+                            .state::<Desktop>()
+                            .capture
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .map(|capture| capture.draft_text.clone())
+                            .unwrap_or_else(|| {
+                                a.state::<Desktop>().quick_text.lock().unwrap().clone()
+                            });
+                        if crate::desktop::desktop_open(a.clone(), false).is_ok() {
+                            crate::desktop::enqueue_quick(
+                                &a,
+                                "record",
+                                Some(text),
+                                None,
+                                Some(gesture),
+                                None,
                             );
                         }
                     });

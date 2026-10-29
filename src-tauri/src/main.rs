@@ -521,6 +521,8 @@ fn main() {
             desktop::desktop_pet_drag,
             desktop::desktop_hit_regions,
             desktop::desktop_quick_state,
+            desktop::desktop_ask_session,
+            desktop::desktop_commands_take,
             desktop::desktop_dismiss,
             desktop::desktop_toggle,
             desktop_input::desktop_key_state,

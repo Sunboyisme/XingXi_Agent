@@ -8,9 +8,8 @@ import {
   X,
   Copy,
   ExternalLink,
-  MessageSquarePlus,
-  Camera,
   RotateCw,
+  LoaderCircle,
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint, Markdown } from "./common";
@@ -22,8 +21,7 @@ import {
   emitTo,
   desktopListen,
   desktopError,
-  readQuickDraft,
-  saveQuickDraft,
+  emptyQuickDraft,
   models,
   selectedModel,
   addDesktopFile,
@@ -51,8 +49,21 @@ type IncomingImage = {
   attachment?: Attachment;
   failed?: boolean;
 };
+type QuickCommand = {
+  id: string;
+  sessionId: string;
+  action: string;
+  text?: string;
+  dataUrl?: string;
+  gesture?: number;
+  imageAction?: string;
+};
 export function DesktopQuickAsk() {
-  const [draft, setDraft] = useState<QuickDraft>(readQuickDraft);
+  const [draft, setDraft] = useState<QuickDraft>(emptyQuickDraft);
+  const [sessionId, setSessionId] = useState("");
+  const session = useRef("");
+  const commandsWorking = useRef(false);
+  const commandsPending = useRef(false);
   const [settings, setSettings] = useState<Settings>();
   const [answer, setAnswer] = useState("");
   const [question, setQuestion] = useState("");
@@ -67,7 +78,6 @@ export function DesktopQuickAsk() {
   const mounted = useRef(false);
   const visible = useRef(false);
   const generation = useRef(0);
-  const viewReady = useRef(false);
   const tracking = useRef(0);
   const work = useRef({ busy: false, uploading: false, locked: false });
   const startRequest = useRef(false);
@@ -91,6 +101,8 @@ export function DesktopQuickAsk() {
     pickFiles,
     shown,
     drainImages,
+    resetSession,
+    drainCommands,
   });
   functions.current = {
     send,
@@ -100,6 +112,8 @@ export function DesktopQuickAsk() {
     pickFiles,
     shown,
     drainImages,
+    resetSession,
+    drainCommands,
   };
   useDesktopHitRegions(
     ".quick-answer,.quick-composer-group,.ui-hint,[role=dialog],[role=listbox],[role=menu],[data-slot=dialog-overlay]",
@@ -108,7 +122,6 @@ export function DesktopQuickAsk() {
     const next =
       typeof change === "function" ? change(current.current) : change;
     current.current = next;
-    saveQuickDraft(next);
     if (mounted.current) setDraft(next);
   }
   function setRunBusy(value: boolean) {
@@ -120,22 +133,27 @@ export function DesktopQuickAsk() {
     if (mounted.current) setUploading(value);
   }
   useEffect(() => {
+    if (!sessionId) return;
     void invoke("desktop_quick_state", {
+      sessionId,
       text: draft.text,
       busy: busy || uploading || Boolean(voice && voice.phase !== "error"),
     }).catch(() => {});
-  }, [draft.text, busy, uploading, voice?.phase]);
+  }, [sessionId, draft.text, busy, uploading, voice?.phase]);
   useEffect(() => {
     if (!busy && !uploading && !voice) void functions.current.drainImages();
   }, [busy, uploading, voice, pendingCount]);
   useEffect(() => {
     mounted.current = true;
-    const epoch = ++generation.current;
     const listeners = [
-      desktopListen<{ text: string; sequence: number }>(
+      desktopListen<{ text: string; sequence: number; sessionId: string }>(
         "desktop-compose",
         (v) => {
-          if (v.sequence <= composingSequence.current) return;
+          if (
+            v.sessionId !== session.current ||
+            v.sequence <= composingSequence.current
+          )
+            return;
           composingSequence.current = v.sequence;
           updateDraft((d) => ({ ...d, text: v.text }));
         },
@@ -143,16 +161,14 @@ export function DesktopQuickAsk() {
       desktopListen<string>("desktop-error", (v) => {
         if (mounted.current) setError(v);
       }),
-      desktopListen("desktop-submit", () => void functions.current.send()),
-      desktopListen("desktop-pick", () => void functions.current.pickFiles()),
-      desktopListen<{ gesture: number }>("desktop-record", (v) => {
-        heldGesture.current = v.gesture;
-        void functions.current.startVoice(v.gesture);
+      desktopListen<{ id: string }>("desktop-session", (v) => {
+        functions.current.resetSession(v.id);
+        void functions.current.drainCommands();
       }),
-      desktopListen(
-        "desktop-record-click",
-        () => void functions.current.startVoice(),
-      ),
+      desktopListen<{ sessionId: string }>("desktop-command", (v) => {
+        if (v.sessionId === session.current)
+          void functions.current.drainCommands();
+      }),
       desktopListen<{ gesture: number }>("desktop-release", (v) => {
         if (heldGesture.current === v.gesture) {
           heldGesture.current = null;
@@ -161,7 +177,8 @@ export function DesktopQuickAsk() {
         }
       }),
       desktopListen("desktop-voice-cancel", () => cancelVoice()),
-      desktopListen("desktop-hidden", () => {
+      desktopListen<{ sessionId: string }>("desktop-hidden", (v) => {
+        if (v.sessionId !== session.current) return;
         visible.current = false;
         cancelVoice();
         setHiddenEpoch((value) => value + 1);
@@ -175,15 +192,15 @@ export function DesktopQuickAsk() {
         }
         acceptVoice(v);
       }),
-      desktopListen<IncomingImage>("desktop-image", (v) =>
-        functions.current.receiveImage(v),
-      ),
     ];
     void Promise.all(listeners)
       .then(async () => {
-        if (!mounted.current || epoch !== generation.current) return;
-        await refreshSettings(false);
-        if (current.current.conversationId) await restore();
+        if (!mounted.current) return;
+        const id = await invoke<string>("desktop_ask_session");
+        if (!mounted.current) return;
+        // An event received while this request was in flight is newer than its result.
+        if (!session.current) functions.current.resetSession(id);
+        await functions.current.drainCommands();
         if (await getCurrentWindow().isVisible())
           await functions.current.shown();
       })
@@ -208,7 +225,7 @@ export function DesktopQuickAsk() {
       tracker.current?.abort();
       request.current?.abort();
       voiceEpoch.current++;
-      void invoke("voice_cancel", { id: voiceId.current || undefined });
+      if (voiceId.current) void invoke("voice_cancel", { id: voiceId.current });
       listeners.forEach((p) => void p.then((f) => f()));
       window.removeEventListener("keydown", key);
     };
@@ -233,12 +250,6 @@ export function DesktopQuickAsk() {
     await refreshSettings(false);
     if (!mounted.current || !visible.current) return;
     if (
-      !work.current.busy &&
-      !viewReady.current &&
-      (current.current.conversationId || current.current.runId)
-    )
-      void restore();
-    if (
       mounted.current &&
       !work.current.locked &&
       !document.querySelector('[role="dialog"]')
@@ -251,54 +262,67 @@ export function DesktopQuickAsk() {
     setError("");
     await invoke("desktop_dismiss");
   }
-  async function restore() {
-    if (work.current.busy || startRequest.current || viewReady.current) return;
-    const epoch = generation.current;
-    const id = current.current.conversationId;
-    if (!id) {
-      if (current.current.runId) {
-        viewReady.current = true;
-        void track(current.current.runId, epoch);
-      }
-      return;
-    }
+  function resetSession(id: string) {
+    if (!id || id === session.current) return;
+    session.current = id;
+    setSessionId(id);
+    generation.current++;
+    tracking.current++;
+    tracker.current?.abort();
+    cancelVoice();
+    startRequest.current = false;
+    pending.current = [];
+    seen.current.clear();
+    imageWorking.current = false;
+    composingSequence.current = 0;
+    setPendingCount(0);
+    setRunBusy(false);
+    setFileBusy(false);
+    updateDraft(emptyQuickDraft());
+    setAnswer("");
+    setQuestion("");
+    setError("");
+    setHiddenEpoch((value) => value + 1);
+  }
+  async function drainCommands() {
+    commandsPending.current = true;
+    if (commandsWorking.current || !session.current) return;
+    commandsWorking.current = true;
     try {
-      const messages = await api<{ role: string; content: string }[]>(
-        `/conversations/${id}/messages`,
-      );
-      if (
-        !mounted.current ||
-        epoch !== generation.current ||
-        id !== current.current.conversationId ||
-        work.current.busy
-      )
-        return;
-      setAnswer(
-        messages.filter((m) => m.role === "assistant").at(-1)?.content || "",
-      );
-      setQuestion(
-        messages.filter((m) => m.role === "user").at(-1)?.content || "",
-      );
-      viewReady.current = true;
-      if (current.current.runId) {
-        const run = await api<Run>(`/runs/${current.current.runId}`);
-        if (
-          !mounted.current ||
-          epoch !== generation.current ||
-          work.current.busy
-        )
-          return;
-        if (["pending", "running", "queued"].includes(run.status))
-          void track(run.id, epoch);
-        else updateDraft((d) => ({ ...d, runId: null }));
+      while (commandsPending.current && mounted.current) {
+        commandsPending.current = false;
+        const id = session.current;
+        const items = await invoke<QuickCommand[]>("desktop_commands_take", {
+          sessionId: id,
+        });
+        if (!mounted.current || id !== session.current) continue;
+        // Actions may arrive before this hidden WebView has finished mounting.
+        // Native keeps them until the listener is ready, including the final draft text.
+        for (const item of items) {
+          if (item.sessionId !== session.current) continue;
+          const text = item.text;
+          if (typeof text === "string") updateDraft((d) => ({ ...d, text }));
+          if (item.action === "send") void functions.current.send();
+          if (item.action === "file") void functions.current.pickFiles();
+          if (item.action === "voice" || item.action === "record") {
+            heldGesture.current = item.gesture ?? null;
+            void functions.current.startVoice(item.gesture, true);
+          }
+          if (item.action === "image" && item.dataUrl)
+            functions.current.receiveImage({
+              id: item.id,
+              dataUrl: item.dataUrl,
+              action: item.imageAction || "attach",
+            });
+        }
       }
     } catch (e) {
-      if (visible.current && mounted.current && epoch === generation.current)
-        setError(desktopError(e));
+      if (mounted.current) setError(desktopError(e));
+    } finally {
+      commandsWorking.current = false;
     }
   }
   async function track(id: string, epoch: number) {
-    viewReady.current = true;
     const sequence = ++tracking.current;
     tracker.current?.abort();
     const controller = new AbortController();
@@ -399,7 +423,7 @@ export function DesktopQuickAsk() {
         !choice.vision
       )
         throw new Error(
-          "当前模型不支持图片，请在下方选择支持图片的模型。截图和文字已保留。",
+          "当前模型不支持图片，请在设置中更换支持图片的默认模型。截图和文字已保留。",
         );
       let id = value.conversationId;
       if (!id) {
@@ -408,7 +432,8 @@ export function DesktopQuickAsk() {
             title: "新对话",
           })
         ).id;
-        updateDraft((d) => ({ ...d, conversationId: id }));
+        if (mounted.current && epoch === generation.current)
+          updateDraft((d) => ({ ...d, conversationId: id }));
       }
       const text = value.text.trim() || "请根据这张截图或附件帮助我分析。";
       const run = await api<Run>(`/conversations/${id}/messages`, "POST", {
@@ -416,14 +441,16 @@ export function DesktopQuickAsk() {
         attachment_ids: value.attachments.map((a) => a.id),
         model_selection: selected,
       });
-      updateDraft({
-        ...value,
-        conversationId: id,
-        text: "",
-        attachments: [],
-        runId: run.id,
-      });
       if (!mounted.current || epoch !== generation.current) return;
+      updateDraft((d) => ({
+        ...d,
+        conversationId: id,
+        text: d.text === value.text ? "" : d.text,
+        attachments: d.attachments.filter(
+          (a) => !value.attachments.some((sent) => sent.id === a.id),
+        ),
+        runId: run.id,
+      }));
       setQuestion(text);
       await track(run.id, epoch);
     } catch (e) {
@@ -432,16 +459,18 @@ export function DesktopQuickAsk() {
         setError(desktopError(e));
       }
     } finally {
-      startRequest.current = false;
+      if (epoch === generation.current) startRequest.current = false;
     }
   }
   async function stop() {
     const id = current.current.runId;
+    const epoch = generation.current;
     if (id)
       try {
         await api(`/runs/${id}/cancel`, "POST");
       } catch (e) {
-        setError(desktopError(e));
+        if (mounted.current && epoch === generation.current)
+          setError(desktopError(e));
       }
   }
   async function pickFiles() {
@@ -453,6 +482,7 @@ export function DesktopQuickAsk() {
     try {
       const files =
         await invoke<{ name: string; bytes: number[] }[]>("desktop_pick_files");
+      if (!mounted.current || epoch !== generation.current) return;
       if (files.length + current.current.attachments.length > 4)
         throw new Error("每次最多提交 4 个附件");
       for (const file of files) {
@@ -469,7 +499,7 @@ export function DesktopQuickAsk() {
       if (mounted.current && epoch === generation.current)
         setError(desktopError(e));
     } finally {
-      if (mounted.current) {
+      if (mounted.current && epoch === generation.current) {
         setFileBusy(false);
         if (visible.current && !work.current.locked)
           input.current?.focus({ preventScroll: true });
@@ -518,7 +548,7 @@ export function DesktopQuickAsk() {
           model_selection: selectedModel(settings, current.current.modelKey),
         });
         if (!mounted.current || epoch !== generation.current) {
-          void api(`/runs/${run.id}/cancel`, "POST");
+          void api(`/runs/${run.id}/cancel`, "POST").catch(() => {});
           return;
         }
         updateDraft((d) => ({ ...d, runId: run.id }));
@@ -537,8 +567,8 @@ export function DesktopQuickAsk() {
         setError(desktopError(e));
       }
     } finally {
-      imageWorking.current = false;
       if (mounted.current && epoch === generation.current) {
+        imageWorking.current = false;
         setFileBusy(false);
         if (pending.current[0] && !pending.current[0].failed)
           void drainImages();
@@ -553,7 +583,7 @@ export function DesktopQuickAsk() {
       setError(value.error || "录音失败");
     }
   }
-  async function startVoice(gesture?: number) {
+  async function startVoice(gesture?: number, transferred = false) {
     if (work.current.locked || work.current.uploading || work.current.busy)
       return;
     work.current.locked = true;
@@ -562,8 +592,12 @@ export function DesktopQuickAsk() {
     startingVoice.current = true;
     pendingVoice.current = null;
     voiceRange.current = {
-      start: input.current?.selectionStart ?? current.current.text.length,
-      end: input.current?.selectionEnd ?? current.current.text.length,
+      start: transferred
+        ? current.current.text.length
+        : (input.current?.selectionStart ?? current.current.text.length),
+      end: transferred
+        ? current.current.text.length
+        : (input.current?.selectionEnd ?? current.current.text.length),
       text: current.current.text,
     };
     setVoice({ id: "", phase: "starting", seconds: 0, level: 0 });
@@ -670,25 +704,7 @@ export function DesktopQuickAsk() {
     request.current = null;
     work.current.locked = false;
     setVoice(null);
-    void invoke("voice_cancel", { id: id || undefined });
-  }
-  function newChat() {
-    if (work.current.busy || work.current.locked || work.current.uploading)
-      return;
-    generation.current++;
-    viewReady.current = true;
-    pending.current = [];
-    setPendingCount(0);
-    updateDraft({
-      text: "",
-      attachments: [],
-      conversationId: null,
-      runId: null,
-      modelKey: current.current.modelKey,
-    });
-    setAnswer("");
-    setQuestion("");
-    setError("");
+    if (id) void invoke("voice_cancel", { id });
   }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
   return (
@@ -807,25 +823,67 @@ export function DesktopQuickAsk() {
           </Hint>
           <Hint
             label={
-              <span>
-                语音输入　按住 <kbd>右Alt</kbd>
+              <span className="quick-mic-hint">
+                <span>
+                  语音输入　按住 <kbd>右Alt</kbd>
+                </span>
+                {voice && (
+                  <span>
+                    {voice.phase === "recording"
+                      ? `正在录音 ${Math.floor(voice.seconds)} 秒，点击结束`
+                      : voice.phase === "transcribing"
+                        ? "正在识别，Esc 取消"
+                        : voice.phase === "error"
+                          ? "识别未完成，点击重试，Esc 取消"
+                          : "正在打开麦克风…"}
+                  </span>
+                )}
               </span>
             }
           >
             <button
-              aria-label="语音输入，按住右 Alt"
-              className={voiceBusy ? "recording" : ""}
-              disabled={voice?.phase === "transcribing"}
+              aria-label={
+                voice?.phase === "recording"
+                  ? `正在录音 ${Math.floor(voice.seconds)} 秒，点击结束`
+                  : voice?.phase === "transcribing"
+                    ? "正在识别，点击取消"
+                    : voice?.retryable
+                      ? "重试语音识别"
+                      : "语音输入，按住右 Alt"
+              }
+              className={`quick-mic ${voiceBusy ? "is-active" : ""} ${voice?.phase === "recording" ? "is-recording" : ""}`}
+              disabled={busy || uploading || voice?.phase === "starting"}
               onClick={() => {
                 if (voice?.phase === "recording")
                   void invoke("voice_stop", { id: voiceId.current });
+                else if (voice?.phase === "transcribing") cancelVoice();
+                else if (voice?.retryable) void transcribe(voice.id);
                 else {
                   heldGesture.current = null;
                   void startVoice();
                 }
               }}
             >
-              <Mic size={20} />
+              {voice?.phase === "transcribing" ||
+              voice?.phase === "starting" ? (
+                <LoaderCircle className="quick-mic-spinner" size={20} />
+              ) : voice?.retryable ? (
+                <RotateCw size={20} />
+              ) : (
+                <Mic size={20} />
+              )}
+              {voice?.phase === "recording" && (
+                <span className="quick-mic-waves" aria-hidden="true">
+                  {[0.65, 1, 0.8].map((factor, index) => (
+                    <i
+                      key={index}
+                      style={{
+                        height: `${4 + Math.min(1, voice.level * 3) * 10 * factor}px`,
+                      }}
+                    />
+                  ))}
+                </span>
+              )}
             </button>
           </Hint>
           <Hint label={busy ? "停止回答" : "发送"}>
@@ -842,81 +900,12 @@ export function DesktopQuickAsk() {
               {busy ? <Square size={17} /> : <ArrowUp size={21} />}
             </button>
           </Hint>
+          <Hint label="关闭问答">
+            <button aria-label="关闭问答" onClick={() => void dismiss()}>
+              <X size={19} />
+            </button>
+          </Hint>
         </div>
-        <footer className="quick-footer">
-          <select
-            aria-label="问答模型"
-            value={draft.modelKey}
-            onChange={(e) =>
-              updateDraft((d) => ({ ...d, modelKey: e.target.value }))
-            }
-          >
-            <option value="">当前默认模型</option>
-            {models(settings).map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.label}
-                {m.vision ? " · 图片" : ""}
-              </option>
-            ))}
-          </select>
-          <div>
-            <Hint label="重新截图">
-              <button
-                aria-label="重新截图"
-                disabled={busy || uploading || Boolean(voiceBusy)}
-                onClick={() =>
-                  void invoke("desktop_open", { capture: true }).catch((e) =>
-                    setError(desktopError(e)),
-                  )
-                }
-              >
-                <Camera size={16} />
-              </button>
-            </Hint>
-            <Hint label="新建悬浮对话">
-              <button
-                aria-label="新建悬浮对话"
-                disabled={busy || uploading || Boolean(voiceBusy)}
-                onClick={newChat}
-              >
-                <MessageSquarePlus size={16} />
-              </button>
-            </Hint>
-            <Hint label="收起">
-              <button
-                aria-label="收起"
-                onClick={() => {
-                  cancelVoice();
-                  void dismiss();
-                }}
-              >
-                <X size={16} />
-              </button>
-            </Hint>
-          </div>
-        </footer>
-        {voice && (
-          <div className="voice-status" role="status">
-            <span
-              className="voice-meter"
-              style={{ width: `${Math.max(3, voice.level * 100)}%` }}
-            />
-            <span>
-              {voice.phase === "recording"
-                ? `正在录音 ${Math.floor(voice.seconds)} 秒`
-                : voice.phase === "transcribing"
-                  ? "正在识别…"
-                  : "识别未完成"}
-            </span>
-            {voice.phase === "error" && voice.retryable && (
-              <button onClick={() => void transcribe(voice.id)}>
-                <RotateCw size={14} />
-                重试
-              </button>
-            )}
-            <button onClick={cancelVoice}>取消</button>
-          </div>
-        )}
         {uploading && (
           <p className="quick-activity" role="status">
             正在添加附件…

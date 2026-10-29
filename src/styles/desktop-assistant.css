@@ -36,6 +36,13 @@ html[data-desktop] button {
 html[data-desktop] button:hover {
   background: rgba(255, 255, 255, 0.11);
 }
+html[data-desktop] .avatar-interaction,
+html[data-desktop] .avatar-interaction:is(:hover, :active) {
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+}
 html[data-desktop] button:disabled {
   opacity: 0.4;
   cursor: default;
@@ -90,7 +97,8 @@ html[data-desktop] .ui-hint {
   width: 52px;
   height: 52px;
 }
-.quick-bar textarea {
+html[data-desktop] .quick-bar textarea,
+html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
   flex: 1;
   min-width: 0;
   resize: none;
@@ -98,40 +106,20 @@ html[data-desktop] .ui-hint {
   max-height: 100px;
   line-height: 26px;
   padding: 11px 0;
-  background: transparent;
+  appearance: none;
+  background: transparent !important;
   color: #fff6ef;
-  border: 0;
-  box-shadow: none;
-  outline: 0;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
   font-size: 18px;
 }
 .quick-bar textarea::placeholder {
   color: #c7bbb3;
 }
-.quick-bar button.recording {
-  color: #ff827e;
-  background: #9b363944;
-}
 .quick-composer-group {
   flex-shrink: 0;
 }
-.quick-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 22px;
-  color: #d4c9c2;
-  text-shadow: 0 1px 4px #000;
-  background: #26211fc9;
-  border-radius: 14px;
-  margin-top: 4px;
-}
-.quick-footer > div {
-  display: flex;
-  gap: 7px;
-}
-.quick-footer select,
 .selection-controls select {
   border: 0;
   background: #302b27;
@@ -206,29 +194,74 @@ html[data-desktop] .ui-hint {
   font-size: 13px;
   white-space: pre-wrap;
 }
-.voice-status {
+.quick-mic-hint {
+  display: grid;
+  gap: 5px;
+}
+html[data-desktop] .quick-mic {
   position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+html[data-desktop] .quick-mic.is-active {
+  color: #ffe0c8;
+  background: transparent;
+}
+.quick-mic.is-recording::before,
+.quick-mic.is-recording::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 1px solid #e4ae8870;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: quick-mic-pulse 1.6s ease-out infinite;
+}
+.quick-mic.is-recording::after {
+  animation-delay: 0.8s;
+}
+.quick-mic-waves {
+  position: absolute;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 7px 18px;
-  margin-top: 5px;
-  border-radius: 12px;
-  background: #302924;
-  color: #fff1e8;
-  overflow: hidden;
+  justify-content: center;
+  gap: 2px;
+  bottom: -8px;
+  height: 12px;
+  pointer-events: none;
 }
-.voice-status > span:not(.voice-meter),
-.voice-status > button {
-  z-index: 1;
+.quick-mic-waves i {
+  width: 2px;
+  border-radius: 2px;
+  background: #e4ae88;
+  transition: height 90ms linear;
 }
-.voice-meter {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background: #b0715450;
-  transition: width 80ms;
+.quick-mic-spinner {
+  animation: quick-mic-spin 1s linear infinite;
+}
+@keyframes quick-mic-pulse {
+  from {
+    opacity: 0.8;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+@keyframes quick-mic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quick-mic.is-recording::before,
+  .quick-mic.is-recording::after,
+  .quick-mic-spinner {
+    animation: none;
+  }
 }
 .capture-window {
   width: 100%;

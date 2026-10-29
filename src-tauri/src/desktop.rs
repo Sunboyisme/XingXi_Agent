@@ -42,6 +42,17 @@ pub struct HitRegion {
     pub width: f64,
     pub height: f64,
 }
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickCommand {
+    id: String,
+    session_id: String,
+    action: String,
+    text: Option<String>,
+    data_url: Option<String>,
+    gesture: Option<u64>,
+    image_action: Option<String>,
+}
 impl Default for Preferences {
     fn default() -> Self {
         Self {
@@ -69,6 +80,8 @@ pub struct Desktop {
     pub capture: Mutex<Option<Capture>>,
     pub selection: Mutex<Option<SelectionSnapshot>>,
     pub hidden: Mutex<Vec<String>>,
+    pub ask_session: Mutex<String>,
+    pub quick_commands: Mutex<Vec<QuickCommand>>,
 }
 pub struct Capture {
     pub id: String,
@@ -78,7 +91,7 @@ pub struct Capture {
     pub x: i32,
     pub y: i32,
     pub draft_text: String,
-    pub return_quick: bool,
+    pub session_id: String,
 }
 
 fn path(app: &tauri::AppHandle) -> PathBuf {
@@ -202,7 +215,7 @@ pub async fn desktop_preferences_save(
         }
     }
     if !preferences.enabled {
-        finish_capture(&app, None, false);
+        finish_capture(&app, None);
         desktop_dismiss_label(&app, "quick");
     }
     if !preferences.selection {
@@ -234,9 +247,9 @@ pub fn persist_pet_position(app: &tauri::AppHandle) {
     }
 }
 pub fn restore(app: &tauri::AppHandle) {
-    finish_capture(app, None, false);
+    finish_capture(app, None);
 }
-fn finish_capture(app: &tauri::AppHandle, id: Option<&str>, return_to_quick: bool) -> bool {
+fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
     let state = app.state::<Desktop>();
     let capture = {
         let mut c = state.capture.lock().unwrap();
@@ -263,14 +276,12 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>, return_to_quick: boo
             let _ = w.show();
         }
     }
-    if return_to_quick && capture.return_quick {
-        let _ = desktop_open(app.clone(), false);
-    }
     true
 }
 pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
     if label == "capture" {
-        let _ = capture_cancel(app.clone(), None, None);
+        finish_capture(app, None);
+        desktop_dismiss_label(app, "quick");
         return;
     }
     if label == "selection" {
@@ -278,8 +289,19 @@ pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
         return;
     }
     if label == "quick" {
+        finish_capture(app, None);
         crate::voice::voice_cancel(app.state(), None);
-        let _ = app.emit_to("quick", "desktop-hidden", ());
+        app.state::<Desktop>()
+            .quick_commands
+            .lock()
+            .unwrap()
+            .retain(|command| command.action == "send" || command.action == "image");
+        let session_id = app.state::<Desktop>().ask_session.lock().unwrap().clone();
+        let _ = app.emit_to(
+            "quick",
+            "desktop-hidden",
+            serde_json::json!({"sessionId":session_id}),
+        );
     }
     if let Some(w) = app.get_webview_window(label) {
         let _ = w.hide();
@@ -295,7 +317,8 @@ pub fn desktop_toggle(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
     if app.state::<Desktop>().capture.lock().unwrap().is_some() {
-        return capture_cancel(app, None, None).map(|_| ());
+        desktop_dismiss_label(&app, "capture");
+        return Ok(());
     }
     if app
         .get_webview_window("quick")
@@ -304,7 +327,66 @@ pub fn desktop_toggle(app: tauri::AppHandle) -> Result<(), String> {
         desktop_dismiss_label(&app, "quick");
         return Ok(());
     }
-    begin_capture(&app)
+    desktop_open(app, true)
+}
+pub fn begin_ask_session(app: &tauri::AppHandle) -> Result<String, String> {
+    finish_capture(app, None);
+    if let Some(w) = app.get_webview_window("quick") {
+        let _ = w.hide();
+    }
+    crate::voice::voice_cancel(app.state(), None);
+    let id = uuid::Uuid::new_v4().to_string();
+    let state = app.state::<Desktop>();
+    let mut session = state.ask_session.lock().unwrap();
+    *session = id.clone();
+    state.quick_commands.lock().unwrap().clear();
+    state.quick_busy.store(false, Ordering::SeqCst);
+    state.quick_text.lock().unwrap().clear();
+    drop(session);
+    app.emit_to("quick", "desktop-session", serde_json::json!({"id":id}))
+        .map_err(|e| e.to_string())?;
+    Ok(id)
+}
+#[tauri::command]
+pub fn desktop_ask_session(app: tauri::AppHandle) -> String {
+    app.state::<Desktop>().ask_session.lock().unwrap().clone()
+}
+#[tauri::command]
+pub fn desktop_commands_take(app: tauri::AppHandle, session_id: String) -> Vec<QuickCommand> {
+    let state = app.state::<Desktop>();
+    let session = state.ask_session.lock().unwrap();
+    if *session != session_id {
+        return vec![];
+    }
+    let commands = std::mem::take(&mut *state.quick_commands.lock().unwrap());
+    commands
+}
+pub fn enqueue_quick(
+    app: &tauri::AppHandle,
+    action: &str,
+    text: Option<String>,
+    data_url: Option<String>,
+    gesture: Option<u64>,
+    image_action: Option<String>,
+) {
+    let state = app.state::<Desktop>();
+    let session = state.ask_session.lock().unwrap();
+    let session_id = session.clone();
+    state.quick_commands.lock().unwrap().push(QuickCommand {
+        id: uuid::Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        action: action.into(),
+        text,
+        data_url,
+        gesture,
+        image_action,
+    });
+    drop(session);
+    let _ = app.emit_to(
+        "quick",
+        "desktop-command",
+        serde_json::json!({"sessionId":session_id}),
+    );
 }
 #[tauri::command]
 pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> {
@@ -312,6 +394,7 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
         return Ok(());
     }
     if capture {
+        begin_ask_session(&app)?;
         return begin_capture(&app);
     }
     restore(&app);
@@ -370,13 +453,7 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
             return Err(e);
         }
     };
-    capture.return_quick = app
-        .state::<Desktop>()
-        .hidden
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|label| label == "quick");
+    capture.session_id = app.state::<Desktop>().ask_session.lock().unwrap().clone();
     capture.draft_text = app.state::<Desktop>().quick_text.lock().unwrap().clone();
     let (x, y, width, height) = (capture.x, capture.y, capture.width, capture.height);
     *app.state::<Desktop>().capture.lock().unwrap() = Some(capture);
@@ -389,7 +466,7 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
         w.emit("capture-ready", ()).map_err(|e| e.to_string())
     })();
     if result.is_err() {
-        finish_capture(app, None, true);
+        finish_capture(app, None);
     }
     result
 }
@@ -446,22 +523,27 @@ pub fn capture_cancel(
             capture_compose(app.clone(), key.clone(), text)?;
         }
     }
-    Ok(finish_capture(&app, id.as_deref(), true))
+    let finished = finish_capture(&app, id.as_deref());
+    if finished {
+        desktop_dismiss_label(&app, "quick");
+    }
+    Ok(finished)
 }
 #[tauri::command]
 pub fn capture_compose(app: tauri::AppHandle, id: String, text: String) -> Result<(), String> {
     let state = app.state::<Desktop>();
-    {
+    let session_id = {
         let mut c = state.capture.lock().unwrap();
         let c = c.as_mut().filter(|c| c.id == id).ok_or("截图会话已结束")?;
         c.draft_text = text.clone();
-    }
+        c.session_id.clone()
+    };
     *state.quick_text.lock().unwrap() = text.clone();
     let sequence = state.compose_sequence.fetch_add(1, Ordering::SeqCst) + 1;
     app.emit_to(
         "quick",
         "desktop-compose",
-        serde_json::json!({"text":text,"sequence":sequence}),
+        serde_json::json!({"text":text,"sequence":sequence,"sessionId":session_id}),
     )
     .map_err(|e| e.to_string())
 }
@@ -472,22 +554,16 @@ pub fn capture_continue(
     text: String,
     action: String,
 ) -> Result<(), String> {
-    capture_compose(app.clone(), id.clone(), text)?;
-    if !finish_capture(&app, Some(&id), false) {
+    if !["send", "file", "voice"].contains(&action.as_str()) {
+        return Err("未知问答操作".into());
+    }
+    capture_compose(app.clone(), id.clone(), text.clone())?;
+    if !finish_capture(&app, Some(&id)) {
         return Ok(());
     }
     desktop_open(app.clone(), false)?;
-    app.emit_to(
-        "quick",
-        match action.as_str() {
-            "send" => "desktop-submit",
-            "file" => "desktop-pick",
-            "voice" => "desktop-record-click",
-            _ => return Err("未知问答操作".into()),
-        },
-        (),
-    )
-    .map_err(|e| e.to_string())
+    enqueue_quick(&app, &action, Some(text), None, None, None);
+    Ok(())
 }
 
 #[tauri::command]
@@ -499,16 +575,15 @@ pub async fn capture_export(
     x: Option<i32>,
     y: Option<i32>,
 ) -> Result<bool, String> {
-    if !app
+    let draft_text = app
         .state::<Desktop>()
         .capture
         .lock()
         .unwrap()
         .as_ref()
-        .is_some_and(|c| c.id == id)
-    {
-        return Err("截图会话已结束".into());
-    }
+        .filter(|c| c.id == id)
+        .map(|c| c.draft_text.clone())
+        .ok_or("截图会话已结束")?;
     let bytes = STANDARD
         .decode(
             data_url
@@ -580,21 +655,23 @@ pub async fn capture_export(
             w.show().map_err(|e| e.to_string())?;
         }
         "attach" | "ocr" | "translate" => {
-            if !finish_capture(&app, Some(&id), false) {
+            if !finish_capture(&app, Some(&id)) {
                 return Ok(false);
             }
             desktop_open(app.clone(), false)?;
-            app.emit_to(
-                "quick",
-                "desktop-image",
-                serde_json::json!({"id":id,"dataUrl":data_url,"action":action}),
-            )
-            .map_err(|e| e.to_string())?;
+            enqueue_quick(
+                &app,
+                "image",
+                Some(draft_text),
+                Some(data_url),
+                None,
+                Some(action),
+            );
             return Ok(true);
         }
         _ => return Err("未知截图操作".into()),
     }
-    finish_capture(&app, Some(&id), true);
+    finish_capture(&app, Some(&id));
     Ok(true)
 }
 static PIN_IMAGES: std::sync::LazyLock<Mutex<std::collections::HashMap<String, String>>> =
@@ -786,11 +863,14 @@ fn apply_hit_regions(window: &tauri::WebviewWindow, regions: &[HitRegion]) -> Re
     Ok(())
 }
 #[tauri::command]
-pub fn desktop_quick_state(app: tauri::AppHandle, text: String, busy: bool) {
-    *app.state::<Desktop>().quick_text.lock().unwrap() = text;
-    app.state::<Desktop>()
-        .quick_busy
-        .store(busy, Ordering::Relaxed);
+pub fn desktop_quick_state(app: tauri::AppHandle, session_id: String, text: String, busy: bool) {
+    let state = app.state::<Desktop>();
+    let session = state.ask_session.lock().unwrap();
+    if *session != session_id {
+        return;
+    }
+    *state.quick_text.lock().unwrap() = text;
+    state.quick_busy.store(busy, Ordering::Relaxed);
 }
 #[tauri::command]
 pub fn desktop_selection_get(app: tauri::AppHandle) -> Option<SelectionSnapshot> {
@@ -978,7 +1058,7 @@ fn desktop_image() -> Result<Capture, String> {
             x,
             y,
             draft_text: String::new(),
-            return_quick: false,
+            session_id: String::new(),
         })
     }
 }

@@ -25,6 +25,7 @@ import {
   GripVertical,
   Mic,
   Plus,
+  ArrowUp,
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
@@ -576,6 +577,7 @@ export function DesktopCapture() {
     }
   }
   async function openQuick(action: "send" | "file" | "voice") {
+    if (action === "send" && !draftRef.current.trim()) return;
     const id = currentSession.current?.id;
     if (id)
       await invoke("capture_continue", {
@@ -648,7 +650,12 @@ export function DesktopCapture() {
                 compose(e.target.value);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Escape") void cancelCapture();
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void cancelCapture();
+                  return;
+                }
                 if (
                   e.key === "Enter" &&
                   !e.shiftKey &&
@@ -682,8 +689,20 @@ export function DesktopCapture() {
                 <Mic size={21} />
               </button>
             </Hint>
-            <Hint label="取消">
-              <button aria-label="取消" onClick={() => void cancelCapture()}>
+            <Hint label="发送">
+              <button
+                aria-label="发送"
+                disabled={!draft.trim()}
+                onClick={() => void openQuick("send")}
+              >
+                <ArrowUp size={21} />
+              </button>
+            </Hint>
+            <Hint label="关闭问答">
+              <button
+                aria-label="关闭问答"
+                onClick={() => void cancelCapture()}
+              >
                 <X size={19} />
               </button>
             </Hint>
