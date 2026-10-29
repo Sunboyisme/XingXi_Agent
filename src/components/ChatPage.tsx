@@ -419,12 +419,10 @@ export function ChatPage({
   };
   const contextTokens =
     modelOptions.contextTokens ?? selected?.model.context_tokens ?? 500000;
-  const levels = selected?.model.reasoning_efforts || [];
-  const reasoningEffort = levels.includes(modelOptions.reasoningEffort as (typeof levels)[number])
-    ? modelOptions.reasoningEffort : undefined;
+  const reasoningEffort = selected?.model.default_reasoning_effort || undefined;
   const thinkingEnabled =
     thinkingControl === "always" ||
-    (thinkingControl !== "none" && modelOptions.thinking);
+    (thinkingControl !== "none" && Boolean(selected?.model.default_thinking_enabled));
   function updateModelOptions(patch: Partial<ModelOptions>) {
     if (!selected) return;
     const next = {
@@ -2041,9 +2039,9 @@ export function ChatPage({
                 <ComposerModelPicker
                   choices={choices}
                   selected={selected}
-                  options={modelOptions}
                   thinkingEnabled={thinkingEnabled}
                   contextTokens={contextTokens}
+                  contextOverride={modelOptions.contextTokens}
                   usage={
                     contextUsage?.model_name === selected?.model.name &&
                     contextUsage?.provider_id === selected?.profile.id
@@ -2054,7 +2052,7 @@ export function ChatPage({
                   disabled={busy}
                   defaultProvider={settings.default_provider}
                   onSelect={selectModel}
-                  onOptions={updateModelOptions}
+                  onContextChange={(contextTokens) => updateModelOptions({ contextTokens })}
                   onSettings={() => openModelSettings()}
                 />
                 <Button

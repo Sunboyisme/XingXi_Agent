@@ -1,7 +1,9 @@
 import { useId, useState, type Ref } from "react";
 import { Input } from "./ui/input";
 
-const capacities = [8000, 32000, 64000, 128000, 256000, 1000000, 2000000];
+export const contextCapacities = [
+  8000, 32000, 64000, 128000, 256000, 1000000, 2000000,
+];
 
 export function ContextCapacityInput({
   value = 500000,
@@ -50,7 +52,7 @@ export function ContextCapacityInput({
         role="group"
         aria-label="快捷上下文容量"
       >
-        {capacities.map((tokens) => (
+        {contextCapacities.map((tokens) => (
           <button
             key={tokens}
             type="button"

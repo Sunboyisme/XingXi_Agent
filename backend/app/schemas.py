@@ -60,6 +60,7 @@ class ModelOption(BaseModel):
     context_tokens: int = Field(default=500000, ge=4096, le=2000000)
     vision_enabled: bool = False
     thinking_mode: ThinkingMode = "auto"
+    default_thinking_enabled: bool = False
     reasoning_efforts: list[ReasoningEffort] | None = Field(default=None, max_length=7)
     default_reasoning_effort: ReasoningEffort | None = None
 
@@ -132,7 +133,7 @@ class ProviderPresetRead(BaseModel):
 class ModelSelection(BaseModel):
     provider_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     model_name: str = Field(min_length=1, max_length=200)
-    thinking_enabled: bool = False
+    thinking_enabled: bool | None = None
     reasoning_effort: ReasoningEffort | None = None
     context_tokens: int | None = Field(default=None, ge=4096, le=2000000)
     # agent: the model may call tools; chat: system prompt and conversation only.

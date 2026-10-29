@@ -421,7 +421,7 @@
   transform-origin: center;
 }
 .context-meter:hover,
-.context-meter[data-state="delayed-open"] {
+.context-meter[data-state="open"] {
   background: var(--surface-hover);
   color: var(--ui-color-heading);
 }
@@ -434,34 +434,6 @@
 .context-meter:focus-visible {
   outline: 2px solid var(--ui-color-focus);
   outline-offset: 2px;
-}
-.context-meter-popover {
-  z-index: 100;
-  display: grid;
-  gap: 5px;
-  max-width: min(320px, calc(100vw - 24px));
-  padding: 14px 18px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 14px;
-  background: var(--ui-color-surface);
-  color: var(--ui-color-text);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 12%);
-  text-align: center;
-  font-size: 12px;
-  line-height: 1.5;
-  font-variant-numeric: tabular-nums;
-}
-.context-meter-heading,
-.context-meter-percent {
-  color: var(--ui-color-text-muted);
-}
-.context-meter-popover strong {
-  color: var(--ui-color-heading);
-  font-size: 12px;
-  font-weight: 550;
-}
-.context-meter-arrow {
-  fill: var(--ui-color-surface);
 }
 @keyframes context-meter-pulse {
   50% { opacity: 0.4; }

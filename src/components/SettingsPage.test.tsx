@@ -44,6 +44,7 @@ const settings: Settings = {
           context_tokens: 64000,
           thinking_mode: "auto",
           thinking_control: "none",
+          default_thinking_enabled: false,
         },
       ],
     },

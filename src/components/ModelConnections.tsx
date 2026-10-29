@@ -59,7 +59,14 @@ const blankModel = () => ({
   vision_enabled: false,
   thinking_mode: "auto" as const,
   thinking_control: "auto" as const,
+  default_thinking_enabled: false,
 });
+
+function modelThinkingControl(model: Connection["models"][number]) {
+  return model.thinking_mode && model.thinking_mode !== "auto"
+    ? model.thinking_mode
+    : model.thinking_control;
+}
 
 export function ModelConnections({
   settings,
@@ -811,11 +818,34 @@ export function ModelConnections({
                               )}
                             </span>
                           </div>
+                          <label className="model-option-row model-thinking-enabled">
+                            <span className="model-option-copy">
+                              <strong>启用思考</strong>
+                              <small>
+                                {modelThinkingControl(model) === "always"
+                                  ? "此模型始终思考，无法关闭"
+                                  : modelThinkingControl(model) === "none"
+                                    ? "当前模型不支持思考，请先核对思考支持配置"
+                                    : "聊天使用此模型时，沿用这里的开关与下方强度"}
+                              </small>
+                            </span>
+                            <Checkbox
+                              aria-label={`模型 ${index + 1} 启用思考`}
+                              checked={
+                                modelThinkingControl(model) === "always" ||
+                                (modelThinkingControl(model) !== "none" && Boolean(model.default_thinking_enabled))
+                              }
+                              disabled={busy || ["none", "always"].includes(modelThinkingControl(model))}
+                              onCheckedChange={(enabled) =>
+                                updateModel(index, { default_thinking_enabled: enabled === true })
+                              }
+                            />
+                          </label>
                         </div>
                         {(model.thinking_mode === "reasoning_effort" || Boolean(model.reasoning_efforts?.length)) && (
                           <div className="model-effort-settings">
                             <strong>支持的思考强度</strong>
-                            <small>按当前接口实际支持的档位选择，聊天中只显示这些选项。</small>
+                            <small>按当前接口实际支持的档位配置。启用思考后，聊天使用下方默认强度。</small>
                             <div className="model-effort-levels">
                               {effortOptions.map((option) => {
                                 const levels = model.reasoning_efforts ?? ["low", "medium", "high"];

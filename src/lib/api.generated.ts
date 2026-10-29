@@ -3354,6 +3354,11 @@ export interface components {
              * @enum {string}
              */
             thinking_mode: "auto" | "none" | "always" | "enable_thinking" | "thinking" | "reasoning_effort";
+            /**
+             * Default Thinking Enabled
+             * @default false
+             */
+            default_thinking_enabled: boolean;
             /** Reasoning Efforts */
             reasoning_efforts?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra")[] | null;
             /** Default Reasoning Effort */
@@ -3379,6 +3384,11 @@ export interface components {
              * @enum {string}
              */
             thinking_mode: "auto" | "none" | "always" | "enable_thinking" | "thinking" | "reasoning_effort";
+            /**
+             * Default Thinking Enabled
+             * @default false
+             */
+            default_thinking_enabled: boolean;
             /** Reasoning Efforts */
             reasoning_efforts?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra")[] | null;
             /** Default Reasoning Effort */
@@ -3395,11 +3405,8 @@ export interface components {
             provider_id: string;
             /** Model Name */
             model_name: string;
-            /**
-             * Thinking Enabled
-             * @default false
-             */
-            thinking_enabled: boolean;
+            /** Thinking Enabled */
+            thinking_enabled?: boolean | null;
             /** Reasoning Effort */
             reasoning_effort?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra") | null;
             /** Context Tokens */

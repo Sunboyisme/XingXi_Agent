@@ -135,6 +135,13 @@ def profiles(settings):
                 value["model_url"], model, value["provider_type"]
             )
             model.update(reasoning_capabilities(value["model_url"], model))
+            model["default_thinking_enabled"] = (
+                model["thinking_control"] == "always"
+                or (
+                    model["thinking_control"] != "none"
+                    and bool(model.get("default_thinking_enabled"))
+                )
+            )
     return values
 
 
@@ -174,7 +181,11 @@ def resolve(settings, selection=None):
     )
     if not model:
         raise ValueError("请先添加模型并选择默认模型。")
-    enabled = bool(selection and selection.thinking_enabled)
+    enabled = (
+        selection.thinking_enabled
+        if selection and selection.thinking_enabled is not None
+        else model.get("default_thinking_enabled", False)
+    )
     if enabled and model["thinking_control"] == "none":
         raise ValueError("这个模型尚未配置思考开关，请到模型设置选择支持的参数。")
     effort = selection.reasoning_effort if selection else None
