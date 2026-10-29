@@ -5,7 +5,7 @@ import { AVATAR_SUCCESS_MS, type AvatarActivity, type AvatarGesture } from "../l
 
 type AvatarMotion = "idle" | "thinking" | "still";
 const gestureDurations = { press: 700, pet: 850, drag: Infinity, drop: 500 };
-const blinkGestureDurations = { ...gestureDurations, press: 1000 };
+const blinkGestureDurations = { ...gestureDurations, press: 900 };
 const restingEyes = {
   "--bai-eye-rest-left": RESTING_EYE_TRANSFORMS[0],
   "--bai-eye-rest-right": RESTING_EYE_TRANSFORMS[1],
