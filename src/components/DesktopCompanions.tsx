@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
-import { ArrowUp, ChevronDown, X } from "lucide-react";
+import { AudioLines, Bell, CornerUpLeft, Square, SquarePen, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
+import type { ComplexTask, Conversation } from "@/lib/api";
 import { PetActivities, activityPhase, desktopTask, isActiveRun, presentDesktopTask, type AvatarActivity, type AvatarGesture, type DesktopTaskActivity, type DesktopTaskSnapshot } from "@/lib/avatarActivity";
 import {
   invoke,
@@ -32,8 +33,16 @@ export function DesktopPet() {
   }>({ phase: "idle", key: 0 });
   const presenceEpoch = useRef(-1);
   const presenceKey = useRef(0);
-  const [task, setTask] = useState<PetTask | null>(null);
+  const [task, setTask] = useState<DesktopTaskActivity | null>(null);
   const [notification, setNotification] = useState<PetTask | null>(null);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const hoverState = useRef(false);
+  const hoverTools = useRef<HTMLDivElement>(null);
+  const [stopping, setStopping] = useState("");
+  const [taskName, setTaskName] = useState<{ runId: string; title: string }>();
   const [activity, setActivity] = useState<AvatarActivity>();
   const [gesture, setGesture] = useState<AvatarGesture>();
   const [activities] = useState(() => new PetActivities());
@@ -104,7 +113,7 @@ export function DesktopPet() {
     }
   }
   useDesktopHitRegions(
-    ".pet-avatar,.pet-bubble,.pet-menu,.pet-window .desktop-error,.ui-hint",
+    ".pet-avatar,.pet-hover-tools,.pet-task-card,.pet-card-close,.pet-menu,.pet-window .desktop-error,.ui-hint",
   );
   useEffect(() => {
     const w = getCurrentWindow();
@@ -129,7 +138,7 @@ export function DesktopPet() {
     void update();
     const moved = w.onMoved(() => void update());
     const focus = w.onFocusChanged((event) => {
-      if (!event.payload) setMenu(false);
+      if (!event.payload) { setMenu(false); setFocused(false); }
     });
     const listeners = [
       desktopListen<{
@@ -150,6 +159,9 @@ export function DesktopPet() {
           if (!alive || value.epoch <= presenceEpoch.current) return;
           presenceEpoch.current = value.epoch;
           presencePhase.current = value.shown ? "enter" : "leave";
+          hoverState.current = false;
+          setHovered(false);
+          setFocused(false);
           drag.current = null;
           rub.current = null;
           setGesture(undefined);
@@ -176,6 +188,13 @@ export function DesktopPet() {
           setGesture({ kind: "drop", startedAt: Date.now() });
       }),
       desktopListen<{ x: number; y: number }>("desktop-cursor", (p) => {
+        const point = { x: (p.x - position.current.x) / position.current.scale, y: (p.y - position.current.y) / position.current.scale };
+        const inside = (element: HTMLElement | null) => {
+          const r = element?.getBoundingClientRect();
+          return r && point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom;
+        };
+        const nextHover = !drag.current?.started && Boolean(inside(petElement.current) || inside(hoverTools.current));
+        if (nextHover !== hoverState.current) { hoverState.current = nextHover; setHovered(nextHover); }
         const old = cursor.current;
         cursor.current = p;
         if (drag.current?.started && old && petElement.current) {
@@ -184,8 +203,8 @@ export function DesktopPet() {
         }
         window.dispatchEvent(
           new PointerEvent("pointermove", {
-            clientX: (p.x - position.current.x) / position.current.scale,
-            clientY: (p.y - position.current.y) / position.current.scale,
+            clientX: point.x,
+            clientY: point.y,
             pointerType: "mouse",
           }),
         );
@@ -205,6 +224,7 @@ export function DesktopPet() {
       desktopListen<{ id?: string; title: string; body: string }[]>(
         "desktop-notification",
         (notes) => {
+          setNotificationCount(notes.length);
           if (notes[0]) {
             const signature =
               notes[0].id || `${notes[0].title}:${notes[0].body}`;
@@ -245,6 +265,24 @@ export function DesktopPet() {
     };
   }, []);
   useEffect(() => {
+    if (!task) return;
+    let alive = true;
+    const runId = task.runId;
+    const load = async () => {
+      let title = "";
+      if (task.taskId) {
+        const detail = await api<ComplexTask>(`/tasks/${task.taskId}`);
+        title = detail.title || detail.goal;
+      } else if (task.conversationId) {
+        const values = await api<Conversation[]>("/conversations");
+        title = values.find(value => value.id === task.conversationId)?.title || "";
+      }
+      if (alive && title) setTaskName({ runId, title });
+    };
+    void load().catch(() => {});
+    return () => { alive = false; };
+  }, [task?.runId, task?.taskId, task?.conversationId]);
+  useEffect(() => {
     if (menu)
       (
         document.querySelector(".pet-menu button") as HTMLButtonElement | null
@@ -274,40 +312,55 @@ export function DesktopPet() {
       await invoke("desktop_main", { conversationId: value.conversationId });
     else await invoke("desktop_resume", { runId: value.runId });
   }
+  async function stopTask() {
+    if (!task || stopping || !isActiveRun(task.runStatus)) return;
+    const value = task;
+    setStopping(value.runId);
+    try {
+      if (value.taskId) await api(`/tasks/${value.taskId}/cancel`, "POST");
+      else await api(`/runs/${value.runId}/cancel`, "POST");
+      const run = await api<Run>(`/runs/${value.runId}`);
+      acceptTasks([desktopTask(run, value.source)]);
+    } catch (error) { setError(desktopError(error)); }
+    finally { setStopping(""); }
+  }
+  function startChat(voice = false) {
+    void invoke("desktop_chat", { newChat: !voice, voice }).catch(error => setError(desktopError(error)));
+  }
   const avatarSize = (82 * layout.size) / 100;
   const avatarTop = layout.y ?? 132;
-  const displayedTask = notification || task;
+  const avatarLeft = layout.x ?? window.innerWidth - avatarSize - 8;
+  const displayedTask = notificationsOpen ? notification || task || { title: "暂无提醒", status: "有新提醒时会在这里显示。" } : task;
+  const visibleCard = notificationsOpen || (task && !collapsed);
+  const updates = notificationCount + (collapsed && task ? 1 : 0);
+  const title = displayedTask === task && taskName?.runId === task?.runId ? taskName?.title : displayedTask?.title;
   return (
     <main
       className="pet-window"
       data-presence={presence.phase}
-      data-dragging={gesture?.kind === "drag" || undefined}
       style={
         {
           "--pet-size": `${avatarSize}px`,
           "--pet-left": layout.x == null ? undefined : `${layout.x}px`,
           "--pet-top": layout.y == null ? undefined : `${layout.y}px`,
-          "--pet-bubble-top": `${avatarTop >= 100 ? Math.max(5, avatarTop - 96) : avatarTop + avatarSize + 12}px`,
+          "--pet-panel-top": `${avatarTop >= 100 ? Math.max(12, avatarTop - 92) : avatarTop + avatarSize + 70}px`,
+          "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 154 - avatarLeft, avatarSize / 2 - 74))}px`,
           "--pet-menu-top": `${avatarTop >= 110 ? avatarTop - 108 : avatarTop + avatarSize + 8}px`,
         } as CSSProperties
       }
     >
-      {displayedTask && !collapsed && (
-        <div className="pet-bubble">
-          <button
-            onClick={() =>
-              void openTask(displayedTask).catch((e) => setError(desktopError(e)))
-            }
-          >
-            <strong>{displayedTask.title}</strong>
-            <span>{displayedTask.status}</span>
-          </button>
-          <Hint label="收起气泡">
-            <button aria-label="收起气泡" onClick={() => { setCollapsed(true); setNotification(null); }}>
-              <ChevronDown size={17} />
-            </button>
-          </Hint>
-        </div>
+      {!menu && displayedTask && visibleCard && (
+        <section className="pet-floating-panel" aria-label="桌面悬浮助手">
+            <article className="pet-task-card" aria-label={displayedTask === task ? "当前任务" : "提醒"}>
+              <Hint label="关闭卡片（不停止任务）"><button className="pet-card-close" aria-label="关闭任务卡片" onClick={() => {
+                if (notificationsOpen) { setNotificationsOpen(false); setNotification(null); setNotificationCount(0); }
+                if (displayedTask === task) setCollapsed(true);
+              }}><X size={13} /></button></Hint>
+              <Hint label={<><strong>{title}</strong><br />{displayedTask.status}</>}><button className="pet-task-copy" disabled={!task && !notification} onClick={() => void openTask(displayedTask).catch(error => setError(desktopError(error)))}><strong>{title}</strong><span role="status">{displayedTask.status}</span></button></Hint>
+              {(task || notification) && <Hint label="打开任务原对话"><button className="pet-card-action" aria-label="打开任务原对话" onClick={() => void openTask(displayedTask).catch(error => setError(desktopError(error)))}><CornerUpLeft size={18} /></button></Hint>}
+              {displayedTask === task && task && <Hint label="停止任务"><button className="pet-card-action" aria-label="停止任务" disabled={Boolean(stopping) || !isActiveRun(task.runStatus)} onClick={() => void stopTask()}><Square size={16} fill="currentColor" /></button></Hint>}
+            </article>
+        </section>
       )}
       {error && (
         <p className="desktop-error" role="alert">
@@ -342,6 +395,8 @@ export function DesktopPet() {
       <div
         ref={petElement}
         className="pet-avatar"
+        onFocusCapture={() => setFocused(true)}
+        onBlurCapture={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
         onContextMenu={(e) => {
           e.preventDefault();
           setError("");
@@ -399,7 +454,7 @@ export function DesktopPet() {
         >
           <BaiAvatar
             interactive
-            label="打开 XiaoXi 新对话"
+            label="开始桌面新聊天"
             activity={activity}
             gesture={gesture}
             presence={presence.phase}
@@ -407,26 +462,18 @@ export function DesktopPet() {
             pressFeedback="blink"
             onClick={(event) => {
               if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; return false; }
-              void invoke("desktop_main", { newChat: true }).catch(error => setError(desktopError(error)));
+              startChat();
             }}
           />
         </span>
-        {task && (
-          <Hint label={<><strong>打开任务对话</strong><br />{task.title}<br />{task.status}</>}>
-            <button
-              type="button"
-              className="pet-task-open"
-              aria-label="打开任务对话"
-              onPointerDown={event => event.stopPropagation()}
-              onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}
-              onClick={event => {
-                event.stopPropagation();
-                void openTask(task).catch(error => setError(desktopError(error)));
-              }}
-            >
-              <ArrowUp size={17} aria-hidden="true" />
-            </button>
-          </Hint>
+        {(hovered || focused) && presence.phase === "idle" && gesture?.kind !== "drag" && !menu && (
+          <div ref={hoverTools} className="pet-hover-tools" role="toolbar" aria-label="桌宠快捷操作" onPointerDown={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
+            <Hint label="开始新聊天"><button aria-label="开始新聊天" onClick={() => startChat()}><SquarePen size={20} /></button></Hint>
+            <span className="pet-toolbar-divider" />
+            <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startChat(true)}><AudioLines size={20} /></button></Hint>
+            <span className="pet-toolbar-divider" />
+            <Hint label="提醒和任务"><button aria-label="提醒和任务" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setCollapsed(false); }}><Bell size={20} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
+          </div>
         )}
       </div>
     </main>

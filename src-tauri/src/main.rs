@@ -527,6 +527,7 @@ fn main() {
             desktop::desktop_toggle,
             desktop::desktop_main,
             desktop::desktop_resume,
+            desktop::desktop_chat,
             desktop::desktop_pick_files,
             desktop::capture_get,
             desktop::capture_present,

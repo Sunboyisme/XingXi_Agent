@@ -70,6 +70,8 @@ pub struct Desktop {
     pub pet_exiting: AtomicBool,
     pub quick_text: Mutex<String>,
     pub quick_busy: AtomicBool,
+    pub quick_floating: AtomicBool,
+    pub floating_below: AtomicBool,
     pub dialog_active: AtomicBool,
     pub hit_regions: Mutex<std::collections::HashMap<String, Vec<HitRegion>>>,
     pub capture: Mutex<Option<Capture>>,
@@ -136,7 +138,8 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     window(app, "quick", 900.0, 540.0)?;
     window(app, "capture", 900.0, 600.0)?;
     let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
-    let pet = window(app, "pet", 340.0, 82.0 * p.pet_size as f64 / 100.0 + 138.0)?;
+    let (pet_width, pet_height) = pet_window_dimensions(p.pet_size);
+    let pet = window(app, "pet", pet_width, pet_height)?;
     if let Some(m) = pet.primary_monitor().map_err(|e| e.to_string())? {
         let area = m.work_area();
         let size = pet.outer_size().map_err(|e| e.to_string())?;
@@ -156,7 +159,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn desktop_preferences(app: tauri::AppHandle) -> serde_json::Value {
     let d = app.state::<Desktop>();
-    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed)})
+    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"floatingChat":d.quick_floating.load(Ordering::Relaxed),"floatingBelow":d.floating_below.load(Ordering::Relaxed)})
 }
 #[tauri::command]
 pub async fn desktop_preferences_save(
@@ -196,9 +199,10 @@ pub async fn desktop_preferences_save(
     persisted?;
     if let Some(pet) = app.get_webview_window("pet") {
         if old_pet_size != preferences.pet_size {
+            let (width, height) = pet_window_dimensions(preferences.pet_size);
             pet.set_size(tauri::LogicalSize::new(
-                340.0,
-                82.0 * preferences.pet_size as f64 / 100.0 + 138.0,
+                width,
+                height,
             ))
             .map_err(|e| e.to_string())?;
         }
@@ -276,23 +280,23 @@ fn place_pet(app: &tauri::AppHandle, reset: bool) -> Result<(), String> {
     let a = monitor.work_area();
     let target_scale = monitor.scale_factor();
     let target_diameter = (82.0 * p.pet_size as f64 / 100.0 * target_scale).round() as i32;
-    let height = 82.0 * p.pet_size as f64 / 100.0 + 138.0;
+    let (width, height) = pet_window_dimensions(p.pet_size);
     let target_size = PhysicalSize::new(
-        (340.0 * target_scale).round() as u32,
-        (height * target_scale).round() as u32,
+        ((width * target_scale).round() as u32).min(a.size.width),
+        ((height * target_scale).round() as u32).min(a.size.height),
     );
     if reset {
         // Use the destination DPI: moving from a differently scaled screen must
         // place the avatar, rather than the transparent window frame, at the corner.
         let gap = (24.0 * target_scale).round() as i32;
         let x = (a.position.x + a.size.width as i32 - target_diameter - gap).max(a.position.x);
-        let y = (a.position.y + a.size.height as i32 - target_diameter - gap).max(a.position.y);
+        let y = (a.position.y + a.size.height as i32 - target_diameter - gap - (72.0 * target_scale).round() as i32).max(a.position.y);
         return position_pet(app, &w, a, x, y, target_size, target_scale);
     }
     let min_x = a.position.x;
     let min_y = a.position.y;
     let max_x = (min_x + a.size.width as i32 - target_diameter).max(min_x);
-    let max_y = (min_y + a.size.height as i32 - target_diameter).max(min_y);
+    let max_y = (min_y + a.size.height as i32 - target_diameter - (72.0 * target_scale).round() as i32).max(min_y);
     let x = (cx - target_diameter / 2).clamp(min_x, max_x);
     let y = (cy - target_diameter / 2).clamp(min_y, max_y);
     position_pet(app, &w, a, x, y, target_size, target_scale)
@@ -312,7 +316,7 @@ fn position_pet(
         area.position.x,
         (area.position.x + area.size.width as i32 - size.width as i32).max(area.position.x),
     );
-    let origin_y = (y + diameter + (6.0 * scale).round() as i32 - size.height as i32).clamp(
+    let origin_y = (y + diameter + (72.0 * scale).round() as i32 - size.height as i32).clamp(
         area.position.y,
         (area.position.y + area.size.height as i32 - size.height as i32).max(area.position.y),
     );
@@ -344,6 +348,9 @@ pub fn finish_pet_drag(app: &tauri::AppHandle) {
         return;
     }
     let _ = place_pet(app, false);
+}
+fn pet_window_dimensions(size: u16) -> (f64, f64) {
+    (452.0, 82.0 * size as f64 / 100.0 + 216.0)
 }
 #[tauri::command]
 pub fn desktop_pet_reset(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
@@ -557,6 +564,7 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
         return Ok(());
     }
     if capture {
+        set_quick_mode(&app, false);
         begin_ask_session(&app)?;
         return begin_capture(&app);
     }
@@ -571,6 +579,9 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
         let _ = app.emit_to("capture", "capture-reset", id);
         return show_capture_composer(&app);
     }
+    if app.state::<Desktop>().quick_floating.load(Ordering::Relaxed) {
+        return show_floating_quick(&app);
+    }
     if begin_capture(&app).is_ok() {
         return Ok(());
     }
@@ -579,15 +590,64 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
 }
 #[tauri::command]
 pub fn desktop_resume(app: tauri::AppHandle, run_id: Option<String>) -> Result<(), String> {
-    if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
-        return Ok(());
-    }
-    finish_capture(&app, None);
-    show_quick_window(&app)?;
+    desktop_chat(app.clone(), Some(false), Some(false))?;
     if let Some(id) = run_id {
         app.emit_to("quick", "desktop-resume-task", serde_json::json!({"runId":id}))
             .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+fn set_quick_mode(app: &tauri::AppHandle, floating: bool) {
+    app.state::<Desktop>().quick_floating.store(floating, Ordering::SeqCst);
+    let _ = app.emit_to("quick", "desktop-chat-mode", serde_json::json!({"floating":floating}));
+}
+#[tauri::command]
+pub fn desktop_chat(app: tauri::AppHandle, new_chat: Option<bool>, voice: Option<bool>) -> Result<(), String> {
+    if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    if voice.unwrap_or(false) && app.state::<Desktop>().quick_busy.load(Ordering::Relaxed) {
+        return Err("当前桌面问答正在处理，请先完成或停止任务。".into());
+    }
+    finish_capture(&app, None);
+    if new_chat.unwrap_or(false) || app.state::<Desktop>().ask_session.lock().unwrap().is_empty() {
+        begin_ask_session(&app)?;
+    }
+    set_quick_mode(&app, true);
+    show_floating_quick(&app)?;
+    if voice.unwrap_or(false) {
+        enqueue_quick(&app, "voice", None, None, None, None);
+    }
+    Ok(())
+}
+fn show_floating_quick(app: &tauri::AppHandle) -> Result<(), String> {
+    let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
+    let pet = app.get_webview_window("pet").ok_or("桌宠窗口不可用")?;
+    let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
+    let at = pet.outer_position().map_err(|e| e.to_string())?;
+    let scale = pet.scale_factor().map_err(|e| e.to_string())?;
+    let x = at.x + (p.pet_offset_x.unwrap_or(250.0) * scale).round() as i32;
+    let y = at.y + (p.pet_offset_y.unwrap_or(132.0) * scale).round() as i32;
+    let diameter = (82.0 * p.pet_size as f64 / 100.0 * scale).round() as i32;
+    let monitor = pet.monitor_from_point((x + diameter / 2) as f64, (y + diameter / 2) as f64)
+        .map_err(|e| e.to_string())?.ok_or("显示器不可用")?;
+    let a = monitor.work_area();
+    let width = ((436.0 * scale).round() as u32).min(a.size.width);
+    let gap = (12.0 * scale).round() as i32;
+    let left = (x + diameter - width as i32).clamp(a.position.x, a.position.x + a.size.width as i32 - width as i32);
+    let above = (y - gap - a.position.y).max(0);
+    let below = above < (80.0 * scale) as i32;
+    let available = if below { a.position.y + a.size.height as i32 - y - diameter - gap } else { above };
+    let height = ((440.0 * scale).round() as u32).min(available.max((64.0 * scale) as i32) as u32).min(a.size.height);
+    let top = (if below { y + diameter + gap } else { y - gap - height as i32 })
+        .clamp(a.position.y, a.position.y + a.size.height as i32 - height as i32);
+    app.state::<Desktop>().floating_below.store(below, Ordering::SeqCst);
+    let _ = w.emit("desktop-chat-placement", serde_json::json!({"below":below}));
+    w.set_position(PhysicalPosition::new(left, top)).map_err(|e| e.to_string())?;
+    w.set_size(PhysicalSize::new(width, height)).map_err(|e| e.to_string())?;
+    w.show().map_err(|e| e.to_string())?;
+    w.set_focus().map_err(|e| e.to_string())?;
+    let _ = w.emit("desktop-shown", ());
     Ok(())
 }
 fn show_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
@@ -920,13 +980,12 @@ pub fn desktop_main(
     conversation_id: Option<String>,
     settings: Option<bool>,
     settings_tab: Option<String>,
-    new_chat: Option<bool>,
 ) {
     crate::open_main(&app);
     let _ = app.emit_to(
         "main",
         "desktop-navigate",
-        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false)}),
+        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab}),
     );
 }
 #[tauri::command]

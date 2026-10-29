@@ -67,6 +67,9 @@ export function DesktopQuickAsk() {
   const [uploading, setUploading] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [hiddenEpoch, setHiddenEpoch] = useState(0);
+  const [floating, setFloating] = useState(false);
+  const [floatingBelow, setFloatingBelow] = useState(false);
+  const modeVersion = useRef(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const current = useRef(draft);
   const mounted = useRef(false);
@@ -173,6 +176,8 @@ export function DesktopQuickAsk() {
         setError("");
       }),
       desktopListen("desktop-shown", () => void functions.current.shown()),
+      desktopListen<{ floating: boolean }>("desktop-chat-mode", value => { modeVersion.current++; setFloating(value.floating); }),
+      desktopListen<{ below: boolean }>("desktop-chat-placement", value => { modeVersion.current++; setFloatingBelow(value.below); }),
       desktopListen<{ runId: string }>("desktop-resume-task", value => {
         void functions.current.resumeTask(value.runId).catch(error => {
           if (mounted.current) setError(desktopError(error));
@@ -222,6 +227,7 @@ export function DesktopQuickAsk() {
   }
   async function shown() {
     visible.current = true;
+    const mode = modeVersion.current;
     if (
       mounted.current &&
       !work.current.locked &&
@@ -229,7 +235,12 @@ export function DesktopQuickAsk() {
       !document.querySelector('[role="dialog"]')
     )
       input.current?.focus({ preventScroll: true });
-    await refreshSettings(false);
+    await Promise.all([
+      refreshSettings(false),
+      invoke<{ floatingChat: boolean; floatingBelow: boolean }>("desktop_preferences")
+        .then(value => { if (mounted.current && modeVersion.current === mode) { setFloating(value.floatingChat); setFloatingBelow(value.floatingBelow); } })
+        .catch(() => {}),
+    ]);
     if (!mounted.current || !visible.current) return;
     if (
       mounted.current &&
@@ -582,8 +593,15 @@ export function DesktopQuickAsk() {
   }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
   const hasAnswer = Boolean(answer || busy || error);
+  const fileButton = (
+    <Hint label="添加文件">
+      <button className="quick-add-file" aria-label="添加文件" disabled={busy || uploading || Boolean(voiceBusy)} onClick={() => void pickFiles()}>
+        <Plus size={21} />
+      </button>
+    </Hint>
+  );
   return (
-    <main className="quick-window">
+    <main className={`quick-window ${floating ? "is-floating" : ""} ${floating && floatingBelow ? "is-below" : ""}`}>
       {hasAnswer && !answerCollapsed && (
         <section className="quick-answer" id="desktop-quick-answer">
           <header>
@@ -687,11 +705,12 @@ export function DesktopQuickAsk() {
           </div>
         )}
         <div className="quick-bar">
-          <BaiAvatar interactive activity={avatar.activity} motion={busy ? "thinking" : "idle"} />
+          {!floating && <BaiAvatar interactive activity={avatar.activity} motion={busy ? "thinking" : "idle"} />}
+          {floating && fileButton}
           <textarea
             ref={input}
-            aria-label="随心输入"
-            placeholder="随心输入"
+            aria-label={floating ? "开始新聊天" : "随心输入"}
+            placeholder={floating ? "开始新聊天" : "随心输入"}
             value={draft.text}
             readOnly={Boolean(voiceBusy)}
             onChange={(e) =>
@@ -709,22 +728,15 @@ export function DesktopQuickAsk() {
               }
             }}
           />
-          <Hint label="添加桌面文件">
-            <button
-              aria-label="添加桌面文件"
-              disabled={busy || uploading || Boolean(voiceBusy)}
-              onClick={() => void pickFiles()}
-            >
-              <Plus size={21} />
-            </button>
-          </Hint>
-          <SpeechInputButton
+          {!floating && fileButton}
+          {(!floating || voiceBusy || voice?.retryable) && <SpeechInputButton
             speech={speech}
             disabled={busy || uploading}
-            desktopShortcut
-          />
+            desktopShortcut={!floating}
+          />}
           <Hint label={busy ? "停止回答" : "发送"}>
             <button
+              className="quick-send"
               aria-label={busy ? "停止回答" : "发送"}
               disabled={
                 !busy &&
@@ -737,11 +749,11 @@ export function DesktopQuickAsk() {
               {busy ? <Square size={17} /> : <ArrowUp size={21} />}
             </button>
           </Hint>
-          <Hint label="关闭问答">
+          {!floating && <Hint label="关闭问答">
             <button aria-label="关闭问答" onClick={() => void dismiss()}>
               <X size={19} />
             </button>
-          </Hint>
+          </Hint>}
           {hasAnswer && answerCollapsed && (
             <Hint label="展开回答">
               <button
