@@ -541,6 +541,32 @@ html[data-desktop] .capture-text {
   width: 100%;
   height: 100%;
 }
+html[data-desktop] .pet-task-open {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  border: 1px solid #776453;
+  border-radius: 50%;
+  background: #342e2a;
+  color: #fff4ec;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms;
+}
+.pet-avatar:is(:hover, :focus-within) .pet-task-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+html[data-desktop] .pet-task-open:hover {
+  background: #4b4038;
+}
+.pet-window[data-dragging] .pet-task-open,
+.pet-window:not([data-presence="idle"]) .pet-task-open {
+  visibility: hidden;
+}
 .pet-appearance {
   display: block;
   width: 100%;
@@ -802,40 +828,6 @@ html[data-desktop] .quick-bar textarea[readonly] {
 }
 .quick-pending > span {
   flex: 1;
-}
-.selection-window.is-compact {
-  justify-content: center;
-}
-.selection-window header {
-  gap: 4px;
-  flex-shrink: 0;
-}
-.selection-actions {
-  flex: 1;
-  gap: 4px;
-  justify-content: center;
-}
-.selection-actions button {
-  padding: 6px 10px;
-  white-space: nowrap;
-}
-.selection-actions button[aria-pressed="true"] {
-  background: #ffffff16;
-}
-html[data-desktop] .selection-grip {
-  color: #b2a397;
-  cursor: move;
-  min-width: 22px;
-}
-.selection-window footer {
-  flex-shrink: 0;
-  align-items: center;
-  gap: 8px;
-}
-.selection-window footer > span {
-  flex: 1;
-  color: #bcac9f;
-  font-size: 12px;
 }
 .pet-avatar {
   user-select: none;

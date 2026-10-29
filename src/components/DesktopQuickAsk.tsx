@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { useAvatarActivity } from "@/lib/useAvatarActivity";
+import { copyText } from "@/lib/clipboard";
+import { isActiveRun } from "@/lib/avatarActivity";
 import { Hint, Markdown } from "./common";
 import { Picture } from "./ImageAttachments";
 import { SpeechInputButton } from "./SpeechInputButton";
@@ -27,7 +29,6 @@ import {
   selectedModel,
   addDesktopFile,
   imageFile,
-  copyText,
   readEvents,
   type QuickDraft,
   type Settings,
@@ -101,6 +102,7 @@ export function DesktopQuickAsk() {
     drainImages,
     resetSession,
     drainCommands,
+    resumeTask,
   });
   functions.current = {
     send,
@@ -111,6 +113,7 @@ export function DesktopQuickAsk() {
     drainImages,
     resetSession,
     drainCommands,
+    resumeTask,
   };
   useDesktopHitRegions(
     ".quick-answer,.quick-composer-group,.ui-hint,[role=dialog],[role=listbox],[role=menu],[data-slot=dialog-overlay]",
@@ -170,6 +173,11 @@ export function DesktopQuickAsk() {
         setError("");
       }),
       desktopListen("desktop-shown", () => void functions.current.shown()),
+      desktopListen<{ runId: string }>("desktop-resume-task", value => {
+        void functions.current.resumeTask(value.runId).catch(error => {
+          if (mounted.current) setError(desktopError(error));
+        });
+      }),
     ];
     void Promise.all(listeners)
       .then(async () => {
@@ -236,6 +244,24 @@ export function DesktopQuickAsk() {
     avatar.clearCelebration();
     setError("");
     await invoke("desktop_dismiss");
+  }
+  async function resumeTask(id: string) {
+    setAnswerCollapsed(false);
+    if (work.current.busy && current.current.runId === id) return;
+    if (work.current.busy) throw new Error("当前问答正在处理另一项任务，请先完成或停止它。");
+    const epoch = generation.current;
+    const run = await api<Run>(`/runs/${id}`);
+    if (!mounted.current || epoch !== generation.current || work.current.busy) return;
+    avatar.clearCelebration();
+    setQuestion("桌面任务");
+    if (isActiveRun(run.status)) {
+      updateDraft(value => ({ ...value, runId: id }));
+      await track(run, epoch);
+    } else {
+      const text = run.result?.text;
+      setAnswer(typeof text === "string" ? text : "");
+      setError(run.error || "");
+    }
   }
   function resetSession(id: string) {
     if (!id || id === session.current) return;

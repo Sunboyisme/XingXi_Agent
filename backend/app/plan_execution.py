@@ -108,39 +108,6 @@ def execution_receipt(events):
     return facts_receipt(operation_facts(events))
 
 
-def existing_receipt(events):
-    for event in reversed(events):
-        if event.data.get("tool_id") != "list_plans" or event.data.get("status") != "completed":
-            continue
-        result = event.data.get("result")
-        if isinstance(result, list) and result:
-            return _receipt(result, f"查询到日历中已有 {len(result)} 项计划。本轮没有重复写入。")
-    return ""
-
-
-def _receipt(plans, heading):
-    if not plans:
-        return ""
-    lines = [heading, "", "| 计划 | 时间 | 提醒 |", "| --- | --- | --- |"]
-    for plan in sorted(plans, key=lambda value: value["start"]):
-        title = str(plan.get("title", "计划")).replace("|", "\\|").replace("\n", " ")
-        if plan.get("reminder_enabled"):
-            offsets = plan.get("reminder_offsets") or [0]
-            reminder = "、".join("开始时" if offset == 0 else f"{'提前' if offset < 0 else '开始后'} {abs(offset)} 分钟" for offset in offsets)
-        else:
-            reminder = "未开启"
-        repeat = {"daily": "每天", "weekly": "每周", "monthly": "每月"}.get(plan.get("recurrence"))
-        time = plan_time(plan)
-        if repeat:
-            time += f"；每 {plan.get('repeat_interval', 1)} {'天' if repeat == '每天' else '周' if repeat == '每周' else '个月'}重复"
-            if plan.get("repeat_until"):
-                time += f"，截至 {plan['repeat_until']}"
-            elif plan.get("repeat_count"):
-                time += f"，共 {plan['repeat_count']} 次"
-        lines.append(f"| {title} | {time} | {reminder} |")
-    return "\n".join(lines)
-
-
 def history_context(conversation_id):
     """Keep actual write outcomes available when prior tool messages are omitted."""
     with Session() as db:

@@ -5,7 +5,7 @@ export type ModelOptions = {
   contextTokens?: number;
 };
 
-export type ModelPreference = {
+type ModelPreference = {
   version: 2;
   key: string;
   models: Record<string, ModelOptions>;

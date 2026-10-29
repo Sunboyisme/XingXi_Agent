@@ -1,7 +1,7 @@
 import { useId, useState, type Ref } from "react";
 import { Input } from "./ui/input";
 
-export const contextCapacities = [
+const contextCapacities = [
   8000, 32000, 64000, 128000, 256000, 1000000, 2000000,
 ];
 

@@ -4,6 +4,7 @@ import "../styles/bai-avatar.css";
 import { AVATAR_SUCCESS_MS, type AvatarActivity, type AvatarGesture } from "../lib/avatarActivity";
 
 type AvatarMotion = "idle" | "thinking" | "still";
+const gestureDurations = { press: 700, pet: 850, drag: Infinity, drop: 500 };
 const restingEyes = {
   "--bai-eye-rest-left": RESTING_EYE_TRANSFORMS[0],
   "--bai-eye-rest-right": RESTING_EYE_TRANSFORMS[1],
@@ -34,10 +35,7 @@ export function BaiAvatar({
   const pressCount = useRef(0);
   const [, refreshClock] = useState(0);
   const now = Date.now();
-  const externalDuration = gesture?.kind === "pet" ? 850 : gesture?.kind === "drop" ? 500 : 700;
-  const candidate = gesture && (gesture.kind === "drag" || now < gesture.startedAt + externalDuration) ? gesture : press;
-  const duration = candidate?.kind === "pet" ? 850 : candidate?.kind === "drop" ? 500 : 700;
-  const activeGesture = candidate && (candidate.kind === "drag" || now < candidate.startedAt + duration) ? candidate : undefined;
+  const activeGesture = [gesture, press].find(value => value && now < value.startedAt + gestureDurations[value.kind]);
   const success = activity?.phase === "success" && now < activity.startedAt + AVATAR_SUCCESS_MS;
   const working = activity ? activity.phase === "working" : motion === "thinking";
   const suspended = presence === "enter" || presence === "leave";
@@ -52,7 +50,7 @@ export function BaiAvatar({
   const blockedGaze = suspended || Boolean(reaction) || working;
   const deadline = Math.min(
     success ? activity!.startedAt + AVATAR_SUCCESS_MS : Infinity,
-    activeGesture && activeGesture.kind !== "drag" ? activeGesture.startedAt + duration : Infinity,
+    activeGesture ? activeGesture.startedAt + gestureDurations[activeGesture.kind] : Infinity,
   );
   useEffect(() => {
     if (!Number.isFinite(deadline)) return;
@@ -80,7 +78,6 @@ export function BaiAvatar({
       data-working={displayWorking || undefined}
       data-presence={presence}
       style={{ ...restingEyes,
-        "--bai-tilt": activeGesture?.tilt == null ? undefined : `${activeGesture.tilt}deg`,
         "--bai-reaction-delay": `${reactionDelay}ms`,
         "--bai-work-delay": `${workDelay}ms`,
       } as CSSProperties}
@@ -153,7 +150,7 @@ export function BaiAvatar({
       onClick={(event) => {
         if (onClick?.(event) === false) return;
         const id = ++pressCount.current;
-        setPress({ kind: "press", id, startedAt: Date.now(), variant: id % 2 ? "happy" : "wave" });
+        setPress({ kind: "press", startedAt: Date.now(), variant: id % 2 ? "happy" : "wave" });
       }}
     >
       {artwork}

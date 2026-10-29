@@ -575,7 +575,23 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
         return Ok(());
     }
     // Keep error feedback available if the desktop cannot be captured.
-    let w = window(&app, "quick", 900.0, 540.0)?;
+    show_quick_window(&app)
+}
+#[tauri::command]
+pub fn desktop_resume(app: tauri::AppHandle, run_id: Option<String>) -> Result<(), String> {
+    if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    finish_capture(&app, None);
+    show_quick_window(&app)?;
+    if let Some(id) = run_id {
+        app.emit_to("quick", "desktop-resume-task", serde_json::json!({"runId":id}))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+fn show_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
+    let w = window(app, "quick", 900.0, 540.0)?;
     let (x, y) = crate::desktop_input::cursor();
     let monitor = w
         .monitor_from_point(x as f64, y as f64)

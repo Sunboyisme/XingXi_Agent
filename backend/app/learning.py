@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from typing import TypedDict
 import json
-from sqlalchemy import select, func
+from sqlalchemy import select
 import re
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt

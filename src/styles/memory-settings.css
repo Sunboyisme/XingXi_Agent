@@ -120,7 +120,7 @@
   line-height: 1.8;
 }
 
-.memory-settings .memory-card > p.memory-content:not(.is-expanded) {
+.memory-settings .memory-card > p.memory-content {
   display: -webkit-box;
   min-height: 5.4em;
   overflow: hidden;

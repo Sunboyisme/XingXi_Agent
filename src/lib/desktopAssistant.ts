@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import {
   api,
-  fetchApi,
   readEvents,
   uploadFile,
   uploadImage,
@@ -20,7 +19,7 @@ export type DesktopPreferences = {
   petOffsetX?: number | null;
   petOffsetY?: number | null;
 };
-export type SpeechProfile = {
+type SpeechProfile = {
   provider: "siliconflow" | "bailian" | "custom";
   url: string;
   model: string;
@@ -30,11 +29,6 @@ export type SpeechProfile = {
 export type SpeechSettings = {
   selected: SpeechProfile["provider"];
   profiles: SpeechProfile[];
-};
-export type ModelChoice = {
-  provider_id: string;
-  model_name: string;
-  thinking_enabled?: boolean;
 };
 export type QuickDraft = {
   text: string;
@@ -69,7 +63,7 @@ export function models(settings?: Settings) {
 export function selectedModel(
   settings: Settings | undefined,
   key: string,
-): ModelChoice | undefined {
+) {
   return models(settings).find((m) => m.key === key)?.selection;
 }
 export async function addDesktopFile(file: File): Promise<Attachment> {
@@ -96,11 +90,8 @@ export async function imageFile(dataUrl: string) {
     { type: "image/png" },
   );
 }
-export async function copyText(text: string) {
-  await invoke("plugin:clipboard-manager|write_text", { text });
-}
 export function desktopListen<T>(event: string, handler: (payload: T) => void) {
   return listen<T>(event, (e) => handler(e.payload));
 }
-export { invoke, emitTo, api, fetchApi, readEvents };
+export { invoke, emitTo, api, readEvents };
 export type { Attachment, Run, Settings };

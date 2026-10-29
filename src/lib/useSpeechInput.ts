@@ -3,8 +3,9 @@ import { isTauri, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { fetchApi } from "./api";
+import { desktopError as message } from "./desktopAssistant";
 
-export type SpeechState = {
+type SpeechState = {
   id: string;
   phase: string;
   seconds: number;
@@ -23,7 +24,6 @@ type Options = {
   onLockChange?: (locked: boolean) => void;
   onBegin?: () => void;
 };
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** One recording belongs to one editor scope; late events may never replace another draft. */
 export function useSpeechInput(options: Options) {

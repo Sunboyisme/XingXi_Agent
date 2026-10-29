@@ -659,25 +659,20 @@ export function ChatPage({
     setImages(values);
     persistDraft(draftRef.current, values);
   }
+  const focusInput = useCallback(() => {
+    const input = composer.current;
+    if (!input || input.disabled) return;
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, []);
   function chooseStarter(prompt: string) {
     if (submitting || stopping || movingProject || speech.isLocked()) return;
     changeDraft(prompt);
-    requestAnimationFrame(() => {
-      const input = composer.current;
-      if (!input || input.disabled) return;
-      input.focus({ preventScroll: true });
-      input.setSelectionRange(input.value.length, input.value.length);
-    });
+    requestAnimationFrame(focusInput);
   }
   function focusComposer(note = "我在，想到什么就继续说吧。") {
     setBuddyNote(note);
-    requestAnimationFrame(() => {
-      composer.current?.focus({ preventScroll: true });
-      composer.current?.setSelectionRange(
-        composer.current.value.length,
-        composer.current.value.length,
-      );
-    });
+    requestAnimationFrame(focusInput);
   }
   useEffect(() => {
     if (!buddyNote) return;
@@ -685,14 +680,9 @@ export function ChatPage({
     return () => window.clearTimeout(timer);
   }, [buddyNote]);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const input = composer.current;
-      if (!input || input.disabled) return;
-      input.focus({ preventScroll: true });
-      input.setSelectionRange(input.value.length, input.value.length);
-    });
+    const frame = requestAnimationFrame(focusInput);
     return () => cancelAnimationFrame(frame);
-  }, [conversationId]);
+  }, [conversationId, focusInput]);
   useLayoutEffect(() => {
     if (composer.current) resizeMessageInput(composer.current);
   }, [draft]);

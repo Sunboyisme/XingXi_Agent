@@ -526,6 +526,7 @@ fn main() {
             desktop::desktop_dismiss,
             desktop::desktop_toggle,
             desktop::desktop_main,
+            desktop::desktop_resume,
             desktop::desktop_pick_files,
             desktop::capture_get,
             desktop::capture_present,
@@ -711,16 +712,8 @@ fn main() {
                             let mut batch = Vec::new();
                             for run in values.iter().rev() {
                                 let Some(id) = run["id"].as_str() else { continue; };
-                                let running = matches!(run["status"].as_str(), Some("queued" | "pending" | "running"));
                                 let next = run["result"]["next_run_id"].is_string();
-                                let waiting = next || (run["task_id"].is_string() && run["task_status"] != "completed");
-                                let status = if running { "正在处理…" }
-                                    else if run["status"] == "completed" && waiting { "等待继续，点击查看" }
-                                    else if run["status"] == "completed" { "回答完成，点击查看" }
-                                    else if run["status"] == "cancelled" { "已停止" }
-                                    else { "任务未完成，点击查看" };
                                 batch.push(serde_json::json!({
-                                    "title":"XiaoXi 任务", "status":status,
                                     "conversationId":run["conversation_id"], "source":"poll", "runId":id,
                                     "runStatus":run["status"], "taskId":run["task_id"],
                                     "taskStatus":run["task_status"], "hasNextRun":next, "updatedAt":run["updated_at"]

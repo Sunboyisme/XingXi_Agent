@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
-import { ChevronDown, X } from "lucide-react";
+import { ArrowUp, ChevronDown, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
-import { PetActivities, activityPhase, desktopTask, isActiveRun, type AvatarActivity, type AvatarGesture, type DesktopTaskActivity } from "@/lib/avatarActivity";
+import { PetActivities, activityPhase, desktopTask, isActiveRun, presentDesktopTask, type AvatarActivity, type AvatarGesture, type DesktopTaskActivity, type DesktopTaskSnapshot } from "@/lib/avatarActivity";
 import {
   invoke,
   api,
@@ -17,8 +17,8 @@ type PetTask = {
   title: string;
   status: string;
   conversationId?: string | null;
-  notification?: boolean;
   source?: string;
+  runId?: string;
 };
 export function DesktopPet() {
   const [layout, setLayout] = useState<{
@@ -41,7 +41,7 @@ export function DesktopPet() {
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState("");
   const drag = useRef<{ id: number; x: number; y: number; moved: boolean; started: boolean } | null>(null);
-  const gestureSequence = useRef(0);
+  const dragSequence = useRef(0);
   const petElement = useRef<HTMLDivElement>(null);
   const presencePhase = useRef(presence.phase);
   presencePhase.current = presence.phase;
@@ -99,7 +99,7 @@ export function DesktopPet() {
       if (++stroke.turns >= 3) {
         rubCooldown.current = now + 2000;
         rub.current = null;
-        setGesture({ kind: "pet", id: ++gestureSequence.current, startedAt: now });
+        setGesture({ kind: "pet", startedAt: now });
       }
     }
   }
@@ -165,7 +165,7 @@ export function DesktopPet() {
       desktopListen<{ dragId: number }>("desktop-pet-drag-started", (value) => {
         if (drag.current?.id !== value.dragId) return;
         drag.current.started = true;
-        setGesture({ kind: "drag", id: value.dragId, startedAt: Date.now() });
+        setGesture({ kind: "drag", startedAt: Date.now() });
       }),
       desktopListen<{ dragId: number }>("desktop-pet-drag-ended", (value) => {
         if (drag.current?.id !== value.dragId) return;
@@ -173,7 +173,7 @@ export function DesktopPet() {
         suppressClick.current = true;
         petElement.current?.style.removeProperty("--bai-tilt");
         if (presencePhase.current === "idle")
-          setGesture({ kind: "drop", id: ++gestureSequence.current, startedAt: Date.now() });
+          setGesture({ kind: "drop", startedAt: Date.now() });
       }),
       desktopListen<{ x: number; y: number }>("desktop-cursor", (p) => {
         const old = cursor.current;
@@ -191,14 +191,14 @@ export function DesktopPet() {
         );
       }),
       desktopListen<DesktopTaskActivity>("desktop-task", (value) => acceptTasks([value])),
-      desktopListen<DesktopTaskActivity[]>("desktop-task-snapshot", values => {
-        acceptTasks(values.filter(value => isActiveRun(value.runStatus) || activities.knowsRun(value.runId)));
+      desktopListen<DesktopTaskSnapshot[]>("desktop-task-snapshot", values => {
+        acceptTasks(values.filter(value => isActiveRun(value.runStatus) || activities.knowsRun(value.runId)).map(presentDesktopTask));
         // /runs is limited to 30 recent entries. Older active work must still settle.
         const present = new Set(values.map(value => value.runId));
         void Promise.all(activities.activeIds().filter(id => !present.has(id)).map(async id => {
           try {
             const run = await api<Run>(`/runs/${id}`);
-            if (alive) acceptTasks([{ ...desktopTask(run, "main"), source: "poll" }]);
+            if (alive) acceptTasks([desktopTask(run, "poll")]);
           } catch { /* Keep a running task during a temporary connection failure. */ }
         }));
       }),
@@ -213,7 +213,6 @@ export function DesktopPet() {
             setNotification({
               title: notes[0].title,
               status: notes[0].body,
-              notification: true,
             });
             setCollapsed(false);
           }
@@ -269,11 +268,11 @@ export function DesktopPet() {
       setError(desktopError(e));
     }
   }
-  async function openTask() {
-    const displayed = notification || task;
-    if (displayed?.notification || displayed?.source !== "quick")
-      await invoke("desktop_main", { conversationId: displayed?.conversationId });
-    else await invoke("desktop_open", { capture: false });
+  async function openTask(value: PetTask | null) {
+    if (!value) return;
+    if (value.conversationId || value.source !== "quick")
+      await invoke("desktop_main", { conversationId: value.conversationId });
+    else await invoke("desktop_resume", { runId: value.runId });
   }
   const avatarSize = (82 * layout.size) / 100;
   const avatarTop = layout.y ?? 132;
@@ -282,6 +281,7 @@ export function DesktopPet() {
     <main
       className="pet-window"
       data-presence={presence.phase}
+      data-dragging={gesture?.kind === "drag" || undefined}
       style={
         {
           "--pet-size": `${avatarSize}px`,
@@ -296,7 +296,7 @@ export function DesktopPet() {
         <div className="pet-bubble">
           <button
             onClick={() =>
-              void openTask().catch((e) => setError(desktopError(e)))
+              void openTask(displayedTask).catch((e) => setError(desktopError(e)))
             }
           >
             <strong>{displayedTask.title}</strong>
@@ -353,7 +353,7 @@ export function DesktopPet() {
             e.currentTarget.querySelector("button")?.setPointerCapture(e.pointerId);
             suppressClick.current = false;
             rub.current = null;
-            drag.current = { id: ++gestureSequence.current, x: e.clientX, y: e.clientY, moved: false, started: false };
+            drag.current = { id: ++dragSequence.current, x: e.clientX, y: e.clientY, moved: false, started: false };
           }
         }}
         onPointerMove={(e) => {
@@ -410,6 +410,23 @@ export function DesktopPet() {
             }}
           />
         </span>
+        {task && (
+          <Hint label={<><strong>打开任务对话</strong><br />{task.title}<br />{task.status}</>}>
+            <button
+              type="button"
+              className="pet-task-open"
+              aria-label="打开任务对话"
+              onPointerDown={event => event.stopPropagation()}
+              onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}
+              onClick={event => {
+                event.stopPropagation();
+                void openTask(task).catch(error => setError(desktopError(error)));
+              }}
+            >
+              <ArrowUp size={17} aria-hidden="true" />
+            </button>
+          </Hint>
+        )}
       </div>
     </main>
   );

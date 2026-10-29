@@ -43,7 +43,6 @@
 .project-overview-fixed .project-overview-image { min-height: 48px; font-size: 13px; }
 .project-overview-fixed .project-overview-image img { width: 30px; height: 30px; border-radius: 5px; }
 .project-overview-fixed .project-overview-image > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.project-upload-link { margin-top: 10px; }
 .project-overview-tabs { display: none; }
 .project-library-shared .project-library-actions { flex-wrap: wrap; }
 .project-batch-toggle { margin-left: auto; }

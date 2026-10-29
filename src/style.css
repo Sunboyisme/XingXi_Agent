@@ -260,7 +260,6 @@ textarea::placeholder {
   background: var(--surface-hover);
   color: var(--ui-color-heading);
 }
-.candidate-dot,
 .setup-dot {
   height: 6px;
   width: 6px;

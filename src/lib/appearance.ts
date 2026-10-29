@@ -1,4 +1,4 @@
-export type Theme = "cream" | "warm-dark";
+type Theme = "cream" | "warm-dark";
 export type ThemePreference = Theme | "system";
 export const THEME_KEY = "xiaoxi-appearance-theme";
 const changedEvent = "xiaoxi-theme-changed";
@@ -19,12 +19,6 @@ function applyTheme(theme: Theme) {
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", theme === "warm-dark" ? "#24211e" : "#f6efe8");
   window.dispatchEvent(new Event(changedEvent));
-}
-
-export function currentTheme(): Theme {
-  return document.documentElement.dataset.theme === "cream"
-    ? "cream"
-    : "warm-dark";
 }
 
 export function currentThemePreference(): ThemePreference {

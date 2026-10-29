@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 
 export async function copyText(text: string) {
+  if (isTauri()) {
+    await invoke("plugin:clipboard-manager|write_text", { text });
+    return;
+  }
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
     return;

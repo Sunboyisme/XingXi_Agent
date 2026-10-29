@@ -87,5 +87,3 @@ export function useHoverPopover(
     },
   };
 }
-
-export type HoverPopover = ReturnType<typeof useHoverPopover>;

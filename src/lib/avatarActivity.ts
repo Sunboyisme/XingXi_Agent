@@ -8,12 +8,10 @@ export type AvatarActivity = {
 };
 export type AvatarGesture = {
   kind: "press" | "pet" | "drag" | "drop";
-  id: number;
   startedAt: number;
-  tilt?: number;
   variant?: "happy" | "wave";
 };
-export type DesktopTaskActivity = {
+export type DesktopTaskSnapshot = {
   runId: string;
   runStatus: string;
   taskId?: string | null;
@@ -21,35 +19,35 @@ export type DesktopTaskActivity = {
   hasNextRun?: boolean;
   conversationId?: string | null;
   source: "main" | "quick" | "poll";
-  title: string;
-  status: string;
   updatedAt?: string;
 };
+export type DesktopTaskActivity = DesktopTaskSnapshot & { title: string; status: string };
 export const isActiveRun = (status: string) =>
   ["queued", "pending", "running"].includes(status);
-export const isTerminalRun = (status: string) =>
+const isTerminalRun = (status: string) =>
   ["completed", "failed", "cancelled"].includes(status);
-export function activityPhase(task: DesktopTaskActivity): AvatarActivity["phase"] {
+export function activityPhase(task: DesktopTaskSnapshot): AvatarActivity["phase"] {
   if (isActiveRun(task.runStatus)) return "working";
   if (task.runStatus !== "completed") return "idle";
   if (task.hasNextRun || (task.taskId && task.taskStatus !== "completed"))
     return "waiting";
   return "success";
 }
-export function desktopTask(run: Run, source: "main" | "quick"): DesktopTaskActivity {
-  const task: DesktopTaskActivity = {
+export function desktopTask(run: Run, source: DesktopTaskSnapshot["source"]): DesktopTaskActivity {
+  return presentDesktopTask({
     runId: run.id, runStatus: run.status, taskId: run.task_id,
     taskStatus: run.task_status, hasNextRun: typeof run.result?.next_run_id === "string",
     conversationId: run.conversation_id, source,
-    title: source === "quick" ? "桌面问答" : "XiaoXi 任务", status: "",
     updatedAt: run.updated_at,
-  };
+  });
+}
+export function presentDesktopTask(task: DesktopTaskSnapshot): DesktopTaskActivity {
   const phase = activityPhase(task);
-  task.status = phase === "working" ? "正在处理…"
+  const status = phase === "working" ? "正在处理…"
     : phase === "success" ? "回答完成，点击查看"
     : phase === "waiting" ? "等待继续，点击查看"
-    : run.status === "cancelled" ? "已停止" : "处理未完成，点击查看";
-  return task;
+    : task.runStatus === "cancelled" ? "已停止" : "处理未完成，点击查看";
+  return { ...task, title: task.source === "quick" ? "桌面问答" : "XiaoXi 任务", status };
 }
 
 /** Merge one polling batch atomically: one finished run must not hide another active run. */

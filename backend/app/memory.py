@@ -165,35 +165,6 @@ def normalize_content(content: str) -> str:
     return value
 
 
-def preference_clause(message: str) -> str:
-    """A conservative fallback for clear, stable preferences stated by the user.
-
-    The model usually calls ``remember`` itself. When it only *claims* to have
-    remembered something, this extracts the user's own clause so an obvious
-    habit such as “我有每天学英语和读书的习惯” is not silently lost.
-    """
-    text = " ".join((message or "").split())
-    if not text or len(text) > 240:
-        return ""
-    if DECLINED.search(text) or SECRET.search(text) or TEMPORARY.search(text):
-        return ""
-    explicit = EXPLICIT.search(text)
-    clauses = [part.strip(" ，,。.；;：:") for part in re.split(r"[，,。；;\n]", text)]
-    for clause in clauses:
-        if not clause or len(clause) > 160:
-            continue
-        if PREFERENCE.search(clause):
-            return clause
-    if explicit and len(text) <= 160:
-        value = re.sub(
-            r"^(?:请|麻烦)?(?:你)?(?:记住|记下|记着)[：:，,\s]*",
-            "",
-            text,
-        ).strip(" ，,。.；;")
-        return value if value and value != text else ""
-    return ""
-
-
 def snapshot(value: Memory) -> dict:
     return {
         **{field: getattr(value, field) for field in FIELDS},
