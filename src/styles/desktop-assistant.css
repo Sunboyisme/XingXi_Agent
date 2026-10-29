@@ -546,47 +546,277 @@ html[data-desktop] .pet-bubble > button:first-child {
 .pinned-controls input {
   width: 65px;
 }
+/* Desktop settings follow the shared setting rows and connection-card system. */
 .desktop-preferences {
-  margin-top: 16px;
+  margin: 0;
 }
-.desktop-shortcut {
+.desktop-preferences > .general-setting-row:first-child {
+  border-top: 1px solid var(--ui-color-line);
+}
+.desktop-shortcut-legend {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 16px 0;
-}
-.desktop-shortcut label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.desktop-shortcut input {
-  max-width: 260px;
-}
-.speech-connection {
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-.speech-connection h3 {
-  margin-top: 0;
-}
-.speech-connection p {
-  color: var(--muted-foreground);
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--ui-color-text-muted);
   font-size: 12px;
 }
-.speech-connection form {
-  display: grid;
-  gap: 12px;
-}
-.speech-connection form > label {
-  display: flex;
-  flex-direction: column;
+.desktop-keycaps {
+  display: inline-flex;
+  align-items: center;
   gap: 5px;
+}
+.desktop-keycaps kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 27px;
+  min-height: 25px;
+  padding: 3px 7px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 6px;
+  background: var(--ui-color-surface-deep, var(--ui-color-surface));
+  color: var(--ui-color-text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 1px 0 var(--ui-color-line);
+}
+.desktop-shortcut-setting {
+  padding: 22px 0;
+  border-top: 1px solid var(--ui-color-line);
+}
+.desktop-shortcut-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.desktop-shortcut-heading > svg {
+  color: var(--ui-color-text-muted);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.desktop-shortcut-heading strong {
+  font-weight: 600;
+}
+.desktop-shortcut-editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.desktop-shortcut-recorder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  min-width: 214px;
+  max-width: 100%;
+  padding: 8px 14px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 10px;
+  background: var(--ui-color-surface);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.desktop-shortcut-recorder:hover {
+  background: var(--ui-color-surface-deep, var(--ui-color-surface));
+}
+.desktop-shortcut-recorder:focus-visible,
+.desktop-shortcut-recorder.is-recording {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 2px;
+}
+.desktop-shortcut-recorder:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.desktop-recording-label {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: var(--ui-color-action);
   font-size: 13px;
 }
-.speech-save {
+.desktop-recording-label i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.desktop-shortcut-feedback {
+  min-height: 26px;
+  margin-top: 8px;
+}
+.desktop-shortcut-feedback p {
+  margin: 0;
+  font-size: 12px;
+}
+.desktop-shortcut-feedback .field-error,
+.speech-form .field-error {
+  color: var(--destructive, var(--ui-color-action));
+  font-size: 12px;
+}
+.general-settings .desktop-owner-notice {
+  font-size: 12px;
+  max-width: 540px;
+  margin-top: 4px;
+}
+.speech-dialog {
+  max-width: 530px;
+}
+.speech-form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.speech-form .form-field {
+  min-width: 0;
+}
+.speech-form .soft-select {
+  width: 100%;
+}
+.speech-secret-heading {
   display: flex;
-  gap: 10px;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.speech-secret-heading > label {
+  margin-bottom: 0;
+}
+.speech-activity {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  border-top: 1px solid var(--ui-color-line);
+  padding-top: 12px;
+}
+.speech-activity summary {
+  cursor: pointer;
+}
+.speech-activity > div {
+  display: grid;
+  gap: 9px;
+  max-height: 160px;
+  overflow: auto;
+  margin-top: 12px;
+}
+.speech-activity > div > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+}
+.speech-activity time {
+  grid-column: 1/-1;
+  font-size: 11px;
+}
+.speech-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.speech-dialog-footer > span {
+  flex: 1;
+  min-width: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.speech-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+}
+html[data-desktop] .quick-bar textarea[readonly] {
+  opacity: 0.7;
+}
+.quick-pending,
+.quick-activity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 15px;
+  margin: 5px 0 0;
+  background: #302924;
+  color: #e7d8cb;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.quick-pending > span {
+  flex: 1;
+}
+.selection-window.is-compact {
+  justify-content: center;
+}
+.selection-window header {
+  gap: 4px;
+  flex-shrink: 0;
+}
+.selection-actions {
+  flex: 1;
+  gap: 4px;
+  justify-content: center;
+}
+.selection-actions button {
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.selection-actions button[aria-pressed="true"] {
+  background: #ffffff16;
+}
+html[data-desktop] .selection-grip {
+  color: #b2a397;
+  cursor: move;
+  min-width: 22px;
+}
+.selection-window footer {
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+.selection-window footer > span {
+  flex: 1;
+  color: #bcac9f;
+  font-size: 12px;
+}
+.pet-avatar {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.pet-avatar:active {
+  cursor: grabbing;
+}
+.pet-avatar .bai-avatar,
+.pet-avatar svg {
+  pointer-events: none;
+}
+.pet-window > .desktop-error {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 5px;
+  padding: 8px 12px;
+  background: #302724;
+  border-radius: 12px;
+}
+@media (max-width: 600px) {
+  .desktop-shortcut-recorder {
+    min-width: 180px;
+    flex: 1;
+  }
+  .desktop-shortcut-legend {
+    flex-wrap: wrap;
+  }
+  .speech-dialog-footer {
+    flex-wrap: wrap;
+  }
+  .speech-dialog-footer > span {
+    flex-basis: 100%;
+  }
 }

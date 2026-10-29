@@ -52,16 +52,34 @@ export function readQuickDraft(): QuickDraft {
     modelKey: "",
   };
   try {
+    const value = JSON.parse(localStorage.getItem(QUICK_KEY) || "{}");
     return {
-      ...fallback,
-      ...JSON.parse(localStorage.getItem(QUICK_KEY) || "{}"),
+      text: typeof value.text === "string" ? value.text : "",
+      attachments: Array.isArray(value.attachments)
+        ? value.attachments
+            .filter(
+              (a: Attachment) =>
+                a &&
+                typeof a.id === "string" &&
+                typeof a.media_type === "string",
+            )
+            .slice(0, 4)
+        : [],
+      conversationId:
+        typeof value.conversationId === "string" ? value.conversationId : null,
+      runId: typeof value.runId === "string" ? value.runId : null,
+      modelKey: typeof value.modelKey === "string" ? value.modelKey : "",
     };
   } catch {
     return fallback;
   }
 }
 export function saveQuickDraft(draft: QuickDraft) {
-  localStorage.setItem(QUICK_KEY, JSON.stringify(draft));
+  try {
+    localStorage.setItem(QUICK_KEY, JSON.stringify(draft));
+  } catch {
+    /* Keep the active draft usable if WebView storage is full. */
+  }
 }
 export const desktopError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);

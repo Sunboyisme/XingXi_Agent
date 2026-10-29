@@ -33,8 +33,6 @@ import {
   emitTo,
   desktopListen,
   desktopError,
-  readQuickDraft,
-  saveQuickDraft,
 } from "@/lib/desktopAssistant";
 
 type Point = { x: number; y: number };
@@ -61,6 +59,7 @@ type Session = {
   monitorY: number;
   monitorWidth: number;
   monitorHeight: number;
+  draftText: string;
 };
 type Gesture = {
   pointerId: number;
@@ -174,7 +173,9 @@ export function DesktopCapture() {
   const [width, setWidth] = useState(3);
   const [fontSize, setFontSize] = useState(24);
   const [text, setText] = useState<{ at: Point; value: string } | null>(null);
-  const [draft, setDraft] = useState(() => readQuickDraft().text);
+  const [draft, setDraft] = useState("");
+  const draftRef = useRef("");
+  const currentSession = useRef<Session | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -184,6 +185,7 @@ export function DesktopCapture() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const source = useRef<HTMLCanvasElement | null>(null);
   const gesture = useRef<Gesture | null>(null);
+  const gestureTarget = useRef<Element | null>(null);
   const toolbarDrag = useRef<{
     pointerId: number;
     start: Point;
@@ -195,8 +197,14 @@ export function DesktopCapture() {
   const launcherInput = useRef<HTMLTextAreaElement>(null);
   const epoch = useRef(0);
   const exportLock = useRef(false);
-  const commands = useRef({ undo, redoAction, finish, commitText });
-  commands.current = { undo, redoAction, finish, commitText };
+  const commands = useRef({
+    undo,
+    redoAction,
+    finish,
+    commitText,
+    cancelCapture,
+  });
+  commands.current = { undo, redoAction, finish, commitText, cancelCapture };
   const sx = session ? viewport.w / session.width : 1,
     sy = session ? viewport.h / session.height : 1;
   const styleRect = (r: Rect) => ({
@@ -223,9 +231,14 @@ export function DesktopCapture() {
       exportLock.current = false;
       setToolbar(null);
       gesture.current = null;
-      setDraft(readQuickDraft().text);
+      let loadingId = "";
       try {
         const s = await invoke<Session>("capture_get");
+        if (!alive || current !== epoch.current) return;
+        loadingId = s.id;
+        currentSession.current = s;
+        draftRef.current = s.draftText;
+        setDraft(s.draftText);
         active = true;
         const raw = await invoke<ArrayBuffer | number[]>("capture_pixels", {
           id: s.id,
@@ -250,20 +263,58 @@ export function DesktopCapture() {
         if (alive && current === epoch.current && active) {
           setError(desktopError(e));
           await emitTo("quick", "desktop-error", desktopError(e));
-          await invoke("capture_cancel");
+          await invoke("capture_cancel", { id: loadingId });
         }
       }
     }
     const unlisten = desktopListen("capture-ready", () => void load());
-    void load();
+    const dismissListener = desktopListen<string>("capture-dismiss", (id) => {
+      if (currentSession.current?.id !== id) return;
+      const activeGesture = gesture.current;
+      if (
+        activeGesture &&
+        gestureTarget.current?.hasPointerCapture(activeGesture.pointerId)
+      )
+        gestureTarget.current.releasePointerCapture(activeGesture.pointerId);
+      gestureTarget.current = null;
+      const toolbarGesture = toolbarDrag.current;
+      const grip = toolbarElement.current?.querySelector(".toolbar-grip");
+      if (toolbarGesture && grip?.hasPointerCapture(toolbarGesture.pointerId))
+        grip.releasePointerCapture(toolbarGesture.pointerId);
+      toolbarDrag.current = null;
+      epoch.current++;
+      currentSession.current = null;
+      gesture.current = null;
+      source.current = null;
+      setSession(undefined);
+      setSelection(null);
+      setMarks([]);
+      setHistory([]);
+      setRedo([]);
+      setLive(null);
+      setText(null);
+      setBusy(false);
+      setDragging(false);
+      exportLock.current = false;
+    });
+    void Promise.all([unlisten, dismissListener]).then(() => {
+      if (alive) void load();
+    });
     const resize = () => setViewport({ w: innerWidth, h: innerHeight });
     window.addEventListener("resize", resize);
     const key = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.matches("textarea,input,select")) return;
       if (e.key === "Escape") {
+        if (e.defaultPrevented) return;
         e.preventDefault();
-        void invoke("capture_cancel");
-      } else if (e.ctrlKey && e.key.toLowerCase() === "z") {
+        void commands.current.cancelCapture();
+        return;
+      }
+      if (
+        (e.target as HTMLElement)?.matches("textarea,input,select") ||
+        e.isComposing
+      )
+        return;
+      if (e.ctrlKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) commands.current.redoAction();
         else commands.current.undo();
@@ -283,10 +334,26 @@ export function DesktopCapture() {
       alive = false;
       epoch.current++;
       void unlisten.then((f) => f());
+      void dismissListener.then((f) => f());
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", key);
     };
   }, []);
+  async function cancelCapture() {
+    const id = currentSession.current?.id;
+    if (id)
+      await invoke("capture_cancel", { id, text: draftRef.current }).catch(
+        (e) => {
+          if (currentSession.current?.id === id) setError(desktopError(e));
+        },
+      );
+  }
+  function compose(text: string) {
+    draftRef.current = text;
+    setDraft(text);
+    const id = currentSession.current?.id;
+    if (id) void invoke("capture_compose", { id, text }).catch(() => {});
+  }
   useEffect(() => {
     if (text) textInput.current?.focus();
   }, [Boolean(text)]);
@@ -301,7 +368,7 @@ export function DesktopCapture() {
     );
     resize.observe(node);
     return () => resize.disconnect();
-  }, [Boolean(selection)]);
+  }, [Boolean(selection && selection.w >= 2 && !dragging)]);
   useEffect(() => {
     if (!session || !source.current || !canvas.current) return;
     const ctx = canvas.current.getContext("2d")!;
@@ -402,6 +469,7 @@ export function DesktopCapture() {
       setRedo([]);
     }
     e.currentTarget.setPointerCapture(e.pointerId);
+    gestureTarget.current = e.currentTarget;
     setDragging(true);
   }
   function move(e: ReactPointerEvent) {
@@ -444,11 +512,16 @@ export function DesktopCapture() {
     const g = gesture.current;
     if (!g || g.pointerId !== e.pointerId) return;
     if (g.mark) addMark(g.mark);
+    if (!g.mark && !g.original) {
+      const box = rect(g.start, point(e));
+      if (box.w < 2 || box.h < 2) setSelection(null);
+    }
     gesture.current = null;
     setLive(null);
     setDragging(false);
-    if (e.currentTarget.hasPointerCapture(e.pointerId))
-      e.currentTarget.releasePointerCapture(e.pointerId);
+    if (gestureTarget.current?.hasPointerCapture(e.pointerId))
+      gestureTarget.current.releasePointerCapture(e.pointerId);
+    gestureTarget.current = null;
   }
   async function finish(action: string) {
     if (
@@ -460,11 +533,21 @@ export function DesktopCapture() {
       exportLock.current
     )
       return;
-    if (text) {
-      commitText();
-      setError("文字已确认，请再次选择导出操作");
-      return;
-    }
+    const outputMarks = text?.value.trim()
+      ? [
+          ...marks,
+          {
+            tool: "text" as const,
+            points: [text.at],
+            color,
+            width,
+            size: fontSize,
+            text: text.value,
+          },
+        ]
+      : marks;
+    if (text) commitText();
+    const id = session.id;
     exportLock.current = true;
     setBusy(true);
     setError("");
@@ -475,7 +558,7 @@ export function DesktopCapture() {
       const ctx = output.getContext("2d")!;
       ctx.translate(-selection.x, -selection.y);
       ctx.drawImage(source.current, 0, 0);
-      marks.forEach((m) => paint(ctx, m, source.current!));
+      outputMarks.forEach((m) => paint(ctx, m, source.current!));
       await invoke("capture_export", {
         id: session.id,
         dataUrl: output.toDataURL("image/png"),
@@ -484,26 +567,22 @@ export function DesktopCapture() {
         y: session.y + Math.round(selection.y),
       });
     } catch (e) {
-      setError(desktopError(e));
+      if (currentSession.current?.id === id) setError(desktopError(e));
     } finally {
-      exportLock.current = false;
-      setBusy(false);
+      if (currentSession.current?.id === id) {
+        exportLock.current = false;
+        setBusy(false);
+      }
     }
   }
   async function openQuick(action: "send" | "file" | "voice") {
-    const value = { ...readQuickDraft(), text: draft };
-    saveQuickDraft(value);
-    await emitTo("quick", "desktop-compose", { text: draft });
-    await invoke("capture_cancel");
-    await emitTo(
-      "quick",
-      action === "send"
-        ? "desktop-submit"
-        : action === "voice"
-          ? "desktop-record-click"
-          : "desktop-pick",
-      {},
-    );
+    const id = currentSession.current?.id;
+    if (id)
+      await invoke("capture_continue", {
+        id,
+        text: draftRef.current,
+        action,
+      }).catch((e) => setError(desktopError(e)));
   }
   const box = selection ? styleRect(selection) : null;
   const barPosition = box
@@ -566,15 +645,10 @@ export function DesktopCapture() {
               placeholder="随心输入"
               value={draft}
               onChange={(e) => {
-                setDraft(e.target.value);
-                const value = { ...readQuickDraft(), text: e.target.value };
-                saveQuickDraft(value);
-                void emitTo("quick", "desktop-compose", {
-                  text: e.target.value,
-                });
+                compose(e.target.value);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Escape") void invoke("capture_cancel");
+                if (e.key === "Escape") void cancelCapture();
                 if (
                   e.key === "Enter" &&
                   !e.shiftKey &&
@@ -609,10 +683,7 @@ export function DesktopCapture() {
               </button>
             </Hint>
             <Hint label="取消">
-              <button
-                aria-label="取消"
-                onClick={() => void invoke("capture_cancel")}
-              >
+              <button aria-label="取消" onClick={() => void cancelCapture()}>
                 <X size={19} />
               </button>
             </Hint>
@@ -844,7 +915,7 @@ export function DesktopCapture() {
               className="capture-cancel"
               aria-label="取消截图"
               disabled={busy}
-              onClick={() => void invoke("capture_cancel")}
+              onClick={() => void cancelCapture()}
             >
               <X size={21} />
             </button>

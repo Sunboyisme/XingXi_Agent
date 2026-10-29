@@ -518,15 +518,25 @@ fn main() {
             desktop::desktop_preferences,
             desktop::desktop_preferences_save,
             desktop::desktop_open,
-            desktop::desktop_pet_interactive,
-            desktop::desktop_quick_top,
+            desktop::desktop_pet_drag,
+            desktop::desktop_hit_regions,
+            desktop::desktop_quick_state,
+            desktop::desktop_dismiss,
+            desktop::desktop_toggle,
+            desktop_input::desktop_key_state,
+            desktop_input::desktop_shortcut_recording,
             desktop::desktop_main,
             desktop::desktop_pick_files,
             desktop::desktop_selection_offer,
+            desktop::desktop_selection_get,
+            desktop::desktop_selection_dismiss,
+            desktop::desktop_selection_expand,
             desktop::capture_get,
             desktop::capture_present,
             desktop::capture_pixels,
             desktop::capture_cancel,
+            desktop::capture_compose,
+            desktop::capture_continue,
             desktop::capture_export,
             desktop::pinned_image,
             voice::voice_start,
@@ -710,7 +720,7 @@ fn main() {
                                 let running = matches!(run["status"].as_str(),Some("running"|"pending"));
                                 tracked_desktop_run=if running{run["id"].as_str().map(str::to_owned)}else{None};
                                 let status=if running{"正在处理…"}else if run["status"]=="completed"{"任务完成，点击查看"}else if run["status"]=="cancelled"{"已停止"}else{"任务未完成，点击查看"};
-                                let _=handle.emit_to("pet","desktop-task",serde_json::json!({"title":"XiaoXi 任务","status":status,"conversationId":run["conversation_id"],"source":"main"}));
+                                let _=handle.emit_to("pet","desktop-task",serde_json::json!({"title":"XiaoXi 任务","status":status,"conversationId":run["conversation_id"],"source":"main","runId":run["id"]}));
                             }
                         }
                     }
@@ -781,17 +791,12 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::ScaleFactorChanged { .. } = event { desktop::refresh_hit_regions(window.app_handle(),window.label()); }
             if let tauri::WindowEvent::Destroyed = event { desktop::forget_pin(window.label()); }
             if ["quick", "capture", "selection", "pet"].contains(&window.label()) {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    if window.label() == "capture" { desktop::restore(window.app_handle()); }
-                    if window.label() == "quick" {
-                        voice::voice_cancel(window.state(), None);
-                        let _ = window.emit("desktop-voice-cancel", ());
-                    }
-                    if window.label() == "selection" { let _ = window.emit("desktop-selection-close", ()); }
-                    let _ = window.hide();
+                    desktop::desktop_dismiss_label(window.app_handle(),window.label());
                     return;
                 }
             }

@@ -38,7 +38,7 @@ export function ConnectionCard({
       <p className="service-card-description">{description}</p>
       <div className="service-card-bottom">
         <Hint label={detail}>
-          <span>{detail}</span>
+          <span tabIndex={0}>{detail}</span>
         </Hint>
         <Button
           size="sm"

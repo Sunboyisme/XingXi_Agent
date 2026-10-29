@@ -15,6 +15,7 @@ pub struct Recording {
     id: String,
     stop: Arc<AtomicBool>,
     audio: Vec<u8>,
+    gesture: Option<u64>,
 }
 
 fn event(app: &tauri::AppHandle, id: &str, phase: &str, seconds: f64, level: f32, error: &str) {
@@ -26,9 +27,15 @@ fn event(app: &tauri::AppHandle, id: &str, phase: &str, seconds: f64, level: f32
 }
 
 #[tauri::command]
-pub fn voice_start(app: tauri::AppHandle) -> Result<String, String> {
+pub fn voice_start(app: tauri::AppHandle, gesture: Option<u64>) -> Result<String, String> {
+    if gesture.is_some_and(|id| !crate::desktop_input::gesture_held(id)) {
+        return Err("录音手势已结束".into());
+    }
     let state = app.state::<Voice>();
     let mut active = state.0.lock().map_err(|_| "录音状态不可用")?;
+    if gesture.is_some_and(|id| !crate::desktop_input::gesture_held(id)) {
+        return Err("录音手势已结束".into());
+    }
     if let Some(old) = active.as_ref() {
         old.stop.store(true, Ordering::SeqCst);
     }
@@ -38,6 +45,7 @@ pub fn voice_start(app: tauri::AppHandle) -> Result<String, String> {
         id: id.clone(),
         stop: stop.clone(),
         audio: vec![],
+        gesture,
     });
     drop(active);
     drop(state);
@@ -50,8 +58,23 @@ pub fn voice_start(app: tauri::AppHandle) -> Result<String, String> {
     });
     Ok(id)
 }
+pub fn stop_gesture(app: &tauri::AppHandle, gesture: u64) {
+    if let Some(r) = app
+        .state::<Voice>()
+        .0
+        .lock()
+        .unwrap()
+        .as_ref()
+        .filter(|r| r.gesture == Some(gesture))
+    {
+        r.stop.store(true, Ordering::SeqCst);
+    }
+}
 
 fn record(app: &tauri::AppHandle, id: &str, stop: &AtomicBool) -> Result<(), String> {
+    if stop.load(Ordering::SeqCst) {
+        return Ok(());
+    }
     let device = cpal::default_host()
         .default_input_device()
         .ok_or("没有可用麦克风，请检查系统录音设置")?;
@@ -108,6 +131,9 @@ fn record(app: &tauri::AppHandle, id: &str, stop: &AtomicBool) -> Result<(), Str
         _ => return Err("当前麦克风的音频格式暂不支持，请更换默认录音设备".into()),
     }
     .map_err(|_| "麦克风启动失败，请检查录音权限及设备占用")?;
+    if stop.load(Ordering::SeqCst) {
+        return Ok(());
+    }
     stream.play().map_err(|_| "无法开始录音")?;
     let started = Instant::now();
     while !stop.load(Ordering::SeqCst) && started.elapsed().as_secs() < 120 {
@@ -185,8 +211,14 @@ fn collect(
 }
 
 #[tauri::command]
-pub fn voice_stop(state: tauri::State<'_, Voice>) {
-    if let Some(r) = state.0.lock().unwrap().as_ref() {
+pub fn voice_stop(state: tauri::State<'_, Voice>, id: Option<String>) {
+    if let Some(r) = state
+        .0
+        .lock()
+        .unwrap()
+        .as_ref()
+        .filter(|r| id.as_ref().is_none_or(|id| r.id == *id))
+    {
         r.stop.store(true, Ordering::SeqCst);
     }
 }
