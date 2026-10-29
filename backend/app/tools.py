@@ -640,6 +640,8 @@ def build_tools(run_id: str, conversation_id: str):
                 args_schema=originals[entry["id"]].args_schema
                 if entry["source"] == "builtin"
                 else entry["parameters"],
+                metadata={"catalog_name": entry["name"], "catalog_description": entry["description"],
+                          "source": entry["source"], "source_label": entry["source_label"]},
             )
         )
     return result
