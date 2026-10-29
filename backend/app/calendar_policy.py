@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 def creation_authorized(text):
     if re.search(r"(?:别|不要|不用|先不|暂不).{0,8}(?:写|创建|保存|安排|加)|先给方案|只讨论|先讨论", text):
         return False
-    return bool(re.search(r"安排|提醒|记得|记一下|记下|放进日历|放入日历|写入日历|加到日历|添加.{0,8}(?:计划|日程)|每.{0,8}(?:天|周|月|年).{0,40}(?:一次|交|跑步|学习|整理)|帮我约", text))
+    return bool(re.search(r"安排|提醒|记得|记一下|记下|放进日历|放入日历|写入日历|加到日历|添加.{0,8}(?:计划|日程)|(?:创建|新建|新增|保存|写入)[^。；;\n]{0,40}(?:计划|日程|日历|事项|会议)(?!书|文档|报告|方案|表)|每.{0,8}(?:天|周|月|年).{0,40}(?:一次|交|跑步|学习|整理)|帮我约", text))
 
 
 def similar_title(first, second):

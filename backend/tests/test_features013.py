@@ -173,7 +173,7 @@ def test_calendar_tool_requires_confirmation_and_retry_is_idempotent(client):
     with db.Session() as session:
         session.add(
             db.Message(
-                conversation_id=conversation["id"], role="user", content="安排明天"
+                conversation_id=conversation["id"], role="user", content="先给方案，安排明天"
             )
         )
         session.commit()
@@ -226,7 +226,7 @@ def test_calendar_tool_requires_confirmation_and_retry_is_idempotent(client):
     created = json.loads(
         explicit.invoke(
             {
-                "plans": [event(title="明确计划")],
+                "plans": [event(title="明确计划", start="2026-10-21T11:00:00+08:00", end="2026-10-21T12:00:00+08:00")],
                 "explicit_request": True,
             }
         )
@@ -240,7 +240,7 @@ def test_plan_confirmation_uses_what_the_user_saw_and_accepts_naive_times(client
     with db.Session() as session:
         session.add(
             db.Message(
-                conversation_id=conversation["id"], role="user", content="提醒我晒衣服"
+                conversation_id=conversation["id"], role="user", content="先给方案，提醒我晒衣服"
             )
         )
         session.commit()
@@ -291,7 +291,7 @@ def test_plan_confirmation_uses_what_the_user_saw_and_accepts_naive_times(client
     with db.Session() as session:
         session.add(
             db.Message(
-                conversation_id=conversation["id"], role="user", content="再建一个"
+                conversation_id=conversation["id"], role="user", content="再创建一个10月22日的日历计划"
             )
         )
         session.commit()
@@ -306,8 +306,8 @@ def test_plan_confirmation_uses_what_the_user_saw_and_accepts_naive_times(client
                 "plans": [
                     {
                         "title": "无偏移时间",
-                        "start": "2026-10-21T09:00:00",
-                        "end": "2026-10-21T10:00:00",
+                        "start": "2026-10-22T09:00:00",
+                        "end": "2026-10-22T10:00:00",
                     }
                 ],
                 "explicit_request": True,
@@ -315,7 +315,7 @@ def test_plan_confirmation_uses_what_the_user_saw_and_accepts_naive_times(client
         )
     )
     assert created[0]["title"] == "无偏移时间"
-    assert created[0]["start"].startswith("2026-10-21T01:00:00")
+    assert created[0]["start"].startswith("2026-10-22T01:00:00")
 
 
 def test_artifact_export_keeps_the_user_facing_filename(client):
@@ -522,7 +522,11 @@ def test_image_blocks_sources_persistence_and_export(client):
         session.add(db.RunEvent(run_id=run, kind="tool", data={"result": result}))
         session.commit()
     shown = client.get(f"{API}/runs/{run}/presentation").json()
-    assert shown["artifacts"] == result["artifacts"]
+    assert len(shown["artifacts"]) == len(result["artifacts"])
+    for index, expected in enumerate(result["artifacts"]):
+        actual = shown["artifacts"][index]
+        assert {key: actual[key] for key in expected} == expected
+        assert actual["current"] is True and actual["revision"] == 1
     assert shown["sources"][0]["title"] == "示例"
     content = client.get(f"{API}/artifacts/{shown['artifacts'][0]['id']}/content")
     assert (

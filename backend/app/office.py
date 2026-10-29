@@ -373,7 +373,12 @@ async def read_file(key, conversation_id, start=1, count=5, page=None, *, run_id
 async def search_file(key, conversation_id, query, offset=0, limit=8):
     value, warnings = authorized(key, conversation_id)
     if isinstance(value, Path):
-        if value.suffix.lower() not in {".docx", ".pdf", ".xlsx", ".csv", ".txt", ".md", ".json"}:
+        # Generated artifacts have an opaque .bin storage name. Dispatch the
+        # parser with the authorized display name, just as read_file does.
+        with Session() as db:
+            record = db.get(Attachment, key) or db.get(artifacts.Artifact, key)
+            is_image = record and record.media_type.startswith("image/")
+        if is_image or Path(warnings).suffix.lower() not in {".docx", ".pdf", ".xlsx", ".csv", ".txt", ".md", ".json"}:
             raise ValueError("全文检索只支持有已解析文字的文档；图片请用read_file。")
         parsed = await worker("parse", data=base64.b64encode(value.read_bytes()).decode(), name=warnings)
         value, warnings = parsed["chunks"], parsed["warnings"]

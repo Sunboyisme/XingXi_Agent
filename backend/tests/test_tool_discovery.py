@@ -136,19 +136,44 @@ async def test_budget_uses_loaded_schemas_and_keeps_runtime_out_of_history(monke
     exposed_tool = tool("get_weather")
     request = Request(messages=messages, system_message=SystemMessage(content=prompt()), tools=[exposed_tool])
     result = await middleware.awrap_model_call(request, passthrough)
-    assert "2026-10-29" not in result.system_message.content
-    assert "项目资料和用户约束" not in result.system_message.content
-    assert result.messages[:2] == messages[:2]
-    assert result.messages[-1].content[:2] == messages[-1].content
-    assert "2026-10-29" in result.messages[-1].content[-1]["text"]
+    assert "2026-10-29" in result.system_message.content
+    assert "项目资料和用户约束" in result.system_message.content
+    assert result.messages == messages
+    assert "xiaoxi_runtime_context" not in str(result.messages[-1].content)
     assert len(messages[-1].content) == 2
     assert prepared[0] == messages
     assert events[-1]["tool_tokens"] == schema_tokens([exposed_tool])
 
 
-def test_summary_insertion_preserves_clock_tail_and_runtime_split():
+def test_summary_insertion_preserves_clock_tail_and_data_boundary():
     combined = agent_prompts.append_context(prompt(), "\n历史摘要")
     assert combined.index("历史摘要") < combined.index(agent_prompts.CLOCK_MARKER)
-    fixed, runtime = agent_prompts.split_runtime(combined)
-    assert "历史摘要" not in fixed and "历史摘要" in runtime
-    assert "用户原话" in fixed
+    assert combined.index(agent_prompts.RUNTIME_MARKER) < combined.index("历史摘要")
+    assert combined.startswith(agent_prompts.CORE)
+
+
+def test_common_intents_preload_schemas_without_hiding_other_capabilities():
+    discovery = ToolDiscovery([tool("get_weather"), tool("remember"), tool("search_memories"),
+                               tool("create_plans")], initial_text="查一下广州天气，记住我喜欢简短回答")
+    exposed = {item.name for item in discovery.exposed_tools()}
+    assert {"get_weather", "remember", "search_memories"} <= exposed
+    assert "create_plans" not in exposed
+    assert "create_plans" in discovery.catalog_context()
+
+
+@pytest.mark.asyncio
+async def test_short_query_does_not_load_all_tools_and_labels_resolve():
+    discovery = ToolDiscovery([tool("get_weather", "查询城市的天气", catalog_name="查询天气"),
+                               tool("read_file", "读取上传的文件")])
+    receipt = json.loads(await discovery.discover(query="的"))
+    assert receipt["loaded"] == []
+    loaded = json.loads(await discovery.discover(names=[" 查询天气 ", "GET_WEATHER"]))
+    assert loaded["loaded"] == ["get_weather"]
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_tool_labels_do_not_select_an_arbitrary_service():
+    discovery = ToolDiscovery([tool("mcp_a", catalog_name="search", source="mcp"),
+                               tool("mcp_b", catalog_name="search", source="mcp")])
+    result = json.loads(await discovery.discover(names=["search"]))
+    assert result["loaded"] == [] and result["not_found"] == ["search"]

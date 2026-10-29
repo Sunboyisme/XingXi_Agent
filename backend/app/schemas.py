@@ -539,6 +539,13 @@ class GoalCreate(BaseModel):
     weekly_minutes: int | None = Field(default=None, ge=1, le=10080)
     target_date: str | None = None
 
+    @field_validator("weekly_minutes", mode="before")
+    @classmethod
+    def optional_weekly_minutes(cls, value):
+        # Intake drafts store editable optional fields as strings. Clearing the
+        # field must have the same meaning as omitting it when confirming.
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("target_date")
     @classmethod
     def valid_target_date(cls, value):

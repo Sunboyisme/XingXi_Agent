@@ -48,6 +48,45 @@ DEPENDENCIES = {
 }
 
 
+def initial_tools(text):
+    """Local hints preload common workflows; discovery remains available."""
+    names = set()
+    patterns = (
+        (r"天气|气温|预报|weather", {"get_weather"}),
+        (r"计算|算一下|求和|总时长|合计|算式|\d\s*[+*/]\s*\d", {"calculate"}),
+        (r"换算|单位|convert", {"convert_units"}),
+        (r"日期|星期|时区|几号|几天|date_time", {"date_time"}),
+        (r"待办|todo", {"list_todos", "create_todo", "update_todo", "action_todo"}),
+        (r"记住|记忆|喜欢|偏好|过敏|生日|我养|我住|我叫|memory", {"remember", "search_memories"}),
+        (r"之前|上次|历史|前面|刚才", {"search_conversation_history"}),
+        (r"读|附件|上传|文档|资料|截图|\b(?:file|document|attachment)\b", {"list_files", "read_file", "search_file"}),
+        (r"本地|文件夹|目录|[a-z]:[\\/]", {"read_local_file", "scan_local_folder"}),
+        (r"搜索|查资料|搜一下|联网|最新|新闻|https?://|网页", {"web_search", "read_url"}),
+        (r"学习|课程|路线|复习|知识点|我想学|零基础", {"learning_goals", "create_learning_goal"}),
+        (r"技能|skill|脚本", {"load_skill", "read_skill_file", "run_skill_script"}),
+        (r"生成.{0,10}(?:图片|海报|图像)|生图|配图|插画|画一|图片来源", {"generate_image"}),
+    )
+    for pattern, values in patterns:
+        if re.search(pattern, text, re.I):
+            names.update(values)
+    if re.search(r"日历|日程|安排|提醒|预约|会议|计划", text):
+        names.update({"list_plans", "date_time"})
+        if re.search(r"安排|提醒|创建|新建|添加|记一下|记下", text):
+            names.add("create_plans")
+        if re.search(r"改|调整|更新", text):
+            names.add("update_plan")
+        if re.search(r"删|移除|取消|完成|恢复|结束", text):
+            names.update({"delete_plan", "delete_plans", "action_plan"})
+    if re.search(r"生成|导出|保存|制作|做成|输出|写成", text):
+        if re.search(r"word|pdf|docx|文档|报告", text, re.I):
+            names.add("create_document")
+        if re.search(r"excel|xlsx|表格|明细", text, re.I):
+            names.add("create_spreadsheet")
+        if re.search(r"markdown|csv|json|txt|文本|笔记", text, re.I):
+            names.add("create_text_file")
+    return names
+
+
 class DiscoveryQuery(BaseModel):
     query: str = Field(default="", max_length=1000, description="工具用途、名称或服务名；留空分页浏览目录")
     names: list[str] = Field(default_factory=list, max_length=32, description="精确工具名称，来自目录或发现结果")
@@ -64,11 +103,19 @@ def schema_tokens(tools):
 
 
 class ToolDiscovery(AgentMiddleware):
-    def __init__(self, tools, *, required=()):
+    def __init__(self, tools, *, required=(), initial_text=""):
         self.available = {tool.name: tool for tool in sorted(tools, key=lambda tool: tool.name)}
         self.loaded = []
         self.advertised = set()
-        self._load({"read_context_record", *required})
+        self._load({"read_context_record", *required, *initial_tools(initial_text)})
+        remote = [name for name, tool in self.available.items() if (tool.metadata or {}).get("source") == "mcp"]
+        if initial_text:
+            if "mcp" in initial_text.casefold() and len(remote) <= 8:
+                self._load(remote)
+            else:
+                ranked = sorted(((self._score(name, initial_text.casefold()), name) for name in remote),
+                                key=lambda item: (-item[0], item[1]))
+                self._load([name for score, name in ranked[:2] if score >= 4])
         # Async discovery runs in the same event loop as the middleware; tool
         # execution can remain parallel without a worker mutating this state.
         self.discovery_tool = StructuredTool.from_function(
@@ -138,11 +185,18 @@ class ToolDiscovery(AgentMiddleware):
         text = " ".join([name, entry["label"], entry["service"],
                          self.available[name].description,
                          metadata.get("catalog_description", "")]).casefold()
+        if metadata.get("source") != "mcp":
+            text += " " + " ".join(label for label, names in GROUPS if name in names)
         if name.casefold() == query or entry["label"].casefold() == query:
             return 10000
+        if len(query) < 2:
+            return 0
         if query in text:
             return 1000
-        words = re.findall(r"[a-z0-9_]+|[\u4e00-\u9fff]", query)
+        words = set(re.findall(r"[a-z0-9_]+", query))
+        for phrase in re.findall(r"[\u4e00-\u9fff]+", query):
+            words.update(phrase[index:index + 2] for index in range(len(phrase) - 1))
+        words -= {"工具", "查询", "查看", "帮我", "一下", "请问", "使用"}
         return sum(len(word) for word in words if word in text)
 
     async def discover(self, query="", names=None, offset=0, limit=6):
@@ -152,10 +206,16 @@ class ToolDiscovery(AgentMiddleware):
         if requested:
             candidates = []
             for name in requested:
-                if name in self.available:
-                    candidates.append(name)
+                exact = name.strip()
+                aliases = [key for key in self.available if key.casefold() == exact.casefold()
+                           or self._entry(key)["label"].casefold() == exact.casefold()]
+                if exact in self.available:
+                    candidates.append(exact)
+                elif len(aliases) == 1:
+                    candidates.append(aliases[0])
                 else:
                     missing.append(name)
+            candidates = list(dict.fromkeys(candidates))
             matched = bool(candidates)
             if not matched:
                 candidates = list(self.available)

@@ -80,6 +80,8 @@ async def test_all_builtin_tools_in_user_workflows(configured, isolate, monkeypa
     text = await call("create_text_file", name="活动记录.md", format="md", content="# 活动：预算100元")
     await call("list_files")
     await call("read_file", file_id=text["artifacts"][0]["id"])
+    matches = await call("search_file", file_id=text["artifacts"][0]["id"], query="预算")
+    assert matches["matches"]
     await call("create_document", name="活动报告.docx", format="docx", title="活动报告", blocks=[{"kind": "paragraph", "text": "预算100元，3个节点。"}])
     await call("create_spreadsheet", name="预算.xlsx", sheets=[{"name": "预算", "rows": [["项目", "金额"], ["活动", 100]]}])
     await call("generate_image", prompt="橙色活动插画", name="活动配图")

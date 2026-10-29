@@ -3,7 +3,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import SystemMessage
 from openai import BadRequestError
 
-from . import agent_prompts, context, provider, task_context
+from . import context, provider, task_context
 from .db import Session, TaskStep
 from .loop_compaction import LoopCompactor, message_cost
 from .runs import emit
@@ -23,13 +23,10 @@ class ContextBudget(AgentMiddleware):
         # Discovery can add schemas between model rounds. Count the exposed
         # request, not the complete registry or a stale initial estimate.
         tool_tokens = schema_tokens(request.tools)
-        system_message, runtime = request.system_message, ""
-        if (system_message and isinstance(system_message.content, str)
-                and any(message.type == "human" for message in request.messages)):
-            fixed, runtime = agent_prompts.split_runtime(system_message.content)
-            system_message = system_message.model_copy(update={"content": fixed})
-        overhead = (tool_tokens + (message_cost(system_message) if system_message else 0)
-                    + context.tokens(runtime))
+        system_message = request.system_message
+        # Keep application context in the system role. Appending it to a human
+        # message changes the user's utterance and breaks follow-up semantics.
+        overhead = tool_tokens + (message_cost(system_message) if system_message else 0)
         messages = await self.compactor.prepare(list(request.messages), overhead, hard)
         used = overhead + sum(map(message_cost, messages))
         # Drop only complete old conversation turns. Never split the active
@@ -50,17 +47,6 @@ class ContextBudget(AgentMiddleware):
              "provider_id": self.config.get("provider_id"), "model_name": self.config.get("model_name")})
         if used > hard:
             raise provider.ConfigurationError("自动摘要后，当前步骤必须保留的提示、工具信息与消息仍超过上下文额度。已有操作结果保留；请在连接与设置中调整当前模型的上下文大小，或缩小当前步骤范围。")
-        # Add application data only to the active request's human message.
-        # Earlier messages, durable history and multimodal parts stay intact.
-        # The compactor sees the original user message, never this derived data.
-        if runtime:
-            messages = list(messages)
-            index = max(i for i, message in enumerate(messages) if message.type == "human")
-            source = messages[index]
-            content = source.content + runtime if isinstance(source.content, str) else [
-                *source.content, {"type": "text", "text": runtime},
-            ]
-            messages[index] = source.model_copy(update={"content": content})
         overrides = {"messages": messages, "system_message": system_message}
         execution = task_context.current.get()
         if self.first and execution:

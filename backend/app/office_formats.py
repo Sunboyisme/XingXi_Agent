@@ -625,7 +625,7 @@ def text_file(format, content=None, rows=None):
             try:
                 rows = list(csv.reader(io.StringIO(content, newline=""), strict=True))
             except csv.Error as error:
-                raise ValueError(f"CSV引号或转义不合法：{error}，请改用rows结构化行。") from None
+                raise ValueError(f"CSV引号、转义或列数不合法：{error}，请改用rows结构化行。") from None
         if not rows or len(rows) > 4000 or any(not isinstance(row, list) or len(row) > 50 for row in rows):
             raise ValueError("CSV需有1–4000行，每行最多50列")
         widths = {len(row) for row in rows if row}

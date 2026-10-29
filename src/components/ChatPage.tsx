@@ -352,7 +352,7 @@ function ReplyActivity({
       <Reasoning text={reasoning} active />
       {imageGeneration && <ImageGenerationPreview progress={imageGeneration} />}
       {stream && <Markdown runId={runId}>{stream}</Markdown>}
-      {!imageGeneration && !stream && (
+      {!imageGeneration && (
         <div className="thinking" role="status" aria-live="polite">
           <span className="thinking-label">{progress || "XiaoXi 正在思考"}</span>
           <span className="thinking-dots" aria-hidden="true">

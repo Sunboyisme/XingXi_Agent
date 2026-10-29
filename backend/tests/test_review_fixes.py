@@ -38,8 +38,12 @@ def test_distinct_creation_steps_share_authorization_but_not_deduplication():
     second = plans.create_events([plan("第二步")], source)[0]
     assert first["id"] != second["id"]
     assert plans.create_events([plan("第一步")], source)[0]["id"] == first["id"]
-    # A later reminder request is a distinct write too.
+    # Changing parameters in a retry of the same source item cannot create a
+    # duplicate. A new user request has its own source and can add another item.
     third = plans.create_events([plan("第一步", reminder_enabled=True, reminder_offsets=[-30])], source)[0]
+    assert third["id"] == first["id"]
+    assert len(plans.list_events()) == 2
+    third = plans.create_events([plan("第一步", reminder_enabled=True, reminder_offsets=[-30])], db.uid())[0]
     assert third["id"] != first["id"]
     assert len(plans.list_events()) == 3
 
