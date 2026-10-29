@@ -8,7 +8,6 @@ html[data-desktop] #root {
   overflow: hidden;
 }
 html[data-desktop] {
-  color-scheme: dark;
   --bai-avatar-fill: #c58265;
   --bai-avatar-light: #e4ae88;
   --bai-avatar-shade: #b76b50;
@@ -49,7 +48,7 @@ html[data-desktop] button:disabled {
 }
 html[data-desktop] button:focus-visible,
 html[data-desktop] select:focus-visible {
-  outline: 2px solid #e2b08d;
+  outline: 2px solid var(--ui-color-focus);
   outline-offset: 2px;
 }
 html[data-desktop] kbd {
@@ -60,10 +59,13 @@ html[data-desktop] kbd {
   white-space: nowrap;
 }
 html[data-desktop] .ui-hint {
-  background: #342e2a;
-  color: #fff4ec;
-  border-color: #66564b;
-  font-size: 12px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  border-color: var(--ui-color-border);
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
 }
 .quick-window {
   position: absolute;
@@ -118,17 +120,23 @@ html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
   color: #c7bbb3;
 }
 .quick-composer-group {
+  position: relative;
   flex-shrink: 0;
 }
-.quick-window.is-floating { inset: 8px; gap: 10px; }
+.quick-window.is-floating { inset: 12px 8px 8px; gap: 10px; color: var(--ui-color-text); }
 .quick-window.is-floating.is-below { flex-direction: column-reverse; }
-.quick-window.is-floating .quick-bar { min-height: 50px; padding: 7px 9px; gap: 9px; border: 1px solid #ffffff12; border-radius: 30px; background: #1f1f21f5; }
-html[data-desktop] .quick-window.is-floating .quick-bar textarea { height: 32px; max-height: 70px; padding: 4px 0; font-size: 15px; line-height: 24px; }
-.quick-window.is-floating .quick-bar textarea::placeholder { color: #88888b; }
-html[data-desktop] .quick-window.is-floating .quick-add-file { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: #303032; color: #c0c0c3; }
-html[data-desktop] .quick-window.is-floating .quick-send { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: #315e9d; color: #e0eafa; }
-html[data-desktop] .quick-window.is-floating .quick-send:hover { background: #3c73bb; }
-.quick-window.is-floating .quick-answer { max-height: none; flex-shrink: 1; background: #242426f5; border-color: #ffffff24; }
+.quick-window.is-floating .quick-bar { min-height: 50px; padding: 7px 9px; gap: 9px; border: 1px solid var(--ui-color-border); border-radius: 30px; background: var(--ui-color-surface); }
+html[data-desktop] .quick-window.is-floating .quick-bar textarea { height: 32px; max-height: 70px; padding: 4px 0; font-size: 15px; line-height: 24px; color: var(--ui-color-text); }
+.quick-window.is-floating .quick-bar textarea::placeholder { color: var(--ui-color-text-muted); }
+html[data-desktop] .quick-window.is-floating .quick-add-file { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: var(--ui-color-surface-deep); color: var(--ui-color-text-muted); }
+html[data-desktop] .quick-window.is-floating .quick-add-file:hover { background: var(--surface-hover); color: var(--ui-color-text); }
+html[data-desktop] .quick-window.is-floating .quick-send { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: var(--ui-color-action); color: var(--ui-color-on-action); }
+html[data-desktop] .quick-window.is-floating .quick-send:hover { background: var(--ui-color-action-hover); }
+html[data-desktop] .quick-floating-close { position: absolute; right: -2px; top: -9px; z-index: 1; width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 2px; border: 1px solid var(--ui-color-border); border-radius: 50%; background: var(--ui-color-surface-deep); color: var(--ui-color-text-muted); }
+html[data-desktop] .quick-floating-close:hover { background: var(--surface-hover); color: var(--ui-color-text); }
+.quick-window.is-floating .quick-answer { max-height: none; flex-shrink: 1; background: var(--ui-color-surface); border-color: var(--ui-color-border); }
+.quick-window.is-floating .quick-answer header { border-color: var(--ui-color-line); }
+.quick-window.is-floating .quick-attachments { background: var(--ui-color-surface-deep); }
 .quick-window.is-floating .quick-answer-scroll { min-height: 0; }
 .quick-answer {
   min-height: 0;
@@ -533,7 +541,7 @@ html[data-desktop] .capture-text {
 .pet-window {
   position: absolute;
   inset: 0;
-  color: #f6ece3;
+  color: var(--ui-color-text);
   font-size: 13px;
   pointer-events: none;
 }
@@ -623,23 +631,24 @@ html[data-desktop] .capture-text {
 .pet-hover-tools {
   position: absolute;
   top: 100%;
-  left: var(--pet-tools-left, -33px);
+  left: var(--pet-tools-left, -15px);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  width: 148px;
-  min-height: 46px;
-  padding: 4px 8px;
-  border: 1px solid #ffffff12;
-  border-radius: 30px;
-  background: #1f1f21f5;
+  gap: 3px;
+  width: 112px;
+  min-height: 36px;
+  padding: 4px 5px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 20px;
+  background: var(--ui-color-surface);
   box-sizing: border-box;
   pointer-events: auto;
 }
-.pet-hover-tools button { position: relative; width: 32px; height: 32px; color: #d5d5d8; }
-.pet-toolbar-divider { height: 23px; width: 1px; background: #ffffff12; margin: 0 3px; }
-.pet-update-count { position: absolute; top: -2px; right: -1px; min-width: 15px; height: 15px; padding: 0 2px; border-radius: 10px; background: #4384e7; color: #fff; font-size: 11px; line-height: 15px; text-align: center; }
+html[data-desktop] .pet-hover-tools button { position: relative; width: 26px; min-width: 26px; height: 26px; min-height: 26px; padding: 4px; color: var(--ui-color-text-muted); }
+html[data-desktop] .pet-hover-tools button:hover { background: var(--surface-hover); color: var(--ui-color-action); }
+.pet-toolbar-divider { height: 16px; width: 1px; background: var(--ui-color-line); margin: 0 1px; }
+.pet-update-count { position: absolute; top: -3px; right: -2px; min-width: 13px; height: 13px; padding: 0 2px; border-radius: 8px; background: var(--ui-color-action); color: var(--ui-color-on-action); font-size: 9px; line-height: 13px; text-align: center; }
 .pet-task-card {
   position: relative;
   display: flex;
@@ -649,9 +658,9 @@ html[data-desktop] .capture-text {
   min-height: 72px;
   box-sizing: border-box;
   padding: 12px 16px 12px 20px;
-  border: 1px solid #ffffff24;
+  border: 1px solid var(--ui-color-border);
   border-radius: 38px;
-  background: #242426f5;
+  background: var(--ui-color-surface);
   pointer-events: auto;
 }
 .pet-task-copy { flex: 1; min-width: 0; }
@@ -663,17 +672,17 @@ html[data-desktop] .pet-task-copy:hover { display: flex; flex-direction: column;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pet-task-copy strong { font-size: 16px; font-weight: 600; color: #f1f1f2; }
-.pet-task-copy span { color: #acacae; font-size: 13px; }
-html[data-desktop] .pet-card-action { width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; color: #bdbdc0; background: #ffffff09; }
-html[data-desktop] .pet-card-action:hover { background: #ffffff18; }
-html[data-desktop] .pet-card-close { position: absolute; left: 0; top: -9px; width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 2px; border-radius: 50%; background: #29292b; color: #e6e6e8; }
+.pet-task-copy strong { font-size: 16px; font-weight: 600; color: var(--ui-color-heading); }
+.pet-task-copy span { color: var(--ui-color-text-muted); font-size: 13px; }
+html[data-desktop] .pet-card-action { width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; color: var(--ui-color-text-muted); background: var(--ui-color-surface-deep); }
+html[data-desktop] .pet-card-action:hover { background: var(--surface-hover); color: var(--ui-color-action); }
+html[data-desktop] .pet-card-close { position: absolute; left: 0; top: -9px; width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 2px; border-radius: 50%; background: var(--ui-color-surface-deep); color: var(--ui-color-text); }
 .pet-menu {
   position: absolute;
   right: 8px;
   top: var(--pet-menu-top, 24px);
-  background: #2e2824;
-  border: 1px solid #6c594a;
+  background: var(--ui-color-surface);
+  border: 1px solid var(--ui-color-border);
   border-radius: 12px;
   padding: 5px;
   display: flex;

@@ -341,6 +341,11 @@ fn position_pet(
         "desktop-pet-layout",
         serde_json::json!({"x":offset_x,"y":offset_y,"size":p.pet_size}),
     );
+    if app.state::<Desktop>().quick_floating.load(Ordering::SeqCst)
+        && app.get_webview_window("quick").is_some_and(|quick| quick.is_visible().unwrap_or(false))
+    {
+        layout_floating_quick(app, false)?;
+    }
     Ok(())
 }
 pub fn finish_pet_drag(app: &tauri::AppHandle) {
@@ -383,6 +388,9 @@ pub fn set_pet_visible(app: &tauri::AppHandle, shown: bool) {
             serde_json::json!({"shown":true,"epoch":epoch}),
         );
     } else {
+        if state.quick_floating.load(Ordering::SeqCst) {
+            desktop_dismiss_label(app, "quick");
+        }
         let _ = w.emit(
             "desktop-pet-presence",
             serde_json::json!({"shown":false,"epoch":epoch}),
@@ -480,6 +488,23 @@ pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
 #[tauri::command]
 pub fn desktop_dismiss(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     desktop_dismiss_label(&app, window.label());
+}
+#[tauri::command]
+pub fn desktop_floating_blur(app: tauri::AppHandle, session_id: String) -> Result<(), String> {
+    let state = app.state::<Desktop>();
+    if !state.quick_floating.load(Ordering::SeqCst)
+        || state.dialog_active.load(Ordering::SeqCst)
+        || *state.ask_session.lock().unwrap() != session_id
+        || state.capture.lock().unwrap().is_some()
+    {
+        return Ok(());
+    }
+    let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
+    // A delayed blur must not hide a window that has already regained focus.
+    if w.is_visible().map_err(|e| e.to_string())? && !w.is_focused().map_err(|e| e.to_string())? {
+        desktop_dismiss_label(&app, "quick");
+    }
+    Ok(())
 }
 #[tauri::command]
 pub fn desktop_toggle(app: tauri::AppHandle) -> Result<(), String> {
@@ -621,6 +646,9 @@ pub fn desktop_chat(app: tauri::AppHandle, new_chat: Option<bool>, voice: Option
     Ok(())
 }
 fn show_floating_quick(app: &tauri::AppHandle) -> Result<(), String> {
+    layout_floating_quick(app, true)
+}
+fn layout_floating_quick(app: &tauri::AppHandle, reveal: bool) -> Result<(), String> {
     let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
     let pet = app.get_webview_window("pet").ok_or("桌宠窗口不可用")?;
     let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
@@ -638,16 +666,18 @@ fn show_floating_quick(app: &tauri::AppHandle) -> Result<(), String> {
     let above = (y - gap - a.position.y).max(0);
     let below = above < (80.0 * scale) as i32;
     let available = if below { a.position.y + a.size.height as i32 - y - diameter - gap } else { above };
-    let height = ((440.0 * scale).round() as u32).min(available.max((64.0 * scale) as i32) as u32).min(a.size.height);
+    let height = ((440.0 * scale).round() as u32).min(available.max((76.0 * scale) as i32) as u32).min(a.size.height);
     let top = (if below { y + diameter + gap } else { y - gap - height as i32 })
         .clamp(a.position.y, a.position.y + a.size.height as i32 - height as i32);
     app.state::<Desktop>().floating_below.store(below, Ordering::SeqCst);
     let _ = w.emit("desktop-chat-placement", serde_json::json!({"below":below}));
     w.set_position(PhysicalPosition::new(left, top)).map_err(|e| e.to_string())?;
     w.set_size(PhysicalSize::new(width, height)).map_err(|e| e.to_string())?;
-    w.show().map_err(|e| e.to_string())?;
-    w.set_focus().map_err(|e| e.to_string())?;
-    let _ = w.emit("desktop-shown", ());
+    if reveal {
+        w.show().map_err(|e| e.to_string())?;
+        w.set_focus().map_err(|e| e.to_string())?;
+        let _ = w.emit("desktop-shown", ());
+    }
     Ok(())
 }
 fn show_quick_window(app: &tauri::AppHandle) -> Result<(), String> {

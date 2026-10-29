@@ -106,6 +106,7 @@ export function DesktopQuickAsk() {
     resetSession,
     drainCommands,
     resumeTask,
+    blur,
   });
   functions.current = {
     send,
@@ -117,9 +118,10 @@ export function DesktopQuickAsk() {
     resetSession,
     drainCommands,
     resumeTask,
+    blur,
   };
   useDesktopHitRegions(
-    ".quick-answer,.quick-composer-group,.ui-hint,[role=dialog],[role=listbox],[role=menu],[data-slot=dialog-overlay]",
+    ".quick-answer,.quick-composer-group,.quick-floating-close,.ui-hint,[role=dialog],[role=listbox],[role=menu],[data-slot=dialog-overlay]",
   );
   function updateDraft(change: QuickDraft | ((d: QuickDraft) => QuickDraft)) {
     const next =
@@ -152,6 +154,9 @@ export function DesktopQuickAsk() {
   useEffect(() => {
     mounted.current = true;
     const listeners = [
+      getCurrentWindow().onFocusChanged(event => {
+        if (!event.payload) void functions.current.blur();
+      }),
       desktopListen<string>("desktop-error", (v) => {
         if (mounted.current) setError(v);
       }),
@@ -213,7 +218,7 @@ export function DesktopQuickAsk() {
       generation.current++;
       tracking.current++;
       tracker.current?.abort();
-      listeners.forEach((p) => void p.then((f) => f()));
+      listeners.forEach((p) => void p.then((f) => f()).catch(() => {}));
       window.removeEventListener("keydown", key);
     };
   }, []);
@@ -255,6 +260,10 @@ export function DesktopQuickAsk() {
     avatar.clearCelebration();
     setError("");
     await invoke("desktop_dismiss");
+  }
+  async function blur() {
+    if (!visible.current || work.current.locked || work.current.uploading) return;
+    await invoke("desktop_floating_blur", { sessionId: session.current }).catch(() => {});
   }
   async function resumeTask(id: string) {
     setAnswerCollapsed(false);
@@ -673,6 +682,13 @@ export function DesktopQuickAsk() {
         </section>
       )}
       <div className="quick-composer-group">
+        {floating && (
+          <Hint label="收起桌面聊天">
+            <button className="quick-floating-close" aria-label="收起桌面聊天" onClick={() => void dismiss()}>
+              <X size={13} />
+            </button>
+          </Hint>
+        )}
         {draft.attachments.length > 0 && (
           <div className="quick-attachments">
             {draft.attachments.map((a) => (

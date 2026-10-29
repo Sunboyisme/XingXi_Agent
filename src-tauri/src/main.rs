@@ -524,6 +524,7 @@ fn main() {
             desktop::desktop_ask_session,
             desktop::desktop_commands_take,
             desktop::desktop_dismiss,
+            desktop::desktop_floating_blur,
             desktop::desktop_toggle,
             desktop::desktop_main,
             desktop::desktop_resume,

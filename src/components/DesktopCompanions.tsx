@@ -344,7 +344,7 @@ export function DesktopPet() {
           "--pet-left": layout.x == null ? undefined : `${layout.x}px`,
           "--pet-top": layout.y == null ? undefined : `${layout.y}px`,
           "--pet-panel-top": `${avatarTop >= 100 ? Math.max(12, avatarTop - 92) : avatarTop + avatarSize + 70}px`,
-          "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 154 - avatarLeft, avatarSize / 2 - 74))}px`,
+          "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 118 - avatarLeft, avatarSize / 2 - 56))}px`,
           "--pet-menu-top": `${avatarTop >= 110 ? avatarTop - 108 : avatarTop + avatarSize + 8}px`,
         } as CSSProperties
       }
@@ -468,11 +468,11 @@ export function DesktopPet() {
         </span>
         {(hovered || focused) && presence.phase === "idle" && gesture?.kind !== "drag" && !menu && (
           <div ref={hoverTools} className="pet-hover-tools" role="toolbar" aria-label="桌宠快捷操作" onPointerDown={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
-            <Hint label="开始新聊天"><button aria-label="开始新聊天" onClick={() => startChat()}><SquarePen size={20} /></button></Hint>
+            <Hint label="开始新聊天"><button aria-label="开始新聊天" onClick={() => startChat()}><SquarePen size={16} /></button></Hint>
             <span className="pet-toolbar-divider" />
-            <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startChat(true)}><AudioLines size={20} /></button></Hint>
+            <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startChat(true)}><AudioLines size={16} /></button></Hint>
             <span className="pet-toolbar-divider" />
-            <Hint label="提醒和任务"><button aria-label="提醒和任务" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setCollapsed(false); }}><Bell size={20} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
+            <Hint label="提醒和任务"><button aria-label="提醒和任务" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setCollapsed(false); }}><Bell size={16} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
           </div>
         )}
       </div>
