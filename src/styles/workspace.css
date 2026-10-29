@@ -1603,26 +1603,29 @@ textarea:not(#chat-message):not(.learning-message-input):focus-visible,
   line-height: 1.7;
 }
 .data-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px 28px;
-  margin: 22px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 32px;
+  margin: 20px 0;
 }
 .data-counts > div {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ui-color-line);
 }
-.data-counts strong {
-  font-size: 20px;
-  font-weight: 500;
-  color: var(--appearance-muted, #755d43);
+.data-counts dd {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 550;
+  color: var(--ui-color-text);
   font-variant-numeric: tabular-nums;
 }
-.data-counts span {
-  color: var(--appearance-muted, #a18e76);
-  font-size: 11px;
+.data-counts dt {
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
 }
 .data-paths {
   display: grid;
@@ -1688,7 +1691,7 @@ textarea:not(#chat-message):not(.learning-message-input):focus-visible,
     padding: 18px;
   }
   .data-counts {
-    gap: 16px 20px;
+    grid-template-columns: 1fr;
   }
   .data-pending {
     align-items: flex-start;

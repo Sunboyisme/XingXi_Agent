@@ -777,8 +777,6 @@ textarea::placeholder {
 }
 .markdown table {
   border-collapse: collapse;
-  display: block;
-  overflow: auto;
   max-width: 100%;
   margin: var(--ui-space-4) 0;
   font-size: var(--ui-text-sm);

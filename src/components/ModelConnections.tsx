@@ -272,7 +272,7 @@ export function ModelConnections({
             (model.context_tokens ?? 500000) > 2000000,
         )
       )
-        throw new Error("请调整标记的上下文容量，可直接选择8千至200万的快捷容量。");
+        throw new Error("请调整标记的上下文容量，有效范围为 4.096–2,000k token。");
       if (new Set(models.map((x) => x.name)).size !== models.length)
         throw new Error("模型名称不能重复。");
       const profile = {
@@ -751,7 +751,7 @@ export function ModelConnections({
                           <div className="model-option-row model-context-setting">
                             <span className="model-option-copy">
                               <strong>上下文大小</strong>
-                              <small>支持快捷选择与单位换算</small>
+                              <small>同时参考的聊天与资料量</small>
                             </span>
                             <ContextCapacityInput
                                 inputRef={model.name === contextFocusModel ? contextInput : undefined}

@@ -1101,32 +1101,6 @@
   transform: none;
 }
 
-/* Local data counts are grouped by what they belong to. */
-.data-count-groups {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-  margin: 20px 0;
-}
-.data-count-groups > section {
-  padding: 12px 14px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 12px;
-}
-.data-count-groups h3 {
-  margin: 0 0 8px;
-  color: var(--ui-color-text);
-  font-size: 12px;
-  font-weight: 600;
-}
-.data-count-groups .data-counts {
-  gap: 10px 22px;
-  margin: 0;
-}
-.data-count-groups .data-counts strong {
-  font-size: 18px;
-}
-
 /* Reply mode and retrieval options in the composer "+" menu. */
 .composer-add-menu {
   width: 264px;

@@ -1,11 +1,7 @@
-import { useEffect, useId, useState, type Ref } from "react";
+import { useId, useState, type Ref } from "react";
 import { Input } from "./ui/input";
-import { SoftSelect } from "./ui/soft-select";
 
-const capacities = [
-  8000, 32000, 64000, 128000, 256000, 500000, 1000000, 2000000,
-];
-const initialUnit = (value: number) => (value >= 10000 ? 10000 : 1);
+const capacities = [8000, 32000, 64000, 128000, 256000, 1000000, 2000000];
 
 export function ContextCapacityInput({
   value = 500000,
@@ -20,14 +16,12 @@ export function ContextCapacityInput({
   inputRef?: Ref<HTMLInputElement>;
   onChange: (tokens: number) => void;
 }) {
-  const [unit, setUnit] = useState(() => initialUnit(value));
   const helpId = useId();
-  const [amount, setAmount] = useState(() =>
-    String(value / initialUnit(value)),
-  );
-  useEffect(() => {
-    if (Number(amount) * unit !== value) setAmount(String(value / unit));
-  }, [value, unit, amount]);
+  const [entry, setEntry] = useState({
+    tokens: value,
+    amount: String(value / 1000),
+  });
+  const amount = entry.tokens === value ? entry.amount : String(value / 1000);
   const valid = Number.isInteger(value) && value >= 4096 && value <= 2000000;
   return (
     <div className="context-capacity-control">
@@ -43,25 +37,13 @@ export function ContextCapacityInput({
           disabled={disabled}
           onChange={(event) => {
             const next = event.target.value;
-            if (!/^\d*(?:\.\d*)?$/.test(next)) return;
-            setAmount(next);
-            onChange(Number(next || 0) * unit);
+            if (!/^\d*(?:\.\d{0,3})?$/.test(next)) return;
+            const tokens = Math.round((Number(next) || 0) * 1000);
+            setEntry({ tokens, amount: next });
+            onChange(tokens);
           }}
         />
-        <SoftSelect
-          label={`${label}单位`}
-          value={String(unit)}
-          disabled={disabled}
-          options={[
-            { value: "1", label: "token" },
-            { value: "1000", label: "千 token" },
-            { value: "10000", label: "万 token" },
-          ]}
-          onValueChange={(next) => {
-            setUnit(Number(next));
-            setAmount(String(value / Number(next)));
-          }}
-        />
+        <span className="context-capacity-unit">k token</span>
       </div>
       <div className="context-capacity-presets" aria-label="快捷上下文容量">
         {capacities.map((tokens) => (
@@ -71,13 +53,11 @@ export function ContextCapacityInput({
             disabled={disabled}
             aria-pressed={value === tokens}
             onClick={() => {
-              const nextUnit = tokens >= 10000 ? 10000 : 1000;
-              setUnit(nextUnit);
-              setAmount(String(tokens / nextUnit));
+              setEntry({ tokens, amount: String(tokens / 1000) });
               onChange(tokens);
             }}
           >
-            {tokens < 10000 ? `${tokens / 1000}千` : `${tokens / 10000}万`}
+            {tokens >= 1000000 ? `${tokens / 1000000}M` : `${tokens / 1000}k`}
           </button>
         ))}
       </div>
@@ -87,8 +67,8 @@ export function ContextCapacityInput({
         role={valid ? undefined : "alert"}
       >
         {valid
-          ? "同时参考的聊天与资料量，请按服务商上限填写。"
-          : "容量需至少约4千、最多200万 token，可直接选择上方容量。"}
+          ? "1k = 1,000 token · 1M = 1,000k，请按模型上限填写。"
+          : "请输入 4.096–2,000k token，或选择上方容量。"}
       </small>
     </div>
   );

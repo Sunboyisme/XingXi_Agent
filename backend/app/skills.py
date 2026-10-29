@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from sqlalchemy import select
 
 from . import config
@@ -37,6 +37,9 @@ EXTENSIONS = {
     ".ps1": "powershell",
     ".sh": "bash",
 }
+BUILTIN_SKILLS = ("meeting-actions", "document-brief")
+LEGACY_NOTE_FILES = {"SKILL.md", "references/format.md", "scripts/make_note.py"}
+LEGACY_NOTE_DIGEST = "feb40743c155b45894b18fb59bd6c4b49cc7041c87e7654e14aa3d0ff54553e8"
 
 
 class SkillRead(BaseModel):
@@ -48,6 +51,14 @@ class SkillRead(BaseModel):
     enabled: bool
     scripts_allowed: bool
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def builtin(self) -> bool:
+        if self.name not in BUILTIN_SKILLS:
+            return False
+        marker = root() / f".{self.name}-installed"
+        return marker.is_file() and marker.read_text("utf-8") == self.id
 
 
 class SkillUpdate(BaseModel):
@@ -66,26 +77,59 @@ def root():
     return value
 
 
+def package_digest(files):
+    digest = hashlib.sha256()
+    for name in sorted(files):
+        digest.update(name.encode() + b"\x00" + hashlib.sha256(files[name]).digest())
+    return digest.hexdigest()
+
+
+def is_legacy_note(row, folder):
+    # Old bundles could include bytecode caches; only compare original source files.
+    files = {name for name in row.files if not (
+        PurePosixPath(name).parent.as_posix() == "scripts/__pycache__" and name.endswith(".pyc"))}
+    if files != LEGACY_NOTE_FILES or not all((folder / name).is_file() for name in files):
+        return False
+    content = {name: (folder / name).read_bytes().replace(b"\r\n", b"\n") for name in files}
+    return package_digest(content) == LEGACY_NOTE_DIGEST
+
+
 def ensure_builtin():
-    """Install the bundled example once; never replace or authorize a user's skill."""
-    marker = root() / ".text-notes-installed"
-    if marker.exists():
-        return
+    """Retire the original note example and install each default once."""
     with Session() as db:
-        existing = db.scalar(select(Skill).where(Skill.name == "text-notes"))
-    if existing is None:
-        folder = Path(__file__).parent / "builtin_skills" / "text-notes"
-        files = [
-            (p.relative_to(folder).as_posix(), p.read_bytes())
-            for p in sorted(folder.rglob("*"))
-            if p.is_file()
-        ]
-        candidate = preview(files)
-        row = import_skill(ImportConfirm(preview_id=candidate["preview_id"]))
+        legacy = db.scalar(select(Skill).where(
+            Skill.profile_id == config.PROFILE_ID, Skill.name == "text-notes"))
+        if legacy:
+            folder = (root() / legacy.id).resolve()
+            if folder.parent != root().resolve():
+                raise ValueError("旧默认技能目录不在技能根目录内")
+            if is_legacy_note(legacy, folder):
+                db.delete(legacy)
+                db.commit()
+                shutil.rmtree(folder, ignore_errors=True)
+    (root() / ".text-notes-installed").unlink(missing_ok=True)
+    for name in BUILTIN_SKILLS:
+        marker = root() / f".{name}-installed"
+        if marker.exists():
+            continue
         with Session() as db:
-            db.get(Skill, row.id).enabled = True
-            db.commit()
-    marker.write_text("1", encoding="utf-8")
+            existing = db.scalar(select(Skill).where(
+                Skill.profile_id == config.PROFILE_ID, Skill.name == name))
+        installed_id = ""
+        if existing is None:
+            folder = Path(__file__).parent / "builtin_skills" / name
+            files = [
+                (p.relative_to(folder).as_posix(), p.read_bytes())
+                for p in sorted(folder.rglob("*"))
+                if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"
+            ]
+            candidate = preview(files)
+            row = import_skill(ImportConfirm(preview_id=candidate["preview_id"]))
+            with Session() as db:
+                db.get(Skill, row.id).enabled = True
+                db.commit()
+            installed_id = row.id
+        marker.write_text(installed_id, encoding="utf-8")
 
 
 def safe_path(name):
@@ -181,9 +225,6 @@ def preview(files):
             422,
             "SKILL.md 需要 YAML name（英文小写及短横线）和 description，正文不超过 40000 字符",
         )
-    digest = hashlib.sha256()
-    for key in sorted(unpacked):
-        digest.update(key.encode() + b"\x00" + hashlib.sha256(unpacked[key]).digest())
     key = uid()
     folder = config.DATA_DIR / "skill-imports" / key
     folder.mkdir(parents=True)
@@ -197,7 +238,7 @@ def preview(files):
         "description": description.strip(),
         "body": body.strip(),
         "files": sorted(unpacked),
-        "digest": digest.hexdigest(),
+        "digest": package_digest(unpacked),
     }
     (folder / ".preview.json").write_text(json.dumps(details), "utf-8")
     with Session() as db:

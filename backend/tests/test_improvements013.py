@@ -48,10 +48,12 @@ def test_builtin_skill_installs_once_without_overwriting_or_authorizing(
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     skills.ensure_builtin()
     with db.Session() as session:
-        row = session.query(db.Skill).filter_by(name="text-notes").one()
+        row = session.query(db.Skill).filter_by(name="meeting-actions").one()
         key = row.id
         assert row.enabled and not row.scripts_allowed
-        assert "scripts/make_note.py" in row.files
+        assert row.files == ["SKILL.md"]
+        assert skills.SkillRead.model_validate(row).builtin
+        assert session.query(db.Skill).filter_by(name="document-brief").one().enabled
         row.enabled = False
         session.commit()
     skills.ensure_builtin()
@@ -62,7 +64,7 @@ def test_builtin_skill_installs_once_without_overwriting_or_authorizing(
         session.commit()
     skills.ensure_builtin()
     with db.Session() as session:
-        assert session.query(db.Skill).filter_by(name="text-notes").count() == 0
+        assert session.query(db.Skill).filter_by(name="meeting-actions").count() == 0
 
 
 def test_timed_plan_reminder_can_precede_start_and_survives_updates(client):

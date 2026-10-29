@@ -4231,6 +4231,8 @@ export interface components {
             enabled: boolean;
             /** Scripts Allowed */
             scripts_allowed: boolean;
+            /** Builtin */
+            readonly builtin: boolean;
         };
         /** SkillUpdate */
         SkillUpdate: {

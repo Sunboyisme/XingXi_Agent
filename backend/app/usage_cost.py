@@ -444,13 +444,6 @@ def available_models():
             if item.get("model"):
                 result.append({"provider_id": connection_key("embedding" if kind == "embedding" else "image_generation", item.get("url", "")),
                     "provider_label": label, "model_name": item["model"], "kind": kind})
-        seen = {(x["provider_id"], x["model_name"], x["kind"]) for x in result}
-        for row in db.scalars(select(UsageCall).where(UsageCall.profile_id == config.PROFILE_ID)):
-            key = (row.provider_id, row.model_name, row.kind)
-            if key not in seen:
-                result.append({"provider_id": row.provider_id, "provider_label": row.provider_label,
-                    "model_name": row.model_name, "kind": row.kind})
-                seen.add(key)
         return result
 
 

@@ -87,7 +87,12 @@ export function TableBlock({
           label="复制表格，可粘贴到Excel"
         />
       </div>
-      <div className="markdown-table-scroll">
+      <div
+        className="markdown-table-scroll"
+        role="region"
+        aria-label="表格内容"
+        tabIndex={0}
+      >
         <table {...props}>{children}</table>
       </div>
     </section>

@@ -17,91 +17,82 @@ import { errorMessage } from "@/lib/utils";
 type Data = components["schemas"]["DataRead"];
 type Preview = components["schemas"]["DataImportRead"];
 type Exported = components["schemas"]["DataExportRead"];
-// Record counts grouped by what they belong to; keys follow the backend tables.
-const countGroups: { title: string; items: [string, string][] }[] = [
+// Category totals count stored records, including each category's related records.
+const countGroups = [
   {
     title: "对话",
-    items: [
-      ["conversations", "对话"],
-      ["messages", "消息"],
-      ["attachments", "图片与附件"],
-      ["office_files", "办公文件"],
-      ["artifacts", "工具产物"],
-      ["complex_tasks", "复杂任务"],
+    keys: [
+      "conversations",
+      "messages",
+      "attachments",
+      "office_files",
+      "artifacts",
+      "complex_tasks",
     ],
   },
   {
     title: "项目",
-    items: [
-      ["projects", "项目"],
-      ["project_materials", "项目资料"],
-    ],
+    keys: ["projects", "project_materials"],
   },
   {
     title: "学习",
-    items: [
-      ["goals", "学习目标"],
-      ["learning_intakes", "目标访谈"],
-      ["learning_sessions", "学习会话"],
-      ["learning_reviews", "复习记录"],
+    keys: [
+      "goals",
+      "learning_intakes",
+      "learning_sessions",
+      "learning_reviews",
     ],
   },
   {
     title: "计划与提醒",
-    items: [
-      ["calendar_events", "计划"],
-      ["todos", "待办"],
-      ["reminders", "提醒"],
-      ["plan_occurrences", "单次完成记录"],
-      ["plan_segments", "重复规则调整"],
-      ["plan_day_orders", "日程排序"],
+    keys: [
+      "calendar_events",
+      "todos",
+      "reminders",
+      "plan_occurrences",
+      "plan_segments",
+      "plan_day_orders",
     ],
   },
   {
     title: "记忆与知识库",
-    items: [
-      ["memories", "记忆"],
-      ["memory_vectors", "记忆向量"],
-      ["knowledge_documents", "知识库文件"],
-      ["knowledge_chunks", "知识片段"],
-      ["knowledge_vectors", "知识向量"],
+    keys: [
+      "memories",
+      "memory_vectors",
+      "knowledge_documents",
+      "knowledge_chunks",
+      "knowledge_vectors",
     ],
   },
   {
     title: "模型用量",
-    items: [
-      ["usage_calls", "模型调用"],
-      ["usage_prices", "模型单价"],
-    ],
+    keys: ["usage_calls", "usage_prices"],
   },
 ];
+const knownCountKeys = new Set(countGroups.flatMap((group) => group.keys));
 
 function DataCounts({ counts }: { counts: Record<string, number> }) {
-  const known = new Set(countGroups.flatMap((group) => group.items.map(([key]) => key)));
-  const others = Object.keys(counts).filter((key) => !known.has(key));
+  const others = Object.keys(counts).filter((key) => !knownCountKeys.has(key));
   const groups = others.length
-    ? [...countGroups, { title: "其他", items: others.map((key): [string, string] => [key, key]) }]
+    ? [...countGroups, { title: "其他", keys: others }]
     : countGroups;
   return (
-    <div className="data-count-groups">
+    <dl className="data-counts" aria-label="分类记录总数">
       {groups.map((group) => {
-        const items = group.items.filter(([key]) => key in counts);
-        if (!items.length) return null;
+        const keys = group.keys.filter((key) => key in counts);
+        if (!keys.length) return null;
         return (
-          <section key={group.title} aria-label={group.title}>
-            <h3>{group.title}</h3>
-            <div className="data-counts">
-              {items.map(([key, label]) => (
-                <div key={key}>
-                  <span>{label}</span>
-                  <strong>{counts[key].toLocaleString("zh-CN")}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
+          <div key={group.title}>
+            <dt>{group.title}</dt>
+            <dd>
+              {keys
+                .reduce((total, key) => total + counts[key], 0)
+                .toLocaleString("zh-CN")}
+            </dd>
+          </div>
         );
       })}
-    </div>
+    </dl>
   );
 }
 
@@ -176,7 +167,7 @@ export function DataSettings() {
           </span>
           <div>
             <h2>本机数据</h2>
-            <p>使用 SQLite 数据库存储</p>
+            <p>使用 SQLite 存储 · 各类记录合计（含关联记录）</p>
           </div>
         </div>
         {!data ? (

@@ -460,7 +460,7 @@
 }
 .skill-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, min(100%, 340px));
   gap: 14px;
 }
 .skill-card {

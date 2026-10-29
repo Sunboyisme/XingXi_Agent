@@ -294,12 +294,14 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
               </label>
             </div>
             <Hint label={skill.description}>
-              <p className="skill-card-description">{skill.description}</p>
+              <p className="skill-card-description" tabIndex={0}>
+                {skill.description}
+              </p>
             </Hint>
             <div className="skill-card-footer">
               <span>
-                {skill.name === "text-notes" && (
-                  <span className="skill-builtin-label">示例技能 · </span>
+                {skill.builtin && (
+                  <span className="skill-builtin-label">默认技能 · </span>
                 )}
                 {skill.files.length} 个文件 ·{" "}
                 {!skill.files.some((file) => file.startsWith("scripts/"))
