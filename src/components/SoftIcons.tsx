@@ -86,6 +86,18 @@ export const SettingsIcon = softIcon(
   <path d="M4.5 8H13M17.5 8h2M4.5 16h2M11 16h8.5" />,
 );
 
+export const ConnectionIcon = softIcon(
+  "ConnectionIcon",
+  <rect x="4.25" y="5.5" width="15.5" height="13" rx="3" />,
+  <path d="M8 9.5h8M8 14.5h4.5" />,
+);
+
+export const MemoryIcon = softIcon(
+  "MemoryIcon",
+  <path d="M7.75 4.5h8.5A1.75 1.75 0 0 1 18 6.25v13a.5.5 0 0 1-.77.42L12 16.3l-5.23 3.37a.5.5 0 0 1-.77-.42v-13A1.75 1.75 0 0 1 7.75 4.5Z" />,
+  <path d="M9.25 8.5h5.5" />,
+);
+
 export const HelpIcon = softIcon(
   "HelpIcon",
   <circle cx="12" cy="12" r="8" />,

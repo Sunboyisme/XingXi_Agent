@@ -1,0 +1,147 @@
+.script-runtime-page {
+  display: grid;
+  gap: 16px;
+}
+.runtime-toolbar,
+.runtime-footer,
+.runtime-save-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.runtime-toolbar p,
+.runtime-footer p,
+.runtime-loading {
+  margin: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.runtime-toolbar > button,
+.runtime-save-actions > button {
+  flex-shrink: 0;
+}
+.runtime-list {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-text) 2%,
+    var(--ui-color-surface)
+  );
+}
+.runtime-list-heading,
+.runtime-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) 84px;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+}
+.runtime-list-heading {
+  padding-block: 11px;
+  background: color-mix(in srgb, var(--ui-color-text) 3%, transparent);
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.runtime-list-heading > :last-child {
+  text-align: right;
+}
+.runtime-row {
+  border-top: 1px solid var(--ui-color-line);
+}
+.runtime-name h2 {
+  margin: 0;
+  color: var(--ui-color-heading);
+  font-size: 14px;
+  font-weight: 600;
+}
+.runtime-name small {
+  display: block;
+  margin-top: 5px;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.runtime-path {
+  min-width: 0;
+}
+.runtime-path [data-slot="input"] {
+  height: 36px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+.runtime-resolved,
+.runtime-unresolved {
+  display: block;
+  margin: 6px 0 0;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.runtime-resolved {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runtime-resolved:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
+.runtime-status {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 5px;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.runtime-status.available {
+  color: var(--status-success);
+}
+.runtime-save-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.runtime-save-actions > span {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+@container settings-content (max-width: 700px) {
+  .runtime-list-heading {
+    display: none;
+  }
+  .runtime-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+  .runtime-row:first-of-type {
+    border-top: 0;
+  }
+  .runtime-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .runtime-status {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .runtime-path {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .runtime-toolbar,
+  .runtime-footer {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .runtime-save-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

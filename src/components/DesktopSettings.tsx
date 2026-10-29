@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { Keyboard, Mic, RotateCcw, Loader2, Undo2 } from "lucide-react";
+import { Mic, RotateCcw, Loader2, Undo2 } from "lucide-react";
 import {
   api,
   invoke,
@@ -23,6 +23,7 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { ConnectionCard } from "./ConnectionCard";
+import "../styles/desktop-settings.css";
 type DesktopStatus = {
   preferences: DesktopPreferences;
   ownsShortcuts: boolean;
@@ -180,30 +181,19 @@ export function DesktopSettings() {
     }
   }
   if (!isTauri()) return <p>桌面截图问答、桌宠和划词助手仅在桌面版中可用。</p>;
-  return (
-    <section className="desktop-preferences" aria-label="桌面助手设置">
-      {(
-        [
-          ["enabled", "桌面截图问答", "短按右 Alt 唤出，按住右 Alt 语音输入。"],
-          ["pet", "桌面 XiaoXi", "拖动调整位置，点击唤出问答。"],
-          [
-            "selection",
-            "手动划词助手",
-            "选中文字后，使用下方快捷键打开工具条。",
-          ],
-        ] as const
-      ).map(([key, label, detail]) => (
-        <div className="general-setting-row" key={key}>
-          <div>
-            <strong>{label}</strong>
-            <p>{detail}</p>
-            {key === "enabled" && (
-              <div className="desktop-shortcut-legend">
-                <Keycaps value="右Alt" />
-                <span>截图问答 / 按住说话</span>
-              </div>
-            )}
-          </div>
+  function featureRow(
+    key: "enabled" | "pet" | "selection",
+    label: string,
+    detail: string,
+  ) {
+    return (
+      <div className="desktop-feature-row">
+        <div className="desktop-feature-copy">
+          <strong>{label}</strong>
+          <p>{detail}</p>
+        </div>
+        <div className="desktop-feature-action">
+          {key === "enabled" && <Keycaps value="右 Alt" />}
           <label className="module-toggle">
             <input
               type="checkbox"
@@ -211,107 +201,136 @@ export function DesktopSettings() {
               aria-label={label}
               disabled={!status || busy || recording}
               checked={status?.preferences[key] || false}
-              onChange={(e) => void save({ [key]: e.target.checked })}
+              onChange={(event) => void save({ [key]: event.target.checked })}
             />
             <span>{status?.preferences[key] ? "已开启" : "已关闭"}</span>
           </label>
         </div>
-      ))}
-      <div className="desktop-shortcut-setting">
-        <div className="desktop-shortcut-heading">
-          <Keyboard size={18} />
-          <div>
-            <strong>划词快捷键</strong>
-            <p>点击录制后按下组合键，Esc 取消录制。</p>
+      </div>
+    );
+  }
+  return (
+    <section className="desktop-preferences" aria-label="桌面助手设置">
+      <section className="settings-group">
+        <h2>桌面功能</h2>
+        <div className="desktop-preference-card">
+          {featureRow(
+            "enabled",
+            "桌面截图问答",
+            "短按右 Alt 唤出问答，按住右 Alt 语音输入。",
+          )}
+          {featureRow(
+            "pet",
+            "桌面 XiaoXi",
+            "在桌面显示 XiaoXi，拖动调整位置，点击唤出问答。",
+          )}
+        </div>
+      </section>
+      <section className="settings-group">
+        <h2>划词助手</h2>
+        <div className="desktop-preference-card">
+          {featureRow(
+            "selection",
+            "手动划词助手",
+            "选中文字后，按快捷键打开解释、翻译和总结工具。",
+          )}
+          <div className="desktop-shortcut-setting">
+            <div className="desktop-shortcut-heading">
+              <strong>唤起快捷键</strong>
+              <p>点击键帽录制组合键，Esc 取消。</p>
+            </div>
+            <div className="desktop-shortcut-editor">
+              <button
+                ref={button}
+                type="button"
+                className={`desktop-shortcut-recorder ${recording ? "is-recording" : ""}`}
+                aria-label={recording ? "正在录制划词快捷键" : "录制划词快捷键"}
+                aria-pressed={recording}
+                aria-describedby="desktop-shortcut-feedback"
+                disabled={!status || busy}
+                onClick={() => {
+                  if (recordingRef.current) void stopRecording();
+                  else void beginRecording();
+                }}
+                onKeyDown={captureKey}
+                onBlur={() => {
+                  if (recordingRef.current) void stopRecording();
+                }}
+              >
+                {recording ? (
+                  <span className="desktop-recording-label">
+                    <i />
+                    请按下组合键
+                  </span>
+                ) : (
+                  <Keycaps value={shortcut || "Ctrl+Shift+E"} />
+                )}
+              </button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={
+                  busy || recording || !status || shortcut === "Ctrl+Shift+E"
+                }
+                onClick={() => {
+                  setShortcut("Ctrl+Shift+E");
+                  setKeyError("");
+                  setNotice("");
+                }}
+              >
+                <RotateCcw size={14} />
+                恢复默认
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={
+                  busy ||
+                  recording ||
+                  !status ||
+                  !shortcut ||
+                  shortcut === status.preferences.shortcut
+                }
+                onClick={() => void save({ shortcut })}
+              >
+                {busy && <Loader2 className="spin" size={14} />}保存
+              </Button>
+            </div>
+            <div
+              id="desktop-shortcut-feedback"
+              className="desktop-shortcut-feedback"
+              aria-live="polite"
+            >
+              {keyError ? (
+                <p className="field-error" role="alert">
+                  {keyError}
+                </p>
+              ) : status?.shortcutError ? (
+                <p className="field-error" role="alert">
+                  {status.shortcutError}
+                </p>
+              ) : notice ? (
+                <p>{notice}</p>
+              ) : status && shortcut !== status.preferences.shortcut ? (
+                <p>
+                  当前使用：{status.preferences.shortcut}
+                  ，保存后应用新的快捷键。
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
-        <div className="desktop-shortcut-editor">
-          <button
-            ref={button}
-            type="button"
-            className={`desktop-shortcut-recorder ${recording ? "is-recording" : ""}`}
-            aria-label={recording ? "正在录制划词快捷键" : "录制划词快捷键"}
-            aria-pressed={recording}
-            aria-describedby="desktop-shortcut-feedback"
-            disabled={!status || busy}
-            onClick={() => {
-              if (recordingRef.current) void stopRecording();
-              else void beginRecording();
-            }}
-            onKeyDown={captureKey}
-            onBlur={() => {
-              if (recordingRef.current) void stopRecording();
-            }}
-          >
-            {recording ? (
-              <span className="desktop-recording-label">
-                <i />
-                请按下组合键
-              </span>
-            ) : (
-              <Keycaps value={shortcut || "Ctrl+Shift+E"} />
-            )}
-          </button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={
-              busy || recording || !status || shortcut === "Ctrl+Shift+E"
-            }
-            onClick={() => {
-              setShortcut("Ctrl+Shift+E");
-              setKeyError("");
-              setNotice("");
-            }}
-          >
-            <RotateCcw size={14} />
-            恢复默认
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={
-              busy ||
-              recording ||
-              !status ||
-              !shortcut ||
-              shortcut === status.preferences.shortcut
-            }
-            onClick={() => void save({ shortcut })}
-          >
-            {busy && <Loader2 className="spin" size={14} />}保存
-          </Button>
-        </div>
-        <div
-          id="desktop-shortcut-feedback"
-          className="desktop-shortcut-feedback"
-          aria-live="polite"
-        >
-          {keyError ? (
-            <p className="field-error" role="alert">
-              {keyError}
-            </p>
-          ) : status?.shortcutError ? (
-            <p className="field-error" role="alert">
-              {status.shortcutError}
-            </p>
-          ) : notice ? (
-            <p>{notice}</p>
-          ) : (
-            <p>当前快捷键：{status?.preferences.shortcut || "Ctrl+Shift+E"}</p>
-          )}
-        </div>
-        {status &&
-          (status.preferences.enabled ||
-            status.preferences.pet ||
-            status.preferences.selection) &&
-          !status.ownsShortcuts && (
-            <p className="desktop-owner-notice">
-              另一个 XiaoXi 实例正在使用桌面助手；退出该实例后会自动接管。
-            </p>
-          )}
-      </div>
+      </section>
+      {status &&
+        (status.preferences.enabled ||
+          status.preferences.pet ||
+          status.preferences.selection) &&
+        !status.ownsShortcuts && (
+          <p className="desktop-owner-notice">
+            另一个 XiaoXi 实例正在使用桌面助手；退出该实例后会自动接管。
+          </p>
+        )}
       {error && <ErrorNotice message={error} />}
     </section>
   );

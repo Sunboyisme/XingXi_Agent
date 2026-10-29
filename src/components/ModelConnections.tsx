@@ -1,8 +1,6 @@
 import { Hint } from "./common";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  BrainCircuit,
-  Cable,
   Download,
   Check,
   KeyRound,
@@ -33,6 +31,7 @@ import {
 import { ConfirmDelete, ErrorNotice, Toast } from "./common";
 import { errorMessage } from "@/lib/utils";
 import { effortOptions } from "@/lib/reasoningEffort";
+import { ChatIcon, ConnectionIcon } from "./SoftIcons";
 
 type Connection = Settings["providers"][number];
 type Draft = Connection & { api_key?: string | null };
@@ -386,7 +385,7 @@ export function ModelConnections({
       {options.length > 0 && (
         <div className="model-default-panel">
           <span className="model-default-icon" aria-hidden="true">
-            <BrainCircuit size={22} />
+            <ChatIcon size={18} />
           </span>
           <div className="model-default-copy">
             <span>当前默认</span>
@@ -425,7 +424,7 @@ export function ModelConnections({
             >
               <div className="model-provider-heading">
                 <span className="connection-symbol">
-                  <Cable size={19} />
+                  <ConnectionIcon size={17} />
                 </span>
                 <div className="connection-card-copy">
                   <div className="connection-card-title">
@@ -527,7 +526,7 @@ export function ModelConnections({
       {connections.length === 0 && (
         <button className="connection-empty" onClick={add}>
           <span className="connection-symbol">
-            <Cable size={24} />
+            <ConnectionIcon size={20} />
           </span>
           <strong>添加第一个模型连接</strong>
           <span>阿里云百炼、DeepSeek、Kimi、智谱、硅基流动或自定义接口</span>
@@ -554,7 +553,7 @@ export function ModelConnections({
         >
           <DialogHeader className="model-dialog-heading">
             <span className="model-dialog-icon" aria-hidden="true">
-              {isNew ? <Server size={21} /> : <BrainCircuit size={21} />}
+              {isNew ? <Server size={19} /> : <ConnectionIcon size={19} />}
             </span>
             <span>
               <DialogTitle>

@@ -1031,8 +1031,9 @@ export function LearningPage({
       ) : !goal ? (
         <>
           <div className="page-heading">
-            <div>
-              <div className="learning-home-heading"><BaiAvatar motion="idle" /><div><h1>一起确定你的学习方向</h1><p>XiaoXi 会帮你规划好适合你的学习路线。</p></div></div>
+            <div className="learning-home-heading">
+              <h1>一起确定你的学习方向</h1>
+              <p>XiaoXi 会帮你规划好适合你的学习路线。</p>
             </div>
             <Button onClick={() => openIntake()}>
               <Plus size={16} />

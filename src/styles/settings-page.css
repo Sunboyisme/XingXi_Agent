@@ -137,6 +137,9 @@
 }
 
 .settings-navigation [role="tab"] > svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.7;
   flex-shrink: 0;
   color: var(--ui-color-text-muted);
 }
@@ -215,8 +218,7 @@
   font-weight: 600;
 }
 
-.settings-panel .general-settings,
-.settings-row-card {
+.settings-panel .general-settings {
   padding: 0 20px;
   border: 1px solid var(--ui-color-line);
   border-radius: 16px;
@@ -236,16 +238,11 @@
   font-weight: 600;
 }
 
-.settings-panel .general-setting-row p,
-.settings-row-card p {
+.settings-panel .general-setting-row p {
   margin: 5px 0 0;
   color: var(--ui-color-text-muted);
   font-size: 12px;
   line-height: 1.7;
-}
-
-.settings-row-card .desktop-preferences > .general-setting-row:first-child {
-  border-top: 0;
 }
 
 .settings-panel .model-hub.settings-section {
@@ -268,14 +265,45 @@
 }
 
 .settings-panel .connections-services {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .settings-panel .service-card {
+  padding: 18px;
   background: color-mix(
     in srgb,
     var(--ui-color-text) 3%,
     var(--ui-color-surface)
   );
+}
+.settings-panel .service-card-top {
+  margin-bottom: 14px;
+}
+.settings-panel .service-card-bottom {
+  padding-top: 18px;
+}
+.settings-panel .service-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+.settings-panel .service-card-icon > svg {
+  width: 18px;
+  height: 18px;
+}
+.settings-panel .model-default-icon,
+.settings-panel .model-provider-heading .connection-symbol {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ui-color-action) 7%, transparent);
+}
+.settings-panel .model-provider-models,
+.settings-panel .model-provider-footer {
+  margin-left: 44px;
+}
+.settings-navigation [aria-selected="true"] .soft-icon-fill {
+  opacity: 0.1;
 }
 
 /* Every category fills the same content area; grids react to this area,
@@ -390,36 +418,13 @@
   grid-column: 1 / -1;
 }
 
-.settings-panel .data-card,
-.settings-panel .runtime-card {
+.settings-panel .data-card {
   padding: 20px;
   border-radius: 16px;
 }
 
 .settings-panel .data-card .data-counts {
   grid-template-columns: minmax(0, 1fr);
-}
-
-.settings-panel .desktop-preferences {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
-  column-gap: 24px;
-}
-
-.settings-panel .desktop-preferences > .general-setting-row {
-  grid-column: 1;
-}
-
-.settings-panel .desktop-preferences > .desktop-shortcut-setting {
-  grid-column: 2;
-  grid-row: 1 / span 3;
-  border-top: 0;
-  border-left: 1px solid var(--ui-color-line);
-  padding: 20px 0 20px 24px;
-}
-
-.settings-panel .desktop-preferences > .error-notice {
-  grid-column: 1 / -1;
 }
 
 .settings-panel .wechat-section {
@@ -454,37 +459,26 @@
   padding: 18px;
 }
 
-@container settings-content (min-width: 1120px) {
-  .settings-panel .connections-services {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 @container settings-content (max-width: 780px) {
   .settings-panel .theme-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .settings-panel .data-settings,
-  .settings-panel .desktop-preferences {
+  .settings-panel .data-settings {
     grid-template-columns: minmax(0, 1fr);
   }
+}
 
-  .settings-panel .desktop-preferences > .desktop-shortcut-setting {
-    grid-column: 1;
-    grid-row: auto;
-    border-left: 0;
-    border-top: 1px solid var(--ui-color-line);
-    padding: 20px 0;
+@container settings-content (max-width: 720px) {
+  .settings-panel .connections-services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @container settings-content (max-width: 600px) {
-  .settings-panel .connections-services,
   .settings-panel .memory-grid,
   .settings-panel .builtin-tool-grid,
   .settings-panel .mcp-service-grid,
-  .settings-panel .runtime-page-grid,
   .settings-panel .usage-stats,
   .settings-panel .usage-price-grid,
   .settings-panel .data-counts {
@@ -544,6 +538,7 @@
 
 @container settings-content (max-width: 480px) {
   .settings-panel .theme-options,
+  .settings-panel .connections-services,
   .settings-panel .skill-cards {
     grid-template-columns: minmax(0, 1fr);
   }

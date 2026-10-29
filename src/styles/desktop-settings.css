@@ -1,0 +1,159 @@
+/* Desktop preferences use two compact groups with aligned controls. */
+.desktop-preferences {
+  display: grid;
+  gap: 24px;
+  margin: 0;
+}
+.desktop-preference-card {
+  min-width: 0;
+  padding: 0 18px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-text) 3%,
+    var(--ui-color-surface)
+  );
+}
+.desktop-feature-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 18px 0;
+}
+.desktop-feature-row + .desktop-feature-row {
+  border-top: 1px solid var(--ui-color-line);
+}
+.desktop-feature-copy {
+  min-width: 0;
+}
+.desktop-feature-copy strong,
+.desktop-preferences .desktop-shortcut-heading strong {
+  color: var(--ui-color-heading);
+  font-size: 14px;
+  font-weight: 600;
+}
+.desktop-feature-copy p,
+.desktop-preferences .desktop-shortcut-heading p {
+  margin: 5px 0 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.desktop-feature-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+.desktop-preferences .desktop-shortcut-setting {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 18px 0;
+  border-top: 1px solid var(--ui-color-line);
+}
+.desktop-preferences .desktop-shortcut-heading {
+  display: block;
+  min-width: 0;
+}
+.desktop-preferences .desktop-shortcut-editor {
+  display: flex;
+  flex-wrap: nowrap;
+  margin: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.desktop-preferences .desktop-shortcut-editor > [data-slot="button"] {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.desktop-preferences .desktop-shortcut-recorder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  height: 38px;
+  min-height: 38px;
+  min-width: 164px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 10px;
+  background: var(--ui-color-surface);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.desktop-preferences .desktop-shortcut-recorder:hover {
+  background: var(--ui-color-surface-deep, var(--ui-color-surface));
+}
+.desktop-preferences .desktop-shortcut-recorder:focus-visible,
+.desktop-preferences .desktop-shortcut-recorder.is-recording {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 2px;
+}
+.desktop-preferences .desktop-shortcut-recorder:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.desktop-recording-label {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: var(--ui-color-action);
+  font-size: 13px;
+}
+.desktop-recording-label i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.desktop-preferences .desktop-shortcut-feedback {
+  min-height: 0;
+  margin: 0;
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--ui-color-text-muted);
+  text-align: right;
+}
+.desktop-preferences .desktop-shortcut-feedback p {
+  margin: 0;
+  font-size: 12px;
+}
+.desktop-preferences .field-error {
+  color: var(--ui-color-danger);
+  font-size: 12px;
+}
+.desktop-preferences .desktop-owner-notice {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  line-height: 1.7;
+  margin: -8px 0 0;
+}
+@container settings-content (max-width: 700px) {
+  .desktop-preferences .desktop-shortcut-setting {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .desktop-preferences .desktop-shortcut-editor {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .desktop-preferences .desktop-shortcut-feedback {
+    text-align: left;
+  }
+}
+@container settings-content (max-width: 480px) {
+  .desktop-feature-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}

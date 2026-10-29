@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   AudioLines,
-  Brain,
-  Cable,
   Code2,
   Database,
   MessageCircle,
@@ -16,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { GeneralSettings } from "./GeneralSettings";
+import { ConnectionIcon, MemoryIcon } from "./SoftIcons";
 import { DesktopSettings, SpeechConnection } from "./DesktopSettings";
 import { ModelConnections, type ModelContextTarget } from "./ModelConnections";
 import { type Settings, type Memory } from "@/lib/api";
@@ -65,7 +64,7 @@ const settingGroups = [
       {
         id: "connections",
         label: "模型连接",
-        icon: Cable,
+        icon: ConnectionIcon,
         keywords: "LLM 服务商 API 密钥 对话 推理 上下文 思考 默认模型",
       },
       {
@@ -111,7 +110,7 @@ const settingGroups = [
       {
         id: "memories",
         label: "记忆",
-        icon: Brain,
+        icon: MemoryIcon,
         keywords: "保存方式 自动 确认 检索 索引",
       },
       {
@@ -233,14 +232,7 @@ export function SettingsPage({
       case "appearance":
         return <AppearanceSettings />;
       case "desktop":
-        return (
-          <section className="settings-group">
-            <h2>桌面功能与快捷键</h2>
-            <div className="settings-row-card">
-              <DesktopSettings />
-            </div>
-          </section>
-        );
+        return <DesktopSettings />;
       case "connections":
         return (
           <ModelConnections
@@ -359,7 +351,7 @@ export function SettingsPage({
                   onKeyDown={(event) => navigateTabs(event, id)}
                   onClick={() => onTab(id)}
                 >
-                  <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
+                  <Icon size={17} aria-hidden="true" />
                   <span>{label}</span>
                   {id === "memories" &&
                     memories.some((memory) => memory.state === "candidate") && (

@@ -89,14 +89,7 @@
   overflow-wrap: anywhere;
 }
 .learning-home-heading {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-.learning-home-heading > .bai-avatar {
-  width: 66px;
-  height: 66px;
-  flex: 0 0 66px;
+  min-width: 0;
 }
 .learning-home-heading h1 {
   font-size: clamp(22px, 2.5vw, 32px);
@@ -877,14 +870,6 @@
   background: var(--ui-color-on-action);
 }
 @media (max-width: 1000px) {
-  .learning-home-heading {
-    gap: 12px;
-  }
-  .learning-home-heading > .bai-avatar {
-    width: 50px;
-    height: 50px;
-    flex-basis: 50px;
-  }
   .learning-page .page-heading {
     align-items: flex-start;
     flex-wrap: wrap;
