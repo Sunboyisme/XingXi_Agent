@@ -14,22 +14,38 @@
   box-shadow: 0 2px 5px rgb(0 0 0 / 4%);
 }
 .context-capacity-control {
-  width: min(100%, 340px);
-  min-width: 0;
-  display: grid;
-  justify-self: end;
-  gap: 10px;
+  display: contents;
 }
 .context-capacity-entry {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  min-width: 0;
+  gap: 4px;
+  padding-right: 12px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 10px;
+  background: var(--ui-color-surface);
+}
+.context-capacity-entry:focus-within {
+  border-color: var(--ui-color-action);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-color-action) 14%, transparent);
+}
+.context-capacity-entry:has(input[aria-invalid="true"]) {
+  border-color: var(--ui-color-danger);
 }
 .context-capacity-entry input {
-  width: 104px;
-  flex: 0 1 104px;
+  width: 100%;
+  flex: 1;
   height: 38px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   font-variant-numeric: tabular-nums;
+}
+.context-capacity-entry input:focus-visible {
+  box-shadow: none;
 }
 .context-capacity-unit {
   color: var(--ui-color-text-muted);
@@ -37,16 +53,22 @@
   white-space: nowrap;
 }
 .context-capacity-presets {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ui-color-surface) 80%, transparent);
 }
 .context-capacity-presets button {
-  min-height: 29px;
-  padding: 4px 7px;
-  border: 1px solid var(--ui-color-line);
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 2px;
+  border: 0;
   border-radius: 7px;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   background: transparent;
   color: var(--ui-color-text-muted);
 }
@@ -59,22 +81,24 @@
   outline-offset: 2px;
 }
 .context-capacity-presets button[aria-pressed="true"] {
-  color: var(--ui-color-action);
-  border-color: var(--ui-color-action);
-  background: color-mix(in srgb, var(--ui-color-action) 6%, transparent);
+  color: var(--ui-color-on-action);
+  background: var(--ui-color-action);
 }
-.context-capacity-help,
+.context-capacity-presets button[aria-pressed="true"]:hover:not(:disabled) {
+  color: var(--ui-color-on-action);
+  background: var(--ui-color-action-hover);
+}
 .context-capacity-error {
+  grid-column: 1 / -1;
   font-size: 11px;
   line-height: 1.6;
-  color: var(--ui-color-text-muted);
-}
-.context-capacity-error {
   color: var(--ui-color-danger);
 }
 .model-dialog-redesign .model-option-row.model-context-setting {
-  grid-template-columns: minmax(130px, 1fr) minmax(0, 340px);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) 168px;
+  align-items: center;
+  gap: 14px 20px;
+  padding: 16px 0;
 }
 .ui-hint {
   max-width: min(380px, calc(100vw - 24px));
@@ -350,11 +374,9 @@
 }
 @media (max-width: 650px) {
   .model-dialog-redesign .model-option-row.model-context-setting {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 148px;
     gap: 12px;
-  }
-  .context-capacity-control {
-    width: 100%;
+    padding: 12px 0;
   }
   .current-task-summary summary > strong {
     max-width: 55%;

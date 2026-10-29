@@ -32,7 +32,7 @@ export function ContextCapacityInput({
           inputMode="decimal"
           aria-label={label}
           aria-invalid={!valid}
-          aria-describedby={helpId}
+          aria-describedby={valid ? undefined : helpId}
           value={amount}
           disabled={disabled}
           onChange={(event) => {
@@ -45,7 +45,11 @@ export function ContextCapacityInput({
         />
         <span className="context-capacity-unit">k token</span>
       </div>
-      <div className="context-capacity-presets" aria-label="快捷上下文容量">
+      <div
+        className="context-capacity-presets"
+        role="group"
+        aria-label="快捷上下文容量"
+      >
         {capacities.map((tokens) => (
           <button
             key={tokens}
@@ -61,15 +65,11 @@ export function ContextCapacityInput({
           </button>
         ))}
       </div>
-      <small
-        id={helpId}
-        className={valid ? "context-capacity-help" : "context-capacity-error"}
-        role={valid ? undefined : "alert"}
-      >
-        {valid
-          ? "1k = 1,000 token · 1M = 1,000k，请按模型上限填写。"
-          : "请输入 4.096–2,000k token，或选择上方容量。"}
-      </small>
+      {!valid && (
+        <small id={helpId} className="context-capacity-error" role="alert">
+          请输入 4.096–2,000k token，或选择上方容量。
+        </small>
+      )}
     </div>
   );
 }
