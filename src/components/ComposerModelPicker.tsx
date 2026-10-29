@@ -1,9 +1,14 @@
 import { Check, ChevronDown, Settings2, Sparkles } from "lucide-react";
 import { Popover, RadioGroup } from "radix-ui";
 import type { Settings } from "@/lib/api";
+import type { ModelOptions } from "@/lib/chatModelPreferences";
+import { effortLabel, effortOptions } from "@/lib/reasoningEffort";
 import { useHoverPopover } from "@/lib/useHoverPopover";
-import { Hint } from "./common";
-import { ContextMeter, type ContextUsage } from "./ContextMeter";
+import {
+  ContextMeter,
+  ContextSizeChoices,
+  type ContextUsage,
+} from "./ContextMeter";
 
 type ModelChoice = {
   key: string;
@@ -14,32 +19,51 @@ type ModelChoice = {
 export function ComposerModelPicker({
   choices,
   selected,
+  options,
   thinkingEnabled,
   contextTokens,
-  contextOverride,
   usage,
   compacting,
   disabled,
   defaultProvider,
   onSelect,
-  onContextChange,
+  onOptions,
   onSettings,
 }: {
   choices: ModelChoice[];
   selected?: ModelChoice;
+  options: ModelOptions;
   thinkingEnabled: boolean;
   contextTokens: number;
-  contextOverride?: number;
   usage: ContextUsage | null;
   compacting: boolean;
   disabled: boolean;
   defaultProvider: string;
   onSelect: (key: string) => void;
-  onContextChange: (tokens?: number) => void;
+  onOptions: (patch: Partial<ModelOptions>) => void;
   onSettings: () => void;
 }) {
   const menu = useHoverPopover(disabled);
   const contextMenu = useHoverPopover(disabled || !selected);
+  const control = selected?.model.thinking_control || "none";
+  const levels = effortOptions.filter((option) =>
+    selected?.model.reasoning_efforts?.includes(option.value),
+  );
+  const hasThinkingOverride =
+    options.thinkingOverride !== undefined &&
+    (options.thinkingOverride === false
+      ? control !== "always"
+      : !levels.length ||
+        levels.some((level) => level.value === options.reasoningEffort));
+  const thinkingValue = !hasThinkingOverride
+    ? "default"
+    : !thinkingEnabled
+      ? "off"
+      : levels.some((level) => level.value === options.reasoningEffort)
+        ? options.reasoningEffort
+        : levels.length
+          ? selected?.model.default_reasoning_effort || "default"
+          : "on";
   function showModels() {
     contextMenu.onOpenChange(false);
     menu.show();
@@ -52,10 +76,10 @@ export function ComposerModelPicker({
         usage={usage}
         limit={contextTokens}
         defaultLimit={selected?.model.context_tokens ?? 500000}
-        contextOverride={contextOverride}
+        contextOverride={options.contextTokens}
         compacting={compacting}
         disabled={disabled || !selected}
-        onCapacity={onContextChange}
+        onCapacity={(contextTokens) => onOptions({ contextTokens })}
       />
       <Popover.Root open={menu.open} onOpenChange={menu.onOpenChange}>
         <Popover.Trigger asChild>
@@ -110,45 +134,107 @@ export function ComposerModelPicker({
               disabled={disabled}
               onValueChange={(key) => {
                 onSelect(key);
-                menu.closeAndFocus();
               }}
             >
               {choices
                 .filter((choice) => choice.profile.key_configured)
                 .map((choice) => (
-                  <Hint
+                  <RadioGroup.Item
                     key={choice.key}
-                    label={
-                      <>
-                        <span>{choice.model.name}</span>
-                        <span>{choice.profile.label}</span>
-                      </>
-                    }
+                    value={choice.key}
+                    className="composer-model-choice"
                   >
-                    <RadioGroup.Item
-                      value={choice.key}
-                      className="composer-model-choice"
-                    >
-                      <span>
-                        <strong>{choice.model.name}</strong>
-                        <small>
-                          {choice.profile.label}
-                          {choice.profile.id === defaultProvider &&
-                          choice.model.name === choice.profile.default_model
-                            ? " · 默认"
-                            : ""}
-                        </small>
-                      </span>
-                      <RadioGroup.Indicator>
-                        <Check size={15} />
-                      </RadioGroup.Indicator>
-                    </RadioGroup.Item>
-                  </Hint>
+                    <span>
+                      <strong>{choice.model.name}</strong>
+                      <small>
+                        {choice.profile.label}
+                        {choice.profile.id === defaultProvider &&
+                        choice.model.name === choice.profile.default_model
+                          ? " · 默认"
+                          : ""}
+                      </small>
+                    </span>
+                    <RadioGroup.Indicator>
+                      <Check size={15} />
+                    </RadioGroup.Indicator>
+                  </RadioGroup.Item>
                 ))}
               {!choices.some((choice) => choice.profile.key_configured) && (
                 <p className="model-menu-current">尚未连接模型</p>
               )}
             </RadioGroup.Root>
+            {selected && (
+              <div className="composer-quick-settings">
+                <p>仅对当前对话生效</p>
+                {control !== "none" &&
+                  (control !== "always" || levels.length > 0) && (
+                    <section
+                      className="composer-quick-section"
+                      aria-label="快捷思考设置"
+                    >
+                      <h3>思考{levels.length ? "强度" : "模式"}</h3>
+                      <RadioGroup.Root
+                        className="composer-thinking-choices"
+                        aria-label="选择思考强度"
+                        value={thinkingValue}
+                        disabled={disabled}
+                        onValueChange={(value) =>
+                          onOptions({
+                            thinkingOverride:
+                              value === "default" ? undefined : value !== "off",
+                            reasoningEffort: ["default", "off", "on"].includes(
+                              value,
+                            )
+                              ? undefined
+                              : value,
+                          })
+                        }
+                      >
+                        <RadioGroup.Item value="default">默认</RadioGroup.Item>
+                        {control !== "always" && (
+                          <RadioGroup.Item value="off">关闭</RadioGroup.Item>
+                        )}
+                        {levels.length ? (
+                          levels.map((level) => (
+                            <RadioGroup.Item
+                              key={level.value}
+                              value={level.value}
+                            >
+                              {level.label}
+                            </RadioGroup.Item>
+                          ))
+                        ) : (
+                          <RadioGroup.Item value="on">开启</RadioGroup.Item>
+                        )}
+                      </RadioGroup.Root>
+                      <small>
+                        模型默认：
+                        {selected.model.default_thinking_enabled ||
+                        control === "always"
+                          ? levels.length
+                            ? effortLabel(
+                                selected.model.default_reasoning_effort,
+                              )
+                            : "开启"
+                          : "关闭"}
+                      </small>
+                    </section>
+                  )}
+                <section
+                  className="composer-quick-section"
+                  aria-label="快捷上下文设置"
+                >
+                  <h3>上下文大小</h3>
+                  <ContextSizeChoices
+                    compact
+                    value={options.contextTokens}
+                    defaultLimit={selected.model.context_tokens ?? 500000}
+                    disabled={disabled}
+                    onChange={(contextTokens) => onOptions({ contextTokens })}
+                  />
+                </section>
+              </div>
+            )}
             <button
               type="button"
               className="composer-model-settings"

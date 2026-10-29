@@ -419,10 +419,23 @@ export function ChatPage({
   };
   const contextTokens =
     modelOptions.contextTokens ?? selected?.model.context_tokens ?? 500000;
-  const reasoningEffort = selected?.model.default_reasoning_effort || undefined;
+  const levels = selected?.model.reasoning_efforts || [];
+  const hasThinkingOverride =
+    modelOptions.thinkingOverride !== undefined &&
+    (modelOptions.thinkingOverride === false
+      ? thinkingControl !== "always"
+      : !levels.length || levels.includes(modelOptions.reasoningEffort as (typeof levels)[number]));
+  const reasoningEffort =
+    hasThinkingOverride && modelOptions.thinkingOverride === true &&
+    levels.includes(modelOptions.reasoningEffort as (typeof levels)[number])
+      ? modelOptions.reasoningEffort
+      : selected?.model.default_reasoning_effort || undefined;
   const thinkingEnabled =
     thinkingControl === "always" ||
-    (thinkingControl !== "none" && Boolean(selected?.model.default_thinking_enabled));
+    (thinkingControl !== "none" &&
+      (hasThinkingOverride
+        ? modelOptions.thinkingOverride === true
+        : Boolean(selected?.model.default_thinking_enabled)));
   function updateModelOptions(patch: Partial<ModelOptions>) {
     if (!selected) return;
     const next = {
@@ -2039,9 +2052,9 @@ export function ChatPage({
                 <ComposerModelPicker
                   choices={choices}
                   selected={selected}
+                  options={modelOptions}
                   thinkingEnabled={thinkingEnabled}
                   contextTokens={contextTokens}
-                  contextOverride={modelOptions.contextTokens}
                   usage={
                     contextUsage?.model_name === selected?.model.name &&
                     contextUsage?.provider_id === selected?.profile.id
@@ -2052,7 +2065,7 @@ export function ChatPage({
                   disabled={busy}
                   defaultProvider={settings.default_provider}
                   onSelect={selectModel}
-                  onContextChange={(contextTokens) => updateModelOptions({ contextTokens })}
+                  onOptions={updateModelOptions}
                   onSettings={() => openModelSettings()}
                 />
                 <Button

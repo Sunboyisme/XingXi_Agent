@@ -31,7 +31,7 @@ test("connection overview stays compact and real endpoint drafts save only on re
   expect(view.container.querySelector(".lucide-brain")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "配置语义记忆检索" }));
   expect(
-    screen.getByText("按语义相似度召回相关记忆；关闭后仍可使用关键词检索。"),
+    screen.getByRole("checkbox", { name: "使用语义检索" }),
   ).toBeTruthy();
   expect(screen.queryByText(/通常以 \/v1 结尾/)).toBeNull();
   fireEvent.change(screen.getByLabelText("Embedding 接口地址"), {

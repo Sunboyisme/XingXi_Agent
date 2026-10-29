@@ -721,93 +721,7 @@ body:has(.reminder-popup),
   gap: 8px;
 }
 
-/* Embedding modal: readable grouping and an unobtrusive secret action. */
-[data-slot="dialog-content"].embedding-dialog {
-  width: min(620px, calc(100vw - 32px));
-  max-height: calc(100dvh - 40px);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  overflow: hidden;
-}
-
-.embedding-dialog .embedding-toggle-card {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 13px 14px;
-  border: 1px solid
-    color-mix(in srgb, var(--ui-color-action) 15%, var(--ui-color-line));
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--ui-color-action) 4%, var(--ui-color-bg));
-  cursor: pointer;
-}
-
-.embedding-toggle-icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  border-radius: 11px;
-  color: var(--ui-color-action);
-  background: color-mix(in srgb, var(--ui-color-action) 9%, transparent);
-}
-
-.embedding-toggle-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.embedding-toggle-copy strong {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.embedding-toggle-copy small {
-  color: var(--ui-color-text-muted);
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.embedding-form-card {
-  display: grid;
-  gap: 2px;
-  padding: 15px;
-  border: 1px solid var(--line-subtle);
-  border-radius: 18px;
-  overflow-y: auto;
-}
-
-.embedding-section-title {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin-bottom: 14px;
-  color: var(--ui-color-action);
-}
-
-.embedding-section-title > span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.embedding-section-title strong {
-  color: var(--ui-color-heading);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.embedding-section-title small {
-  color: var(--ui-color-text-muted);
-  font-size: 10px;
-  line-height: 1.55;
-}
-
+/* Shared secret labels and indexing feedback. */
 .embedding-label-row {
   display: flex;
   align-items: center;
@@ -852,24 +766,6 @@ body:has(.reminder-popup),
 .embedding-index-error.is-working {
   color: var(--ui-color-text-muted);
   background: var(--ui-color-bg);
-}
-
-.embedding-dialog-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  padding-top: 13px;
-  border-top: 1px solid var(--line-subtle);
-}
-
-.embedding-footer-status {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ui-color-text-muted);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Destructive confirmations use one clear icon, explanation and balanced actions. */
@@ -1246,13 +1142,6 @@ body:has(.reminder-popup),
     text-align: left;
   }
 
-  .embedding-dialog-footer {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .embedding-footer-status {
-    grid-column: 1 / -1;
-  }
 }
 
 @media (max-width: 700px) {

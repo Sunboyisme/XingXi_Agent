@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { DropdownMenu, RadioGroup, ToggleGroup } from "radix-ui";
 import { api, fetchApi, type Settings } from "@/lib/api";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -843,29 +843,44 @@ export function ModelConnections({
                         </div>
                         {(model.thinking_mode === "reasoning_effort" || Boolean(model.reasoning_efforts?.length)) && (
                           <div className="model-effort-settings">
-                            <strong>支持的思考强度</strong>
-                            <small>按当前接口实际支持的档位配置。启用思考后，聊天使用下方默认强度。</small>
-                            <div className="model-effort-levels">
-                              {effortOptions.map((option) => {
-                                const levels = model.reasoning_efforts ?? ["low", "medium", "high"];
-                                return <label key={option.value}>
-                                  <Checkbox checked={levels.includes(option.value)}
-                                    disabled={busy || (levels.length === 1 && levels.includes(option.value))}
-                                    aria-label={`模型 ${index + 1} 支持${option.label}强度`}
-                                    onCheckedChange={(checked) => updateModel(index, {
-                                      reasoning_efforts: checked === true ? [...levels, option.value] : levels.filter((level) => level !== option.value),
-                                      default_reasoning_effort: null,
-                                    })} />{option.label}
-                                </label>;
-                              })}
+                            <div className="model-effort-heading">
+                              <strong>思考强度</strong>
+                              <p>配置接口实际支持的档位，聊天中可直接选择。</p>
                             </div>
-                            <SoftSelect label={`模型 ${index + 1} 默认思考强度`} disabled={busy}
-                              value={model.default_reasoning_effort || "auto"}
-                              onValueChange={(value) => updateModel(index, {
-                                default_reasoning_effort: value === "auto" ? null : value as typeof model.default_reasoning_effort,
-                              })}
-                              options={[{ value: "auto", label: "服务商默认" }, ...effortOptions.filter((option) =>
-                                (model.reasoning_efforts ?? ["low", "medium", "high"]).includes(option.value))]} />
+                            <div className="model-effort-row">
+                              <span>可用档位<small>至少保留一档</small></span>
+                              <ToggleGroup.Root type="multiple" className="model-effort-levels"
+                                aria-label={`模型 ${index + 1} 支持的思考强度`}
+                                value={model.reasoning_efforts ?? ["low", "medium", "high"]}
+                                disabled={busy}
+                                onValueChange={(values) => {
+                                  if (!values.length) return;
+                                  updateModel(index, {
+                                    reasoning_efforts: effortOptions.filter((option) => values.includes(option.value)).map((option) => option.value),
+                                    default_reasoning_effort: values.includes(model.default_reasoning_effort || "") ? model.default_reasoning_effort : null,
+                                  });
+                                }}>
+                                {effortOptions.map((option) => {
+                                  const levels = model.reasoning_efforts ?? ["low", "medium", "high"];
+                                  return <ToggleGroup.Item key={option.value} value={option.value}
+                                    disabled={busy || (levels.length === 1 && levels.includes(option.value))}
+                                    aria-label={`模型 ${index + 1} 支持${option.label}强度`}>{option.label}</ToggleGroup.Item>;
+                                })}
+                              </ToggleGroup.Root>
+                            </div>
+                            <div className="model-effort-row">
+                              <span>默认强度<small>未单独选择时使用</small></span>
+                              <RadioGroup.Root className="model-effort-default" aria-label={`模型 ${index + 1} 默认思考强度`}
+                                value={model.default_reasoning_effort || "auto"} disabled={busy}
+                                onValueChange={(value) => updateModel(index, {
+                                  default_reasoning_effort: value === "auto" ? null : value as typeof model.default_reasoning_effort,
+                                })}>
+                                <RadioGroup.Item value="auto">服务商默认</RadioGroup.Item>
+                                {effortOptions.filter((option) => (model.reasoning_efforts ?? ["low", "medium", "high"]).includes(option.value)).map((option) => (
+                                  <RadioGroup.Item key={option.value} value={option.value}>{option.label}</RadioGroup.Item>
+                                ))}
+                              </RadioGroup.Root>
+                            </div>
                           </div>
                         )}
                         <p className="model-capabilities-note">

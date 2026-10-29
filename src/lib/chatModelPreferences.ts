@@ -1,5 +1,6 @@
 export type ModelOptions = {
   thinking: boolean;
+  thinkingOverride?: boolean;
   reasoningEffort?: string;
   contextTokens?: number;
 };
@@ -47,6 +48,9 @@ export function readModelPreference(
             key,
             {
               thinking: option.thinking === true,
+              ...(typeof option.thinkingOverride === "boolean"
+                ? { thinkingOverride: option.thinkingOverride }
+                : {}),
               ...(typeof option.reasoningEffort === "string"
                 ? { reasoningEffort: option.reasoningEffort }
                 : {}),

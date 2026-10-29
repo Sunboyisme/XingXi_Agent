@@ -38,7 +38,7 @@
 .composer-model-menu,
 .context-size-menu {
   z-index: 80;
-  width: min(300px, calc(100vw - 24px));
+  width: min(340px, calc(100vw - 24px));
   max-height: min(560px, var(--radix-popover-content-available-height));
   overflow: auto;
   overscroll-behavior: contain;
@@ -58,7 +58,7 @@
 }
 .composer-model-choices {
   display: grid;
-  max-height: 210px;
+  max-height: 170px;
   overflow-y: auto;
   overscroll-behavior: contain;
   gap: 3px;
@@ -84,7 +84,8 @@
 .composer-model-choice strong {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-weight: 500;
 }
 .composer-model-choice small {
@@ -103,7 +104,8 @@
   background: var(--surface-hover);
 }
 .composer-model-menu button:focus-visible,
-.context-size-menu button:focus-visible {
+.context-size-menu button:focus-visible,
+.model-effort-settings button:focus-visible {
   outline: 2px solid var(--ui-color-focus);
   outline-offset: -2px;
 }
@@ -159,6 +161,11 @@
   text-align: left;
   padding-inline: 10px;
 }
+.context-size-options.is-compact > .context-size-default {
+  grid-column: auto;
+  padding-inline: 4px;
+  text-align: center;
+}
 .composer-model-settings {
   display: flex;
   align-items: center;
@@ -173,31 +180,116 @@
 }
 .model-effort-settings {
   display: grid;
-  gap: 8px;
-  padding: 12px 0;
-  border-top: 1px solid var(--ui-color-line);
+  gap: 18px;
+  padding: 18px;
+  margin-top: 12px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 14px;
+  background: var(--ui-color-surface);
 }
-.model-effort-settings > strong {
+.model-effort-heading > strong {
   font-size: 13px;
   font-weight: 500;
 }
-.model-effort-settings > small {
+.model-effort-heading > p {
+  margin: 5px 0 0;
   color: var(--ui-color-text-muted);
   font-size: 11px;
 }
-.model-effort-settings > .soft-select {
-  max-width: 190px;
+.model-effort-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
 }
-.model-effort-levels {
+.model-effort-row > span {
+  padding-top: 6px;
+  color: var(--ui-color-heading);
+  font-size: 12px;
+}
+.model-effort-row > span > small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.model-effort-levels,
+.model-effort-default,
+.composer-thinking-choices {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 7px;
 }
-.model-effort-levels > label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.model-effort-levels > button,
+.model-effort-default > button,
+.composer-thinking-choices > button {
+  min-width: 44px;
+  padding: 7px 11px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ui-color-text-muted);
   font-size: 12px;
+}
+.model-effort-levels > button[data-state="on"],
+.model-effort-default > button[data-state="checked"],
+.composer-thinking-choices > button[data-state="checked"] {
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-action) 50%,
+    var(--ui-color-line)
+  );
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 9%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-heading);
+  font-weight: 550;
+}
+.model-effort-settings button:enabled:hover,
+.composer-thinking-choices > button:enabled:hover {
+  background: var(--surface-hover);
+}
+.composer-quick-settings {
+  display: grid;
+  gap: 14px;
+  margin-top: 10px;
+  padding: 12px 10px 14px;
+  border-top: 1px solid var(--ui-color-line);
+}
+.composer-quick-settings > p {
+  margin: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.composer-quick-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.composer-quick-section > h3 {
+  margin: 0;
+  color: var(--ui-color-heading);
+  font-size: 12px;
+  font-weight: 600;
+}
+.composer-quick-section > small {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+@media (max-width: 620px) {
+  .model-effort-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+  .model-effort-row > span {
+    padding-top: 0;
+  }
+  .model-effort-row > span > small {
+    display: inline;
+    margin-left: 8px;
+  }
 }
 @container composer (max-width: 380px) {
   .composer-bottom {

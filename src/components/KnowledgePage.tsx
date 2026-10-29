@@ -423,7 +423,8 @@ export function KnowledgePage({
                 : "正在读取知识库…"}
             </small>
           </div>
-          <label className="module-toggle">
+          <label className="module-toggle knowledge-retrieval-toggle">
+            <span>启用检索</span>
             <input
               type="checkbox"
               role="switch"
@@ -449,7 +450,7 @@ export function KnowledgePage({
                 });
               }}
             />
-            <span role="status">
+            <span className="sr-only" role="status">
               {updatingConfig
                 ? "正在更新…"
                 : status?.enabled

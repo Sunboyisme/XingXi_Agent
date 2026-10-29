@@ -2,6 +2,47 @@ import { Popover, RadioGroup } from "radix-ui";
 import type { HoverPopover } from "@/lib/useHoverPopover";
 import { contextCapacities } from "./ContextCapacityInput";
 
+export function ContextSizeChoices({
+  value,
+  defaultLimit,
+  disabled,
+  compact = false,
+  onChange,
+}: {
+  value?: number;
+  defaultLimit: number;
+  disabled?: boolean;
+  compact?: boolean;
+  onChange: (tokens?: number) => void;
+}) {
+  const capacities =
+    value !== undefined && !contextCapacities.includes(value)
+      ? [...contextCapacities, value].sort((a, b) => a - b)
+      : contextCapacities;
+  const format = (tokens: number) =>
+    tokens >= 1000000 ? `${tokens / 1000000}M` : `${tokens / 1000}k`;
+  return (
+    <RadioGroup.Root
+      className={`context-size-options ${compact ? "is-compact" : ""}`}
+      aria-label="选择上下文容量"
+      value={value === undefined ? "default" : String(value)}
+      disabled={disabled}
+      onValueChange={(next) =>
+        onChange(next === "default" ? undefined : Number(next))
+      }
+    >
+      <RadioGroup.Item value="default" className="context-size-default">
+        {compact ? "默认" : "模型默认 ·"} {format(defaultLimit)}
+      </RadioGroup.Item>
+      {capacities.map((tokens) => (
+        <RadioGroup.Item key={tokens} value={String(tokens)}>
+          {format(tokens)}
+        </RadioGroup.Item>
+      ))}
+    </RadioGroup.Root>
+  );
+}
+
 export type ContextUsage = {
   used_tokens?: number;
   limit_tokens?: number;
@@ -42,16 +83,9 @@ export function ContextMeter({
   const percent = used === undefined ? 0 : Math.round((100 * used) / limit);
   const high = used !== undefined && (used + reserved) / limit >= 0.9;
   const format = (tokens: number) => tokens.toLocaleString("zh-CN");
-  const capacityLabel = (tokens: number) =>
-    tokens >= 1000000 ? `${tokens / 1000000}M` : `${tokens / 1000}k`;
   const label = compacting
     ? "正在整理上下文"
     : `上下文窗口，${used === undefined ? "" : `已用约 ${percent}%，`}总额度 ${format(limit)} token。悬停或聚焦选择上下文大小。`;
-  const capacities =
-    contextOverride !== undefined &&
-    !contextCapacities.includes(contextOverride)
-      ? [...contextCapacities, contextOverride].sort((a, b) => a - b)
-      : contextCapacities;
   return (
     <Popover.Root open={menu.open} onOpenChange={menu.onOpenChange}>
       <Popover.Trigger asChild>
@@ -117,29 +151,15 @@ export function ContextMeter({
                 ? `总额度 ${format(limit)} token`
                 : `已用 ${format(used)} / ${format(limit)} token · 约 ${percent}%`}
           </p>
-          <RadioGroup.Root
-            className="context-size-options"
-            aria-label="选择上下文容量"
-            value={
-              contextOverride === undefined
-                ? "default"
-                : String(contextOverride)
-            }
+          <ContextSizeChoices
+            value={contextOverride}
+            defaultLimit={defaultLimit}
             disabled={disabled}
-            onValueChange={(value) => {
-              onCapacity(value === "default" ? undefined : Number(value));
+            onChange={(tokens) => {
+              onCapacity(tokens);
               menu.closeAndFocus();
             }}
-          >
-            <RadioGroup.Item value="default" className="context-size-default">
-              模型默认 · {capacityLabel(defaultLimit)}
-            </RadioGroup.Item>
-            {capacities.map((tokens) => (
-              <RadioGroup.Item key={tokens} value={String(tokens)}>
-                {capacityLabel(tokens)}
-              </RadioGroup.Item>
-            ))}
-          </RadioGroup.Root>
+          />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

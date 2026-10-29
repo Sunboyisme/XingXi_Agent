@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Boxes,
   CheckCircle2,
   KeyRound,
-  Link2,
   Loader2,
   SearchCheck,
   Undo2,
@@ -25,6 +23,7 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { errorMessage } from "@/lib/utils";
+import "../styles/embedding-settings.css";
 
 type Status = components["schemas"]["EmbeddingRead"];
 const initial: Status = {
@@ -166,37 +165,23 @@ export function EmbeddingSettings() {
             <span>
               <DialogTitle>语义记忆检索</DialogTitle>
               <DialogDescription>
-                为长期记忆单独配置向量接口。聊天模型不受这里影响。
+                为长期记忆单独配置向量接口，聊天模型保持原有连接。
               </DialogDescription>
             </span>
           </DialogHeader>
-          <label className="embedding-toggle-card">
-            <span className="embedding-toggle-icon" aria-hidden="true">
-              <Boxes size={18} />
-            </span>
-            <span className="embedding-toggle-copy">
-              <strong>使用语义检索</strong>
-              <small>
-                按语义相似度召回相关记忆；关闭后仍可使用关键词检索。
-              </small>
-            </span>
+          <label className="embedding-enable-row">
             <Checkbox
+              aria-label="使用语义检索"
               checked={form.enabled}
               disabled={busy}
               onCheckedChange={(checked) =>
                 change({ enabled: checked === true })
               }
             />
+            <span>使用语义检索</span>
           </label>
-          <div className="embedding-form-card">
-            <div className="embedding-section-title">
-              <Link2 size={16} />
-              <span>
-                <strong>Embedding 接口</strong>
-                <small>填写兼容 OpenAI Embeddings 的服务地址。</small>
-              </span>
-            </div>
-            <div className="form-field">
+          <div className="embedding-fields">
+            <div className="form-field embedding-url-field">
               <Label htmlFor="embedding-url">Embedding 接口地址</Label>
               <Input
                 id="embedding-url"
@@ -205,6 +190,7 @@ export function EmbeddingSettings() {
                 onChange={(e) => change({ url: e.target.value })}
                 placeholder="https://example.com/v1"
               />
+              <small>兼容 OpenAI Embeddings 的服务地址。</small>
             </div>
             <div className="form-field">
               <Label htmlFor="embedding-model">Embedding 模型名称</Label>
