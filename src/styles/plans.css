@@ -9,6 +9,7 @@
 .calendar-page > .plan-calendar {
   margin-top: 16px;
 }
+.calendar-page .plan-weekdays { border-top: 0; }
 .calendar-page .plan-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

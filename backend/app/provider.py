@@ -50,12 +50,26 @@ async def discover_models(profile):
     rows = body.get("data") if isinstance(body, dict) else None
     if not isinstance(rows, list):
         raise ConfigurationError("接口没有返回可识别的模型列表，请手动添加模型。")
-    names = {item["id"].strip() for item in rows
-             if isinstance(item, dict) and isinstance(item.get("id"), str)
-             and 0 < len(item["id"].strip()) <= 200}
-    return [{"name": name, "vision_enabled": False, "thinking_mode": "auto",
-             "thinking_control": model_profiles.thinking_control(url, {"name": name}, profile.provider_type)}
-            for name in sorted(names, key=str.casefold)]
+    models = {}
+    for item in rows:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            continue
+        name = item["id"].strip()
+        if not 0 < len(name) <= 200:
+            continue
+        model = {"name": name, "vision_enabled": False, "thinking_mode": "auto"}
+        effort = item.get("effort")
+        if isinstance(effort, dict) and isinstance(effort.get("supported_levels"), list):
+            model["reasoning_efforts"] = [level for level in effort["supported_levels"]
+                                         if level in model_profiles.EFFORT_LEVELS]
+            model["default_reasoning_effort"] = effort.get("default_level")
+        capacity = item.get("context_window")
+        if isinstance(capacity, int) and 4096 <= capacity <= 2000000:
+            model["context_tokens"] = capacity
+        model.update(model_profiles.reasoning_capabilities(url, model))
+        model["thinking_control"] = model_profiles.thinking_control(url, model, profile.provider_type)
+        models[name] = model
+    return [models[name] for name in sorted(models, key=str.casefold)]
 
 
 class CompatibleChatModel(ChatOpenAI):
@@ -113,7 +127,9 @@ def model(config=None, *, usage_purpose=None) -> ChatOpenAI:
         elif mode == "enable_thinking":
             extra = {"enable_thinking": enabled}
         elif mode == "reasoning_effort":
-            options["reasoning_effort"] = "high" if enabled else "none"
+            options["reasoning_effort"] = (config.get("reasoning_effort") or "high") if enabled else "none"
+        if enabled and config.get("reasoning_effort"):
+            options["reasoning_effort"] = config["reasoning_effort"]
         return CompatibleChatModel(
             model=config["model_name"],
             api_key=key,

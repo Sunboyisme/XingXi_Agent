@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, CalendarCheck, Lightbulb, PenLine } from "lucide-react";
+import { BookOpen, CalendarCheck, Lightbulb, ListTree, PenLine, WandSparkles } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 
 const starters = [
@@ -17,6 +17,16 @@ const starters = [
     label: "安排今天",
     icon: CalendarCheck,
     prompt: "请帮我规划一下今天的日程",
+  },
+  {
+    label: "优化提示词",
+    icon: WandSparkles,
+    prompt: "请帮我优化下面的提示词。先理解我要达成的目标，检查任务、背景、约束和输出格式是否清楚；缺少关键信息时先问我最多三个问题。给出可直接复制使用的完整提示词，并简要说明主要改动，不擅自补充事实。原提示词：",
+  },
+  {
+    label: "拆解任务",
+    icon: ListTree,
+    prompt: "请根据我上传的文件或下面的工作描述，帮我把任务拆成可执行的步骤。先梳理目标、交付物和限制，再给出任务清单、先后顺序、依赖关系、预计投入和第一步建议；信息不足时先问关键问题。先给出安排建议。工作内容：",
   },
 ];
 

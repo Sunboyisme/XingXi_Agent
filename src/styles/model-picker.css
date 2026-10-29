@@ -1,0 +1,242 @@
+.chat-main .composer {
+  container: composer / inline-size;
+}
+.composer-bottom {
+  column-gap: 12px;
+}
+.composer-bottom > .composer-tools {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+.composer-bottom > .composer-submit {
+  min-width: 0;
+  margin-left: auto;
+  gap: 10px;
+}
+.composer-model-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+.composer-model-controls .composer-model {
+  min-width: 0;
+  max-width: min(220px, 34cqi);
+  background: var(--ui-color-bg);
+}
+.composer-model-controls .composer-model:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
+.composer-model-controls .composer-model > span {
+  min-width: 0;
+}
+.composer-model-controls .context-meter:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.composer-model-menu {
+  z-index: 80;
+  width: min(340px, calc(100vw - 24px));
+  max-height: min(560px, var(--radix-popover-content-available-height));
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 18px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 16%);
+  font-size: 13px;
+  outline: none;
+}
+.composer-model-menu-heading {
+  padding: 8px 10px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.composer-model-choices {
+  display: grid;
+  max-height: 210px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 3px;
+}
+.composer-model-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.composer-model-choice > span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.composer-model-choice strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.composer-model-choice small {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.composer-model-choice[data-state="checked"] {
+  background: var(--ui-color-bg);
+}
+.composer-model-choice > span:last-child:has(svg) {
+  color: var(--ui-color-action);
+  flex-shrink: 0;
+}
+.composer-model-choice:hover,
+.composer-model-option:hover:enabled,
+.composer-model-settings:hover {
+  background: var(--surface-hover);
+}
+.composer-model-menu button:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: -2px;
+}
+.composer-model-options {
+  margin-top: 8px;
+  padding: 8px 2px;
+  border-top: 1px solid var(--ui-color-line);
+}
+.composer-model-options > p {
+  margin: 2px 8px 6px;
+  font-size: 11px;
+  color: var(--ui-color-text-muted);
+}
+.composer-model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 8px;
+  gap: 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+}
+.composer-model-option > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ui-color-text-muted);
+}
+.composer-model-option:disabled {
+  cursor: default;
+}
+.composer-model-option[aria-expanded="true"] > span:last-child > svg {
+  transform: rotate(90deg);
+}
+.composer-effort-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 3px 8px 10px;
+}
+.composer-effort-options > button {
+  padding: 6px 10px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.composer-effort-options > button[data-state="checked"] {
+  border-color: var(--ui-color-action);
+  color: var(--ui-color-heading);
+  background: var(--ui-color-bg);
+}
+.composer-context-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+  padding: 4px 8px 10px;
+}
+.composer-context-panel .context-capacity-entry {
+  grid-column: 1;
+  grid-row: auto;
+}
+.composer-context-panel .context-capacity-presets {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.composer-context-panel > p {
+  margin: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+.composer-context-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.composer-context-actions [data-slot="button"] {
+  min-height: 30px;
+}
+.composer-model-settings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-top: 1px solid var(--ui-color-line);
+  border-radius: 0 0 10px 10px;
+  background: transparent;
+  color: var(--ui-color-text-muted);
+}
+.model-effort-settings {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--ui-color-line);
+}
+.model-effort-settings > strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.model-effort-settings > small {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.model-effort-settings > .soft-select {
+  max-width: 190px;
+}
+.model-effort-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.model-effort-levels > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+@container composer (max-width: 380px) {
+  .composer-bottom {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .composer-bottom > .composer-submit {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+  .composer-model-controls .composer-model {
+    max-width: 62cqi;
+  }
+}

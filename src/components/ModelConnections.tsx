@@ -32,6 +32,7 @@ import {
 } from "./ui/dialog";
 import { ConfirmDelete, ErrorNotice, Toast } from "./common";
 import { errorMessage } from "@/lib/utils";
+import { effortOptions } from "@/lib/reasoningEffort";
 
 type Connection = Settings["providers"][number];
 type Draft = Connection & { api_key?: string | null };
@@ -42,7 +43,7 @@ const thinkingOptions = [
   { value: "always", label: "始终思考" },
   { value: "enable_thinking", label: "enable_thinking 开关" },
   { value: "thinking", label: "thinking.type 开关" },
-  { value: "reasoning_effort", label: "reasoning_effort 开关" },
+  { value: "reasoning_effort", label: "reasoning_effort 强度" },
 ];
 const thinkingControlLabels: Record<string, string> = {
   auto: "保存后识别",
@@ -50,7 +51,7 @@ const thinkingControlLabels: Record<string, string> = {
   always: "始终思考",
   enable_thinking: "enable_thinking 开关",
   thinking: "thinking 开关",
-  reasoning_effort: "reasoning_effort 开关",
+  reasoning_effort: "reasoning_effort 强度",
 };
 const blankModel = () => ({
   name: "",
@@ -171,7 +172,10 @@ export function ModelConnections({
             ...x,
             ...patch,
             ...(patch.name !== undefined
-              ? { thinking_control: "auto" as const }
+              ? { thinking_control: "auto" as const, reasoning_efforts: null, default_reasoning_effort: null }
+              : {}),
+            ...(patch.thinking_mode !== undefined
+              ? { reasoning_efforts: null, default_reasoning_effort: null }
               : {}),
           }
         : x,
@@ -808,6 +812,33 @@ export function ModelConnections({
                             </span>
                           </div>
                         </div>
+                        {(model.thinking_mode === "reasoning_effort" || Boolean(model.reasoning_efforts?.length)) && (
+                          <div className="model-effort-settings">
+                            <strong>支持的思考强度</strong>
+                            <small>按当前接口实际支持的档位选择，聊天中只显示这些选项。</small>
+                            <div className="model-effort-levels">
+                              {effortOptions.map((option) => {
+                                const levels = model.reasoning_efforts ?? ["low", "medium", "high"];
+                                return <label key={option.value}>
+                                  <Checkbox checked={levels.includes(option.value)}
+                                    disabled={busy || (levels.length === 1 && levels.includes(option.value))}
+                                    aria-label={`模型 ${index + 1} 支持${option.label}强度`}
+                                    onCheckedChange={(checked) => updateModel(index, {
+                                      reasoning_efforts: checked === true ? [...levels, option.value] : levels.filter((level) => level !== option.value),
+                                      default_reasoning_effort: null,
+                                    })} />{option.label}
+                                </label>;
+                              })}
+                            </div>
+                            <SoftSelect label={`模型 ${index + 1} 默认思考强度`} disabled={busy}
+                              value={model.default_reasoning_effort || "auto"}
+                              onValueChange={(value) => updateModel(index, {
+                                default_reasoning_effort: value === "auto" ? null : value as typeof model.default_reasoning_effort,
+                              })}
+                              options={[{ value: "auto", label: "服务商默认" }, ...effortOptions.filter((option) =>
+                                (model.reasoning_efforts ?? ["low", "medium", "high"]).includes(option.value))]} />
+                          </div>
+                        )}
                         <p className="model-capabilities-note">
                           上下文包含提示、历史、工具结果与回复预留；调大数值不会扩展模型本身的能力。
                         </p>

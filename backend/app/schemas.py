@@ -52,6 +52,7 @@ ProviderId = Literal["bailian", "deepseek", "kimi", "zhipu", "siliconflow", "cus
 ThinkingMode = Literal[
     "auto", "none", "always", "enable_thinking", "thinking", "reasoning_effort"
 ]
+ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
 
 
 class ModelOption(BaseModel):
@@ -59,6 +60,16 @@ class ModelOption(BaseModel):
     context_tokens: int = Field(default=500000, ge=4096, le=2000000)
     vision_enabled: bool = False
     thinking_mode: ThinkingMode = "auto"
+    reasoning_efforts: list[ReasoningEffort] | None = Field(default=None, max_length=7)
+    default_reasoning_effort: ReasoningEffort | None = None
+
+    @model_validator(mode="after")
+    def valid_efforts(self):
+        if self.reasoning_efforts is not None:
+            self.reasoning_efforts = list(dict.fromkeys(self.reasoning_efforts))
+            if self.default_reasoning_effort not in self.reasoning_efforts:
+                self.default_reasoning_effort = None
+        return self
 
     @field_validator("name")
     @classmethod
@@ -122,6 +133,8 @@ class ModelSelection(BaseModel):
     provider_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     model_name: str = Field(min_length=1, max_length=200)
     thinking_enabled: bool = False
+    reasoning_effort: ReasoningEffort | None = None
+    context_tokens: int | None = Field(default=None, ge=4096, le=2000000)
     # agent: the model may call tools; chat: system prompt and conversation only.
     mode: Literal["agent", "chat"] = "agent"
     use_memory: bool = True

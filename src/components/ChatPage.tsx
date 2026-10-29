@@ -1,5 +1,12 @@
 import { resizeMessageInput } from "@/lib/composerSize";
-import { ContextMeter, type ContextUsage } from "./ContextMeter";
+import type { ContextUsage } from "./ContextMeter";
+import { ComposerModelPicker } from "./ComposerModelPicker";
+import {
+  chatModelKey,
+  readModelPreference,
+  storeModelPreference,
+  type ModelOptions,
+} from "@/lib/chatModelPreferences";
 import { isSendShortcut } from "@/lib/generalPreferences";
 import { useComposerPlaceholder } from "@/lib/useComposerPlaceholder";
 import {
@@ -25,9 +32,7 @@ import {
   Plus,
   LoaderCircle,
   RotateCcw,
-  Settings2,
   Square,
-  Sparkles,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { Button } from "@/components/ui/button";
@@ -128,8 +133,6 @@ type StoredChatDraft = {
   images: Attachment[];
 };
 
-const chatModelKey = (conversationId: string | null) =>
-  `bai-chat-model:${conversationId || "new"}`;
 const chatDraftKey = (conversationId: string | null) =>
   `bai-chat-draft:${conversationId || "new"}`;
 
@@ -170,34 +173,6 @@ export function clearChatPreferences(conversationId: string | null) {
     localStorage.removeItem(`bai-chat-options:${conversationId || "new"}`);
   } catch {
     /* Storage restrictions must not block deleting or starting a chat. */
-  }
-}
-
-function readModelPreference(conversationId: string | null) {
-  try {
-    const value = JSON.parse(
-      localStorage.getItem(chatModelKey(conversationId)) || "null",
-    );
-    return value?.version === 1 && typeof value.key === "string"
-      ? { key: value.key, thinking: value.thinking === true }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function storeModelPreference(
-  conversationId: string | null,
-  key: string,
-  thinking: boolean,
-) {
-  try {
-    localStorage.setItem(
-      chatModelKey(conversationId),
-      JSON.stringify({ version: 1, key, thinking }),
-    );
-  } catch {
-    /* Storage restrictions must not block model selection. */
   }
 }
 
@@ -399,12 +374,15 @@ export function ChatPage({
   onAction: (page: string, create?: boolean) => void;
   onContextSettings?: (providerId: string, modelName: string) => void;
 }) {
-  const [modelKey, setModelKey] = useState(
-    () => readModelPreference(conversationId)?.key || "",
+  const [modelPreference, setModelPreference] = useState(() =>
+    readModelPreference(conversationId),
   );
-  const [thinking, setThinking] = useState(
-    () => readModelPreference(conversationId)?.thinking || false,
-  );
+  const modelKey = modelPreference.key;
+  function selectModel(key: string) {
+    const next = { ...modelPreference, key };
+    setModelPreference(next);
+    storeModelPreference(conversationId, next);
+  }
   const [chatOptions, setChatOptions] = useState(readChatOptions);
   function updateChatOptions(change: Partial<ChatOptions>) {
     const next = { ...chatOptions, ...change };
@@ -414,9 +392,7 @@ export function ChatPage({
   // null while unknown; knowledge context only exists when retrieval is enabled.
   const [knowledgeEnabled, setKnowledgeEnabled] = useState<boolean | null>(null);
   useEffect(() => {
-    const saved = readModelPreference(conversationId);
-    setModelKey(saved?.key || "");
-    setThinking(saved?.thinking || false);
+    setModelPreference(readModelPreference(conversationId));
   }, [conversationId]);
   const choices = useMemo(
     () =>
@@ -438,13 +414,37 @@ export function ChatPage({
     );
   const modelReady = Boolean(selected?.profile.key_configured);
   const thinkingControl = selected?.model.thinking_control || "none";
+  const modelOptions = modelPreference.models[selected?.key || ""] || {
+    thinking: false,
+  };
+  const contextTokens =
+    modelOptions.contextTokens ?? selected?.model.context_tokens ?? 500000;
+  const levels = selected?.model.reasoning_efforts || [];
+  const reasoningEffort = levels.includes(modelOptions.reasoningEffort as (typeof levels)[number])
+    ? modelOptions.reasoningEffort : undefined;
   const thinkingEnabled =
-    thinkingControl === "always" || (thinkingControl !== "none" && thinking);
+    thinkingControl === "always" ||
+    (thinkingControl !== "none" && modelOptions.thinking);
+  function updateModelOptions(patch: Partial<ModelOptions>) {
+    if (!selected) return;
+    const next = {
+      ...modelPreference,
+      key: selected.key,
+      models: {
+        ...modelPreference.models,
+        [selected.key]: { ...modelOptions, ...patch },
+      },
+    };
+    setModelPreference(next);
+    storeModelPreference(conversationId, next);
+  }
   const modelSelection = selected
     ? {
         provider_id: selected.profile.id,
         model_name: selected.model.name,
         thinking_enabled: thinkingEnabled,
+        reasoning_effort: thinkingEnabled ? reasoningEffort : undefined,
+        context_tokens: contextTokens,
         mode: chatOptions.mode,
         use_memory: chatOptions.useMemory,
         use_knowledge: chatOptions.useKnowledge,
@@ -551,12 +551,12 @@ export function ChatPage({
         ),
       )
     ) {
-      setModelKey("");
-      setThinking(false);
-      storeModelPreference(conversationId, "", false);
+      const next = { ...modelPreference, key: "" };
+      setModelPreference(next);
+      storeModelPreference(conversationId, next);
       setBuddyNote("原先选择的模型已移除，已切换为当前默认模型。");
     }
-  }, [modelKey, settings.providers, conversationId]);
+  }, [modelKey, modelPreference, settings.providers, conversationId]);
   const scroller = useRef<HTMLDivElement>(null);
   const chatSurface = useRef<HTMLDivElement>(null);
   const composerArea = useRef<HTMLDivElement>(null);
@@ -1094,7 +1094,7 @@ export function ChatPage({
         model_selection: modelSelection,
       });
       if (created) {
-        storeModelPreference(id, selected?.key || "", thinking);
+        storeModelPreference(id, { ...modelPreference, key: selected?.key || "" });
       }
       if (!isCurrent()) {
         if (!edited) clearChatDraft(sendingTo);
@@ -2036,128 +2036,27 @@ export function ChatPage({
                     </Hint>
                   ))}
                 </div>
-                <Hint
-                  label={
-                    thinkingControl === "none"
-                      ? "此模型未配置思考开关"
-                      : thinkingControl === "always"
-                        ? "此模型始终开启思考"
-                        : thinkingEnabled
-                          ? "关闭思考模式"
-                          : "开启思考模式"
-                  }
-                >
-                  <button
-                    className="composer-thinking"
-                    aria-label="思考模式"
-                    aria-pressed={thinkingEnabled}
-                    disabled={
-                      busy ||
-                      thinkingControl === "none" ||
-                      thinkingControl === "always"
-                    }
-                    onClick={() => {
-                      setThinking(!thinking);
-                      storeModelPreference(
-                        conversationId,
-                        selected?.key || "",
-                        !thinking,
-                      );
-                    }}
-                  >
-                    <Sparkles size={15} aria-hidden="true" />
-                    <span>
-                      {thinkingControl === "always" ? "始终思考" : "思考"}
-                    </span>
-                  </button>
-                </Hint>
-                <DropdownMenu.Root>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      className="composer-model"
-                      aria-label="选择模型"
-                      disabled={busy}
-                    >
-                      <span>{selected?.model.name || "选择模型"}</span>
-                      <ChevronDown size={13} />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                      className="model-menu"
-                      align="start"
-                      sideOffset={8}
-                      collisionPadding={16}
-                    >
-                      <DropdownMenu.Label className="model-menu-label">
-                        模型
-                      </DropdownMenu.Label>
-                      {choices
-                        .filter((x) => x.profile.key_configured)
-                        .map((choice) => (
-                          <DropdownMenu.Item
-                            key={choice.key}
-                            className="model-menu-item model-choice"
-                            onSelect={() => {
-                              setModelKey(choice.key);
-                              setThinking(false);
-                              storeModelPreference(
-                                conversationId,
-                                choice.key,
-                                false,
-                              );
-                            }}
-                          >
-                            <span>
-                              <strong>{choice.model.name}</strong>
-                              <small>
-                                {choice.profile.label}
-                                {choice.profile.id ===
-                                  settings.default_provider &&
-                                choice.model.name ===
-                                  choice.profile.default_model
-                                  ? " · 默认"
-                                  : ""}
-                              </small>
-                            </span>
-                            {selected?.key === choice.key && (
-                              <Check size={15} />
-                            )}
-                          </DropdownMenu.Item>
-                        ))}
-                      {!choices.some((x) => x.profile.key_configured) && (
-                        <div className="model-menu-current">尚未连接模型</div>
-                      )}
-                      <DropdownMenu.Separator className="model-menu-separator" />
-                      <DropdownMenu.Item
-                        className="model-menu-item"
-                        onSelect={() => openModelSettings()}
-                      >
-                        <Settings2 size={15} />
-                        连接与设置
-                      </DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Root>
-                <ContextMeter
+              </div>
+              <div className="composer-submit">
+                <ComposerModelPicker
+                  choices={choices}
+                  selected={selected}
+                  options={modelOptions}
+                  thinkingEnabled={thinkingEnabled}
+                  contextTokens={contextTokens}
                   usage={
                     contextUsage?.model_name === selected?.model.name &&
                     contextUsage?.provider_id === selected?.profile.id
                       ? contextUsage
                       : null
                   }
-                  limit={selected?.model.context_tokens ?? 500000}
                   compacting={contextStatus === "正在整理上下文…"}
-                  onSettings={() => {
-                    if (selected && onContextSettings) {
-                      onContextSettings(selected.profile.id, selected.model.name);
-                    } else {
-                      openModelSettings();
-                    }
-                  }}
+                  disabled={busy}
+                  defaultProvider={settings.default_provider}
+                  onSelect={selectModel}
+                  onOptions={updateModelOptions}
+                  onSettings={() => openModelSettings()}
                 />
-              </div>
-              <div className="composer-submit">
                 <Button
                   aria-label={showStop ? "停止生成" : "发送消息"}
                   size="icon"

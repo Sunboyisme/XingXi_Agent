@@ -1,10 +1,12 @@
 export type Theme = "cream" | "warm-dark";
+export type ThemePreference = Theme | "system";
 export const THEME_KEY = "xiaoxi-appearance-theme";
 const changedEvent = "xiaoxi-theme-changed";
 
-function savedTheme(): Theme {
+function savedTheme(): ThemePreference {
   try {
-    return localStorage.getItem(THEME_KEY) === "cream" ? "cream" : "warm-dark";
+    const value = localStorage.getItem(THEME_KEY);
+    return value === "cream" || value === "system" ? value : "warm-dark";
   } catch {
     return "warm-dark";
   }
@@ -25,14 +27,26 @@ export function currentTheme(): Theme {
     : "warm-dark";
 }
 
-export function setTheme(theme: Theme) {
+export function currentThemePreference(): ThemePreference {
+  const value = document.documentElement.dataset.themePreference;
+  return value === "cream" || value === "system" ? value : "warm-dark";
+}
+
+function applyPreference(preference: ThemePreference) {
+  document.documentElement.dataset.themePreference = preference;
+  applyTheme(preference === "system"
+    ? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "warm-dark" : "cream")
+    : preference);
+}
+
+export function setTheme(theme: ThemePreference) {
   // A blocked/full browser store must not prevent using the selected appearance.
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch {
     /* Keep it for this session. */
   }
-  applyTheme(theme);
+  applyPreference(theme);
 }
 
 export function subscribeTheme(onChange: () => void) {
@@ -41,10 +55,18 @@ export function subscribeTheme(onChange: () => void) {
 }
 
 export function initializeAppearance() {
-  applyTheme(savedTheme());
+  applyPreference(savedTheme());
+  const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+  const onSystemChange = () => {
+    if (currentThemePreference() === "system") applyPreference("system");
+  };
+  media?.addEventListener("change", onSystemChange);
   const sync = (event: StorageEvent) => {
-    if (event.key === THEME_KEY || event.key === null) applyTheme(savedTheme());
+    if (event.key === THEME_KEY || event.key === null) applyPreference(savedTheme());
   };
   window.addEventListener("storage", sync);
-  return () => window.removeEventListener("storage", sync);
+  return () => {
+    window.removeEventListener("storage", sync);
+    media?.removeEventListener("change", onSystemChange);
+  };
 }

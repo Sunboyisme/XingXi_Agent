@@ -42,6 +42,7 @@ import { DateTimePicker } from "./DateTimePicker";
 import { SoftSelect } from "./ui/soft-select";
 import { holidayOn } from "@/lib/holidays";
 import { lunarDate } from "@/lib/lunarCalendar";
+import { readPlanLocation, storePlanLocation } from "@/lib/planLocation";
 import { isRepeating, isRoutine } from "@/lib/planPresentation";
 
 import {
@@ -133,11 +134,15 @@ export function CalendarPage({
   openAgenda?: { day: string; tab: "todo" | "repeat" } | null;
 }) {
   const today = zonedToday(timezone);
-  const [todoView, setTodoView] = useState(Boolean(openTodoId));
+  const [savedLocation] = useState(() => readPlanLocation(today));
+  const [todoView, setTodoView] = useState(Boolean(openTodoId) || savedLocation.view === "todo");
   useEffect(() => { if (openTodoId) setTodoView(true); }, [openTodoId]);
   useEffect(() => { if (openEventId || requestedAgenda || createRequested) setTodoView(false); }, [openEventId, requestedAgenda, createRequested]);
-  const [anchor, setAnchor] = useState(today);
-  const [view, setView] = useState<"month" | "week">("month");
+  const [anchor, setAnchor] = useState(savedLocation.anchor);
+  const [view, setView] = useState<"month" | "week">(savedLocation.calendarView);
+  useEffect(() => {
+    storePlanLocation({ view: todoView ? "todo" : view, calendarView: view, anchor });
+  }, [todoView, view, anchor]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [dayOrders, setDayOrders] = useState<Record<string, string[]>>({});
   const [orderSaving, setOrderSaving] = useState(false);
@@ -389,6 +394,7 @@ export function CalendarPage({
     )
       .then((event) => {
         if (!live) return;
+        setAnchor(event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10));
         edit(event.start.slice(0, 10), {
           ...event,
           occurrence_start: openOccurrenceStart || event.start,
@@ -401,7 +407,7 @@ export function CalendarPage({
     return () => {
       live = false;
     };
-  }, [openEventId, openOccurrenceStart, edit, onOpened]);
+  }, [openEventId, openOccurrenceStart, edit, onOpened, timezone]);
   useEffect(() => {
     if (!requestedAgenda) return;
     setAnchor(requestedAgenda.day);
@@ -409,7 +415,10 @@ export function CalendarPage({
     onOpened?.();
   }, [requestedAgenda, onOpened]);
   useEffect(() => {
-    if (createRequested) edit(today);
+    if (createRequested) {
+      setAnchor(today);
+      edit(today);
+    }
   }, [createRequested, edit]);
   useEffect(() => {
     if (view === "week" && weekScroll.current)
@@ -930,13 +939,6 @@ export function CalendarPage({
                     {Number(day.slice(8))}
                   </strong>
                 </span>
-                <small
-                  className={`plan-week-lunar ${lunarDates.get(day)?.festival ? "festival" : lunarDates.get(day)?.term ? "solar-term" : ""}`}
-                >
-                  {lunarDates.get(day)?.festival ||
-                    lunarDates.get(day)?.term ||
-                    lunarDates.get(day)?.label}
-                </small>
               </div>
             ))}
           </div>

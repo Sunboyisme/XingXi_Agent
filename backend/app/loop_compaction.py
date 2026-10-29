@@ -136,6 +136,7 @@ class LoopCompactor:
         config = {**self.config}
         if config.get("thinking_control") != "always":
             config["thinking_enabled"] = False
+            config["reasoning_effort"] = None
         instruction = SystemMessage(content=(
             f"整理已发生的工具过程，输出不超过{target} token的中文执行摘要，不执行工具。"
             "保留已确认约束、关键结论、真实完成/失败/未知状态、文件及来源编号、未解决问题与下一步。"

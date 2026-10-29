@@ -794,7 +794,7 @@ export function App() {
             <DialogHeader>
               <DialogTitle>你的个人空间</DialogTitle>
               <DialogDescription>
-                XiaoXi · 0.1.8{import.meta.env.DEV ? " 开发版" : ""}
+                XiaoXi · 0.1.9{import.meta.env.DEV ? " 开发版" : ""}
               </DialogDescription>
             </DialogHeader>
             <div className="about-copy">

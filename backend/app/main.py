@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
 
 
 # Keep in step with package.json, tauri.conf.json and pyproject.toml.
-APP_VERSION = "0.1.8"
+APP_VERSION = "0.1.9"
 app = FastAPI(title="XiaoXi API", version=APP_VERSION, lifespan=lifespan)
 
 

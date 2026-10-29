@@ -1170,42 +1170,6 @@
 .composer-mode-switch:has(:disabled) {
   opacity: 0.45;
 }
-/* 思考开关：与回答方式切换同一套浅灰底，开启时只给图标点缀强调色。 */
-.composer-thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 99px;
-  background: transparent;
-  color: var(--ui-color-text-muted);
-  font-size: 12.5px;
-  white-space: nowrap;
-  transition:
-    color 0.15s ease,
-    background-color 0.15s ease;
-}
-.composer-thinking:hover:enabled {
-  background: color-mix(in srgb, var(--ui-color-text) 4%, transparent);
-  color: var(--ui-color-text);
-}
-.composer-thinking[aria-pressed="true"],
-.composer-thinking[aria-pressed="true"]:hover:enabled {
-  background: color-mix(in srgb, var(--ui-color-text) 6%, transparent);
-  color: var(--ui-color-text);
-  font-weight: 500;
-}
-.composer-thinking[aria-pressed="true"] > svg {
-  color: var(--ui-color-action);
-}
-.composer-thinking:focus-visible {
-  outline: 2px solid var(--ui-color-focus);
-  outline-offset: 1px;
-}
-
 /* 侧栏圆润图标：选中时外形填一层淡淡的强调色，悬停时更淡。 */
 .soft-icon .soft-icon-fill {
   opacity: 0;

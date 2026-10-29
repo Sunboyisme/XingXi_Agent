@@ -222,12 +222,12 @@
 
 .incomplete-reply-notice {
   display: grid;
-  gap: 6px;
-  width: min(100%, 460px);
+  gap: 9px;
+  width: min(100%, 500px);
   margin: 12px 0 8px;
-  padding: 12px 14px;
+  padding: 16px 18px;
   border: 1px solid var(--ui-color-line);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--ui-color-bg);
   color: var(--ui-color-text-muted);
 }
@@ -244,20 +244,12 @@
 }
 
 .incomplete-reply-notice.is-failed {
-  border-color: color-mix(
-    in srgb,
-    var(--ui-color-danger) 22%,
-    var(--ui-color-line)
-  );
-  background: color-mix(
-    in srgb,
-    var(--ui-color-danger-surface) 56%,
-    var(--ui-color-surface)
-  );
+  border-color: var(--ui-color-line);
+  background: var(--ui-color-bg);
 }
 
 .incomplete-reply-notice.is-failed header > svg {
-  color: var(--ui-color-danger);
+  color: var(--ui-color-action);
 }
 
 .incomplete-reply-notice strong {
@@ -280,8 +272,10 @@
 
 .incomplete-reply-actions {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+  margin: 3px 0 0 23px;
 }
 
 .error-notice {

@@ -3354,6 +3354,10 @@ export interface components {
              * @enum {string}
              */
             thinking_mode: "auto" | "none" | "always" | "enable_thinking" | "thinking" | "reasoning_effort";
+            /** Reasoning Efforts */
+            reasoning_efforts?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra")[] | null;
+            /** Default Reasoning Effort */
+            default_reasoning_effort?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra") | null;
         };
         /** ModelOptionRead */
         ModelOptionRead: {
@@ -3375,6 +3379,10 @@ export interface components {
              * @enum {string}
              */
             thinking_mode: "auto" | "none" | "always" | "enable_thinking" | "thinking" | "reasoning_effort";
+            /** Reasoning Efforts */
+            reasoning_efforts?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra")[] | null;
+            /** Default Reasoning Effort */
+            default_reasoning_effort?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra") | null;
             /**
              * Thinking Control
              * @enum {string}
@@ -3392,6 +3400,10 @@ export interface components {
              * @default false
              */
             thinking_enabled: boolean;
+            /** Reasoning Effort */
+            reasoning_effort?: ("minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra") | null;
+            /** Context Tokens */
+            context_tokens?: number | null;
             /**
              * Mode
              * @default agent

@@ -12,11 +12,13 @@ export function ContextMeter({
   usage,
   limit,
   compacting,
+  disabled,
   onSettings,
 }: {
   usage: ContextUsage | null;
   limit: number;
   compacting: boolean;
+  disabled?: boolean;
   onSettings: () => void;
 }) {
   const used = usage?.used_tokens;
@@ -37,6 +39,7 @@ export function ContextMeter({
         <Tooltip.Trigger asChild>
           <button
             type="button"
+            disabled={disabled}
             className={`context-meter ${high ? "is-high" : ""} ${compacting ? "is-compacting" : ""}`}
             aria-label={label}
             onClick={onSettings}

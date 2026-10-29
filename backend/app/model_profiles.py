@@ -79,6 +79,27 @@ def thinking_control(url, model, provider_type=None):
     return "none"
 
 
+EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh", "max", "ultra")
+
+
+def reasoning_capabilities(url, model):
+    """Effort support belongs to the endpoint, not just the model's name."""
+    levels = model.get("reasoning_efforts")
+    default = model.get("default_reasoning_effort")
+    if levels is None:
+        host = urlsplit(url).hostname or ""
+        name = model["name"].lower()
+        if host == "api.deepseek.com" and name in {"deepseek-flash", "deepseek-v4-pro"}:
+            levels, default = ["low", "high", "max"], default or "high"
+        elif model.get("thinking_mode") == "reasoning_effort":
+            levels, default = ["low", "medium", "high"], default or "high"
+        else:
+            levels = []
+    levels = list(dict.fromkeys(level for level in levels if level in EFFORT_LEVELS))
+    return {"reasoning_efforts": levels,
+            "default_reasoning_effort": default if default in levels else None}
+
+
 def profiles(settings):
     values = deepcopy(settings.model_providers or [])
     if (
@@ -113,6 +134,7 @@ def profiles(settings):
             model["thinking_control"] = thinking_control(
                 value["model_url"], model, value["provider_type"]
             )
+            model.update(reasoning_capabilities(value["model_url"], model))
     return values
 
 
@@ -126,6 +148,7 @@ def presets():
                 {
                     "name": name,
                     "thinking_control": thinking_control(url, {"name": name}, id),
+                    **reasoning_capabilities(url, {"name": name}),
                 }
                 for name in names
             ],
@@ -154,14 +177,19 @@ def resolve(settings, selection=None):
     enabled = bool(selection and selection.thinking_enabled)
     if enabled and model["thinking_control"] == "none":
         raise ValueError("这个模型尚未配置思考开关，请到模型设置选择支持的参数。")
+    effort = selection.reasoning_effort if selection else None
+    if effort and effort not in model["reasoning_efforts"]:
+        raise ValueError("这个模型不支持所选思考强度，请重新选择。")
+    enabled = enabled or model["thinking_control"] == "always"
     return {
         "provider_id": provider_id,
         "model_url": profile["model_url"],
         "model_name": name,
         "vision_enabled": model["vision_enabled"],
         "thinking_control": model["thinking_control"],
-        "thinking_enabled": enabled or model["thinking_control"] == "always",
-        "context_tokens": model.get("context_tokens", 500000),
+        "thinking_enabled": enabled,
+        "reasoning_effort": (effort or model["default_reasoning_effort"]) if enabled else None,
+        "context_tokens": (selection.context_tokens if selection else None) or model.get("context_tokens", 500000),
         **chat_options(selection.model_dump() if selection else None),
     }
 
@@ -186,6 +214,8 @@ def saved_selection(config):
         provider_id=config["provider_id"],
         model_name=config["model_name"],
         thinking_enabled=bool(config.get("thinking_enabled")),
+        reasoning_effort=config.get("reasoning_effort"),
+        context_tokens=config.get("context_tokens"),
         **chat_options(config),
     )
 

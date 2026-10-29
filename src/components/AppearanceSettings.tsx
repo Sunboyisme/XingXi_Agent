@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from "react";
-import { Check, Moon, Sun } from "lucide-react";
+import { Check, Monitor, Moon, Sun } from "lucide-react";
 import {
-  currentTheme,
+  currentThemePreference,
   setTheme,
   subscribeTheme,
-  type Theme,
+  type ThemePreference,
 } from "@/lib/appearance";
 
 const themes = [
@@ -20,13 +20,19 @@ const themes = [
     description: "暖灰底色，配上柔和的杏棕色。",
     icon: Moon,
   },
+  {
+    id: "system",
+    name: "跟随系统",
+    description: "随系统外观，自动切换浅色与深色。",
+    icon: Monitor,
+  },
 ] as const;
 
 export function AppearanceSettings() {
   const theme = useSyncExternalStore(
     subscribeTheme,
-    currentTheme,
-    () => "warm-dark" as Theme,
+    currentThemePreference,
+    () => "warm-dark" as ThemePreference,
   );
   return (
     <section className="appearance-settings" aria-label="外观设置">

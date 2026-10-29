@@ -146,6 +146,7 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
             config = {**model_config}
             if config["thinking_control"] != "always":
                 config["thinking_enabled"] = False
+                config["reasoning_effort"] = None
             llm = provider.model(config)
             updated = summary
             # Bound each summary call, even when an individual old message is very long.
