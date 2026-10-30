@@ -237,6 +237,7 @@ pub fn selection_shortcut_recording(
 }
 
 pub fn dismiss(app: &tauri::AppHandle) {
+    crate::read_aloud::cancel(app);
     let state = app.state::<Selection>();
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     *state.dom.lock().unwrap() = None;

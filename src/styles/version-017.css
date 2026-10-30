@@ -210,15 +210,15 @@
   width: 34px;
   height: 34px;
   flex-shrink: 0;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 50%;
+  border: 0;
+  border-radius: 7px;
   background: transparent;
   color: var(--ui-color-text-muted);
 }
 .composer-add-trigger:hover,
 .composer-add-trigger[data-state="open"] {
   color: var(--ui-color-action);
-  background: var(--ui-color-surface);
+  background: var(--surface-hover);
 }
 .composer-add-trigger:focus-visible {
   outline: 2px solid var(--ui-color-focus);

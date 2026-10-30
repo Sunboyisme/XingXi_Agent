@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
-import { isActiveRun, type DesktopTaskActivity } from "./avatarActivity";
+import { isActiveRun, isSilentDesktopTask, type DesktopTaskActivity } from "./avatarActivity";
 
 const inboxKey = "xiaoxi-desktop-task-inbox-v1";
 export const DESKTOP_TASK_READ_PREFIX = "xiaoxi-desktop-task-read:";
@@ -29,12 +29,13 @@ export class DesktopTaskInbox {
     try {
       const values: DesktopTaskActivity[] = JSON.parse(localStorage.getItem(inboxKey) || "[]");
       if (Array.isArray(values)) for (const task of values) {
-        if (typeof task?.runId === "string" && typeof task.runStatus === "string") this.tasks.set(task.runId, task);
+        if (typeof task?.runId === "string" && typeof task.runStatus === "string" && !isSilentDesktopTask(task)) this.tasks.set(task.runId, task);
       }
     } catch { /* A missing or invalid local inbox starts empty. */ }
   }
   accept(values: DesktopTaskActivity[]) {
     for (const task of values) {
+      if (isSilentDesktopTask(task)) { this.tasks.delete(task.runId); continue; }
       if (!task.runId || !task.runStatus) continue;
       const old = this.tasks.get(task.runId);
       if (old && (["completed", "failed", "cancelled"].includes(old.runStatus) && isActiveRun(task.runStatus) || stamp(old) > stamp(task))) continue;

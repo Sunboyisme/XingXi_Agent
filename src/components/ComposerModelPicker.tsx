@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Settings2 } from "lucide-react";
+import { Check, ChevronRight, Settings2 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import type { Settings } from "@/lib/api";
 import type { ModelOptions } from "@/lib/chatModelPreferences";
@@ -120,12 +120,6 @@ export function ComposerModelPicker({
                     : "关闭思考"}
               </span>
             )}
-            <ChevronDown
-              size={12}
-              strokeWidth={1.6}
-              className="composer-model-chevron"
-              aria-hidden="true"
-            />
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>

@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { containCaptureText } from "@/lib/captureTextLayout";
 import { Popover } from "radix-ui";
 import {
   Pencil,
@@ -337,6 +338,8 @@ export function DesktopCapture() {
   const toolbarElement = useRef<HTMLDivElement>(null);
   const [toolbarSize, setToolbarSize] = useState({ w: 760, h: 44 });
   const textInput = useRef<HTMLTextAreaElement>(null);
+  const textOverflow = useRef(false);
+  const [textOverflowMessage, setTextOverflowMessage] = useState("");
   const epoch = useRef(0);
   const exportLock = useRef(false);
   const commands = useRef({
@@ -537,7 +540,11 @@ export function DesktopCapture() {
   useLayoutEffect(() => {
     const node = textInput.current,
       context = source.current?.getContext("2d");
-    if (!text || !node || !context) return;
+    if (!text || !node || !context || !session || !selection) {
+      textOverflow.current = false;
+      setTextOverflowMessage("");
+      return;
+    }
     context.save();
     context.font = `${fontSize}px "Microsoft YaHei", sans-serif`;
     const natural = text.value
@@ -546,18 +553,53 @@ export function DesktopCapture() {
         (width, line) => Math.max(width, context.measureText(line).width),
         fontSize * 2,
       );
-    const available = Math.max(
-      fontSize,
-      Math.min(
-        (viewport.w - text.at.x * sx - 8) / sx,
-        selection ? selection.x + selection.w - text.at.x : Infinity,
+    const available = Math.min(
+      session.width,
+      Math.max(
+        fontSize * 2 + 2,
+        Math.min(
+          (viewport.w - text.at.x * sx - 8) / sx,
+          selection.x + selection.w - text.at.x,
+        ),
       ),
     );
     node.style.width = `${Math.min(natural + 2, available) * sx}px`;
+    node.style.lineHeight = `${fontSize * sy * 1.4}px`;
+    node.style.overflowY = "hidden";
     node.style.height = "0px";
-    node.style.height = `${Math.max(fontSize * sx * 1.4, node.scrollHeight)}px`;
+    const height = Math.max(fontSize * sy * 1.4, node.scrollHeight);
+    node.style.height = `${Math.min(height, viewport.h)}px`;
+    node.style.overflowY = height > viewport.h ? "auto" : "hidden";
+    const fit = containCaptureText(
+      selection,
+      text.at,
+      {
+        w: node.getBoundingClientRect().width / sx,
+        h: height / sy,
+      },
+      { w: session.width, h: session.height },
+    );
+    textOverflow.current = fit.overflow;
+    setTextOverflowMessage(
+      fit.overflow
+        ? "文字超过当前屏幕可容纳的范围，请减少内容或调整字号后完成截图。"
+        : "",
+    );
+    if (
+      Math.abs(fit.at.x - text.at.x) > 0.01 ||
+      Math.abs(fit.at.y - text.at.y) > 0.01
+    )
+      setText((old) => (old === text ? { ...old, at: fit.at } : old));
+    if (
+      ["x", "y", "w", "h"].some(
+        (key) =>
+          Math.abs(fit.crop[key as keyof Rect] - selection[key as keyof Rect]) >
+          0.01,
+      )
+    )
+      setSelection((old) => (old === selection ? fit.crop : old));
     context.restore();
-  }, [text, fontSize, sx, viewport.w, selection]);
+  }, [text, fontSize, sx, sy, viewport.w, viewport.h, selection, session]);
   useEffect(() => {
     const node = toolbarElement.current;
     if (!node) return;
@@ -613,7 +655,7 @@ export function DesktopCapture() {
     setRedo((r) => r.slice(0, -1));
   }
   function commitText() {
-    if (!text) return;
+    if (!text || textOverflow.current) return;
     const next = editedMarks();
     if (JSON.stringify(next) !== JSON.stringify(marks)) {
       setHistory((h) => [...h, marks]);
@@ -953,7 +995,8 @@ export function DesktopCapture() {
       selection.h < 2 ||
       !session ||
       !source.current ||
-      exportLock.current
+      exportLock.current ||
+      textOverflow.current
     )
       return;
     const outputMarks = editedMarks();
@@ -1383,9 +1426,9 @@ export function DesktopCapture() {
           </Hint>
         </div>
       )}
-      {error && (
+      {(error || textOverflowMessage) && (
         <p className="capture-error desktop-error" role="alert">
-          {error}
+          {error || textOverflowMessage}
         </p>
       )}
     </main>

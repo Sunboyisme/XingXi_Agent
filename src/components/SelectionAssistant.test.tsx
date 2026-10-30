@@ -122,6 +122,10 @@ test("toolbar saves directly into the default category once, without a dialog", 
 test("Escape closes a just-opened toolbar even when focus is on the window body", async () => {
   render(<SelectionAssistant />);
   await screen.findByRole("button", { name: "解释" });
+  expect(mock.invoke).toHaveBeenCalledWith(
+    "selection_resize",
+    expect.objectContaining({ height: 140 }),
+  );
   fireEvent.keyDown(window, { key: "Escape" });
   expect(mock.invoke).toHaveBeenCalledWith("selection_dismiss", { id: 2 });
 });
@@ -238,4 +242,55 @@ test("an earlier success timer cannot dismiss a fresh selection or a switched ac
     "selection_dismiss",
     expect.anything(),
   );
+});
+
+test("source and translated speech are scoped and a fresh selection stops playback", async () => {
+  render(<SelectionAssistant />);
+  fireEvent.click(await screen.findByRole("button", { name: "朗读选中文字" }));
+  await waitFor(() =>
+    expect(mock.invoke).toHaveBeenCalledWith("read_aloud_start", {
+      selectionId: 2,
+      id: expect.any(String),
+      text: "春天到了，花开了。",
+    }),
+  );
+  const sourceId = mock.invoke.mock.calls.find(
+    (call) => call[0] === "read_aloud_start",
+  )![1].id;
+  fireEvent.click(screen.getByRole("button", { name: "翻译" }));
+  await screen.findByText("结果");
+  expect(mock.invoke).toHaveBeenCalledWith("read_aloud_stop", { id: sourceId });
+  fireEvent.click(screen.getByRole("button", { name: "朗读译文" }));
+  await waitFor(() =>
+    expect(mock.invoke).toHaveBeenLastCalledWith("read_aloud_start", {
+      selectionId: 2,
+      id: expect.any(String),
+      text: "结果",
+    }),
+  );
+  const translationId = mock.invoke.mock.calls
+    .filter((call) => call[0] === "read_aloud_start")
+    .at(-1)![1].id;
+  act(() =>
+    mock.handlers.get("selection-reading")?.({
+      id: sourceId,
+      selectionId: 2,
+      phase: "finished",
+      error: "",
+    }),
+  );
+  expect(screen.getByRole("button", { name: "停止朗读" })).toBeVisible();
+  act(() =>
+    mock.handlers.get("selection-snapshot")?.({
+      id: 4,
+      text: "新选区",
+      error: "",
+      x: 50,
+      y: 50,
+    }),
+  );
+  expect(mock.invoke).toHaveBeenCalledWith("read_aloud_stop", {
+    id: translationId,
+  });
+  expect(screen.getByRole("button", { name: "朗读选中文字" })).toBeVisible();
 });

@@ -10,6 +10,7 @@ import {
   Loader2,
   RotateCcw,
   Square,
+  Volume2,
   X,
 } from "lucide-react";
 import {
@@ -24,6 +25,7 @@ import {
 } from "@/lib/desktopAssistant";
 import { copyText } from "@/lib/clipboard";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
+import { useReadAloud } from "@/lib/useReadAloud";
 import { BaiAvatar } from "./BaiAvatar";
 import { notifyCommonTextsChanged } from "@/lib/commonTexts";
 import { ErrorNotice, Hint, Markdown } from "./common";
@@ -55,6 +57,7 @@ export function SelectionAssistant() {
   const [stopping, setStopping] = useState(false);
   const [incomplete, setIncomplete] = useState(false);
   const [error, setError] = useState("");
+  const reading = useReadAloud(setError);
   const [notice, setNotice] = useState("");
   const [savingText, setSavingText] = useState(false);
   const [savedText, setSavedText] = useState(false);
@@ -135,6 +138,7 @@ export function SelectionAssistant() {
     }
   }
   function invalidate() {
+    reading.stop();
     clearFeedback();
     copyRequest.current = null;
     operation.current++;
@@ -255,7 +259,7 @@ export function SelectionAssistant() {
   useLayoutEffect(() => {
     if (!snapshot) return;
     let active = true;
-    const expandedHeight = action ? 590 : 76;
+    const expandedHeight = action ? 590 : 140;
     const resize = () => {
       if (active)
         void invoke("selection_resize", {
@@ -267,7 +271,7 @@ export function SelectionAssistant() {
               ),
           height: Math.max(
             expandedHeight,
-            (root.current?.scrollHeight || 64) + 20,
+            (root.current?.scrollHeight || 64) + (action ? 20 : 64),
           ),
         }).catch((cause) => {
           if (active) setError(desktopError(cause));
@@ -415,6 +419,33 @@ export function SelectionAssistant() {
           <span className="selection-avatar">
             <BaiAvatar motion="still" />
           </span>
+          <Hint
+            side="bottom"
+            label={
+              reading.kind === "source" ? "停止朗读选中文字" : "朗读选中文字"
+            }
+          >
+            <button
+              disabled={toolDisabled}
+              aria-label={
+                reading.kind === "source" ? "停止朗读选中文字" : "朗读选中文字"
+              }
+              aria-pressed={reading.kind === "source"}
+              onClick={() => {
+                clearFeedback();
+                setNotice("");
+                setError("");
+                void reading.toggle(snapshot.text, "source", snapshot.id);
+              }}
+            >
+              {reading.kind === "source" ? (
+                <Square size={16} />
+              ) : (
+                <Volume2 size={16} />
+              )}
+              朗读
+            </button>
+          </Hint>
           <button
             disabled={toolDisabled}
             aria-pressed={action === "explain"}
@@ -493,7 +524,10 @@ export function SelectionAssistant() {
             )}
             添加到常用文本
           </button>
-          <Hint label={copied === "source" ? "已复制选中文字" : "复制选中文字"}>
+          <Hint
+            side="bottom"
+            label={copied === "source" ? "已复制选中文字" : "复制选中文字"}
+          >
             <button
               disabled={toolDisabled}
               onClick={() => void copy(snapshot.text, "source")}
@@ -503,7 +537,7 @@ export function SelectionAssistant() {
             </button>
           </Hint>
         </div>
-        <Hint label="关闭划词助手（Esc）">
+        <Hint side="bottom" label="关闭划词助手（Esc）">
           <button
             className="selection-close"
             aria-label="关闭划词助手"
@@ -590,6 +624,25 @@ export function SelectionAssistant() {
             )}
           </div>
           <div className="selection-result-actions">
+            {action === "translate" && (
+              <button
+                disabled={!answer || busy}
+                aria-pressed={reading.kind === "translation"}
+                onClick={() => {
+                  clearFeedback();
+                  setNotice("");
+                  setError("");
+                  void reading.toggle(answer, "translation", snapshot.id);
+                }}
+              >
+                {reading.kind === "translation" ? (
+                  <Square size={14} />
+                ) : (
+                  <Volume2 size={14} />
+                )}
+                {reading.kind === "translation" ? "停止朗读" : "朗读译文"}
+              </button>
+            )}
             {busy ? (
               <button disabled={stopping} onClick={() => void stop()}>
                 <Square size={14} />

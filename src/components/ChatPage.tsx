@@ -1975,7 +1975,7 @@ export function ChatPage({
                         className="composer-add-trigger"
                         aria-label="更多功能"
                       >
-                        <Plus size={19} />
+                        <Plus size={21} strokeWidth={1.6} />
                       </button>
                     </DropdownMenu.Trigger>
                   </Hint>

@@ -2,9 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // Browser layout regression only. Native selection, clipboard and window placement
 // are separate checks; this stub never opens or writes the real preview runtime.
-test("selection feedback keeps the close control on its row and then dismisses", async ({
-  page,
-}) => {
+test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     const surface = window as any;
     let sequence = 0;
@@ -49,6 +47,11 @@ test("selection feedback keeps the close control on its row and then dismisses",
       },
     };
   });
+});
+
+test("selection feedback keeps the close control on its row and then dismisses", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 635, height: 220 });
   await page.goto("/?view=selection");
   const copy = page.getByRole("button", { name: "复制", exact: true });
@@ -76,4 +79,25 @@ test("selection feedback keeps the close control on its row and then dismisses",
   const narrowClose = await close.boundingBox();
   expect(narrowClose!.y - toolbar!.y).toBeLessThan(4);
   expect(narrowClose!.x + narrowClose!.width).toBeLessThanOrEqual(340);
+});
+
+test("source, copy and close hints fit below the compact toolbar", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 740, height: 140 });
+  await page.goto("/?view=selection");
+  for (const name of ["朗读选中文字", "复制", "关闭划词助手"]) {
+    const control = page.getByRole("button", { name, exact: true });
+    await control.hover();
+    const hint = page.locator('.ui-hint[data-state$="open"]');
+    await expect(hint).toBeVisible();
+    const bounds = await hint.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(140);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(740);
+    await page.keyboard.press("Escape");
+    await expect(hint).toHaveCount(0);
+  }
+  await page.getByRole("button", { name: "朗读选中文字" }).focus();
+  await expect(page.locator('.ui-hint[data-state$="open"]')).toBeVisible();
 });

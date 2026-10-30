@@ -650,6 +650,10 @@ html[data-desktop] .capture-text {
   top: var(--pet-panel-top, 36px);
   max-height: var(--pet-panel-height, 264px);
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-color-border) transparent;
   overscroll-behavior: contain;
   padding: 10px 2px 2px;
   display: flex;
@@ -658,6 +662,8 @@ html[data-desktop] .capture-text {
   gap: 12px;
   pointer-events: auto;
 }
+.pet-floating-panel::-webkit-scrollbar { width: 4px; height: 0; }
+.pet-floating-panel::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--ui-color-border); }
 .pet-hover-tools {
   position: absolute;
   top: 100%;

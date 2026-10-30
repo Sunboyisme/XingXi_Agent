@@ -31,6 +31,9 @@ export function DesktopPet() {
   const [inbox] = useState(() => new DesktopTaskInbox());
   const [tasks, setTasks] = useState(() => inbox.list(false));
   const [notifications, setNotifications] = useState<PetNotice[]>([]);
+  const [readingNotice, setReadingNotice] = useState("");
+  const readNotices = useRef(new Set<string>());
+  const noticeReadLock = useRef(new Set<string>());
   const [quickShown, setQuickShown] = useState(false);
   const quickVisible = useRef(false);
   const quickEpoch = useRef(-1);
@@ -244,12 +247,21 @@ export function DesktopPet() {
       desktopListen<PetNotice[]>(
         "desktop-notification",
         (notes) => {
-          setNotifications(old => JSON.stringify(old) === JSON.stringify(notes) ? old : notes);
+          const unread = notes.filter(note => !readNotices.current.has(note.id));
+          setNotifications(old => JSON.stringify(old) === JSON.stringify(unread) ? old : unread);
         },
       ),
     ];
     window.addEventListener("pointermove", strokePointer, { passive: true });
     window.addEventListener("storage", storage);
+    // Older saved inbox entries predate run-kind metadata. Recheck them so old
+    // selection results disappear without discarding unrelated unread chat work.
+    void Promise.all(inbox.list().filter(task => !task.kind).map(async task => {
+      try {
+        const run = await api<Run>(`/runs/${task.runId}`);
+        if (alive) acceptTasks([desktopTask(run, task.source)]);
+      } catch { /* Keep existing unread work when the local service is unavailable. */ }
+    }));
     void listeners[0]
       .then(() =>
         invoke<{
@@ -372,8 +384,28 @@ export function DesktopPet() {
   }
   async function openNotice(value: PetNotice) {
     await invoke("desktop_main", {});
-    await api(`/notifications/${value.id}/ack?read=true`, "POST");
-    setNotifications(old => old.filter(note => note.id !== value.id));
+    await readNotice(value);
+  }
+  async function readNotice(value: PetNotice) {
+    if (noticeReadLock.current.has(value.id)) return;
+    noticeReadLock.current.add(value.id);
+    setReadingNotice(value.id);
+    setError("");
+    try {
+      await api(`/notifications/${value.id}/ack?read=true`, "POST");
+      readNotices.current.add(value.id);
+      setNotifications(old => old.filter(note => note.id !== value.id));
+    } finally {
+      noticeReadLock.current.delete(value.id);
+      setReadingNotice(old => old === value.id ? "" : old);
+    }
+  }
+  function readTask(task: DesktopTaskActivity) {
+    const receipt = { runId: task.runId, at: Date.now() };
+    markDesktopTaskRead(receipt);
+    const unread = inbox.read(receipt);
+    taskFingerprint.current = JSON.stringify(unread);
+    setTasks(unread);
   }
   return (
     <main
@@ -396,13 +428,13 @@ export function DesktopPet() {
           {tasks.map(task => {
             const title = taskNames[task.runId] || task.title;
             return <article key={task.runId} className="pet-task-card" aria-label="未读任务">
-              <Hint label="收起列表（保留未读任务）"><button className="pet-card-close" aria-label="收起未读列表" onClick={() => setCollapsed(true)}><X size={13} /></button></Hint>
+              <Hint label="标为已读"><button className="pet-card-close" aria-label={`标为已读 ${title}`} onClick={() => readTask(task)}><X size={13} /></button></Hint>
               <Hint label={<><strong>{title}</strong><br />{task.status}</>}><button className="pet-task-copy" onClick={() => void openTask(task).catch(error => setError(desktopError(error)))}><strong>{title}</strong><span role="status">{task.status}</span></button></Hint>
               {isActiveRun(task.runStatus) && <Hint label="停止任务"><button className="pet-card-action" aria-label={`停止任务 ${title}`} disabled={Boolean(stopping)} onClick={() => void stopTask(task)}><Square size={16} fill="currentColor" /></button></Hint>}
             </article>;
           })}
           {notifications.map(note => <article key={note.id} className="pet-task-card" aria-label="未读提醒">
-            <Hint label="收起列表"><button className="pet-card-close" aria-label="收起未读列表" onClick={() => setCollapsed(true)}><X size={13} /></button></Hint>
+            <Hint label="标为已读"><button className="pet-card-close" aria-label={`标为已读 ${note.title}`} disabled={readingNotice === note.id} onClick={() => void readNotice(note).catch(error => setError(desktopError(error)))}><X size={13} /></button></Hint>
             <Hint label={<><strong>{note.title}</strong><br />{note.body}</>}><button className="pet-task-copy" onClick={() => void openNotice(note).catch(error => setError(desktopError(error)))}><strong>{note.title}</strong><span>{note.body}</span></button></Hint>
           </article>)}
         </section>

@@ -12,6 +12,7 @@ export type AvatarGesture = {
   variant?: "happy" | "wave";
 };
 export type DesktopTaskSnapshot = {
+  kind?: string;
   runId: string;
   runStatus: string;
   taskId?: string | null;
@@ -24,6 +25,8 @@ export type DesktopTaskSnapshot = {
 export type DesktopTaskActivity = DesktopTaskSnapshot & { title: string; status: string };
 export const isActiveRun = (status: string) =>
   ["queued", "pending", "running"].includes(status);
+// Inline selection/OCR/translation results have their own surface and no inbox entry.
+export const isSilentDesktopTask = (task: DesktopTaskSnapshot) => task.kind === "desktop_action";
 const isTerminalRun = (status: string) =>
   ["completed", "failed", "cancelled"].includes(status);
 export function activityPhase(task: DesktopTaskSnapshot): AvatarActivity["phase"] {
@@ -35,6 +38,7 @@ export function activityPhase(task: DesktopTaskSnapshot): AvatarActivity["phase"
 }
 export function desktopTask(run: Run, source: DesktopTaskSnapshot["source"]): DesktopTaskActivity {
   return presentDesktopTask({
+    kind: run.kind,
     runId: run.id, runStatus: run.status, taskId: run.task_id,
     taskStatus: run.task_status, hasNextRun: typeof run.result?.next_run_id === "string",
     conversationId: run.conversation_id, source,
@@ -58,6 +62,11 @@ export class PetActivities {
   accept(values: DesktopTaskActivity[]) {
     let finished: DesktopTaskActivity | undefined;
     for (const value of [...values].sort((a, b) => (Date.parse(a.updatedAt || "") || 0) - (Date.parse(b.updatedAt || "") || 0))) {
+      if (isSilentDesktopTask(value)) {
+        this.runs.delete(value.runId);
+        if (this.last?.runId === value.runId) this.last = undefined;
+        continue;
+      }
       if (!value.runId || !value.runStatus) continue;
       const old = this.runs.get(value.runId);
       // Polling may still contain the pre-completion snapshot after a live result.
