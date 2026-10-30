@@ -52,7 +52,9 @@ test("creates an all-day plan with reminders off and retains calendar/week views
       expect.stringMatching(/^\/plans\?start=/),
     ),
   );
-  fireEvent.click(screen.getByRole("button", { name: "2026-10-19 添加计划" }));
+  fireEvent.doubleClick(
+    screen.getByRole("button", { name: "2026-10-19 查看计划" }),
+  );
   fireEvent.change(screen.getByLabelText("计划名称"), {
     target: { value: "认真读书" },
   });
@@ -85,7 +87,9 @@ test("creates an all-day plan with reminders off and retains calendar/week views
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(screen.getByRole("button", { name: "周历" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "月历" }).getAttribute("aria-pressed")).toBe("true");
+  expect(
+    screen.getByRole("button", { name: "月历" }).getAttribute("aria-pressed"),
+  ).toBe("true");
   expect(document.querySelector(".holiday-source")).toBeNull();
   expect(screen.queryByRole("button", { name: "列表" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "周历" }));
@@ -152,7 +156,7 @@ test("month view folds weekly and monthly repeats into one agenda entry", async 
   ).toBeTruthy();
 });
 
-test("today agenda request opens the day list instead of the edit form", async () => {
+test("today agenda request opens the daily sidebar instead of a dialog", async () => {
   const today = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Shanghai",
   }).format(new Date());
@@ -184,5 +188,7 @@ test("today agenda request opens the day list instead of the edit form", async (
     await screen.findByRole("heading", { name: `${today} 的待办事项` }),
   ).toBeTruthy();
   expect(screen.queryByText("安排一件小事")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.getElementById("plan-day-sidebar")?.hidden).toBe(false);
   expect(onOpened).toHaveBeenCalled();
 });

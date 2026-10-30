@@ -2,9 +2,12 @@ import { TodoPage } from "./TodoPage";
 import { PlanCompletionButton, PlanViewSwitch } from "./PlanControls";
 import { Hint } from "./common";
 import { PlanAgendaList } from "./PlanAgendaList";
+import { WeekCalendar } from "./WeekCalendar";
+import { planTimeRange } from "@/lib/calendarWeek";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -122,6 +125,9 @@ export function CalendarPage({
   openOccurrenceStart,
   openAgenda: requestedAgenda,
   openTodoId,
+  sidebarOpen: providedSidebarOpen,
+  onSidebarOpenChange,
+  onCalendarVisibleChange,
 }: {
   timezone?: string;
   openTodoId?: string;
@@ -131,6 +137,9 @@ export function CalendarPage({
   createRequested?: number;
   openOccurrenceStart?: string | null;
   openAgenda?: { day: string; tab: "todo" | "repeat" } | null;
+  sidebarOpen?: boolean;
+  onSidebarOpenChange?: (open: boolean) => void;
+  onCalendarVisibleChange?: (visible: boolean) => void;
 }) {
   const today = zonedToday(timezone);
   const [savedLocation] = useState(() => readPlanLocation(today));
@@ -144,6 +153,15 @@ export function CalendarPage({
     if (openEventId || requestedAgenda || createRequested) setTodoView(false);
   }, [openEventId, requestedAgenda, createRequested]);
   const [anchor, setAnchor] = useState(savedLocation.anchor);
+  const [localSidebarOpen, setLocalSidebarOpen] = useState(false);
+  const sidebarOpen = providedSidebarOpen ?? localSidebarOpen;
+  function setSidebarOpen(open: boolean) {
+    setLocalSidebarOpen(open);
+    onSidebarOpenChange?.(open);
+  }
+  useEffect(() => {
+    onCalendarVisibleChange?.(!todoView);
+  }, [todoView, onCalendarVisibleChange]);
   const [view, setView] = useState<"month" | "week">(
     savedLocation.calendarView,
   );
@@ -165,7 +183,6 @@ export function CalendarPage({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const monthGrid = useRef<HTMLDivElement>(null);
-  const weekScroll = useRef<HTMLDivElement>(null);
   const [visibleEvents, setVisibleEvents] = useState(3);
   const [editor, setEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<"single" | "repeat">("single");
@@ -173,7 +190,7 @@ export function CalendarPage({
   const [editScope, setEditScope] = useState<"this" | "future" | "series">(
     "this",
   );
-  const [dayList, setDayList] = useState("");
+  const [dayList, setDayList] = useState(savedLocation.anchor);
   const [agendaTab, setAgendaTab] = useState<"todo" | "repeat">("todo");
   const [agendaNotice, setAgendaNotice] = useState("");
   const requestSequence = useRef(0);
@@ -261,11 +278,6 @@ export function CalendarPage({
       ),
     [days, weekDays, dayList, events, timezone, dayOrders],
   );
-  const hasAllDayEvents = weekDays.some((day) =>
-    eventsOnDay(events, day, timezone).some(
-      (event) => event.all_day && !isRoutine(event),
-    ),
-  );
   const lunarDates = useMemo(
     () => new Map([...days, ...weekDays].map((day) => [day, lunarDate(day)])),
     [days, weekDays],
@@ -286,14 +298,24 @@ export function CalendarPage({
     observer.observe(monthGrid.current);
     return () => observer.disconnect();
   }, [view, count, todoView]);
+  const rangeStart = view === "week" ? weekStart : begin;
+  const rangeEnd =
+    view === "week" ? dateMove(weekStart, 7) : dateMove(begin, count);
+  const requestRange = `${rangeStart}|${rangeEnd}|${timezone}`;
+  const activeRange = useRef(requestRange);
+  useLayoutEffect(() => {
+    activeRange.current = requestRange;
+    return () => {
+      activeRange.current = "";
+      requestSequence.current++;
+    };
+  }, [requestRange]);
   const load = useCallback(async () => {
+    if (activeRange.current !== requestRange) return;
     const sequence = ++requestSequence.current;
     setLoading(true);
     try {
-      const start = view === "week" ? weekStart : begin;
-      const end =
-        view === "week" ? dateMove(weekStart, 7) : dateMove(begin, count);
-      const query = `start=${start}&end=${end}&timezone=${encodeURIComponent(timezone)}`;
+      const query = `start=${rangeStart}&end=${rangeEnd}&timezone=${encodeURIComponent(timezone)}`;
       const [values, orders] = await Promise.all([
         api<CalendarEvent[]>(`/plans?${query}`),
         api<Record<string, string[]>>(`/plans/order?${query}`),
@@ -308,7 +330,7 @@ export function CalendarPage({
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
     }
-  }, [begin, count, view, weekStart, timezone]);
+  }, [rangeStart, rangeEnd, timezone, requestRange]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -377,7 +399,7 @@ export function CalendarPage({
       formBaseline.current = nextForm;
       setForm({ ...nextForm, ...changes });
       setError("");
-      setDayList("");
+      setDayList(day);
       setEditor(true);
     },
     [],
@@ -401,7 +423,7 @@ export function CalendarPage({
         scope === "series"
           ? await api<CalendarEvent>(`/plans/${editing.id}`)
           : editing;
-      edit(editing.start.slice(0, 10), editing, scope, source, changes);
+      edit(dayList, editing, scope, source, changes);
     } catch (error) {
       setError(errorMessage(error));
     } finally {
@@ -431,6 +453,7 @@ export function CalendarPage({
     setAgendaTab(tab || (hasTodo ? "todo" : hasRepeat ? "repeat" : "todo"));
     setAgendaNotice("");
     setDayList(day);
+    setSidebarOpen(true);
   }
   useEffect(() => {
     if (!openEventId) return;
@@ -440,12 +463,11 @@ export function CalendarPage({
     )
       .then((event) => {
         if (!live) return;
-        setAnchor(
-          event.all_day
-            ? event.start
-            : zonedInput(event.start, timezone).slice(0, 10),
-        );
-        edit(event.start.slice(0, 10), {
+        const day = event.all_day
+          ? event.start
+          : zonedInput(event.start, timezone).slice(0, 10);
+        setAnchor(day);
+        edit(day, {
           ...event,
           occurrence_start: openOccurrenceStart || event.start,
         });
@@ -470,18 +492,18 @@ export function CalendarPage({
       edit(today);
     }
   }, [createRequested, edit]);
-  useEffect(() => {
-    if (view === "week" && weekScroll.current)
-      weekScroll.current.scrollTop = 8 * 48;
-  }, [view, weekStart]);
   function move(amount: number) {
     if (view === "week") {
-      setAnchor(dateMove(anchor, amount * 7));
+      const next = dateMove(anchor, amount * 7);
+      setAnchor(next);
+      setDayList(next);
       return;
     }
     const value = new Date(`${anchor.slice(0, 7)}-01T00:00:00Z`);
     value.setUTCMonth(value.getUTCMonth() + amount);
-    setAnchor(value.toISOString().slice(0, 10));
+    const next = value.toISOString().slice(0, 10);
+    setAnchor(next);
+    setDayList(next);
   }
   function payload(): CalendarEventWrite {
     const zone = editing?.timezone || timezone;
@@ -766,63 +788,41 @@ export function CalendarPage({
   }
   const timeLabel = (e: CalendarEvent) =>
     e.all_day ? "全天" : zonedInput(e.start, timezone).slice(11);
-  const eventButton = (e: CalendarEvent, day?: string) => (
-    <Hint key={`${e.id}:${e.occurrence_start || e.start}`} label={e.title}>
-      <button
-        className={`day-event ${e.status === "completed" ? "is-completed" : e.status === "cancelled" ? "is-cancelled" : ""}`}
-        onClick={() =>
-          openAgenda(
-            day ||
-              (e.all_day
-                ? e.start
-                : zonedInput(e.start, timezone).slice(0, 10)),
-            isRepeating(e) ? "repeat" : "todo",
-          )
-        }
-      >
-        <span>
-          {!e.all_day && `${timeLabel(e)} `}
-          {e.title}
-          {e.status === "cancelled" && " · 已取消"}
-        </span>
-        {e.status === "completed" ? (
-          <Check size={12} />
-        ) : isRepeating(e) ? (
-          <Repeat2 size={10} className="plan-event-repeat" />
-        ) : null}
-      </button>
-    </Hint>
-  );
-  function weekEventPosition(event: CalendarEvent, day: string) {
-    const dayStart = Date.parse(zonedISO(`${day}T00:00`, timezone));
-    const nextDay = Date.parse(zonedISO(`${dateMove(day, 1)}T00:00`, timezone));
-    const start = Math.max(Date.parse(event.start), dayStart);
-    const end = Math.min(Date.parse(event.end), nextDay);
-    return {
-      top: ((start - dayStart) / 3600000) * 48,
-      height: Math.max(24, ((end - start) / 3600000) * 48),
-    };
-  }
-  const weekEventButton = (event: CalendarEvent, day: string, index = 0) => (
-    <Hint
-      key={`${event.id}:${event.occurrence_start || event.start}:${day}`}
-      label={event.title}
+  const eventButton = (event: CalendarEvent, day = anchor) => (
+    <button
+      type="button"
+      key={occurrenceOrderKey(event)}
+      className={`day-event sidebar-occurrence ${event.status === "completed" ? "is-completed" : event.status === "cancelled" ? "is-cancelled" : ""}`}
+      aria-label={`编辑 ${event.title}，${planTimeRange(event, timezone)}`}
+      onClick={() => edit(day, event)}
     >
-      <button
-        className={`week-event ${event.status === "completed" ? "is-completed" : event.status === "cancelled" ? "is-cancelled" : ""}`}
-        style={{
-          ...weekEventPosition(event, day),
-          zIndex: events.length - index + 1,
-        }}
-        onClick={() => openAgenda(day, isRepeating(event) ? "repeat" : "todo")}
-      >
-        <strong>
-          {zonedInput(event.start, timezone).slice(11)} {event.title}
-          {event.status === "cancelled" && " · 已取消"}
-        </strong>
-      </button>
-    </Hint>
+      <span>
+        {event.title}
+        {isRepeating(event) && (
+          <Repeat2
+            size={11}
+            className="plan-event-repeat"
+            aria-label="重复计划"
+          />
+        )}
+      </span>
+      <small>
+        {planTimeRange(event, timezone)}
+        {event.status === "cancelled" ? " · 已取消" : ""}
+      </small>
+    </button>
   );
+  function closeDaySidebar() {
+    setSidebarOpen(false);
+    setAgendaNotice("");
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '.window-titlebar .sidebar-toggle[aria-controls="plan-day-sidebar"]',
+        )
+        ?.focus({ preventScroll: true }),
+    );
+  }
   useEffect(() => {
     if (!moveNotice) return;
     const timer = window.setTimeout(() => setMoveNotice(""), 3000);
@@ -869,12 +869,6 @@ export function CalendarPage({
         agendaTab === "repeat" ? isRepeating(event) : !isRepeating(event),
       )
     : [];
-  const weekRepeats = new Map(
-    weekDays.map((day) => [day, orderedDay(day).filter(isRoutine)]),
-  );
-  const hasWeekRepeats = [...weekRepeats.values()].some(
-    (values) => values.length,
-  );
   if (todoView)
     return (
       <TodoPage
@@ -889,7 +883,7 @@ export function CalendarPage({
       />
     );
   return (
-    <div className="calendar-page page-content">
+    <div className="calendar-page page-content calendar-compact-page">
       <div className="plan-toolbar">
         <div className="plan-heading">
           <h1>
@@ -907,7 +901,14 @@ export function CalendarPage({
           >
             <ChevronLeft size={17} />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setAnchor(today)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setAnchor(today);
+              setDayList(today);
+            }}
+          >
             今天
           </Button>
           <Button
@@ -924,7 +925,10 @@ export function CalendarPage({
             value={view}
             onChange={(next) => {
               if (next === "todo") setTodoView(true);
-              else setView(next);
+              else {
+                setView(next);
+                setAnchor(dayList);
+              }
             }}
           />
           <DropdownMenu.Root>
@@ -970,418 +974,355 @@ export function CalendarPage({
           </DropdownMenu.Root>
         </div>
       </div>
-      <div className="plan-calendar" data-view={view}>
-        {error && !editor && (
-          <ErrorNotice message={error} retry={() => void load()} />
-        )}
-        {moveNotice && (
-          <p className="plan-move-notice" role="status">
-            {moveNotice}
-          </p>
-        )}
-        {view === "month" && (
-          <div className="plan-weekdays">
-            {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map(
-              (day) => (
-                <span key={day}>{day}</span>
-              ),
-            )}
-          </div>
-        )}
-        {view === "week" && (
-          <div className="plan-weekdays">
-            {weekDays.map((day) => (
-              <div
-                className="plan-weekday"
-                data-today={day === today}
-                key={day}
-              >
-                <span>
-                  {
-                    ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][
-                      weekDays.indexOf(day)
-                    ]
-                  }
-                  <strong data-today={day === today}>
-                    {Number(day.slice(8))}
-                  </strong>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        {loading && (
-          <span className="calendar-loading" role="status">
-            正在读取计划…
-          </span>
-        )}
-        {view === "week" ? (
-          <div className="plan-week-view">
-            {hasWeekRepeats && (
-              <div className="plan-week-repeats">
-                <span className="plan-week-repeats-label">
-                  <Repeat2 size={13} />
-                  重复
-                </span>
-                {weekDays.map((day) => {
-                  const values = weekRepeats.get(day) || [];
-                  return (
-                    <div key={day}>
-                      {values.length > 0 && (
-                        <Hint
-                          label={values.map((event) => event.title).join("\n")}
-                        >
-                          <button
-                            aria-label={`${day} 重复事项 ${values.length} 项`}
-                            onClick={() => openAgenda(day, "repeat")}
-                          >
-                            <Repeat2 size={11} />
-                            {values.length}
-                          </button>
-                        </Hint>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {hasAllDayEvents && (
-              <div className="plan-week-allday">
-                <span className="plan-week-allday-label">全天</span>
-                {weekDays.map((day) => (
-                  <div
-                    key={day}
-                    onDoubleClick={(event) => {
-                      if (!(event.target as HTMLElement).closest("button"))
-                        edit(day);
-                    }}
-                  >
-                    {orderedDay(day)
-                      .filter((event) => event.all_day && !isRoutine(event))
-                      .map((event) => (
-                        <button
-                          key={`${event.id}:${event.occurrence_start || event.start}`}
-                          className={`week-allday-event ${event.status === "completed" ? "is-completed" : event.status === "cancelled" ? "is-cancelled" : ""}`}
-                          onClick={() =>
-                            openAgenda(
-                              day,
-                              isRepeating(event) ? "repeat" : "todo",
-                            )
-                          }
-                        >
-                          {event.title}
-                          {event.status === "cancelled" && " · 已取消"}
-                        </button>
-                      ))}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="plan-week-scroll" ref={weekScroll}>
-              <div className="plan-week-times">
-                {Array.from({ length: 24 }, (_, hour) => (
-                  <span key={hour} style={{ top: hour * 48 }}>
-                    {String(hour).padStart(2, "0")}:00
-                  </span>
-                ))}
-              </div>
-              <div className="plan-week-grid">
-                {weekDays.map((day) => (
-                  <div
-                    className="plan-week-column"
-                    data-today={day === today}
-                    key={day}
-                    onDoubleClick={(event) => {
-                      if (!(event.target as HTMLElement).closest("button"))
-                        edit(day);
-                    }}
-                  >
-                    {orderedDay(day)
-                      .filter((event) => !event.all_day && !isRoutine(event))
-                      .map((event, index) =>
-                        weekEventButton(event, day, index),
-                      )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div
-            className="plan-month-grid"
-            ref={monthGrid}
-            style={{ gridTemplateRows: `repeat(${count / 7}, minmax(0, 1fr))` }}
-          >
-            {days.map((day) => {
-              const values = orderedDay(day);
-              const visibleValues = values.filter((event) => !isRoutine(event));
-              const repeatedValues = values.filter(isRoutine);
-              const segments = monthLayout.get(day) || [];
-              const displayed = segments.filter(
-                (segment) => segment.lane < visibleEvents,
-              );
-              return (
-                <section
-                  key={day}
-                  className="plan-day"
-                  data-calendar-day={day}
-                  data-drop-target={dropDay === day}
-                  data-outside={day.slice(0, 7) !== anchor.slice(0, 7)}
-                  data-today={day === today}
-                  data-holiday={holidayOn(day)?.kind}
-                  onDoubleClick={(event) => {
-                    if (!(event.target as HTMLElement).closest("button, a"))
-                      edit(day);
-                  }}
-                >
-                  <div className="plan-day-heading">
-                    <button
-                      className="plan-day-number"
-                      aria-label={`${day} 添加计划`}
-                      onClick={() => edit(day)}
-                    >
-                      {Number(day.slice(8))}
-                    </button>
-                    <Hint label={lunarDates.get(day)?.title}>
-                      <span
-                        className={`plan-lunar ${lunarDates.get(day)?.festival ? "festival" : lunarDates.get(day)?.term ? "solar-term" : ""}`}
-                      >
-                        {lunarDates.get(day)?.festival ||
-                          lunarDates.get(day)?.term ||
-                          lunarDates.get(day)?.label}
-                      </span>
-                    </Hint>
-                    {holidayOn(day) && (
-                      <Hint
-                        label={`${holidayOn(day)!.name} · ${holidayOn(day)!.kind === "off" ? "放假" : "补班"}`}
-                      >
-                        <span
-                          className={`holiday-label ${holidayOn(day)!.kind}`}
-                        >
-                          {!lunarDates.get(day)?.festival && (
-                            <span>{holidayOn(day)!.name}</span>
-                          )}
-                          <b>{holidayOn(day)!.kind === "off" ? "休" : "班"}</b>
-                        </span>
-                      </Hint>
-                    )}
-                  </div>
-                  <div className="plan-day-events">
-                    <div className="plan-day-event-list">
-                      {Array.from({ length: visibleEvents }, (_, lane) => {
-                        const segment = displayed.find(
-                          (value) => value.lane === lane,
-                        );
-                        return (
-                          <div className="month-event-slot" key={lane}>
-                            {segment ? monthEvent(segment, day) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="plan-day-summary">
-                      {visibleValues.length > displayed.length && (
-                        <button
-                          className="plan-more plan-more-ellipsis"
-                          aria-label={`查看 ${day} 的全部计划`}
-                          onClick={() =>
-                            openAgenda(
-                              day,
-                              visibleValues.some((event) => !isRepeating(event))
-                                ? "todo"
-                                : "repeat",
-                            )
-                          }
-                        >
-                          ···
-                        </button>
-                      )}
-                      {repeatedValues.length > 0 && (
-                        <Hint
-                          label={repeatedValues
-                            .map(
-                              (event) => `${timeLabel(event)} ${event.title}`,
-                            )
-                            .join("\n")}
-                        >
-                          <button
-                            className="plan-daily-repeat-hint"
-                            aria-label={`${day} 重复事项 ${repeatedValues.length} 项`}
-                            onClick={() => openAgenda(day, "repeat")}
-                          >
-                            <Repeat2 size={11} />
-                            <span>{repeatedValues.length}</span>
-                          </button>
-                        </Hint>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      <Dialog
-        open={Boolean(dayList)}
-        onOpenChange={(v) => {
-          if (!v) {
-            setDayList("");
-            setAgendaNotice("");
-          }
-        }}
-      >
-        <DialogContent
-          className="calendar-editor plan-agenda-dialog"
-          aria-describedby={undefined}
-          onEscapeKeyDown={(event) => {
-            // Let the focused handle cancel a sort before Escape closes the dialog.
+      <div className="calendar-workspace" data-sidebar-open={sidebarOpen}>
+        <aside
+          id="plan-day-sidebar"
+          className="plan-day-sidebar"
+          hidden={!sidebarOpen}
+          aria-labelledby="plan-day-sidebar-heading"
+          onKeyDown={(event) => {
             if (
-              event.target instanceof HTMLElement &&
-              event.target.closest(".plan-agenda-list.is-sorting")
-            )
-              event.preventDefault();
+              event.key === "Escape" &&
+              !event.defaultPrevented &&
+              !(event.target as HTMLElement).closest(
+                ".plan-agenda-list.is-sorting",
+              )
+            ) {
+              event.stopPropagation();
+              closeDaySidebar();
+            }
           }}
         >
-          <DialogHeader>
-            <DialogTitle>
-              {dayList} 的{agendaTab === "repeat" ? "重复事项" : "待办事项"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="plan-agenda-sticky-tabs">
-            <div className="plan-agenda-tabs segmented" role="tablist">
-              <button
-                role="tab"
-                aria-selected={agendaTab === "todo"}
-                className={agendaTab === "todo" ? "selected" : ""}
-                onClick={() => setAgendaTab("todo")}
+          {sidebarOpen && (
+            <>
+              <header className="plan-day-sidebar-header">
+                <div>
+                  <h2 id="plan-day-sidebar-heading">
+                    {dayList} 的
+                    {agendaTab === "repeat" ? "重复事项" : "待办事项"}
+                  </h2>
+                  <p>
+                    {lunarDates
+                      .get(dayList)
+                      ?.title.split(" · ")
+                      .slice(1)
+                      .join(" · ")}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label="收起每日计划"
+                  onClick={closeDaySidebar}
+                >
+                  <X size={15} />
+                </Button>
+              </header>
+              <div className="plan-agenda-sticky-tabs">
+                <div className="plan-agenda-tabs segmented" role="tablist">
+                  <button
+                    role="tab"
+                    aria-selected={agendaTab === "todo"}
+                    className={agendaTab === "todo" ? "selected" : ""}
+                    onClick={() => setAgendaTab("todo")}
+                  >
+                    待办事项 <span>{todoCount}</span>
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={agendaTab === "repeat"}
+                    className={agendaTab === "repeat" ? "selected" : ""}
+                    onClick={() => setAgendaTab("repeat")}
+                  >
+                    重复 {repeatCount} 项
+                  </button>
+                </div>
+                <Button
+                  className="plan-order-reset"
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    busy ||
+                    loading ||
+                    orderSaving ||
+                    !dayOrders[dayList]?.length
+                  }
+                  onClick={() => void saveOrder([])}
+                >
+                  <RotateCcw size={14} />
+                  恢复默认排序
+                </Button>
+              </div>
+              {agendaNotice && (
+                <p
+                  className="plan-agenda-feedback"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Check size={14} />
+                  {agendaNotice}
+                </p>
+              )}
+              <PlanAgendaList
+                key={`${dayList}:${agendaTab}:${timezone}`}
+                events={selectedOccurrences}
+                disabled={busy || orderSaving || loading}
+                onReorder={reorder}
+                empty={
+                  <p className="plan-agenda-empty">
+                    {agendaTab === "repeat"
+                      ? "这一天还没有重复安排。"
+                      : "这一天还没有待办事项。"}
+                  </p>
+                }
               >
-                待办事项 <span>{todoCount}</span>
-              </button>
-              <button
-                role="tab"
-                aria-selected={agendaTab === "repeat"}
-                className={agendaTab === "repeat" ? "selected" : ""}
-                onClick={() => setAgendaTab("repeat")}
-              >
-                重复 {repeatCount} 项
-              </button>
-            </div>
-            <Button
-              className="plan-order-reset"
-              size="sm"
-              variant="outline"
-              disabled={
-                busy || loading || orderSaving || !dayOrders[dayList]?.length
-              }
-              onClick={() => void saveOrder([])}
-            >
-              <RotateCcw size={14} />
-              恢复默认排序
-            </Button>
-          </div>
-          {error && <p role="alert">{error}</p>}
-          {agendaNotice && (
-            <p
-              className="plan-agenda-feedback"
-              role="status"
-              aria-live="polite"
-            >
-              <Check size={14} />
-              {agendaNotice}
+                {(event) => (
+                  <>
+                    <PlanCompletionButton
+                      status={event.status}
+                      label={`${["completed", "cancelled"].includes(event.status) ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}
+                      disabled={busy}
+                      onClick={() => void complete(event)}
+                    />
+                    <div className="plan-occurrence-content">
+                      {eventButton(event, dayList)}
+                    </div>
+                    <Hint
+                      label={
+                        isRepeating(event) ? "删除单日计划安排" : "删除计划"
+                      }
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={busy}
+                        className="plan-agenda-delete"
+                        aria-label={`${isRepeating(event) ? "删除单日计划" : "删除"} ${event.title}`}
+                        onClick={() =>
+                          isRepeating(event)
+                            ? setCancelling(event)
+                            : setDeleting(event)
+                        }
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </Hint>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="plan-agenda-edit"
+                      aria-label={`编辑 ${event.title}`}
+                      onClick={() => edit(dayList, event)}
+                    >
+                      <Pencil size={13} />
+                    </Button>
+                  </>
+                )}
+              </PlanAgendaList>
+              <div className="plan-agenda-create">
+                <Button onClick={() => startCreate(dayList)}>
+                  <Plus size={15} />
+                  添加计划
+                </Button>
+                <div
+                  className="plan-agenda-repeat-actions"
+                  aria-label="添加重复计划"
+                >
+                  {[
+                    ["daily", "每日重复"],
+                    ["weekly", "每周重复"],
+                    ["monthly", "每月重复"],
+                  ].map(([value, label]) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        startCreate(
+                          dayList,
+                          value as "daily" | "weekly" | "monthly",
+                        )
+                      }
+                    >
+                      <Repeat2 size={13} />
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </aside>
+        <div className="plan-calendar" data-view={view}>
+          {error && !editor && (
+            <ErrorNotice message={error} retry={() => void load()} />
+          )}
+          {moveNotice && (
+            <p className="plan-move-notice" role="status">
+              {moveNotice}
             </p>
           )}
-          <PlanAgendaList
-            key={`${dayList}:${agendaTab}:${timezone}`}
-            events={selectedOccurrences}
-            disabled={busy || orderSaving || loading}
-            onReorder={reorder}
-            empty={
-              <p className="plan-agenda-empty">
-                {agendaTab === "repeat"
-                  ? "这一天还没有重复安排。"
-                  : "这一天还没有待办事项。"}
-              </p>
-            }
-          >
-            {(event) => (
-              <>
-                <PlanCompletionButton
-                  status={event.status}
-                  label={`${["completed", "cancelled"].includes(event.status) ? "恢复" : "完成"}${isRepeating(event) ? "本次" : ""} ${event.title} ${event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10)}`}
-                  disabled={busy}
-                  onClick={() => void complete(event)}
-                />
-                <div className="plan-occurrence-content">
-                  {eventButton(event, dayList)}
-                </div>
-                <Hint
-                  label={isRepeating(event) ? "删除单日计划安排" : "删除计划"}
-                >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={busy}
-                    className="plan-agenda-delete"
-                    aria-label={`${isRepeating(event) ? "删除单日计划" : "删除"} ${event.title}`}
-                    onClick={() =>
-                      isRepeating(event)
-                        ? setCancelling(event)
-                        : setDeleting(event)
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                </Hint>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="plan-agenda-edit"
-                  aria-label={`编辑 ${event.title}`}
-                  onClick={() => edit(event.start.slice(0, 10), event)}
-                >
-                  <Pencil size={13} />
-                  编辑
-                </Button>
-              </>
-            )}
-          </PlanAgendaList>
-          <div className="plan-agenda-create">
-            <Button onClick={() => startCreate(dayList)}>
-              <Plus size={15} />
-              添加计划
-            </Button>
-            <div
-              className="plan-agenda-repeat-actions"
-              aria-label="添加重复计划"
-            >
-              {[
-                ["daily", "每日重复"],
-                ["weekly", "每周重复"],
-                ["monthly", "每月重复"],
-              ].map(([value, label]) => (
-                <Button
-                  key={value}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    startCreate(
-                      dayList,
-                      value as "daily" | "weekly" | "monthly",
-                    )
-                  }
-                >
-                  <Repeat2 size={13} />
-                  {label}
-                </Button>
-              ))}
+          {view === "month" && (
+            <div className="plan-weekdays">
+              {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map(
+                (day) => (
+                  <span key={day}>{day}</span>
+                ),
+              )}
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          )}
+          {loading && (
+            <span className="calendar-loading" role="status">
+              正在读取计划…
+            </span>
+          )}
+          {view === "week" ? (
+            <WeekCalendar
+              days={weekDays}
+              today={today}
+              selected={dayList}
+              eventsByDay={valuesByDay}
+              timezone={timezone}
+              onOpenDay={openAgenda}
+              onCreate={startCreate}
+            />
+          ) : (
+            <div
+              className="plan-month-grid"
+              ref={monthGrid}
+              style={{
+                gridTemplateRows: `repeat(${count / 7}, minmax(0, 1fr))`,
+              }}
+            >
+              {days.map((day) => {
+                const values = orderedDay(day);
+                const visibleValues = values.filter(
+                  (event) => !isRoutine(event),
+                );
+                const repeatedValues = values.filter(isRoutine);
+                const segments = monthLayout.get(day) || [];
+                const displayed = segments.filter(
+                  (segment) => segment.lane < visibleEvents,
+                );
+                return (
+                  <section
+                    key={day}
+                    className="plan-day"
+                    data-calendar-day={day}
+                    data-drop-target={dropDay === day}
+                    data-outside={day.slice(0, 7) !== anchor.slice(0, 7)}
+                    data-today={day === today}
+                    data-selected={day === dayList}
+                    data-holiday={holidayOn(day)?.kind}
+                    onClick={(event) => {
+                      if (!(event.target as HTMLElement).closest("button, a"))
+                        openAgenda(day);
+                    }}
+                    onDoubleClick={(event) => {
+                      if (!(event.target as HTMLElement).closest("button, a"))
+                        edit(day);
+                    }}
+                  >
+                    <div className="plan-day-heading">
+                      <button
+                        className="plan-day-number"
+                        aria-label={`${day} 查看计划`}
+                        aria-controls="plan-day-sidebar"
+                        aria-pressed={day === dayList}
+                        onClick={() => openAgenda(day)}
+                        onDoubleClick={() => startCreate(day)}
+                      >
+                        {Number(day.slice(8))}
+                      </button>
+                      <Hint label={lunarDates.get(day)?.title}>
+                        <span
+                          className={`plan-lunar ${lunarDates.get(day)?.festival ? "festival" : lunarDates.get(day)?.term ? "solar-term" : ""}`}
+                        >
+                          {lunarDates.get(day)?.festival ||
+                            lunarDates.get(day)?.term ||
+                            lunarDates.get(day)?.label}
+                        </span>
+                      </Hint>
+                      {holidayOn(day) && (
+                        <Hint
+                          label={`${holidayOn(day)!.name} · ${holidayOn(day)!.kind === "off" ? "放假" : "补班"}`}
+                        >
+                          <span
+                            className={`holiday-label ${holidayOn(day)!.kind}`}
+                          >
+                            {!lunarDates.get(day)?.festival && (
+                              <span>{holidayOn(day)!.name}</span>
+                            )}
+                            <b>
+                              {holidayOn(day)!.kind === "off" ? "休" : "班"}
+                            </b>
+                          </span>
+                        </Hint>
+                      )}
+                    </div>
+                    <div className="plan-day-events">
+                      <div className="plan-day-event-list">
+                        {Array.from({ length: visibleEvents }, (_, lane) => {
+                          const segment = displayed.find(
+                            (value) => value.lane === lane,
+                          );
+                          return (
+                            <div className="month-event-slot" key={lane}>
+                              {segment ? monthEvent(segment, day) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="plan-day-summary">
+                        {visibleValues.length > displayed.length && (
+                          <button
+                            className="plan-more plan-more-ellipsis"
+                            aria-label={`查看 ${day} 的全部计划`}
+                            onClick={() =>
+                              openAgenda(
+                                day,
+                                visibleValues.some(
+                                  (event) => !isRepeating(event),
+                                )
+                                  ? "todo"
+                                  : "repeat",
+                              )
+                            }
+                          >
+                            ···
+                          </button>
+                        )}
+                        {repeatedValues.length > 0 && (
+                          <Hint
+                            label={repeatedValues
+                              .map(
+                                (event) => `${timeLabel(event)} ${event.title}`,
+                              )
+                              .join("\n")}
+                          >
+                            <button
+                              className="plan-daily-repeat-hint"
+                              aria-label={`${day} 重复事项 ${repeatedValues.length} 项`}
+                              onClick={() => openAgenda(day, "repeat")}
+                            >
+                              <Repeat2 size={11} />
+                              <span>{repeatedValues.length}</span>
+                            </button>
+                          </Hint>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
       <Dialog
         open={editor}
         onOpenChange={(v) => {
@@ -1860,7 +1801,9 @@ export function CalendarPage({
               : zonedInput(cancelling.start, timezone).slice(0, 10);
             setCancelling(null);
             setEditor(false);
+            setAnchor(day);
             setDayList(day);
+            setSidebarOpen(true);
             setAgendaTab("repeat");
             setAgendaNotice(
               `已删除单日计划「${cancelling.title}」，可点击恢复按钮恢复。`,

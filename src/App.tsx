@@ -122,6 +122,8 @@ export function App() {
     localStorage.setItem("bai-sidebar-width", String(value));
   }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [planCalendarVisible, setPlanCalendarVisible] = useState(true);
   const [learningSidebar, setLearningSidebar] = useState({ available: false, expanded: false });
   const learningClosing = useRef(false);
   useEffect(() => {
@@ -603,11 +605,12 @@ export function App() {
     );
   return (
     <WindowFrame
-      collapsed={page === "learning" ? !learningSidebar.expanded : sidebarCollapsed}
-      sidebarAvailable={page === "chat" || (page === "learning" && learningSidebar.available)}
-      sidebarLabel={page === "learning" ? "课程目录" : "侧栏"}
-      sidebarControls={page === "learning" ? "course-outline" : "chat-sidebar"}
-      onToggle={page === "chat" ? toggleSidebar : page === "learning" ? () => window.dispatchEvent(new Event("xiaoxi-toggle-learning-outline")) : undefined}
+      collapsed={page === "plans" ? !planSidebarOpen : page === "learning" ? !learningSidebar.expanded : sidebarCollapsed}
+      sidebarAvailable={page === "chat" || (page === "plans" && planCalendarVisible) || (page === "learning" && learningSidebar.available)}
+      sidebarLabel={page === "plans" ? "每日计划" : page === "learning" ? "课程目录" : "侧栏"}
+      sidebarControls={page === "plans" ? "plan-day-sidebar" : page === "learning" ? "course-outline" : "chat-sidebar"}
+      sidebarInBrandSlot={page === "plans" && planCalendarVisible}
+      onToggle={page === "chat" ? toggleSidebar : page === "plans" && planCalendarVisible ? () => setPlanSidebarOpen(open => !open) : page === "learning" ? () => window.dispatchEvent(new Event("xiaoxi-toggle-learning-outline")) : undefined}
       menuActions={{
         newChat: startNewChat,
         newLearning: () => navigate("learning", true),
@@ -812,6 +815,9 @@ export function App() {
                 >
                   <CalendarPage
                     key={`plans-${createKey}`}
+                    sidebarOpen={planSidebarOpen}
+                    onSidebarOpenChange={setPlanSidebarOpen}
+                    onCalendarVisibleChange={setPlanCalendarVisible}
                     createRequested={createKey}
                     openOccurrenceStart={planOccurrence}
                     openAgenda={planAgenda}

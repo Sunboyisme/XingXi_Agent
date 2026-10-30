@@ -23,6 +23,7 @@ export function WindowFrame({
   sidebarAvailable = true,
   sidebarLabel = "侧栏",
   sidebarControls = "chat-sidebar",
+  sidebarInBrandSlot = false,
   menuActions,
 }: {
   children: ReactNode;
@@ -34,6 +35,7 @@ export function WindowFrame({
   sidebarAvailable?: boolean;
   sidebarLabel?: string;
   sidebarControls?: string;
+  sidebarInBrandSlot?: boolean;
   menuActions?: AppMenuActions;
 }) {
   const native = isTauri();
@@ -76,7 +78,10 @@ export function WindowFrame({
   if (reminder) return children;
   return (
     <div className="window-frame">
-      <header className="window-titlebar app-topbar" data-tauri-drag-region>
+      <header
+        className={`window-titlebar app-topbar${sidebarInBrandSlot ? " sidebar-in-brand-slot" : ""}`}
+        data-tauri-drag-region
+      >
         <span className="window-brand" data-tauri-drag-region>
           XiaoXi
         </span>
