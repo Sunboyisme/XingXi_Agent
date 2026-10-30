@@ -105,7 +105,10 @@ html[data-desktop] .pomodoro-widget button:focus-visible,
 .pomodoro-widget-menu {
   pointer-events: auto;
   z-index: 100;
-  min-width: 152px;
+  width: 240px;
+  max-width: calc(100vw - 16px);
+  max-height: var(--radix-context-menu-content-available-height);
+  overflow-y: auto;
   padding: 5px;
   border-radius: 11px;
   border: 1px solid var(--ui-color-line);
@@ -114,15 +117,131 @@ html[data-desktop] .pomodoro-widget button:focus-visible,
   box-shadow: 0 5px 18px #00000020;
   outline: none;
 }
-.pomodoro-widget-menu [role="menuitem"] {
+.pomodoro-widget-menu :is([role="menuitem"], [role="menuitemradio"]) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
   outline: none;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: 7px;
   font-size: 12px;
+  line-height: 18px;
+  cursor: default;
 }
 .pomodoro-widget-menu [data-highlighted] {
   background: var(--surface-hover);
   color: var(--ui-color-action);
+}
+.pomodoro-widget-menu [data-disabled] {
+  opacity: 0.5;
+}
+.pomodoro-theme-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  margin-top: 3px;
+}
+.pomodoro-theme-options [role="menuitemradio"] {
+  padding: 5px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.pomodoro-theme-check {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--ui-color-action);
+}
+.pomodoro-theme-swatch {
+  flex: 0 0 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px #8886;
+}
+.pomodoro-theme-swatch[data-theme="follow"] {
+  background: linear-gradient(135deg, #2d2925 50%, #fff6e9 50%);
+}
+.pomodoro-theme-swatch[data-theme="warm-dark"] {
+  background: #db9c74;
+}
+.pomodoro-theme-swatch[data-theme="cream"] {
+  background: #f2d6b5;
+}
+.pomodoro-theme-swatch[data-theme="mist-blue"] {
+  background: #8bbce4;
+}
+.pomodoro-theme-swatch[data-theme="sage"] {
+  background: #a9c98d;
+}
+.pomodoro-theme-swatch[data-theme="plum"] {
+  background: #d3a4d8;
+}
+
+/* These tokens belong only to the timer webview, including its portalled menu. */
+html[data-desktop="pomodoro-timer"][data-pomodoro-theme="warm-dark"] {
+  color-scheme: dark;
+  --ui-color-surface: #2d2925;
+  --ui-color-text: #e5d9c9;
+  --ui-color-heading: #f4ebe0;
+  --ui-color-text-muted: #bca98f;
+  --ui-color-line: #494035;
+  --ui-color-border: #5c4e40;
+  --ui-color-action: #db9c74;
+  --ui-color-focus: #e9af8b;
+  --ui-color-on-action: #2b2018;
+  --surface-hover: #3c342c;
+}
+html[data-desktop="pomodoro-timer"][data-pomodoro-theme="cream"] {
+  color-scheme: light;
+  --ui-color-surface: #fff6e9;
+  --ui-color-text: #433b35;
+  --ui-color-heading: #3a3028;
+  --ui-color-text-muted: #796a5b;
+  --ui-color-line: #ddcbb5;
+  --ui-color-border: #ccb493;
+  --ui-color-action: #a96845;
+  --ui-color-focus: #a96845;
+  --ui-color-on-action: #fffaf2;
+  --surface-hover: #f3e5d2;
+}
+html[data-desktop="pomodoro-timer"][data-pomodoro-theme="mist-blue"] {
+  color-scheme: dark;
+  --ui-color-surface: #263b50;
+  --ui-color-text: #edf6ff;
+  --ui-color-heading: #edf6ff;
+  --ui-color-text-muted: #adc1d2;
+  --ui-color-line: #466178;
+  --ui-color-border: #557791;
+  --ui-color-action: #8bbce4;
+  --ui-color-focus: #8bbce4;
+  --ui-color-on-action: #1c3042;
+  --surface-hover: #344d64;
+}
+html[data-desktop="pomodoro-timer"][data-pomodoro-theme="sage"] {
+  color-scheme: dark;
+  --ui-color-surface: #2d3830;
+  --ui-color-text: #eef4e9;
+  --ui-color-heading: #eef4e9;
+  --ui-color-text-muted: #b4c5ac;
+  --ui-color-line: #4c5b4a;
+  --ui-color-border: #61745c;
+  --ui-color-action: #a9c98d;
+  --ui-color-focus: #a9c98d;
+  --ui-color-on-action: #293324;
+  --surface-hover: #3e4d3e;
+}
+html[data-desktop="pomodoro-timer"][data-pomodoro-theme="plum"] {
+  color-scheme: dark;
+  --ui-color-surface: #3b2c3d;
+  --ui-color-text: #f4eaf5;
+  --ui-color-heading: #f4eaf5;
+  --ui-color-text-muted: #cbb4cf;
+  --ui-color-line: #624a65;
+  --ui-color-border: #7d5d81;
+  --ui-color-action: #d3a4d8;
+  --ui-color-focus: #d3a4d8;
+  --ui-color-on-action: #39223c;
+  --surface-hover: #503c52;
 }
 
 html[data-desktop="pomodoro-timer"] .ui-hint {

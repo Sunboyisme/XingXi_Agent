@@ -128,8 +128,8 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
         });
         below = Some(at.y + ((top + diameter + 8.0) * scale).round() as i32);
         desired = Some(Position {
-            x: at.x + ((left + diameter / 2.0 - 138.0) * scale).round() as i32,
-            y: at.y + ((top - 58.0) * scale).round() as i32,
+            x: at.x + ((left + diameter / 2.0 - 154.0) * scale).round() as i32,
+            y: at.y + ((top - 86.0) * scale).round() as i32,
         });
     } else if desired.is_none() {
         desired = *state.standalone_position.lock().unwrap();
@@ -164,10 +164,9 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
     let scale = monitor.scale_factor();
     let width = (276.0 * scale).round() as i32;
     let height = (168.0 * scale).round() as i32;
-    let margin = (24.0 * scale).round() as i32;
     let at = desired.unwrap_or(Position {
-        x: area.position.x + area.size.width as i32 - width - margin,
-        y: area.position.y + area.size.height as i32 - height - margin,
+        x: area.position.x + (f64::from(area.size.width) * 0.912).round() as i32 - width / 2,
+        y: area.position.y + (f64::from(area.size.height) * 0.518).round() as i32 - (28.0 * scale).round() as i32,
     });
     if !attached_to_pet && state.position.lock().unwrap().is_none() {
         *state.standalone_position.lock().unwrap() = Some(at);

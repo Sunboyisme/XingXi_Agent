@@ -7,7 +7,7 @@ use std::{
     io::Cursor,
     sync::{LazyLock, Mutex},
 };
-use tauri::{Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
@@ -180,14 +180,6 @@ pub fn create(app: &tauri::AppHandle, data_url: String, x: i32, y: i32) -> Resul
 }
 pub fn forget(label: &str) {
     IMAGES.lock().unwrap().remove(label);
-}
-pub fn show_all(app: &tauri::AppHandle) {
-    let labels: Vec<_> = IMAGES.lock().unwrap().keys().cloned().collect();
-    for label in labels {
-        if let Some(window) = app.get_webview_window(&label) {
-            let _ = window.show();
-        }
-    }
 }
 #[tauri::command]
 pub fn pinned_info(window: tauri::WebviewWindow) -> Result<PinInfo, String> {

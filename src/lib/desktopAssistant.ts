@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emitTo } from "@tauri-apps/api/event";
+import type { PomodoroTheme } from "./pomodoroAppearance";
 import {
   api,
   readEvents,
@@ -14,6 +15,7 @@ export type DesktopPreferences = {
   enabled: boolean;
   pet: boolean;
   pomodoro: boolean;
+  pomodoroTheme?: PomodoroTheme;
   petX: number | null;
   petY: number | null;
   petSize: number;

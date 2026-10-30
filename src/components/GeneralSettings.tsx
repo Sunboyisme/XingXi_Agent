@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   setGeneralPreferences,
   useGeneralPreferences,
@@ -23,15 +24,24 @@ export function GeneralSettings() {
       });
       return;
     }
-    void invoke<Autostart>("get_autostart")
-      .then((result) => {
-        if (live) setValue(result);
+    let revision = 0;
+    const stop = listen<Autostart>("autostart-changed", (event) => {
+      revision++;
+      if (live) setValue(event.payload);
+    });
+    void stop
+      .then(async () => {
+        if (!live) return;
+        const before = revision;
+        const result = await invoke<Autostart>("get_autostart");
+        if (live && before === revision) setValue(result);
       })
       .catch((e) => {
         if (live) setError(errorMessage(e));
       });
     return () => {
       live = false;
+      void stop.then((dispose) => dispose()).catch(() => {});
     };
   }, []);
   return (

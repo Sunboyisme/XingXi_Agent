@@ -25,6 +25,7 @@ import {
 import { ConnectionCard } from "./ConnectionCard";
 import { BaiAvatar } from "./BaiAvatar";
 import { SelectionSettings } from "./SelectionSettings";
+import { pomodoroThemes, readPomodoroTheme } from "@/lib/pomodoroAppearance";
 import "../styles/desktop-settings.css";
 type DesktopStatus = {
   preferences: DesktopPreferences;
@@ -113,7 +114,7 @@ export function DesktopSettings() {
       const value = await invoke<DesktopStatus>("desktop_pet_reset");
       if (mounted.current) {
         setStatus(value);
-        setPetNotice("已移至鼠标所在屏幕的右下角");
+        setPetNotice("已返回鼠标所在屏幕的右侧默认位置");
       }
     } catch (e) {
       if (mounted.current) setError(desktopError(e));
@@ -183,9 +184,23 @@ export function DesktopSettings() {
         <div className="desktop-preference-card">
           {featureRow(
             "pomodoro",
-            "启用桌面计时条",
+            "显示桌面番茄钟",
             "无需开启桌宠。专注时自动显示，也可从番茄钟页面或系统托盘打开；收起后继续计时。",
           )}
+          <div className="desktop-feature-row">
+            <div className="desktop-feature-copy">
+              <strong>主题颜色</strong>
+              <p>单独设置桌面番茄钟的配色。</p>
+            </div>
+            <SoftSelect
+              className="desktop-pomodoro-theme"
+              label="桌面番茄钟主题颜色"
+              value={readPomodoroTheme(status?.preferences.pomodoroTheme)}
+              disabled={!status || busy}
+              options={[...pomodoroThemes]}
+              onValueChange={(value) => void save({ pomodoroTheme: readPomodoroTheme(value) })}
+            />
+          </div>
         </div>
       </section>
       <section className="settings-group">
@@ -202,8 +217,8 @@ export function DesktopSettings() {
           </div>
           {featureRow(
             "pet",
-            "显示桌宠",
-            "拖动调整位置，轻触打开番茄钟，双击打开主窗口。桌面计时条可独立使用。",
+            "显示桌面宠物",
+            "拖动调整位置，轻触打开番茄钟，双击打开主窗口。桌面番茄钟可独立使用。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">
@@ -251,7 +266,7 @@ export function DesktopSettings() {
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">
               <strong>重置位置</strong>
-              <p>将当前桌宠移至鼠标所在屏幕的右下角。</p>
+              <p>将当前桌宠移至鼠标所在屏幕的右侧默认位置。</p>
             </div>
             <Button
               variant="outline"

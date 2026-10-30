@@ -2,9 +2,23 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ContextMenu } from "radix-ui";
-import { ArrowUpRight, CircleAlert, Pause, Play, Square } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  ChevronLeft,
+  CircleAlert,
+  Pause,
+  Play,
+  Square,
+} from "lucide-react";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
+import type { DesktopPreferences } from "@/lib/desktopAssistant";
+import {
+  pomodoroThemes,
+  readPomodoroTheme,
+  type PomodoroTheme,
+} from "@/lib/pomodoroAppearance";
 import {
   formatCountdown,
   pomodoroAction,
@@ -20,6 +34,13 @@ export function PomodoroWidget() {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [themeChooser, setThemeChooser] = useState(false);
+  const [theme, setTheme] = useState<PomodoroTheme>("follow");
+  const [themeReady, setThemeReady] = useState(false);
+  const [themeBusy, setThemeBusy] = useState(false);
+  const alive = useRef(false);
+  const themeSaving = useRef(false);
+  const contextMenu = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ x: number; y: number; pointer: number } | null>(null);
   const expanded = hovered || focused || menuOpen || dragging;
@@ -27,6 +48,76 @@ export function PomodoroWidget() {
     ".pomodoro-widget,.pomodoro-widget-menu,.ui-hint,.ui-hint-arrow",
     true,
   );
+  useEffect(() => {
+    alive.current = true;
+    let disposed = false;
+    let revision = 0;
+    type Snapshot = { preferences: DesktopPreferences };
+    const accept = (snapshot: Snapshot) => {
+      if (disposed) return;
+      setTheme(readPomodoroTheme(snapshot.preferences.pomodoroTheme));
+      setThemeReady(true);
+    };
+    const stop = listen<Snapshot>("desktop-preferences", (event) => {
+      revision++;
+      accept(event.payload);
+    });
+    void stop
+      .then(async () => {
+        if (disposed) return;
+        const before = revision;
+        const snapshot = await invoke<Snapshot>("desktop_preferences");
+        if (before === revision) accept(snapshot);
+      })
+      .catch((cause) => {
+        if (!disposed) setLocalError(String(cause));
+      });
+    return () => {
+      disposed = true;
+      alive.current = false;
+      void stop.then((dispose) => dispose()).catch(() => {});
+    };
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.pomodoroTheme = theme;
+    return () => {
+      delete document.documentElement.dataset.pomodoroTheme;
+    };
+  }, [theme]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const frame = requestAnimationFrame(() =>
+      contextMenu.current
+        ?.querySelector<HTMLElement>(
+          themeChooser
+            ? '[role="menuitemradio"][data-state="checked"]'
+            : '[role="menuitem"]',
+        )
+        ?.focus(),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [themeChooser, menuOpen]);
+  async function saveTheme(value: string) {
+    if (themeSaving.current) return;
+    themeSaving.current = true;
+    setThemeBusy(true);
+    setLocalError("");
+    try {
+      const snapshot = await invoke<{ preferences: DesktopPreferences }>(
+        "desktop_preferences_save",
+        {
+          preferences: { pomodoroTheme: readPomodoroTheme(value) },
+        },
+      );
+      if (alive.current)
+        setTheme(readPomodoroTheme(snapshot.preferences.pomodoroTheme));
+    } catch (cause) {
+      if (alive.current) setLocalError(String(cause));
+    } finally {
+      themeSaving.current = false;
+      if (alive.current) setThemeBusy(false);
+    }
+  }
   useEffect(() => {
     const stops = [
       listen<string>("pomodoro-widget-error", (event) =>
@@ -36,6 +127,7 @@ export function PomodoroWidget() {
         setHovered(false);
         setFocused(false);
         setMenuOpen(false);
+        setThemeChooser(false);
         setDragging(false);
       }),
       listen<boolean>("pomodoro-widget-pointer", (event) =>
@@ -113,7 +205,13 @@ export function PomodoroWidget() {
   }
   return (
     <main className="pomodoro-widget-frame">
-      <ContextMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+      <ContextMenu.Root
+        open={menuOpen}
+        onOpenChange={(open) => {
+          setMenuOpen(open);
+          if (!open) setThemeChooser(false);
+        }}
+      >
         <ContextMenu.Trigger asChild>
           <section
             className="pomodoro-widget"
@@ -218,23 +316,75 @@ export function PomodoroWidget() {
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Content
+            ref={contextMenu}
             className="pomodoro-widget-menu"
             collisionPadding={8}
           >
-            <ContextMenu.Item
-              onSelect={() => {
-                setLocalError("");
-                void invoke("pomodoro_widget_reset").catch(fail);
-              }}
-            >
-              返回默认位置
-            </ContextMenu.Item>
-            <ContextMenu.Item onSelect={openPage}>打开番茄钟</ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={() => void invoke("desktop_dismiss").catch(fail)}
-            >
-              收起计时条
-            </ContextMenu.Item>
+            {themeChooser ? (
+              <>
+                <ContextMenu.Item
+                  className="pomodoro-theme-back"
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setThemeChooser(false);
+                  }}
+                >
+                  <ChevronLeft size={14} aria-hidden="true" />
+                  主题颜色
+                </ContextMenu.Item>
+                <ContextMenu.RadioGroup
+                  className="pomodoro-theme-options"
+                  value={theme}
+                  onValueChange={(value) => void saveTheme(value)}
+                >
+                  {pomodoroThemes.map((option) => (
+                    <ContextMenu.RadioItem
+                      key={option.value}
+                      value={option.value}
+                      disabled={themeBusy}
+                    >
+                      <span
+                        className="pomodoro-theme-swatch"
+                        data-theme={option.value}
+                        aria-hidden="true"
+                      />
+                      <span>{option.label}</span>
+                      <ContextMenu.ItemIndicator className="pomodoro-theme-check">
+                        <Check size={12} />
+                      </ContextMenu.ItemIndicator>
+                    </ContextMenu.RadioItem>
+                  ))}
+                </ContextMenu.RadioGroup>
+              </>
+            ) : (
+              <>
+                <ContextMenu.Item
+                  disabled={!themeReady || themeBusy}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setThemeChooser(true);
+                  }}
+                >
+                  主题颜色
+                </ContextMenu.Item>
+                <ContextMenu.Item
+                  onSelect={() => {
+                    setLocalError("");
+                    void invoke("pomodoro_widget_reset").catch(fail);
+                  }}
+                >
+                  返回默认位置
+                </ContextMenu.Item>
+                <ContextMenu.Item onSelect={openPage}>
+                  打开番茄钟
+                </ContextMenu.Item>
+                <ContextMenu.Item
+                  onSelect={() => void invoke("desktop_dismiss").catch(fail)}
+                >
+                  收起桌面番茄钟
+                </ContextMenu.Item>
+              </>
+            )}
           </ContextMenu.Content>
         </ContextMenu.Portal>
       </ContextMenu.Root>

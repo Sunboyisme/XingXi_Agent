@@ -7,6 +7,7 @@ mod drop_files;
 mod desktop;
 mod pinned;
 mod pinned_menu;
+mod tray_menu;
 mod desktop_input;
 mod selection;
 mod voice;
@@ -23,8 +24,7 @@ use std::{
     time::Duration,
 };
 use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent},
+    tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
     Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_notification::NotificationExt;
@@ -276,7 +276,9 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<AutostartState,
     if !get_autostart(app.clone())?.supported { return Err("测试版不注册系统启动项".into()); }
     if enabled { app.autolaunch().enable() } else { app.autolaunch().disable() }
         .map_err(|_| "更新 Windows 开机自启失败，请检查系统权限")?;
-    get_autostart(app)
+    let state = get_autostart(app.clone())?;
+    let _ = app.emit("autostart-changed", &state);
+    Ok(state)
 }
 
 #[tauri::command]
@@ -507,6 +509,9 @@ fn main() {
             backend_config,
             get_autostart,
             set_autostart,
+            tray_menu::tray_menu_state,
+            tray_menu::tray_menu_close,
+            tray_menu::tray_menu_action,
             download_knowledge_file,
             drop_files::read_dropped_files,
             quit_app,
@@ -671,60 +676,26 @@ fn main() {
             let is_preview = app.config().identifier.ends_with(".preview");
             desktop::setup(app.handle()).map_err(std::io::Error::other)?;
             pomodoro::setup(app.handle()).map_err(std::io::Error::other)?;
+            tray_menu::setup(app.handle()).map_err(std::io::Error::other)?;
             let tray_name = if is_preview {
                 "XiaoXi（测试版）"
             } else {
                 "XiaoXi"
             };
-            let show = MenuItem::with_id(
-                app,
-                "show",
-                format!("打开{tray_name}"),
-                true,
-                None::<&str>,
-            )?;
-            let new_chat = MenuItem::with_id(app, "new_chat", "新建对话", true, None::<&str>)?;
-            let plans = MenuItem::with_id(app, "plans", "打开今日安排", true, None::<&str>)?;
-            let pomodoro = MenuItem::with_id(app, "pomodoro", "打开番茄钟", true, None::<&str>)?;
-            let pomodoro_widget = MenuItem::with_id(app, "pomodoro_widget", "显示桌面计时条", true, None::<&str>)?;
-            let settings = MenuItem::with_id(app, "settings", "连接与设置", true, None::<&str>)?;
-            let pins = MenuItem::with_id(app, "show_pins", "显示贴图", true, None::<&str>)?;
-            let exit = MenuItem::with_id(
-                app,
-                "quit",
-                format!("退出{tray_name}"),
-                true,
-                None::<&str>,
-            )?;
-            let menu = Menu::with_items(app, &[&show, &new_chat, &plans, &pomodoro, &pomodoro_widget, &settings, &pins, &exit])?;
             let icon = app.default_window_icon().cloned().ok_or("应用图标缺失")?;
             TrayIconBuilder::new()
                 .icon(icon)
                 .tooltip(tray_name)
-                .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => open_main(app),
-                    "show_pins" => pinned::show_all(app),
-                    "pomodoro" => { let _ = desktop::desktop_main(app.clone(), None, None, None, None, Some("pomodoro".into())); },
-                    "pomodoro_widget" => {
-                        let app = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            if let Err(error) = pomodoro::pomodoro_show_controls(app.clone(), Some(true), None).await {
-                                let _ = app.notification().builder().title("无法打开桌面计时条").body(error).show();
-                            }
-                        });
-                    }
-                    "new_chat" | "plans" | "settings" => {
-                        open_main(app);
-                        let _ = app.emit("bai-tray-action", event.id.as_ref());
-                    }
-                    "quit" => { let _ = app.emit("xiaoxi-close-learning", true); },
-                    _ => {}
-                })
                 .on_tray_icon_event(|tray, event| {
-                    if matches!(event, TrayIconEvent::DoubleClick { .. }) {
-                        open_main(tray.app_handle());
+                    match event {
+                        TrayIconEvent::Click { button: MouseButton::Right, button_state: MouseButtonState::Up, position, .. } => {
+                            if let Err(error) = tray_menu::show(tray.app_handle(), position.x, position.y) {
+                                let _ = tray.app_handle().notification().builder().title("托盘菜单未打开").body(error).show();
+                            }
+                        }
+                        TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => open_main(tray.app_handle()),
+                        _ => {}
                     }
                 })
                 .build(app)?;
@@ -830,6 +801,10 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "tray-menu" {
+                if matches!(event, tauri::WindowEvent::Focused(false)) { tray_menu::focus_lost(window.app_handle()); }
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event { api.prevent_close(); tray_menu::dismiss(window.app_handle()); return; }
+            }
             if let tauri::WindowEvent::Destroyed = event { pinned_menu::owner_closed(window.app_handle(), window.label()); }
             if window.label() == "pin-menu" && matches!(event, tauri::WindowEvent::Focused(false)) { pinned_menu::focus_lost(window.app_handle()); }
             if window.label() == "pomodoro-timer" && matches!(event, tauri::WindowEvent::Focused(false)) { pomodoro::focus_lost(window.app_handle()); }

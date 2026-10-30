@@ -17,6 +17,7 @@ pub struct Preferences {
     pub enabled: bool,
     pub pet: bool,
     pub pomodoro: bool,
+    pub pomodoro_theme: String,
     pub pet_x: Option<i32>,
     pub pet_y: Option<i32>,
     pub pet_size: u16,
@@ -31,6 +32,7 @@ pub struct PreferencePatch {
     pub enabled: Option<bool>,
     pub pet: Option<bool>,
     pub pomodoro: Option<bool>,
+    pub pomodoro_theme: Option<String>,
     pub pet_size: Option<u16>,
     pub selection_enabled: Option<bool>,
     pub selection_shortcut: Option<String>,
@@ -61,6 +63,7 @@ impl Default for Preferences {
             enabled: true,
             pet: true,
             pomodoro: true,
+            pomodoro_theme: "follow".into(),
             pet_x: None,
             pet_y: None,
             pet_size: 100,
@@ -142,6 +145,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     if let Ok(bytes) = std::fs::read(path(app)) {
         if let Ok(mut p) = serde_json::from_slice::<Preferences>(&bytes) {
             p.pet_size = p.pet_size.clamp(50, 200);
+            if !pomodoro_theme_valid(&p.pomodoro_theme) { p.pomodoro_theme = "follow".into(); }
             *app.state::<Desktop>().prefs.lock().unwrap() = p;
         }
     }
@@ -153,16 +157,16 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     let pet = window(app, "pet", pet_width, pet_height)?;
     if let Some(m) = pet.primary_monitor().map_err(|e| e.to_string())? {
         let area = m.work_area();
-        let size = pet.outer_size().map_err(|e| e.to_string())?;
-        let x = p
-            .pet_x
-            .unwrap_or(area.position.x + area.size.width as i32 - size.width as i32 - 24);
-        let y = p
-            .pet_y
-            .unwrap_or(area.position.y + area.size.height as i32 - size.height as i32 - 24);
-        pet.set_position(PhysicalPosition::new(x, y))
-            .map_err(|e| e.to_string())?;
-        let _ = place_pet(app, false);
+        if let (Some(x), Some(y)) = (p.pet_x, p.pet_y) {
+            pet.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+            place_pet(app, false)?;
+        } else {
+            let scale = m.scale_factor();
+            let diameter = (82.0 * f64::from(p.pet_size) / 100.0 * scale).round() as i32;
+            let x = area.position.x + (f64::from(area.size.width) * 0.92).round() as i32 - diameter / 2;
+            let y = area.position.y + (f64::from(area.size.height) * 0.615).round() as i32 - diameter / 2;
+            position_pet(app, &pet, area, x, y, PhysicalSize::new((pet_width * scale).round() as u32, (pet_height * scale).round() as u32), scale)?;
+        }
     }
     crate::desktop_input::start(app.clone());
     Ok(())
@@ -192,6 +196,10 @@ pub async fn desktop_preferences_save(
     }
     if let Some(v) = preferences.pomodoro {
         next.pomodoro = v;
+    }
+    if let Some(v) = preferences.pomodoro_theme {
+        if !pomodoro_theme_valid(&v) { return Err("未知桌面番茄钟主题".into()); }
+        next.pomodoro_theme = v;
     }
     let selection_changed = preferences.selection_enabled.is_some() || preferences.selection_shortcut.is_some();
     if let Some(v) = preferences.selection_enabled { next.selection_enabled = v; }
@@ -261,6 +269,9 @@ fn persist_preferences(app: &tauri::AppHandle, p: &Preferences) -> Result<(), St
     .map_err(|e| e.to_string())?;
     std::fs::rename(temp, target).map_err(|e| e.to_string())
 }
+fn pomodoro_theme_valid(value: &str) -> bool {
+    matches!(value, "follow" | "warm-dark" | "cream" | "mist-blue" | "sage" | "plum")
+}
 // Clamp the visible avatar, and reposition its transparent frame so the bubble
 // and context menu stay accessible at the top and left monitor edges as well.
 fn place_pet(app: &tauri::AppHandle, reset: bool) -> Result<(), String> {
@@ -316,10 +327,9 @@ fn place_pet(app: &tauri::AppHandle, reset: bool) -> Result<(), String> {
     );
     if reset {
         // Use the destination DPI: moving from a differently scaled screen must
-        // place the avatar, rather than the transparent window frame, at the corner.
-        let gap = (24.0 * target_scale).round() as i32;
-        let x = (a.position.x + a.size.width as i32 - target_diameter - gap).max(a.position.x);
-        let y = (a.position.y + a.size.height as i32 - target_diameter - gap - (72.0 * target_scale).round() as i32).max(a.position.y);
+        // place the visible avatar at the screenshot's relative default location.
+        let x = a.position.x + (f64::from(a.size.width) * 0.92).round() as i32 - target_diameter / 2;
+        let y = a.position.y + (f64::from(a.size.height) * 0.615).round() as i32 - target_diameter / 2;
         return position_pet(app, &w, a, x, y, target_size, target_scale);
     }
     let min_x = a.position.x;
