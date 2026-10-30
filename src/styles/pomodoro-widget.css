@@ -1,31 +1,39 @@
 .pomodoro-widget-frame {
   position: absolute;
   inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   padding: 8px;
   pointer-events: none;
+  outline: none;
 }
 .pomodoro-widget {
   box-sizing: border-box;
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 3px;
-  width: 260px;
+  gap: 4px;
+  width: max-content;
+  max-width: 260px;
   height: 40px;
-  padding: 5px 7px 5px 5px;
+  padding: 5px 8px 5px 12px;
   border: 1px solid var(--ui-color-line);
   border-radius: 22px;
   background: var(--ui-color-surface);
   color: var(--ui-color-text);
   box-shadow: 0 3px 12px #00000016;
+  overflow: hidden;
+  outline: none;
 }
 .pomodoro-widget-drag {
   display: flex;
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
   align-items: center;
-  gap: 7px;
-  padding-left: 2px;
+  gap: 10px;
+  min-height: 28px;
+  border-radius: 12px;
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -34,19 +42,15 @@
 .pomodoro-widget-drag:active {
   cursor: grabbing;
 }
-.pomodoro-widget-drag > svg {
-  flex-shrink: 0;
-  color: var(--ui-color-text-muted);
-  opacity: 0.55;
-}
 .pomodoro-widget-drag > span {
   font-size: 10px;
   color: var(--ui-color-text-muted);
   white-space: nowrap;
 }
 .pomodoro-widget-drag > strong {
-  flex: 1;
-  text-align: center;
+  flex: none;
+  min-width: 5ch;
+  text-align: left;
   color: var(--ui-color-heading);
   font-size: 17px;
   line-height: 1;
@@ -84,8 +88,8 @@ html[data-desktop] .pomodoro-widget button:hover {
 }
 html[data-desktop] .pomodoro-widget button:focus-visible,
 .pomodoro-widget-drag:focus-visible {
-  outline: 2px solid var(--ui-color-action);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--ui-color-action);
 }
 .pomodoro-widget[data-status="waiting"] {
   border-color: color-mix(
@@ -104,6 +108,7 @@ html[data-desktop] .pomodoro-widget button:focus-visible,
   background: var(--ui-color-surface);
   color: var(--ui-color-text);
   box-shadow: 0 5px 18px #00000020;
+  outline: none;
 }
 .pomodoro-widget-menu [role="menuitem"] {
   outline: none;

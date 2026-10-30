@@ -2,14 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ContextMenu } from "radix-ui";
-import {
-  ArrowUpRight,
-  CircleAlert,
-  GripVertical,
-  Pause,
-  Play,
-  Square,
-} from "lucide-react";
+import { ArrowUpRight, CircleAlert, Pause, Play, Square } from "lucide-react";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import {
@@ -110,7 +103,7 @@ export function PomodoroWidget() {
                     </>
                   )}
                   <br />
-                  按住拖动，右键可回到桌宠头顶
+                  按住拖动，右键可返回默认位置
                 </>
               }
             >
@@ -121,7 +114,6 @@ export function PomodoroWidget() {
                   if (event.key === "Enter") openPage();
                 }}
               >
-                <GripVertical size={12} aria-hidden="true" />
                 <span>{status}</span>
                 <strong role="timer" aria-live="off">
                   {data ? formatCountdown(remaining) : "--:--"}
@@ -181,7 +173,7 @@ export function PomodoroWidget() {
             <ContextMenu.Item
               onSelect={() => void invoke("pomodoro_widget_reset").catch(fail)}
             >
-              回到桌宠头顶
+              返回默认位置
             </ContextMenu.Item>
             <ContextMenu.Item onSelect={openPage}>打开番茄钟</ContextMenu.Item>
           </ContextMenu.Content>
