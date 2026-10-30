@@ -11,6 +11,10 @@ use std::{
 use tauri::{Emitter, Listener, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_notification::NotificationExt;
 
+// User-selected proposal 02, "木质轻敲". Static storage keeps the WAV buffer
+// valid for the entire lifetime of asynchronous native playback.
+static COMPLETION_SOUND: &[u8] = include_bytes!("../assets/sounds/pomodoro-complete.wav");
+
 #[derive(Clone, Copy, Serialize, Deserialize)]
 struct Position {
     x: i32,
@@ -385,11 +389,22 @@ fn finish_drag(app: &tauri::AppHandle) {
     }
 }
 fn play_completion_sound() -> Result<(), String> {
-    unsafe {
-        windows::Win32::System::Diagnostics::Debug::MessageBeep(
-            windows::Win32::UI::WindowsAndMessaging::MB_OK,
+    use windows::{
+        core::PCWSTR,
+        Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT},
+    };
+    // With SND_MEMORY, PlaySound interprets this pointer as WAV bytes, not text.
+    let started = unsafe {
+        PlaySoundW(
+            PCWSTR(COMPLETION_SOUND.as_ptr().cast()),
+            None,
+            SND_MEMORY | SND_ASYNC | SND_NODEFAULT,
         )
-        .map_err(|e| e.to_string())
+    };
+    if started.as_bool() {
+        Ok(())
+    } else {
+        Err("无法播放完成提示音，请检查音频输出设备。".into())
     }
 }
 #[tauri::command]
