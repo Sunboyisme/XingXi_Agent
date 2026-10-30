@@ -159,7 +159,7 @@ export function CalendarPage({
     setLocalSidebarOpen(open);
     onSidebarOpenChange?.(open);
   }
-  useEffect(() => {
+  useLayoutEffect(() => {
     onCalendarVisibleChange?.(!todoView);
   }, [todoView, onCalendarVisibleChange]);
   const [view, setView] = useState<"month" | "week">(
@@ -864,6 +864,15 @@ export function CalendarPage({
   const dayValues = dayList ? orderedDay(dayList) : [];
   const todoCount = dayValues.filter((event) => !isRepeating(event)).length;
   const repeatCount = dayValues.filter(isRepeating).length;
+  const dayHeading = `${Number(dayList.slice(5, 7))}月${Number(dayList.slice(8))}日`;
+  const dayWeekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
+    new Date(`${dayList}T12:00:00Z`).getUTCDay()
+  ];
+  const dayLunar = lunarDate(dayList)
+    .title.split(" · ")
+    .slice(1)
+    .join(" · ")
+    .replace(/^农历\d+年/, "农历");
   const selectedOccurrences = dayList
     ? dayValues.filter((event) =>
         agendaTab === "repeat" ? isRepeating(event) : !isRepeating(event),
@@ -935,7 +944,7 @@ export function CalendarPage({
             <DropdownMenu.Trigger asChild>
               <Button size="sm" className="plan-add-trigger">
                 <CalendarPlus size={15} />
-                添加计划
+                <span>添加计划</span>
                 <ChevronDown size={13} />
               </Button>
             </DropdownMenu.Trigger>
@@ -997,16 +1006,16 @@ export function CalendarPage({
             <>
               <header className="plan-day-sidebar-header">
                 <div>
-                  <h2 id="plan-day-sidebar-heading">
-                    {dayList} 的
-                    {agendaTab === "repeat" ? "重复事项" : "待办事项"}
+                  <h2
+                    id="plan-day-sidebar-heading"
+                    aria-label={`${dayList} 的每日计划`}
+                  >
+                    <time dateTime={dayList}>{dayHeading}</time>
+                    <span>{dayWeekday}</span>
                   </h2>
                   <p>
-                    {lunarDates
-                      .get(dayList)
-                      ?.title.split(" · ")
-                      .slice(1)
-                      .join(" · ")}
+                    <span>{dayList.slice(0, 4)}年</span>
+                    <span>{dayLunar}</span>
                   </p>
                 </div>
                 <Button
@@ -1035,13 +1044,19 @@ export function CalendarPage({
                     className={agendaTab === "repeat" ? "selected" : ""}
                     onClick={() => setAgendaTab("repeat")}
                   >
-                    重复 {repeatCount} 项
+                    重复事项 <span>{repeatCount}</span>
                   </button>
                 </div>
+              </div>
+              <div className="plan-sidebar-list-toolbar">
+                <span>
+                  {agendaTab === "repeat" ? "重复事项" : "待办事项"}
+                  <small>{selectedOccurrences.length} 项</small>
+                </span>
                 <Button
                   className="plan-order-reset"
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   disabled={
                     busy ||
                     loading ||
@@ -1050,7 +1065,7 @@ export function CalendarPage({
                   }
                   onClick={() => void saveOrder([])}
                 >
-                  <RotateCcw size={14} />
+                  <RotateCcw size={13} />
                   恢复默认排序
                 </Button>
               </div>

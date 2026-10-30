@@ -609,7 +609,6 @@ export function App() {
       sidebarAvailable={page === "chat" || (page === "plans" && planCalendarVisible) || (page === "learning" && learningSidebar.available)}
       sidebarLabel={page === "plans" ? "每日计划" : page === "learning" ? "课程目录" : "侧栏"}
       sidebarControls={page === "plans" ? "plan-day-sidebar" : page === "learning" ? "course-outline" : "chat-sidebar"}
-      sidebarInBrandSlot={page === "plans" && planCalendarVisible}
       onToggle={page === "chat" ? toggleSidebar : page === "plans" && planCalendarVisible ? () => setPlanSidebarOpen(open => !open) : page === "learning" ? () => window.dispatchEvent(new Event("xiaoxi-toggle-learning-outline")) : undefined}
       menuActions={{
         newChat: startNewChat,

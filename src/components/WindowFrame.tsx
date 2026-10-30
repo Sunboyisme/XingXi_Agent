@@ -23,7 +23,6 @@ export function WindowFrame({
   sidebarAvailable = true,
   sidebarLabel = "侧栏",
   sidebarControls = "chat-sidebar",
-  sidebarInBrandSlot = false,
   menuActions,
 }: {
   children: ReactNode;
@@ -35,7 +34,6 @@ export function WindowFrame({
   sidebarAvailable?: boolean;
   sidebarLabel?: string;
   sidebarControls?: string;
-  sidebarInBrandSlot?: boolean;
   menuActions?: AppMenuActions;
 }) {
   const native = isTauri();
@@ -78,31 +76,30 @@ export function WindowFrame({
   if (reminder) return children;
   return (
     <div className="window-frame">
-      <header
-        className={`window-titlebar app-topbar${sidebarInBrandSlot ? " sidebar-in-brand-slot" : ""}`}
-        data-tauri-drag-region
-      >
+      <header className="window-titlebar app-topbar" data-tauri-drag-region>
         <span className="window-brand" data-tauri-drag-region>
           XiaoXi
         </span>
-        {sidebarAvailable && (
-          <Hint label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}>
-            <button
-              className="sidebar-toggle"
-              aria-label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}
-              aria-expanded={!collapsed}
-              aria-controls={sidebarControls}
-              disabled={!onToggle}
-              onClick={onToggle}
-            >
-              {collapsed ? (
-                <PanelLeftOpen size={18} />
-              ) : (
-                <PanelLeftClose size={18} />
-              )}
-            </button>
-          </Hint>
-        )}
+        <div className="window-sidebar-control">
+          {sidebarAvailable && (
+            <Hint label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}>
+              <button
+                className="sidebar-toggle"
+                aria-label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}
+                aria-expanded={!collapsed}
+                aria-controls={sidebarControls}
+                disabled={!onToggle}
+                onClick={onToggle}
+              >
+                {collapsed ? (
+                  <PanelLeftOpen size={18} />
+                ) : (
+                  <PanelLeftClose size={18} />
+                )}
+              </button>
+            </Hint>
+          )}
+        </div>
         {menuActions && (
           <AppMenu
             actions={menuActions}

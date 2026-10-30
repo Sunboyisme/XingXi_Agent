@@ -148,7 +148,7 @@ test("month view folds weekly and monthly repeats into one agenda entry", async 
     }),
   );
   expect(
-    await screen.findByRole("heading", { name: `${today} 的重复事项` }),
+    await screen.findByRole("heading", { name: `${today} 的每日计划` }),
   ).toBeTruthy();
   expect(screen.getByText("每周跑步")).toBeTruthy();
   expect(
@@ -185,7 +185,7 @@ test("today agenda request opens the daily sidebar instead of a dialog", async (
     />,
   );
   expect(
-    await screen.findByRole("heading", { name: `${today} 的待办事项` }),
+    await screen.findByRole("heading", { name: `${today} 的每日计划` }),
   ).toBeTruthy();
   expect(screen.queryByText("安排一件小事")).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();

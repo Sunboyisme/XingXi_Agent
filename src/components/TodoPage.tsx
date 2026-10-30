@@ -172,7 +172,7 @@ export function TodoPage({
     }
   }
   return (
-    <div className="calendar-page todo-page page-content">
+    <div className="calendar-page todo-page page-content calendar-compact-page">
       <div className="plan-toolbar">
         <div className="plan-heading">
           <h1>待办</h1>
@@ -191,7 +191,7 @@ export function TodoPage({
             onClick={() => edit()}
           >
             <ListPlus size={16} />
-            添加待办
+            <span>添加待办</span>
           </Button>
         </div>
       </div>
