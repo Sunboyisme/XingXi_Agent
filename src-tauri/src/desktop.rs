@@ -504,7 +504,7 @@ pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
     }
     if label == "quick" {
         finish_capture(app, None);
-        crate::voice::cancel_owner(&app, "quick");
+        crate::voice::cancel_owner(app, "quick");
         app.state::<Desktop>()
             .quick_commands
             .lock()
@@ -558,7 +558,7 @@ pub fn begin_ask_session(app: &tauri::AppHandle) -> Result<String, String> {
         let _ = w.hide();
         quick_presence(app, w.is_visible().unwrap_or(false));
     }
-    crate::voice::cancel_owner(&app, "quick");
+    crate::voice::cancel_owner(app, "quick");
     let id = uuid::Uuid::new_v4().to_string();
     let state = app.state::<Desktop>();
     let mut session = state.ask_session.lock().unwrap();
@@ -748,12 +748,12 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
     let _ = app.emit_to("pet", "desktop-pet-hide-menu", ());
     let mut hidden = vec![];
     for w in app.webview_windows().values() {
-        if ["pet", "quick", "pomodoro-timer"].contains(&w.label()) || w.label().starts_with("pin-") {
-            if w.is_visible().unwrap_or(false) {
-                hidden.push(w.label().to_owned());
-                w.hide().map_err(|e| e.to_string())?;
-                if w.label() == "quick" { quick_presence(app, false); }
-            }
+        if (["pet", "quick", "pomodoro-timer"].contains(&w.label()) || w.label().starts_with("pin-"))
+            && w.is_visible().unwrap_or(false)
+        {
+            hidden.push(w.label().to_owned());
+            w.hide().map_err(|e| e.to_string())?;
+            if w.label() == "quick" { quick_presence(app, false); }
         }
     }
     *app.state::<Desktop>().hidden.lock().unwrap() = hidden;

@@ -427,7 +427,8 @@ fn open_main(app: &tauri::AppHandle) {
     }
 }
 
-#[allow(dead_code)]
+// Only the installed release uses this migration; keep it available to its unit tests.
+#[cfg_attr(debug_assertions, allow(dead_code))]
 fn migrate_legacy_data(legacy: &std::path::Path, current: &std::path::Path) -> bool {
     if current.join("bai.sqlite").exists() || !legacy.join("bai.sqlite").exists() {
         return true;

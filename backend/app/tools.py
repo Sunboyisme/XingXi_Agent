@@ -126,7 +126,7 @@ def builtin_tools(run_id: str, conversation_id: str):
             result = {"error": "天气查询失败，请检查网络或稍后重试。不可编造天气数据。"}
         return json.dumps(result, ensure_ascii=False)
 
-    def utility_result(name, arguments, operation):
+    def utility_result(arguments, operation):
         try:
             result = operation(**arguments)
         except ValueError as error:
@@ -136,7 +136,7 @@ def builtin_tools(run_id: str, conversation_id: str):
     @tool
     def calculate(expression: str) -> str:
         """精确计算算式，使用数字、括号和 + - * / // % **。百分比写为除以 100，例如 199 * 0.85。不能执行代码或函数；最多 28 位有效数字。"""
-        return utility_result("计算器", {"expression": expression}, utilities.calculate)
+        return utility_result({"expression": expression}, utilities.calculate)
 
     @tool
     def date_time(
@@ -147,7 +147,6 @@ def builtin_tools(run_id: str, conversation_id: str):
     ) -> str:
         """查询当前时间、时区换算、日期加减、两日期间隔。timezone_name 为 IANA 时区；value 留空表示当前时间，也可传 ISO 8601 日期/时间。无偏移的时间按目标时区解释；有偏移则转换。compare_to - (value + add_days) 为间隔。默认北京时间。"""
         return utility_result(
-            "日期与时区",
             {
                 "timezone_name": timezone_name,
                 "value": value,
@@ -161,7 +160,6 @@ def builtin_tools(run_id: str, conversation_id: str):
     def convert_units(value: str, from_unit: str, to_unit: str) -> str:
         """单位换算，value 为数字字符串。支持 mm/cm/m/km/in/ft/mile，mg/g/kg/lb，ml/l，s/min/h/day，m/s/km/h，温度 c/f/k。只在同类单位之间换算。"""
         return utility_result(
-            "单位换算",
             {"value": value, "from_unit": from_unit, "to_unit": to_unit},
             utilities.convert_units,
         )

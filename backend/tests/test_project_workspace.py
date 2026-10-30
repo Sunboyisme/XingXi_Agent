@@ -1,10 +1,9 @@
-import io
 import sqlite3
 import zipfile
 
 import pytest
 
-from app import config, local_files, projects
+from app import local_files, projects
 from app.db import Run, Session
 
 API = "/api/v1"

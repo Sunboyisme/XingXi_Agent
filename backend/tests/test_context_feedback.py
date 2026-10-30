@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 from sqlalchemy import select
 
 from app import context, context_budget, db, tools, complex_tasks, model_profiles, provider, task_context
-from .test_app import API, wait_run
+from .test_app import API
 from .test_complex_tasks import task_records
 
 

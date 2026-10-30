@@ -1,6 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { selectCalendarDate } from "./helpers/calendarPicker";
 test.describe.configure({ mode: "default" });
 test.beforeEach(async ({ page }) => {

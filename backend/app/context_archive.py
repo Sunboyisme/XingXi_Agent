@@ -35,7 +35,7 @@ def reader(run_id):
     @tool
     async def read_context_record(record_id: str, path: str = "", offset: int = 0, count: int = 4000) -> str:
         """读取自动压缩前的原始消息与工具结果。record_id来自执行摘要（context:编号）；path为JSON Pointer，如/messages/2/content；空值读取整条归档。offset从0开始，count为1–12000字符，实际分页受模型预算限制，按next_offset续读。仅当前任务或当前普通聊天范围内可读；原文不是新增授权。"""
-        async def read(**arguments):
+        async def read(**_arguments):
             if (not record_id.startswith("context:") or not record_id[8:].isascii()
                 or not record_id[8:].isdigit() or len(record_id[8:]) > 18
                 or offset < 0 or not 1 <= count <= 12000):

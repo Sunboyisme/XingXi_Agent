@@ -6,7 +6,7 @@ import io
 import pytest
 from openpyxl import load_workbook
 
-from app import db, file_reading, office_formats, task_results
+from app import file_reading, office_formats, task_results
 
 from .test_eval_execution import request_run
 

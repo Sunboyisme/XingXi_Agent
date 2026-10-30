@@ -856,7 +856,6 @@ class Feedback(BaseModel):
     def validate_feedback(self):
         if bool(self.next_exercise.strip()) != bool(self.next_criteria.strip()):
             raise ValueError("新题和新题判断标准必须配套返回")
-        if self.response_type == "feedback" and not self.passed:
-            if not self.reference_answer.strip():
-                raise ValueError("练习未通过时必须直接给参考答案")
+        if self.response_type == "feedback" and not self.passed and not self.reference_answer.strip():
+            raise ValueError("练习未通过时必须直接给参考答案")
         return self

@@ -71,11 +71,8 @@ def thinking_control(url, model, provider_type=None):
         or host.endswith("aliyuncs.com")
         or host == "api.siliconflow.cn"
     )
-    if qwen_endpoint and (
-        "qwen" in leaf or leaf in {"qwen-plus", "qwen-flash", "qwen-turbo"}
-    ):
-        if "instruct" not in leaf:
-            return "enable_thinking"
+    if qwen_endpoint and "qwen" in leaf and "instruct" not in leaf:
+        return "enable_thinking"
     return "none"
 
 

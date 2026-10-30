@@ -196,8 +196,7 @@
   box-shadow: 0 1px 4px rgb(80 50 30 / 8%);
 }
 .plan-weekdays,
-.plan-month-grid,
-.plan-week-allday {
+.plan-month-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
@@ -313,55 +312,11 @@
   padding: 8px;
   color: var(--ui-color-text-muted);
 }
-.plan-week-allday {
-  padding-left: 44px;
-  min-height: 34px;
-  border-bottom: 1px solid var(--ui-color-line);
-}
-.plan-week-allday > div {
-  padding: 4px;
-  border-right: 1px solid var(--ui-color-line);
-  display: grid;
-  align-content: start;
-  gap: 3px;
-}
-.plan-calendar:has(.plan-week-scroll) .plan-weekdays {
-  padding-left: 44px;
-}
-.plan-week-scroll {
-  position: relative;
-  height: min(62vh, 660px);
-  overflow-y: auto;
-  display: flex;
-}
-.plan-week-times {
-  position: relative;
-  flex: 0 0 44px;
-  height: 1152px;
-  font-size: 10px;
-  color: var(--ui-color-text-muted);
-}
-.plan-week-times span {
-  position: absolute;
-  right: 5px;
-  transform: translateY(2px);
-}
 .plan-week-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   flex: 1;
   height: 1152px;
-}
-.plan-week-column {
-  position: relative;
-  border-right: 1px solid var(--ui-color-line);
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 47px,
-    var(--ui-color-line) 47px,
-    var(--ui-color-line) 48px
-  );
 }
 .week-event {
   position: absolute;
@@ -670,14 +625,6 @@
     var(--ui-color-action) 3%,
     var(--ui-color-surface)
   );
-}
-.calendar-page .plan-week-scroll {
-  flex: 1;
-  height: auto;
-  min-height: 0;
-}
-.calendar-page .plan-week-allday {
-  flex: 0 0 auto;
 }
 .calendar-page .calendar-loading {
   position: absolute;

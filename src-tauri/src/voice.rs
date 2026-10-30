@@ -67,7 +67,6 @@ pub fn voice_start(
         owner: owner.clone(),
     });
     drop(active);
-    drop(state);
     let key = id.clone();
     std::thread::spawn(move || {
         let result = record(&app, &owner, &key, &stop);

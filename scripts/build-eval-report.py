@@ -71,11 +71,6 @@ def diff(before, after):
     return result
 
 
-def short(value, limit):
-    string = json.dumps(value, ensure_ascii=False, default=str)
-    return value if len(string) <= limit else {"excerpt": string[:limit], "truncated": True}
-
-
 def public_outputs(row):
     """Expose actual teaching/interview text rather than only workflow IDs."""
     outputs = []

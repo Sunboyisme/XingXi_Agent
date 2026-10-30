@@ -19,8 +19,7 @@
   padding-bottom: 7px;
   align-items: center;
 }
-.calendar-page .plan-weekdays > span,
-.calendar-page .plan-weekday {
+.calendar-page .plan-weekdays > span {
   display: grid;
   place-items: center;
   min-width: 0;
@@ -268,76 +267,6 @@
   background: color-mix(in srgb, var(--ui-color-action) 12%, transparent);
   color: var(--ui-color-action);
 }
-.plan-week-view {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-}
-.plan-weekday {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-}
-.plan-weekday > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.plan-weekday > small {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.calendar-page .plan-week-allday {
-  display: grid;
-  grid-template-columns: 44px repeat(7, minmax(0, 1fr));
-  padding-left: 0;
-  min-height: 42px;
-  max-height: 92px;
-  overflow-y: auto;
-}
-.plan-week-allday-label {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 8px 5px 0 0;
-  color: var(--ui-color-text-muted);
-  font-size: 10px;
-}
-.calendar-page .plan-week-allday > div {
-  min-width: 0;
-  padding: 5px 4px;
-}
-.week-allday-event {
-  width: 100%;
-  overflow: hidden;
-  border: 0;
-  border-left: 3px solid var(--ui-color-action);
-  border-radius: 5px;
-  padding: 3px 5px;
-  background: color-mix(
-    in srgb,
-    var(--ui-color-action) 10%,
-    var(--ui-color-surface)
-  );
-  color: var(--ui-color-action);
-  font-size: 10px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.calendar-page .plan-week-column[data-today="true"] {
-  background-color: color-mix(
-    in srgb,
-    var(--ui-color-action) 3%,
-    var(--ui-color-surface)
-  );
-}
 .week-event {
   right: 2px;
   left: 2px;
@@ -358,11 +287,6 @@
 .plan-event-repeat {
   flex-shrink: 0;
   opacity: 0.75;
-}
-.plan-agenda-dialog[data-slot="dialog-content"] {
-  width: min(620px, calc(100vw - 32px));
-  max-width: 620px;
-  max-height: min(760px, calc(100vh - 32px));
 }
 .plan-agenda-tabs {
   width: fit-content;
@@ -490,8 +414,7 @@
   color: var(--ui-color-text-muted);
 }
 .day-event.is-cancelled,
-.week-event.is-cancelled,
-.week-allday-event.is-cancelled {
+.week-event.is-cancelled {
   opacity: 0.65;
   text-decoration: line-through;
 }
