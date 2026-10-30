@@ -212,9 +212,6 @@ html[data-desktop] .quick-answer .reasoning-toggle {
 html[data-desktop] .quick-answer .reasoning-toggle:is(:hover, [aria-expanded="true"]) {
   color: var(--quick-detail-icon);
 }
-.quick-answer .reasoning-toggle > svg:first-child {
-  color: var(--quick-detail-icon);
-}
 .quick-answer .reasoning-content {
   max-height: min(180px, 30dvh);
   padding: 10px 12px;

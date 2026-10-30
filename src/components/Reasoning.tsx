@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Brain, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Markdown } from "./common";
 
 export function Reasoning({
@@ -37,7 +37,6 @@ export function Reasoning({
         aria-controls={open ? contentId : undefined}
         onClick={() => setOpen(!open)}
       >
-        <Brain size={16} aria-hidden="true" />
         <span>
           {active
             ? "XiaoXi 正在思考"
@@ -45,7 +44,11 @@ export function Reasoning({
               ? "这个想法还没说完"
               : "看看 XiaoXi 的想法"}
         </span>
-        <ChevronDown size={15} className={open ? "is-open" : ""} />
+        <ChevronDown
+          size={15}
+          className={open ? "is-open" : ""}
+          aria-hidden="true"
+        />
       </button>
       {open && (
         <div

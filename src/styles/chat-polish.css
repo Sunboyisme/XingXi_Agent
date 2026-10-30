@@ -82,11 +82,6 @@
   color: var(--ui-color-action);
 }
 
-.reasoning-toggle > svg:first-child {
-  color: var(--ui-color-action);
-  flex-shrink: 0;
-}
-
 .reasoning-toggle > svg:last-child {
   flex-shrink: 0;
   transition: transform 180ms ease;
