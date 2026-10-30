@@ -68,7 +68,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
         "pomodoro-timer",
         WebviewUrl::App("index.html?view=pomodoro-timer".into()),
     )
-    .title("XiaoXi · 番茄钟")
+    .title("XiaoXi · 桌面专注时钟")
     .inner_size(276.0, 168.0)
     .decorations(false)
     .transparent(true)
@@ -145,13 +145,22 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
             (area.position.y + area.size.height as i32 - height).max(area.position.y),
         ),
     );
-    if window.outer_position().map_err(|e| e.to_string())? != target {
-        window.set_position(target).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    set_widget_bounds(&window, target.x, target.y, size.width, size.height)
+}
+fn set_widget_bounds(window: &tauri::WebviewWindow, x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
+    use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::*};
+    let at = window.outer_position().map_err(|e| e.to_string())?;
+    let size = window.outer_size().map_err(|e| e.to_string())?;
+    let mut flags = SWP_NOACTIVATE | SWP_NOZORDER;
+    if at.x == x && at.y == y { flags |= SWP_NOMOVE; }
+    if size.width == width && size.height == height { flags |= SWP_NOSIZE; }
+    if flags.contains(SWP_NOMOVE | SWP_NOSIZE) { return Ok(()); }
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+    unsafe { SetWindowPos(HWND(hwnd.0), None, x, y, width as i32, height as i32, flags)
+        .map_err(|e| e.to_string()) }
 }
 #[tauri::command]
-pub fn pomodoro_widget_layout(
+pub async fn pomodoro_widget_layout(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     width: f64,
@@ -161,7 +170,6 @@ pub fn pomodoro_widget_layout(
     if window.label() != "pomodoro-timer" || !width.is_finite() || !height.is_finite() {
         return Err("计时条尺寸无效".into());
     }
-    place_widget(&app)?;
     let at = window.outer_position().map_err(|e| e.to_string())?;
     let old_size = window.outer_size().map_err(|e| e.to_string())?;
     let Some(monitor) = window.current_monitor().map_err(|e| e.to_string())? else {
@@ -197,12 +205,7 @@ pub fn pomodoro_widget_layout(
         area.position.y,
         area.position.y + area.size.height.saturating_sub(h) as i32,
     );
-    window
-        .set_size(tauri::PhysicalSize::new(w, h))
-        .map_err(|e| e.to_string())?;
-    window
-        .set_position(PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())?;
+    set_widget_bounds(&window, x, y, w, h)?;
     let state = app.state::<Widget>();
     *state.position.lock().unwrap() = Some(Position { x, y });
     let _ = window.emit(
@@ -241,10 +244,7 @@ fn show_focus_notice(app: &tauri::AppHandle, sequence: u64) {
         .notice_sequence
         .store(sequence, Ordering::SeqCst);
     let _ = window.emit("pomodoro-notice-open", sequence);
-    if let Ok(hwnd) = window.hwnd() { unsafe {
-        let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
-            windows::Win32::Foundation::HWND(hwnd.0), windows::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE);
-    }}
+    let _ = crate::desktop_window::show_without_focus(&window);
 }
 
 pub fn refresh_visibility(app: &tauri::AppHandle) {
@@ -254,7 +254,8 @@ pub fn refresh_visibility(app: &tauri::AppHandle) {
     let state = app.state::<Widget>();
     let desktop = app.state::<crate::desktop::Desktop>();
     let enabled = desktop.prefs.lock().unwrap().pomodoro;
-    let capturing = desktop.capture.lock().unwrap().is_some()
+    let capturing = desktop.capture_starting.load(Ordering::SeqCst)
+        || desktop.capture.lock().unwrap().is_some()
         || desktop
             .hidden
             .lock()
@@ -266,13 +267,15 @@ pub fn refresh_visibility(app: &tauri::AppHandle) {
         && !state.suppressed.load(Ordering::SeqCst)
         && (state.active.load(Ordering::SeqCst) || state.manual_visible.load(Ordering::SeqCst));
     if show {
-        let _ = place_widget(app);
         if !window.is_visible().unwrap_or(false) {
+            let _ = place_widget(app);
             let _ = crate::desktop::show_without_focus(&window);
+            let _ = app.emit("pomodoro-widget-visibility", widget_visible(app));
         }
     } else if window.is_visible().unwrap_or(false) {
         let _ = window.emit("pomodoro-widget-dismissed", ());
         let _ = window.hide();
+        let _ = app.emit("pomodoro-widget-visibility", false);
     }
 }
 pub fn preferences_changed(app: &tauri::AppHandle, previous: bool, enabled: bool) {
@@ -286,7 +289,7 @@ pub fn preferences_changed(app: &tauri::AppHandle, previous: bool, enabled: bool
     }
     refresh_visibility(app);
 }
-fn widget_visible(app: &tauri::AppHandle) -> bool {
+pub(crate) fn widget_visible(app: &tauri::AppHandle) -> bool {
     app.get_webview_window("pomodoro-timer")
         .is_some_and(|window| window.is_visible().unwrap_or(false))
 }
@@ -298,15 +301,6 @@ pub fn hide_widget(app: &tauri::AppHandle) {
         .suppressed
         .store(true, Ordering::SeqCst);
     refresh_visibility(app);
-}
-pub fn focus_lost(app: &tauri::AppHandle) {
-    // Losing focus only collapses controls; explicit close hides the timer.
-    if app.state::<Widget>().dragging.load(Ordering::SeqCst) {
-        return;
-    }
-    if let Some(window) = app.get_webview_window("pomodoro-timer") {
-        let _ = window.emit("pomodoro-widget-dismissed", ());
-    }
 }
 pub fn update_hit_test(
     window: &tauri::WebviewWindow,
@@ -330,9 +324,7 @@ pub fn update_hit_test(
     let capture = inside || state.dragging.load(Ordering::SeqCst);
     let mode = if capture { 2 } else { 1 };
     if state.hit_mode.load(Ordering::SeqCst) != mode {
-        window
-            .set_ignore_cursor_events(!capture)
-            .map_err(|e| e.to_string())?;
+        crate::desktop_window::ignore_cursor_events(window, !capture)?;
         state.hit_mode.store(mode, Ordering::SeqCst);
         let _ = window.emit("pomodoro-widget-pointer", inside);
     }
@@ -394,7 +386,7 @@ pub async fn pomodoro_show_controls(
     refresh_visibility(&app);
     let shown = widget_visible(&app);
     if !shown && !automatic.unwrap_or(false) {
-        return Err("桌面番茄钟暂未显示，请结束截图后重试。".into());
+        return Err("桌面专注时钟暂未显示，请结束截图后重试。".into());
     }
     if shown && focus.unwrap_or(false) {
         app.get_webview_window("pomodoro-timer")

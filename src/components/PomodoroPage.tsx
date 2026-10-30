@@ -114,7 +114,7 @@ export function PomodoroPage() {
     try {
       await invoke("pomodoro_show_controls", { focus: true });
     } catch {
-      setWindowError("桌面番茄钟暂时无法打开，请稍后重试。");
+      setWindowError("桌面专注时钟暂时无法打开，请稍后重试。");
     }
   }
   return (
@@ -128,7 +128,7 @@ export function PomodoroPage() {
               size="sm"
               onClick={() => void showDesktopClock()}
             >
-              显示桌面番茄钟
+              显示桌面专注时钟
             </Button>
           )}
           <Hint label="番茄钟设置">

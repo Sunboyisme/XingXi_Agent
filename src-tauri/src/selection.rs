@@ -425,9 +425,7 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
             if let Some(w) = a.get_webview_window("selection") {
                 let _ = w.emit("selection-snapshot", snapshot);
                 if automatic {
-                    if let Ok(hwnd) = w.hwnd() { unsafe {
-                        let _ = ShowWindow(windows::Win32::Foundation::HWND(hwnd.0), SW_SHOWNOACTIVATE);
-                    }}
+                    let _ = crate::desktop_window::show_without_focus(&w);
                 } else {
                     let _ = w.show();
                     let _ = w.set_focus();

@@ -9,6 +9,7 @@ type TrayState = {
   generation: number;
   active: boolean;
   pet: boolean;
+  pomodoroVisible: boolean;
   preview: boolean;
   autostart: { enabled: boolean; supported: boolean; reason: string };
 };
@@ -51,6 +52,7 @@ export function TrayMenu() {
         void refresh();
       }),
       listen("desktop-preferences", () => void refresh()),
+      listen("pomodoro-widget-visibility", () => void refresh()),
       listen("autostart-changed", () => void refresh()),
     ];
     void Promise.all(listeners)
@@ -188,7 +190,11 @@ export function TrayMenu() {
         {item("plans", "打开今日安排")}
         <hr />
         {item("pomodoro", "打开番茄钟")}
-        {item("pomodoro_widget", "显示桌面番茄钟")}
+        {item(
+          "pomodoro_widget",
+          "桌面专注时钟",
+          state?.pomodoroVisible || false,
+        )}
         {item("pet", "显示桌面宠物", state?.pet || false)}
         {item(
           "autostart",

@@ -262,7 +262,14 @@ export function DesktopQuickAsk() {
     visible.current = false;
     avatar.clearCelebration();
     setError("");
-    await invoke("desktop_dismiss");
+    try {
+      await invoke("desktop_dismiss");
+    } catch (cause) {
+      if (mounted.current) {
+        visible.current = true;
+        setError(desktopError(cause));
+      }
+    }
   }
   async function resumeTask(id: string) {
     setAnswerCollapsed(false);

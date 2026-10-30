@@ -486,12 +486,6 @@ html[data-desktop]
   cursor: move;
   outline: 0;
 }
-.capture-text-object .capture-text-corner {
-  opacity: 0;
-}
-.capture-text-object:is(:hover, :focus-visible) .capture-text-corner {
-  opacity: 1;
-}
 .capture-text-move-area {
   position: absolute;
   inset: 0;
@@ -518,11 +512,10 @@ html[data-desktop] .capture-text {
 }
 .capture-text-corner {
   position: absolute;
-  width: 7px;
-  height: 7px;
-  border-color: #6ca9f2;
-  border-style: solid;
-  border-width: 0;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: transparent;
   pointer-events: auto;
 }
 .capture-text-corner:is(.corner-nw, .corner-se) {
@@ -532,28 +525,20 @@ html[data-desktop] .capture-text {
   cursor: nesw-resize;
 }
 .capture-text-corner.corner-nw {
-  left: -3px;
-  top: -3px;
-  border-top-width: 1px;
-  border-left-width: 1px;
+  left: -7px;
+  top: -7px;
 }
 .capture-text-corner.corner-ne {
-  right: -3px;
-  top: -3px;
-  border-top-width: 1px;
-  border-right-width: 1px;
+  right: -7px;
+  top: -7px;
 }
 .capture-text-corner.corner-se {
-  right: -3px;
-  bottom: -3px;
-  border-bottom-width: 1px;
-  border-right-width: 1px;
+  right: -7px;
+  bottom: -7px;
 }
 .capture-text-corner.corner-sw {
-  left: -3px;
-  bottom: -3px;
-  border-bottom-width: 1px;
-  border-left-width: 1px;
+  left: -7px;
+  bottom: -7px;
 }
 .capture-error {
   position: absolute;

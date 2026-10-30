@@ -156,7 +156,7 @@ export function DesktopSettings() {
     );
   }
   if (!isTauri())
-    return <p>AI 对话、截图、划词助手、桌宠和桌面番茄钟仅在桌面版中可用。</p>;
+    return <p>AI 对话、截图、划词助手、桌宠和桌面专注时钟仅在桌面版中可用。</p>;
   return (
     <section className="desktop-preferences" aria-label="桌面助手设置">
       {status &&
@@ -197,21 +197,21 @@ export function DesktopSettings() {
         />
       )}
       <section className="settings-group">
-        <h2>桌面番茄钟</h2>
+        <h2>桌面专注时钟</h2>
         <div className="desktop-preference-card">
           {featureRow(
             "pomodoro",
-            "显示桌面番茄钟",
+            "显示桌面专注时钟",
             "无需开启桌宠。专注时自动显示，也可从番茄钟页面或系统托盘打开；收起后继续计时。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">
               <strong>主题颜色</strong>
-              <p>单独设置桌面番茄钟的配色。</p>
+              <p>单独设置桌面专注时钟的配色。</p>
             </div>
             <SoftSelect
               className="desktop-pomodoro-theme"
-              label="桌面番茄钟主题颜色"
+              label="桌面专注时钟主题颜色"
               value={readPomodoroTheme(status?.preferences.pomodoroTheme)}
               disabled={!status || busy}
               options={[...pomodoroThemes]}
@@ -237,7 +237,7 @@ export function DesktopSettings() {
           {featureRow(
             "pet",
             "显示桌面宠物",
-            "拖动调整位置，双击打开主窗口。桌面番茄钟从系统托盘或番茄钟页面独立打开。",
+            "拖动调整位置，双击打开主窗口。桌面专注时钟从系统托盘或番茄钟页面独立打开。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">

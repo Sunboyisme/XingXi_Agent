@@ -35,6 +35,7 @@ export function PomodoroWidget() {
   const [controlsOpen, setControlsOpen] = useState(false);
   const [anchor, setAnchor] = useState({ right: false, bottom: false });
   const strip = useRef<HTMLElement>(null);
+  const previousLayout = useRef("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [themeChooser, setThemeChooser] = useState(false);
   const [theme, setTheme] = useState<PomodoroTheme>("follow");
@@ -148,22 +149,37 @@ export function PomodoroWidget() {
   useEffect(() => {
     const node = strip.current;
     if (!node) return;
-    let previous = "";
+    let disposed = false;
+    let frame: number | undefined;
     const update = () => {
       const width = Math.ceil(node.getBoundingClientRect().width) + 16;
       const height = Math.ceil(node.getBoundingClientRect().height) + 16;
       const key = `${width}:${height}:${menuOpen}`;
-      if (previous === key) return;
-      previous = key;
+      if (previousLayout.current === key) return;
+      previousLayout.current = key;
       void invoke("pomodoro_widget_layout", { width, height, menuOpen }).catch(
-        (cause) => setLocalError(String(cause)),
+        (cause) => {
+          if (previousLayout.current === key) previousLayout.current = "";
+          if (!disposed) setLocalError(String(cause));
+        },
       );
     };
+    const schedule = () => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        if (!disposed) update();
+      });
+    };
     update();
-    const observer = new ResizeObserver(update);
+    const observer = new ResizeObserver(schedule);
     observer.observe(node);
-    return () => observer.disconnect();
-  }, [expanded, menuOpen]);
+    return () => {
+      disposed = true;
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [menuOpen]);
   const primary = data ? primaryPomodoroAction(data) : null;
   const status = data ? pomodoroStatus(data, true) : "读取中";
   const fail = (cause: unknown) =>
@@ -239,7 +255,7 @@ export function PomodoroWidget() {
           <section
             ref={strip}
             className="pomodoro-widget"
-            aria-label="桌面番茄钟"
+            aria-label="桌面专注时钟"
             data-status={data?.status}
             data-expanded={expanded}
             data-dragging={dragging}
@@ -410,7 +426,7 @@ export function PomodoroWidget() {
                 <ContextMenu.Item
                   onSelect={() => void invoke("desktop_dismiss").catch(fail)}
                 >
-                  收起桌面番茄钟
+                  收起桌面专注时钟
                 </ContextMenu.Item>
               </>
             )}

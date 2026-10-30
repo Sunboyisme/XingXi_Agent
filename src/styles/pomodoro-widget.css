@@ -12,6 +12,7 @@
   box-sizing: border-box;
   pointer-events: auto;
   display: flex;
+  flex: none;
   align-items: center;
   gap: 0;
   width: max-content;

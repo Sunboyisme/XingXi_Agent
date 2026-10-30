@@ -11,6 +11,7 @@ use std::{
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_notification::NotificationExt;
+pub(crate) use crate::desktop_window::show_without_focus;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SelectionModel { pub provider_id: String, pub model_name: String }
@@ -224,7 +225,7 @@ pub async fn desktop_preferences_save(
         next.pomodoro = v;
     }
     if let Some(v) = preferences.pomodoro_theme {
-        if !pomodoro_theme_valid(&v) { return Err("未知桌面番茄钟主题".into()); }
+        if !pomodoro_theme_valid(&v) { return Err("未知桌面专注时钟主题".into()); }
         next.pomodoro_theme = v;
     }
     let selection_changed = preferences.selection_enabled.is_some() || preferences.selection_shortcut.is_some();
@@ -471,16 +472,6 @@ pub fn set_pet_visible(app: &tauri::AppHandle, shown: bool) {
         });
     }
 }
-pub(crate) fn show_without_focus(window: &tauri::WebviewWindow) -> Result<(), String> {
-    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
-    unsafe {
-        let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
-            windows::Win32::Foundation::HWND(hwnd.0),
-            windows::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE,
-        );
-    }
-    Ok(())
-}
 fn restore_capture_windows(app: &tauri::AppHandle) {
     let state = app.state::<Desktop>();
     let preferences = state.prefs.lock().unwrap().clone();
@@ -537,13 +528,17 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
 }
 
 pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
-    if label == "pomodoro-timer" { crate::pomodoro::hide_widget(app); return; }
-    if label == "selection" { crate::selection::dismiss(app); return; }
+    let _ = dismiss_label(app, label);
+}
+fn dismiss_label(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    if label == "pomodoro-timer" { crate::pomodoro::hide_widget(app); return Ok(()); }
+    if label == "selection" { crate::selection::dismiss(app); return Ok(()); }
     if label == "capture" {
         finish_capture(app, None);
-        return;
+        return Ok(());
     }
     if label == "quick" {
+        app.state::<Desktop>().hidden.lock().unwrap().retain(|label| label != "quick");
         crate::voice::cancel_owner(app, "quick");
         app.state::<Desktop>()
             .quick_commands
@@ -558,21 +553,22 @@ pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
         );
     }
     if let Some(w) = app.get_webview_window(label) {
-        let _ = w.hide();
-        if label == "quick" { quick_presence(app, w.is_visible().unwrap_or(false)); }
+        crate::desktop_window::hide(&w)?;
+        if label == "quick" { quick_presence(app, false); }
     }
+    Ok(())
 }
 fn quick_presence(app: &tauri::AppHandle, shown: bool) {
     let epoch = app.state::<Desktop>().quick_epoch.fetch_add(1, Ordering::SeqCst) + 1;
     let _ = app.emit_to("pet", "desktop-quick-presence", serde_json::json!({"shown":shown,"epoch":epoch}));
 }
 #[tauri::command]
-pub fn desktop_dismiss_quick(app: tauri::AppHandle) {
-    desktop_dismiss_label(&app, "quick");
+pub async fn desktop_dismiss_quick(app: tauri::AppHandle) -> Result<(), String> {
+    dismiss_label(&app, "quick")
 }
 #[tauri::command]
-pub fn desktop_dismiss(app: tauri::AppHandle, window: tauri::WebviewWindow) {
-    desktop_dismiss_label(&app, window.label());
+pub async fn desktop_dismiss(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    dismiss_label(&app, window.label())
 }
 pub fn toggle_ai(app: tauri::AppHandle) -> Result<(), String> {
     if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
@@ -749,13 +745,18 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
         if (["pet", "quick", "pomodoro-timer"].contains(&w.label()) || w.label().starts_with("pin-"))
             && w.is_visible().unwrap_or(false)
         {
-            if let Err(error) = w.hide() {
+            if let Err(error) = crate::desktop_window::hide(w) {
                 *desktop_state.hidden.lock().unwrap() = hidden;
                 restore_capture_windows(app);
-                return Err(error.to_string());
+                return Err(error);
             }
             hidden.push(w.label().to_owned());
-            if w.label() == "quick" { quick_presence(app, false); }
+            if w.label() == "quick" {
+                quick_presence(app, false);
+                let session_id = desktop_state.ask_session.lock().unwrap().clone();
+                let _ = w.emit("desktop-hidden", serde_json::json!({"sessionId":session_id}));
+                crate::voice::cancel_owner(app, "quick");
+            }
         }
     }
     *app.state::<Desktop>().hidden.lock().unwrap() = hidden;

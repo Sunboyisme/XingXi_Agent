@@ -12,6 +12,7 @@ pub struct TrayState {
     generation: u64,
     active: bool,
     pet: bool,
+    pomodoro_visible: bool,
     preview: bool,
     autostart: crate::AutostartState,
 }
@@ -124,6 +125,7 @@ pub fn tray_menu_state(
         generation: GENERATION.load(Ordering::SeqCst),
         active: ACTIVE.load(Ordering::SeqCst),
         pet,
+        pomodoro_visible: crate::pomodoro::widget_visible(&app),
         preview: app.config().identifier.ends_with(".preview"),
         autostart,
     })
@@ -175,7 +177,11 @@ pub async fn tray_menu_action(
             crate::set_autostart(app.clone(), enabled.ok_or("缺少自启开关状态")?)?;
         }
         "pomodoro_widget" => {
-            crate::pomodoro::pomodoro_show_controls(app.clone(), Some(false), None).await?;
+            if enabled.ok_or("缺少专注时钟开关状态")? {
+                crate::pomodoro::pomodoro_show_controls(app.clone(), Some(false), None).await?;
+            } else {
+                crate::pomodoro::hide_widget(&app);
+            }
             dismiss(&app);
         }
         "pomodoro" => {
