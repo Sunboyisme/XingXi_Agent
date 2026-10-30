@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Bai desktop windows",
-  "windows": ["main", "reminder", "quick", "capture", "pet", "pin-*"],
+  "windows": ["main", "reminder", "quick", "capture", "pet", "selection", "pin-*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",
@@ -12,6 +12,7 @@
     "core:window:allow-set-size",
     "core:window:allow-set-position",
     "core:window:allow-set-focus",
+    "core:window:allow-is-focused",
     "clipboard-manager:allow-write-text",
     "notification:default"
   ]

@@ -5,6 +5,7 @@ const navigationFeatures = [
   "learning",
   "plans",
   "knowledge",
+  "common-texts",
 ] as const;
 export type NavigationFeature = (typeof navigationFeatures)[number];
 

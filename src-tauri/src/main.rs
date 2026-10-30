@@ -5,6 +5,7 @@ mod window_layout;
 mod drop_files;
 mod desktop;
 mod desktop_input;
+mod selection;
 mod voice;
 
 use serde::Serialize;
@@ -494,6 +495,7 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(desktop::Desktop::default())
+        .manage(selection::Selection::default())
         .manage(voice::Voice::default())
         .manage(backend)
         .manage(drop_files::DroppedPaths::default())
@@ -515,6 +517,12 @@ fn main() {
             ensure_window_visible,
             restore_window_layout,
             desktop::desktop_preferences,
+            selection::selection_snapshot,
+            selection::selection_dom_reply,
+            selection::selection_dismiss,
+            selection::selection_resize,
+            selection::selection_ask,
+            selection::selection_shortcut_recording,
             desktop::desktop_preferences_save,
             desktop::desktop_open,
             desktop::desktop_pet_drag,
@@ -795,7 +803,10 @@ fn main() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::ScaleFactorChanged { .. } = event { desktop::refresh_hit_regions(window.app_handle(),window.label()); }
             if let tauri::WindowEvent::Destroyed = event { desktop::forget_pin(window.label()); }
-            if ["quick", "capture", "pet"].contains(&window.label()) {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Focused(false)) {
+                window.state::<selection::Selection>().recording.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+            if ["quick", "capture", "pet", "selection"].contains(&window.label()) {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     desktop::desktop_dismiss_label(window.app_handle(),window.label());

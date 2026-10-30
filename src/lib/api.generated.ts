@@ -106,6 +106,22 @@ export interface components {
             /** File */
             file: string;
         };
+        /** CategoryRead */
+        CategoryRead: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Name */
+            name: string;
+        };
+        /** CategoryWrite */
+        CategoryWrite: {
+            /** Name */
+            name: string;
+        };
         /** ChatInput */
         ChatInput: {
             /** Content */
@@ -232,9 +248,11 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "translate" | "ocr";
+            action: "translate" | "ocr" | "explain" | "summarize";
             /** Attachment Id */
-            attachment_id: string;
+            attachment_id?: string | null;
+            /** Text */
+            text?: string | null;
             /**
              * Target Language
              * @default auto
@@ -2029,6 +2047,26 @@ export interface components {
              * @enum {string}
              */
             resolution: "retry" | "skip" | "completed";
+        };
+        /** TextRead */
+        TextRead: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Content */
+            content: string;
+            /** Category Id */
+            category_id: string | null;
+        };
+        /** TextWrite */
+        TextWrite: {
+            /** Content */
+            content: string;
+            /** Category Id */
+            category_id?: string | null;
         };
         /** TodoAction */
         TodoAction: {

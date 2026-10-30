@@ -21,6 +21,8 @@ pub struct Preferences {
     pub pet_size: u16,
     pub pet_offset_x: Option<f64>,
     pub pet_offset_y: Option<f64>,
+    pub selection_enabled: bool,
+    pub selection_shortcut: String,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +30,8 @@ pub struct PreferencePatch {
     pub enabled: Option<bool>,
     pub pet: Option<bool>,
     pub pet_size: Option<u16>,
+    pub selection_enabled: Option<bool>,
+    pub selection_shortcut: Option<String>,
 }
 #[derive(Clone, Deserialize)]
 pub struct HitRegion {
@@ -57,6 +61,8 @@ impl Default for Preferences {
             pet_size: 100,
             pet_offset_x: None,
             pet_offset_y: None,
+            selection_enabled: true,
+            selection_shortcut: "Ctrl+Shift+E".into(),
         }
     }
 }
@@ -138,6 +144,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     }
     window(app, "quick", 900.0, 540.0)?;
     window(app, "capture", 900.0, 600.0)?;
+    window(app, "selection", 720.0, 76.0)?;
     let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
     let (pet_width, pet_height) = pet_window_dimensions(p.pet_size);
     let pet = window(app, "pet", pet_width, pet_height)?;
@@ -162,7 +169,7 @@ pub fn desktop_preferences(app: tauri::AppHandle) -> serde_json::Value {
     let d = app.state::<Desktop>();
     let quick_epoch = d.quick_epoch.load(Ordering::SeqCst);
     let quick_shown = app.get_webview_window("quick").is_some_and(|w| w.is_visible().unwrap_or(false));
-    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"floatingChat":d.quick_floating.load(Ordering::Relaxed),"floatingBelow":d.floating_below.load(Ordering::Relaxed),"quickShown":quick_shown,"quickEpoch":quick_epoch})
+    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"selectionShortcutError":app.state::<crate::selection::Selection>().shortcut_error.lock().unwrap().clone(),"floatingChat":d.quick_floating.load(Ordering::Relaxed),"floatingBelow":d.floating_below.load(Ordering::Relaxed),"quickShown":quick_shown,"quickEpoch":quick_epoch})
 }
 #[tauri::command]
 pub async fn desktop_preferences_save(
@@ -171,6 +178,7 @@ pub async fn desktop_preferences_save(
 ) -> Result<serde_json::Value, String> {
     let _save = PREFERENCE_SAVE_LOCK.lock().await;
     let mut next = app.state::<Desktop>().prefs.lock().unwrap().clone();
+    let previous = next.clone();
     let old_pet_size = next.pet_size;
     if let Some(v) = preferences.enabled {
         next.enabled = v;
@@ -178,11 +186,17 @@ pub async fn desktop_preferences_save(
     if let Some(v) = preferences.pet {
         next.pet = v;
     }
+    let selection_changed = preferences.selection_enabled.is_some() || preferences.selection_shortcut.is_some();
+    if let Some(v) = preferences.selection_enabled { next.selection_enabled = v; }
+    if let Some(v) = preferences.selection_shortcut { next.selection_shortcut = v; }
     if let Some(v) = preferences.pet_size {
         if !(50..=200).contains(&v) {
             return Err("桌宠大小需在 50% 到 200% 之间".into());
         }
         next.pet_size = v;
+    }
+    if selection_changed {
+        crate::selection::configure(app.clone(), next.selection_enabled, next.selection_shortcut.clone()).await?;
     }
     let preferences = next;
     let state = app.state::<Desktop>();
@@ -199,7 +213,11 @@ pub async fn desktop_preferences_save(
         }
         result
     };
-    persisted?;
+    if let Err(error) = persisted {
+        if selection_changed { let _ = crate::selection::configure(app.clone(), previous.selection_enabled, previous.selection_shortcut).await; }
+        return Err(error);
+    }
+    if !preferences.selection_enabled { crate::selection::dismiss(&app); }
     if let Some(pet) = app.get_webview_window("pet") {
         if old_pet_size != preferences.pet_size {
             let (width, height) = pet_window_dimensions(preferences.pet_size);
@@ -452,6 +470,7 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
     true
 }
 pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
+    if label == "selection" { crate::selection::dismiss(app); return; }
     if label == "capture" {
         let selection = app
             .state::<Desktop>()
@@ -770,6 +789,7 @@ fn show_capture_composer(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
+    crate::selection::dismiss(app);
     if app.state::<Desktop>().capture.lock().unwrap().is_some() {
         return Ok(());
     }
@@ -1134,7 +1154,7 @@ pub fn desktop_hit_regions(
     window: tauri::WebviewWindow,
     regions: Vec<HitRegion>,
 ) -> Result<(), String> {
-    if !["quick", "pet"].contains(&window.label()) {
+    if !["quick", "pet", "selection"].contains(&window.label()) {
         return Ok(());
     }
     if regions.len() > 32

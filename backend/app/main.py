@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, learning_workflows
 from .learning_public import LEARNING_KINDS, public as public_learning
-from . import composer_suggestions, todos, knowledge, desktop_assistant
+from . import composer_suggestions, todos, knowledge, desktop_assistant, common_texts
 from . import (
     agent,
     data_transfer,
@@ -1445,4 +1445,5 @@ router.include_router(composer_suggestions.router)
 router.include_router(todos.router)
 router.include_router(knowledge.router)
 router.include_router(desktop_assistant.router)
+router.include_router(common_texts.router)
 app.include_router(router)

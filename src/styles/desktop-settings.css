@@ -1,4 +1,29 @@
 /* Desktop preferences use two compact groups with aligned controls. */
+.selection-shortcut-settings {
+  border-top: 1px solid var(--ui-color-line);
+  padding: 18px 0;
+  display: grid;
+  gap: 14px;
+}
+.selection-shortcut-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.selection-shortcut-recorder {
+  min-width: 180px;
+  display: inline-flex;
+  gap: 5px;
+}
+.selection-shortcut-recorder kbd {
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid var(--ui-color-line);
+  background: var(--ui-color-surface);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 .desktop-preferences {
   display: grid;
   gap: 24px;

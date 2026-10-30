@@ -24,10 +24,12 @@ import {
 } from "./ui/dialog";
 import { ConnectionCard } from "./ConnectionCard";
 import { BaiAvatar } from "./BaiAvatar";
+import { SelectionSettings } from "./SelectionSettings";
 import "../styles/desktop-settings.css";
 type DesktopStatus = {
   preferences: DesktopPreferences;
   ownsShortcuts: boolean;
+  selectionShortcutError?: string;
 };
 export function DesktopSettings() {
   const [status, setStatus] = useState<DesktopStatus>();
@@ -63,7 +65,7 @@ export function DesktopSettings() {
     };
   }, []);
   async function save(change: Partial<DesktopPreferences>) {
-    if (saving.current || !status) return;
+    if (saving.current || !status) return false;
     saving.current = true;
     setBusy(true);
     setError("");
@@ -77,8 +79,10 @@ export function DesktopSettings() {
         if (change.petSize !== undefined)
           setPetSize(String(value.preferences.petSize));
       }
+      return true;
     } catch (e) {
       if (mounted.current) setError(desktopError(e));
+      return false;
     } finally {
       saving.current = false;
       if (mounted.current) setBusy(false);
@@ -146,7 +150,7 @@ export function DesktopSettings() {
       </div>
     );
   }
-  if (!isTauri()) return <p>桌面截图问答和桌宠仅在桌面版中可用。</p>;
+  if (!isTauri()) return <p>桌面截图问答、划词助手和桌宠仅在桌面版中可用。</p>;
   return (
     <section className="desktop-preferences" aria-label="桌面助手设置">
       <section className="settings-group">
@@ -159,6 +163,7 @@ export function DesktopSettings() {
           )}
         </div>
       </section>
+      {status && <SelectionSettings enabled={status.preferences.selectionEnabled} shortcut={status.preferences.selectionShortcut} ownsShortcuts={status.ownsShortcuts} shortcutError={status.selectionShortcutError || ""} busy={busy} save={save} />}
       <section className="settings-group">
         <h2>桌面宠物</h2>
         <div className="desktop-preference-card">

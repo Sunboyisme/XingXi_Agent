@@ -55,6 +55,7 @@ import { ErrorNotice, Toast } from "./components/common";
 import { BaiAvatar } from "./components/BaiAvatar";
 import {
   ChatIcon,
+  CommonTextsIcon,
   HelpIcon,
   KnowledgeIcon,
   LearningIcon,
@@ -70,7 +71,8 @@ import { ProjectsPage } from "./components/ProjectsPage";
 import { NavigationOverflowMenu, NavigationTooltip, type NavigationFeatureItem } from "./components/NavigationOverflowMenu";
 import { ProjectManagement, type ProjectManagementRequest } from "./components/ProjectManagement";
 
-type Page = "chat" | "projects" | "learning" | "plans" | "knowledge" | "settings";
+type Page = "chat" | "projects" | "learning" | "plans" | "knowledge" | "common-texts" | "settings";
+const CommonTextsPage = lazy(() => import("./components/CommonTextsPage").then(module => ({ default: module.CommonTextsPage })));
 const KnowledgePage = lazy(() => import("./components/KnowledgePage").then((module) => ({ default: module.KnowledgePage })));
 import type { KnowledgeSource } from "./components/KnowledgeSources";
 import { errorMessage, isActiveNotification, keepIfSame } from "./lib/utils";
@@ -93,6 +95,7 @@ const featurePages: NavigationFeatureItem[] = [
     icon: PlanIcon,
   },
   { id: "knowledge", label: "知识库", icon: KnowledgeIcon },
+  { id: "common-texts", label: "常用文本", icon: CommonTextsIcon },
 ];
 const pages = [{ id: "chat" as const, label: "对话", icon: ChatIcon }, ...featurePages];
 
@@ -818,6 +821,7 @@ export function App() {
                 </Suspense>
               )}
               {page === "knowledge" && <KnowledgePage openSource={knowledgeSource} onOpened={() => setKnowledgeSource(undefined)} />}
+              {page === "common-texts" && <CommonTextsPage />}
               {page === "settings" && (
                 <SettingsPage
                   settings={settings}

@@ -65,6 +65,21 @@ class SpeechCall(Record, Base):
     error: Mapped[str] = mapped_column(Text, default="")
 
 
+class CommonTextCategory(Record, Base):
+    __tablename__ = "common_text_categories"
+    __table_args__ = (UniqueConstraint("profile_id", "name_key"),)
+    name: Mapped[str] = mapped_column(String(80))
+    name_key: Mapped[str] = mapped_column(String(160))
+
+
+class CommonText(Record, Base):
+    __tablename__ = "common_texts"
+    content: Mapped[str] = mapped_column(Text)
+    category_id: Mapped[str | None] = mapped_column(
+        ForeignKey("common_text_categories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+
 class Project(Record, Base):
     __tablename__ = "projects"
     name: Mapped[str] = mapped_column(String(200))

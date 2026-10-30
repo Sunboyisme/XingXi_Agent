@@ -1,0 +1,113 @@
+html[data-desktop="selection"] .selection-window {
+  margin: 8px;
+  padding: 8px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 13px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 2px 9px #00000012;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+}
+.selection-toolbar {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.selection-avatar {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  margin: 0 7px 0 2px;
+}
+html[data-desktop="selection"] .selection-toolbar button {
+  padding: 7px 8px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+html[data-desktop="selection"] button:hover,
+html[data-desktop="selection"] button[aria-pressed="true"] {
+  background: var(--ui-color-surface-deep);
+}
+.selection-toolbar .selection-close {
+  margin-left: auto;
+}
+.selection-result {
+  border-top: 1px solid var(--ui-color-border);
+  margin-top: 8px;
+  padding: 12px 6px 0;
+}
+.selection-result-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+html[data-desktop="selection"] .selection-result-options .soft-select {
+  border: 1px solid var(--ui-color-border);
+  padding: 7px 10px;
+  min-width: 130px;
+  max-width: 100%;
+  justify-content: space-between;
+}
+.selection-result-options .soft-select:first-child {
+  flex: 1;
+}
+.selection-source {
+  margin: 12px 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.selection-source summary {
+  cursor: pointer;
+}
+.selection-source > div {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 120px;
+  overflow: auto;
+  padding: 8px 0;
+}
+.selection-answer {
+  max-height: 355px;
+  overflow: auto;
+  min-height: 65px;
+  padding: 0 4px;
+  overflow-wrap: anywhere;
+}
+.selection-answer .markdown {
+  font-size: 14px;
+}
+.selection-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+}
+.selection-result-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+}
+.selection-notice {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  margin: 10px 8px 2px;
+}
+html[data-desktop="selection"] [data-slot="dialog-content"] {
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+html[data-desktop="selection"]
+  [data-slot="dialog-content"]
+  [data-slot="button"][data-variant="default"] {
+  background: var(--ui-color-action);
+  color: var(--ui-color-on-action);
+}
+html[data-desktop="selection"] .error-notice {
+  margin: 8px 3px;
+}

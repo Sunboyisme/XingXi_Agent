@@ -98,6 +98,8 @@ export function DesktopQuickAsk() {
   const tracker = useRef<AbortController | null>(null);
   const pending = useRef<IncomingImage[]>([]);
   const seen = useRef(new Set<string>());
+  const pendingSelections = useRef<string[]>([]);
+  const seenSelections = useRef(new Set<string>());
   const imageWorking = useRef(false);
   const speech = useSpeechInput({
     scopeKey: sessionId,
@@ -146,6 +148,18 @@ export function DesktopQuickAsk() {
     current.current = next;
     if (mounted.current) setDraft(next);
   }
+  function appendSelections() {
+    if (work.current.locked || !pendingSelections.current.length) return;
+    const quotes = pendingSelections.current.splice(0).map(text => text.split(/\r?\n/).map(line => `> ${line}`).join("\n")).join("\n\n");
+    updateDraft(d => ({ ...d, text: `${d.text}${d.text ? "\n\n" : ""}${quotes}\n\n` }));
+    const id = session.current;
+    requestAnimationFrame(() => {
+      if (!mounted.current || id !== session.current || !visible.current) return;
+      input.current?.focus({ preventScroll: true });
+      input.current?.setSelectionRange(current.current.text.length, current.current.text.length);
+    });
+  }
+  useEffect(() => { appendSelections(); }, [voice?.phase]);
   function setRunBusy(value: boolean) {
     work.current.busy = value;
     if (mounted.current) setBusy(value);
@@ -347,6 +361,8 @@ export function DesktopQuickAsk() {
     startRequest.current = false;
     pending.current = [];
     seen.current.clear();
+    pendingSelections.current = [];
+    seenSelections.current.clear();
     imageWorking.current = false;
     setPendingCount(0);
     setRunBusy(false);
@@ -386,6 +402,14 @@ export function DesktopQuickAsk() {
         // Native keeps them until the listener is ready, including the final draft text.
         for (const item of items) {
           if (item.sessionId !== session.current) continue;
+          if (item.action === "append-selection") {
+            if (item.text && !seenSelections.current.has(item.id)) {
+              seenSelections.current.add(item.id);
+              pendingSelections.current.push(item.text);
+              appendSelections();
+            }
+            continue;
+          }
           const text = item.text;
           if (typeof text === "string") updateDraft((d) => ({ ...d, text }));
           if (item.action === "send") void functions.current.send();

@@ -156,10 +156,11 @@ pub fn start(app: tauri::AppHandle) {
         let mut chord = false;
         let mut down_keys = HashSet::new();
         let mut pointer_update = Instant::now();
+        let mut selection_hotkeys = crate::selection::Hotkeys::new(&app);
 
         loop {
             let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
-            let active = p.enabled || p.pet;
+            let active = p.enabled || p.pet || p.selection_enabled;
             if !owned && active {
                 let acquired = WaitForSingleObject(mutex, 0);
                 if acquired == WAIT_OBJECT_0 || acquired == WAIT_ABANDONED {
@@ -197,9 +198,15 @@ pub fn start(app: tauri::AppHandle) {
                 voice = false;
                 publish(&app);
             }
-            ALT_ENABLED.store(owned && p.enabled, Ordering::Relaxed);
+            selection_hotkeys.poll(&app, owned);
+            let recording_shortcut = app.state::<crate::selection::Selection>().recording.load(Ordering::SeqCst);
+            ALT_ENABLED.store(owned && p.enabled && !recording_shortcut, Ordering::Relaxed);
             let mut msg = MSG::default();
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                if msg.message == WM_HOTKEY && selection_hotkeys.receives(msg.wParam.0) && !recording_shortcut {
+                    crate::selection::trigger(&app);
+                    continue;
+                }
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -211,7 +218,7 @@ pub fn start(app: tauri::AppHandle) {
                 } else {
                     down_keys.remove(&e.key);
                 }
-                if !owned || !p.enabled {
+                if !owned || !p.enabled || recording_shortcut {
                     alt = None;
                     if voice {
                         crate::voice::cancel_owner(&app, "quick");

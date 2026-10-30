@@ -64,6 +64,10 @@ export type UsageReport = {
   }[];
 };
 export const usagePurposes: Record<string, string> = {
+  desktop_explain: "划词解释",
+  desktop_summarize: "划词总结",
+  desktop_translate: "桌面翻译",
+  desktop_ocr: "截图提取文字",
   knowledge_index: "知识库索引",
   knowledge_query: "知识库检索",
   input_suggestion: "输入建议",
