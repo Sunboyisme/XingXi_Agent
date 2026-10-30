@@ -12,7 +12,8 @@ export type DesktopNavigation = {
   settings?: boolean;
   settingsTab?: string | null;
   newChat?: boolean;
-  page?: "pomodoro" | "current" | "plans" | "notifications" | null;
+  page?:
+    "pomodoro" | "current" | "plans" | "notifications" | "common-texts" | null;
 };
 
 export function subscribeDesktopNavigation(

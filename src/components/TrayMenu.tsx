@@ -13,6 +13,8 @@ type TrayState = {
   autostart: { enabled: boolean; supported: boolean; reason: string };
 };
 type Action =
+  | "ai"
+  | "capture"
   | "show"
   | "new_chat"
   | "plans"
@@ -181,6 +183,8 @@ export function TrayMenu() {
         </header>
         {item("show", "打开主窗口")}
         {item("new_chat", "新建对话")}
+        {item("ai", "AI 对话")}
+        {item("capture", "截图")}
         {item("plans", "打开今日安排")}
         <hr />
         {item("pomodoro", "打开番茄钟")}

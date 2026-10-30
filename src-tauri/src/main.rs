@@ -11,6 +11,7 @@ mod tray_menu;
 mod navigation;
 mod desktop_input;
 mod selection;
+mod selection_clipboard;
 mod voice;
 
 use serde::Serialize;
@@ -527,6 +528,8 @@ fn main() {
             restore_window_layout,
             desktop::desktop_preferences,
             pomodoro::pomodoro_show_controls,
+            pomodoro::pomodoro_widget_layout,
+            pomodoro::pomodoro_notice_close,
             pomodoro::pomodoro_widget_reset,
             pomodoro::pomodoro_widget_drag,
             pomodoro::pomodoro_preview_sound,
@@ -536,7 +539,8 @@ fn main() {
             selection::selection_resize,
             selection::selection_shortcut_recording,
             desktop::desktop_preferences_save,
-            desktop::desktop_open,
+            desktop::desktop_ai_open,
+            desktop::desktop_capture_begin,
             desktop::desktop_pet_drag,
             desktop::desktop_pet_reset,
             desktop::desktop_hit_regions,
@@ -552,7 +556,6 @@ fn main() {
             desktop::desktop_pick_files,
             desktop::capture_get,
             desktop::capture_present,
-            desktop::capture_select,
             desktop::capture_pixels,
             desktop::capture_cancel,
             desktop::capture_export,
@@ -813,7 +816,7 @@ fn main() {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Focused(false)) {
                 window.state::<selection::Selection>().recording.store(false, std::sync::atomic::Ordering::SeqCst);
             }
-            if ["quick", "capture", "pet", "selection", "pomodoro-timer"].contains(&window.label()) {
+            if ["quick", "capture", "pet", "selection", "pomodoro-timer", "pomodoro-notice"].contains(&window.label()) {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     desktop::desktop_dismiss_label(window.app_handle(),window.label());

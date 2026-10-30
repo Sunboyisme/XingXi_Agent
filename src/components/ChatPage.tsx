@@ -1,3 +1,4 @@
+import { SoftSelect } from "./ui/soft-select";
 import { resizeMessageInput } from "@/lib/composerSize";
 import { ContextMeter, type ContextUsage } from "./ContextMeter";
 import { ComposerModelPicker } from "./ComposerModelPicker";
@@ -68,7 +69,6 @@ import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
 import { LearningHandoffCards } from "./LearningHandoffCards";
 import { CourseOutline, LearningCourseCards, type CourseReceipt } from "./LearningCourseCards";
-import { CurrentTaskSummary } from "./CurrentTaskSummary";
 import {
   MemoryReview,
   MemorySavedNotice,
@@ -489,6 +489,7 @@ export function ChatPage({
   const [stream, setStream] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [tasks, setTasks] = useState<ComplexTask[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState("");
   const [progress, setProgress] = useState({ stage: "", message: "" });
   const [liveCourses, setLiveCourses] = useState<Record<string, CourseReceipt[]>>({});
   const [courseDialog, setCourseDialog] = useState<CourseReceipt | null>(null);
@@ -1312,58 +1313,11 @@ export function ChatPage({
       { ...last, answer: last.answer + (last.answer ? "\n" : "") + stream },
     ];
   }, [baseTurns, busy, stream]);
-  const entries = useMemo(() => {
-    const tasksByMessage = new Map<string, ComplexTask[]>();
-    const pendingTasks = new Map<string, ComplexTask[]>();
-    const replies = new Map(
-      messages
-        .filter((message) => message.role === "assistant")
-        .map((message) => [message.run_id, message]),
-    );
-    for (const task of [...tasks].sort((a, b) =>
-      a.created_at.localeCompare(b.created_at),
-    )) {
-      const reply = task.source_run_id
-        ? replies.get(task.source_run_id)
-        : undefined;
-      const target = reply ? tasksByMessage : pendingTasks;
-      const key = reply?.id || task.source_message_id;
-      const anchored = target.get(key) || [];
-      anchored.push(task);
-      target.set(key, anchored);
-    }
-    return messages.flatMap((message) => [
-      {
-        message,
-        cards: tasksByMessage.get(message.id) || [],
-        synthetic: false,
-      },
-      ...(pendingTasks.get(message.id) || []).map((task) => ({
-        message: {
-          ...message,
-          id: `task-reply-${task.id}`,
-          role: "assistant",
-          content: "",
-          attachment_ids: [],
-          run_id: task.source_run_id || null,
-          reasoning: "",
-        } as Message,
-        cards: [task],
-        synthetic: true,
-      })),
-    ]);
-  }, [messages, tasks]);
-  const inlineActivity =
-    busy &&
-    entries.some(
-      (entry) =>
-        entry.synthetic &&
-        entry.cards.some(
-          (task) => task.id === run?.task_id && task.source_run_id === run?.id,
-        ),
-    );
   const hasDraft = Boolean(draft.trim() || images.length);
-  const currentTask = tasks.find((task) => task.id === run?.task_id && !["completed", "cancelled"].includes(task.status));
+  const orderedTasks = [...tasks].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const currentTask = tasks.find(task => task.id === selectedTaskId)
+    || tasks.find(task => task.id === run?.task_id)
+    || orderedTasks[0];
   const showStop = busy && !hasDraft;
   async function changeProject(nextId: string | null) {
     if (
@@ -1417,9 +1371,9 @@ export function ChatPage({
             <NewChatWelcome timezone={settings.timezone} />
           ) : (
             <div className="message-list" ref={thread}>
-              {entries.map(({ message: value, cards, synthetic }) => (
+              {messages.map(value => (
                 <article
-                  key={cards.length ? `task-reply-${cards[0].id}` : value.id}
+                  key={value.id}
                   id={`chat-message-${value.id}`}
                   tabIndex={-1}
                   className={`message ${value.role}`}
@@ -1439,11 +1393,7 @@ export function ChatPage({
                       <BaiAvatar
                         interactive
                         activity={value.run_id === avatarActivity?.runId ? avatarActivity : undefined}
-                        motion={
-                          synthetic && busy && value.run_id === run?.id
-                            ? "thinking"
-                            : "still"
-                        }
+                        motion="still"
                         label="和XiaoXi打个招呼，继续聊天"
                         onClick={() =>
                           focusComposer("我在呢。想追问什么，直接告诉我就好。")
@@ -1455,29 +1405,7 @@ export function ChatPage({
                     <span className="message-name">
                       {value.role === "assistant" ? "XiaoXi" : "你"}
                     </span>
-                    {synthetic && busy && value.run_id === run?.id ? (
-                      <ReplyActivity
-                        progress={progress.message}
-                        reasoning={reasoning}
-                        stream={stream}
-                        imageGeneration={imageGeneration}
-                        runId={run?.id}
-                      />
-                    ) : (
-                      value.role === "assistant" && (
-                        <Reasoning text={value.reasoning || ""} />
-                      )
-                    )}
-                    {cards.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        busy={busy}
-                        running={busy && run?.task_id === task.id}
-                        onUpdate={updateTask}
-                        onResume={(taskId) => void retry(undefined, taskId)}
-                      />
-                    ))}
+                    {value.role === "assistant" && <Reasoning text={value.reasoning || ""} />}
                     {value.role === "user" && editingMessageId === value.id ? (
                       <div className="user-message-editor">
                         <Textarea
@@ -1530,7 +1458,7 @@ export function ChatPage({
                         </div>
                       </div>
                     ) : (
-                      !synthetic && (
+                      (
                         <Markdown
                           runId={
                             value.role === "assistant"
@@ -1542,7 +1470,7 @@ export function ChatPage({
                         </Markdown>
                       )
                     )}
-                    {value.role === "assistant" && !synthetic && (
+                    {value.role === "assistant" && (
                       <AnswerPresentation
                         runId={value.run_id || undefined}
                         status={
@@ -1553,7 +1481,7 @@ export function ChatPage({
                         content={value.content}
                       />
                     )}
-                    {value.role === "assistant" && !synthetic && (
+                    {value.role === "assistant" && (
                       <AnswerActions
                         content={value.content}
                         onRetry={value === lastAssistant && value.run_id === run?.id &&
@@ -1580,9 +1508,7 @@ export function ChatPage({
                       />
                     )}
                     {value.role === "assistant" &&
-                      !synthetic &&
                       !value.task_id &&
-                      !cards.length &&
                       !(value.run_id === run?.id && run?.task_id) &&
                       ["failed", "cancelled"].includes(
                         value.run_status ||
@@ -1657,7 +1583,7 @@ export function ChatPage({
                   </div>
                 </article>
               ))}
-              {busy && !inlineActivity && (
+              {busy && (
                 <article className="message assistant">
                   <div className="message-avatar assistant-avatar">
                     <BaiAvatar
@@ -1723,6 +1649,14 @@ export function ChatPage({
                   </div>
                 </article>
               )}
+              {currentTask && <div className="chat-task-panel">
+                {tasks.length > 1 && <SoftSelect label="查看任务" value={currentTask.id}
+                  onValueChange={setSelectedTaskId}
+                  options={orderedTasks.map(task => ({ value: task.id, label: task.title || "历史任务" }))} />}
+                <TaskCard key={currentTask.id} task={currentTask} busy={busy}
+                  running={busy && run?.task_id === currentTask.id} onUpdate={updateTask}
+                  onResume={taskId => void retry(undefined, taskId)} />
+              </div>}
             </div>
           )}
           {candidates.length > 0 && (
@@ -1748,7 +1682,6 @@ export function ChatPage({
           />
         )}
         <div className="composer-area" ref={composerArea}>
-          {currentTask && <CurrentTaskSummary task={currentTask} queued={currentTask.pending_messages > 0 || progress.stage === "queued_input"} />}
           {busy && run && liveCourses[run.id]?.length > 0 && <LearningCourseCards runId={run.id} courses={liveCourses[run.id]} onOpen={setCourseDialog} />}
           <CourseOutline course={courseDialog} onClose={() => setCourseDialog(null)} />
           {buddyNote && (

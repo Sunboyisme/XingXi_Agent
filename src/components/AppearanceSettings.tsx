@@ -9,6 +9,12 @@ import {
 
 const themes = [
   {
+    id: "system",
+    name: "跟随系统",
+    description: "随系统外观，自动切换浅色与深色。",
+    icon: Monitor,
+  },
+  {
     id: "cream",
     name: "奶油杏 · 浅色",
     description: "奶油底色，配上温暖的杏棕色。",
@@ -20,19 +26,13 @@ const themes = [
     description: "暖灰底色，配上柔和的杏棕色。",
     icon: Moon,
   },
-  {
-    id: "system",
-    name: "跟随系统",
-    description: "随系统外观，自动切换浅色与深色。",
-    icon: Monitor,
-  },
 ] as const;
 
 export function AppearanceSettings() {
   const theme = useSyncExternalStore(
     subscribeTheme,
     currentThemePreference,
-    () => "warm-dark" as ThemePreference,
+    () => "system" as ThemePreference,
   );
   return (
     <section className="appearance-settings" aria-label="外观设置">

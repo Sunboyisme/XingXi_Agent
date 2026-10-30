@@ -7,6 +7,7 @@ export function useDesktopHitRegions(selector: string, rounded = false) {
     const regionSelector = `${selector},.picture-overlay,.picture-viewer,.picture-close`;
     let disposed = false;
     let frame: number | undefined;
+    let previous = "";
     const observed = new Set<Element>();
     const update = () => {
       if (disposed) return;
@@ -37,7 +38,12 @@ export function useDesktopHitRegions(selector: string, rounded = false) {
         })
         .filter((r) => r.width > 0 && r.height > 0)
         .slice(0, 32);
-      void invoke("desktop_hit_regions", { regions }).catch(() => {});
+      const signature = JSON.stringify(regions);
+      if (signature === previous) return;
+      previous = signature;
+      void invoke("desktop_hit_regions", { regions }).catch(() => {
+        previous = "";
+      });
     };
     const schedule = () => {
       if (frame !== undefined || disposed) return;
@@ -64,7 +70,7 @@ export function useDesktopHitRegions(selector: string, rounded = false) {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["style", "class", "hidden", "data-state"],
+      attributeFilter: ["style", "class", "hidden", "data-state", "data-anchor-right", "data-anchor-bottom"],
     });
     window.addEventListener("resize", schedule);
     document.addEventListener("animationend", schedule, true);

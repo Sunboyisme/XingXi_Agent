@@ -12,9 +12,14 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, Webvie
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct SelectionModel { pub provider_id: String, pub model_name: String }
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Preferences {
     pub enabled: bool,
+    pub screenshot_enabled: bool,
+    pub selection_shortcut_only: bool,
+    pub selection_model: Option<SelectionModel>,
     pub pet: bool,
     pub pomodoro: bool,
     pub pomodoro_theme: String,
@@ -30,12 +35,19 @@ pub struct Preferences {
 #[serde(rename_all = "camelCase")]
 pub struct PreferencePatch {
     pub enabled: Option<bool>,
+    pub screenshot_enabled: Option<bool>,
+    pub selection_shortcut_only: Option<bool>,
+    #[serde(default, deserialize_with = "selection_model_patch")]
+    pub selection_model: Option<Option<SelectionModel>>,
     pub pet: Option<bool>,
     pub pomodoro: Option<bool>,
     pub pomodoro_theme: Option<String>,
     pub pet_size: Option<u16>,
     pub selection_enabled: Option<bool>,
     pub selection_shortcut: Option<String>,
+}
+fn selection_model_patch<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Option<SelectionModel>>, D::Error> {
+    Option::<SelectionModel>::deserialize(deserializer).map(Some)
 }
 #[derive(Clone, Deserialize)]
 pub struct HitRegion {
@@ -61,6 +73,9 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             enabled: true,
+            screenshot_enabled: true,
+            selection_shortcut_only: false,
+            selection_model: None,
             pet: true,
             pomodoro: true,
             pomodoro_theme: "follow".into(),
@@ -70,12 +85,13 @@ impl Default for Preferences {
             pet_offset_x: None,
             pet_offset_y: None,
             selection_enabled: true,
-            selection_shortcut: "Ctrl+Shift+E".into(),
+            selection_shortcut: "Alt+S".into(),
         }
     }
 }
 #[derive(Default)]
 pub struct Desktop {
+    pub capture_starting: AtomicBool,
     pub prefs: Mutex<Preferences>,
     pub owned: AtomicBool,
     pub pet_dragging: AtomicBool,
@@ -99,10 +115,6 @@ pub struct Capture {
     pub height: u32,
     pub x: i32,
     pub y: i32,
-    pub draft_text: String,
-    pub session_id: String,
-    pub composer_rect: Option<tauri::PhysicalRect<i32, u32>>,
-    pub selecting: bool,
 }
 
 fn path(app: &tauri::AppHandle) -> PathBuf {
@@ -145,6 +157,10 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     if let Ok(bytes) = std::fs::read(path(app)) {
         if let Ok(mut p) = serde_json::from_slice::<Preferences>(&bytes) {
             p.pet_size = p.pet_size.clamp(50, 200);
+            if p.selection_shortcut == "Ctrl+Shift+E" { p.selection_shortcut = "Alt+S".into(); }
+            if let Ok(raw) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if raw.get("screenshotEnabled").is_none() { p.screenshot_enabled = p.enabled; }
+            }
             if !pomodoro_theme_valid(&p.pomodoro_theme) { p.pomodoro_theme = "follow".into(); }
             *app.state::<Desktop>().prefs.lock().unwrap() = p;
         }
@@ -190,6 +206,11 @@ pub async fn desktop_preferences_save(
     let old_pet_size = next.pet_size;
     if let Some(v) = preferences.enabled {
         next.enabled = v;
+    }
+    if let Some(v) = preferences.screenshot_enabled { next.screenshot_enabled = v; }
+    if let Some(v) = preferences.selection_shortcut_only { next.selection_shortcut_only = v; }
+    if let Some(v) = preferences.selection_model {
+        next.selection_model = v.filter(|model| !model.provider_id.is_empty() && !model.model_name.is_empty());
     }
     if let Some(v) = preferences.pet {
         next.pet = v;
@@ -465,6 +486,7 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
     for label in hidden {
         if label == "pomodoro-timer" { crate::pomodoro::refresh_visibility(app); continue; }
         if label == "quick" {
+            let _ = show_quick_window(app);
             continue;
         }
         if label == "pet" && !state.prefs.lock().unwrap().pet {
@@ -484,24 +506,10 @@ pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
     if label == "pomodoro-timer" { crate::pomodoro::hide_widget(app); return; }
     if label == "selection" { crate::selection::dismiss(app); return; }
     if label == "capture" {
-        let selection = app
-            .state::<Desktop>()
-            .capture
-            .lock()
-            .unwrap()
-            .as_ref()
-            .filter(|c| c.selecting)
-            .map(|c| c.id.clone());
-        if let Some(id) = selection {
-            let _ = capture_cancel(app.clone(), Some(id));
-            return;
-        }
         finish_capture(app, None);
-        desktop_dismiss_label(app, "quick");
         return;
     }
     if label == "quick" {
-        finish_capture(app, None);
         crate::voice::cancel_owner(app, "quick");
         app.state::<Desktop>()
             .quick_commands
@@ -539,7 +547,7 @@ pub fn desktop_toggle(app: tauri::AppHandle) -> Result<(), String> {
     }
     if app.state::<Desktop>().capture.lock().unwrap().is_some() {
         desktop_dismiss_label(&app, "capture");
-        return Ok(());
+        return open_ai(app);
     }
     if app
         .get_webview_window("quick")
@@ -548,10 +556,9 @@ pub fn desktop_toggle(app: tauri::AppHandle) -> Result<(), String> {
         desktop_dismiss_label(&app, "quick");
         return Ok(());
     }
-    desktop_open(app, true)
+    open_ai(app)
 }
 pub fn begin_ask_session(app: &tauri::AppHandle) -> Result<String, String> {
-    finish_capture(app, None);
     if let Some(w) = app.get_webview_window("quick") {
         let _ = w.hide();
         quick_presence(app, w.is_visible().unwrap_or(false));
@@ -610,34 +617,27 @@ pub fn enqueue_quick(
         serde_json::json!({"sessionId":session_id}),
     );
 }
-#[tauri::command]
-pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> {
+pub fn open_ai(app: tauri::AppHandle) -> Result<(), String> {
     if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
         return Ok(());
     }
-    if capture {
-        begin_ask_session(&app)?;
-        return begin_capture(&app);
-    }
-    let active_capture = app
-        .state::<Desktop>()
-        .capture
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|c| c.id.clone());
-    if let Some(id) = active_capture {
-        let _ = app.emit_to("capture", "capture-reset", id);
-        return show_capture_composer(&app);
-    }
-    if begin_capture(&app).is_ok() {
-        return Ok(());
-    }
-    // Keep error feedback available if the desktop cannot be captured.
+    if !app.state::<Desktop>().prefs.lock().unwrap().enabled { return Err("AI 对话已关闭，请在桌面助手设置中开启".into()); }
+    finish_capture(&app, None);
+    if app.state::<Desktop>().ask_session.lock().unwrap().is_empty() { begin_ask_session(&app)?; }
     show_quick_window(&app)
 }
+#[tauri::command]
+pub async fn desktop_ai_open(app: tauri::AppHandle) -> Result<(), String> {
+    open_ai(app)
+}
+#[tauri::command]
+pub async fn desktop_capture_begin(app: tauri::AppHandle) -> Result<(), String> {
+    if !app.state::<Desktop>().prefs.lock().unwrap().screenshot_enabled { return Err("截图功能已关闭".into()); }
+    begin_capture(&app)
+}
+
 pub fn desktop_record(app: tauri::AppHandle) -> Result<(), String> {
-    desktop_open(app, false)
+    open_ai(app)
 }
 #[tauri::command]
 pub fn desktop_resume(app: tauri::AppHandle, run_id: Option<String>) -> Result<(), String> {
@@ -656,7 +656,7 @@ pub fn desktop_start(app: tauri::AppHandle, new_chat: Option<bool>, voice: Optio
     if new_chat.unwrap_or(false) || app.state::<Desktop>().ask_session.lock().unwrap().is_empty() {
         begin_ask_session(&app)?;
     }
-    desktop_open(app.clone(), false)?;
+    open_ai(app.clone())?;
     if voice.unwrap_or(false) {
         // Open the editor first. Its current run/upload/recording state decides
         // whether to start recording; a cached busy flag must not block reopening.
@@ -691,58 +691,18 @@ fn show_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
     let _ = w.emit("desktop-shown", ());
     Ok(())
 }
-fn capture_composer_rect(app: &tauri::AppHandle) -> Result<tauri::PhysicalRect<i32, u32>, String> {
-    let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
-    let (x, y) = crate::desktop_input::cursor();
-    let monitor = w
-        .monitor_from_point(x as f64, y as f64)
-        .map_err(|e| e.to_string())?
-        .or(w.primary_monitor().map_err(|e| e.to_string())?)
-        .ok_or("显示器不可用")?;
-    let a = monitor.work_area();
-    let scale = monitor.scale_factor();
-    let width = (884.0 * scale).min(a.size.width as f64) as u32;
-    let bottom = (a.position.y as f64 + a.size.height as f64 * 0.65 + 96.0 * scale)
-        .min((a.position.y + a.size.height as i32) as f64);
-    let height = (540.0 * scale)
-        .min(bottom - a.position.y as f64)
-        .max(96.0 * scale) as u32;
-    Ok(tauri::PhysicalRect {
-        position: PhysicalPosition::new(
-            a.position.x + (a.size.width as i32 - width as i32) / 2,
-            bottom as i32 - height as i32,
-        ),
-        size: PhysicalSize::new(width, height),
-    })
-}
-fn show_capture_composer(app: &tauri::AppHandle) -> Result<(), String> {
-    let rect = app
-        .state::<Desktop>()
-        .capture
-        .lock()
-        .unwrap()
-        .as_mut()
-        .and_then(|c| {
-            c.selecting = false;
-            c.composer_rect
-        })
-        .ok_or("截图会话已结束")?;
-    let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
-    w.set_position(rect.position).map_err(|e| e.to_string())?;
-    w.set_size(rect.size).map_err(|e| e.to_string())?;
-    w.show().map_err(|e| e.to_string())?;
-    quick_presence(app, true);
-    w.set_focus().map_err(|e| e.to_string())?;
-    let _ = w.emit("desktop-shown", ());
-    Ok(())
-}
 pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
+    if !app.state::<Desktop>().prefs.lock().unwrap().screenshot_enabled { return Err("截图功能已关闭".into()); }
+    let desktop_state = app.state::<Desktop>();
+    if desktop_state.capture_starting.swap(true, Ordering::SeqCst) { return Ok(()); }
+    struct Starting<'a>(&'a AtomicBool);
+    impl Drop for Starting<'_> { fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); } }
+    let _starting = Starting(&desktop_state.capture_starting);
     crate::selection::dismiss(app);
     crate::pinned_menu::dismiss(app, false);
     if app.state::<Desktop>().capture.lock().unwrap().is_some() {
         return Ok(());
     }
-    let composer_rect = capture_composer_rect(app)?;
     let _ = app.emit_to("pet", "desktop-pet-hide-menu", ());
     let mut hidden = vec![];
     for w in app.webview_windows().values() {
@@ -755,7 +715,7 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
         }
     }
     *app.state::<Desktop>().hidden.lock().unwrap() = hidden;
-    let mut capture = match desktop_image() {
+    let capture = match desktop_image() {
         Ok(c) => c,
         Err(e) => {
             let hidden = std::mem::take(&mut *app.state::<Desktop>().hidden.lock().unwrap());
@@ -769,9 +729,6 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
             return Err(e);
         }
     };
-    capture.session_id = app.state::<Desktop>().ask_session.lock().unwrap().clone();
-    capture.composer_rect = Some(composer_rect);
-    capture.draft_text = app.state::<Desktop>().quick_text.lock().unwrap().clone();
     let (x, y, width, height) = (capture.x, capture.y, capture.width, capture.height);
     *app.state::<Desktop>().capture.lock().unwrap() = Some(capture);
     let result = (|| {
@@ -801,33 +758,7 @@ pub fn capture_present(app: tauri::AppHandle, id: String) -> Result<(), String> 
     }
     let w = app.get_webview_window("capture").ok_or("截图窗口不可用")?;
     w.show().map_err(|e| e.to_string())?;
-    show_capture_composer(&app)
-}
-#[tauri::command]
-pub fn capture_select(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    let session_id = app
-        .state::<Desktop>()
-        .capture
-        .lock()
-        .unwrap()
-        .as_mut()
-        .filter(|c| c.id == id)
-        .map(|c| {
-            c.selecting = true;
-            c.session_id.clone()
-        })
-        .ok_or("截图会话已结束")?;
-    crate::voice::cancel_owner(&app, "quick");
-    let _ = app.emit_to(
-        "quick",
-        "desktop-hidden",
-        serde_json::json!({"sessionId":session_id}),
-    );
-    if let Some(w) = app.get_webview_window("quick") {
-        w.hide().map_err(|e| e.to_string())?;
-        quick_presence(&app, false);
-    }
-    Ok(())
+    w.set_focus().map_err(|e| e.to_string())
 }
 #[tauri::command]
 pub fn capture_get(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
@@ -840,7 +771,7 @@ pub fn capture_get(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
         .and_then(|w| w.monitor_from_point(px as f64, py as f64).ok().flatten());
     let area = monitor.as_ref().map(|m| m.work_area());
     Ok(
-        serde_json::json!({"id":c.id,"width":c.width,"height":c.height,"x":c.x,"y":c.y,"cursorX":px-c.x,"cursorY":py-c.y,"draftText":c.draft_text,
+        serde_json::json!({"id":c.id,"width":c.width,"height":c.height,"x":c.x,"y":c.y,"cursorX":px-c.x,"cursorY":py-c.y,
         "monitorX":area.map(|a|a.position.x-c.x).unwrap_or(0),"monitorY":area.map(|a|a.position.y-c.y).unwrap_or(0),
         "monitorWidth":area.map(|a|a.size.width).unwrap_or(c.width),"monitorHeight":area.map(|a|a.size.height).unwrap_or(c.height)}),
     )
@@ -867,8 +798,7 @@ pub fn capture_cancel(app: tauri::AppHandle, id: Option<String>) -> Result<bool,
     if !current {
         return Ok(false);
     }
-    desktop_open(app, false)?;
-    Ok(true)
+    Ok(finish_capture(&app, id.as_deref()))
 }
 #[tauri::command]
 pub async fn capture_export(
@@ -879,14 +809,14 @@ pub async fn capture_export(
     x: Option<i32>,
     y: Option<i32>,
 ) -> Result<bool, String> {
-    let draft_text = app
+    let _capture_exists = app
         .state::<Desktop>()
         .capture
         .lock()
         .unwrap()
         .as_ref()
         .filter(|c| c.id == id)
-        .map(|c| c.draft_text.clone())
+        .map(|c| c.id.clone())
         .ok_or("截图会话已结束")?;
     let bytes = STANDARD
         .decode(
@@ -948,11 +878,11 @@ pub async fn capture_export(
             {
                 return Ok(false);
             }
-            desktop_open(app.clone(), false)?;
+            open_ai(app.clone())?;
             enqueue_quick(
                 &app,
                 "image",
-                Some(draft_text),
+                None,
                 Some(data_url),
                 None,
                 Some(action),
@@ -961,9 +891,7 @@ pub async fn capture_export(
         }
         _ => return Err("未知截图操作".into()),
     }
-    if finish_capture(&app, Some(&id)) {
-        desktop_dismiss_label(&app, "quick");
-    }
+    finish_capture(&app, Some(&id));
     Ok(true)
 }
 pub fn forget_pin(label: &str) {
@@ -978,7 +906,7 @@ pub fn desktop_main(
     new_chat: Option<bool>,
     page: Option<String>,
 ) -> Result<(), String> {
-    if page.as_ref().is_some_and(|value| !["pomodoro", "current", "plans", "notifications"].contains(&value.as_str())) {
+    if page.as_ref().is_some_and(|value| !["pomodoro", "current", "plans", "notifications", "common-texts"].contains(&value.as_str())) {
         return Err("未知主窗口页面，请从主导航重新选择。".into());
     }
     let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
@@ -1167,16 +1095,7 @@ pub fn desktop_quick_state(app: tauri::AppHandle, session_id: String, text: Stri
     if *session != session_id {
         return;
     }
-    *state.quick_text.lock().unwrap() = text.clone();
-    if let Some(c) = state
-        .capture
-        .lock()
-        .unwrap()
-        .as_mut()
-        .filter(|c| c.session_id == session_id)
-    {
-        c.draft_text = text;
-    }
+    *state.quick_text.lock().unwrap() = text;
     state.quick_busy.store(busy, Ordering::Relaxed);
 }
 fn desktop_image() -> Result<Capture, String> {
@@ -1260,10 +1179,6 @@ fn desktop_image() -> Result<Capture, String> {
             height: height as u32,
             x,
             y,
-            draft_text: String::new(),
-            session_id: String::new(),
-            composer_rect: None,
-            selecting: false,
         })
     }
 }

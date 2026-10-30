@@ -229,6 +229,7 @@ export function App() {
   const acceptDesktopNavigation = useEffectEvent((request: DesktopNavigation) => {
     const epoch = ++navigationEpoch.current;
     if (request.page === "current") return;
+    if (request.page === "common-texts") { navigate("common-texts"); return; }
     if (request.page === "pomodoro") { navigate("pomodoro"); return; }
     if (request.page === "plans") {
       setPlanAgenda({ day: zonedToday(settings?.timezone), tab: "todo" });

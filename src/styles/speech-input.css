@@ -16,7 +16,7 @@ html[data-desktop] .speech-input-button {
   flex-shrink: 0;
   padding: 4px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 50%;
   box-shadow: none;
   background: transparent;
   color: var(--ui-color-text-muted, #e5d3c5);

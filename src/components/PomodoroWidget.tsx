@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Check,
   ChevronLeft,
+  ChevronRight,
   CircleAlert,
   Pause,
   Play,
@@ -31,8 +32,9 @@ import "../styles/pomodoro-widget.css";
 export function PomodoroWidget() {
   const { data, remaining, busy, error, refresh } = usePomodoro();
   const [localError, setLocalError] = useState("");
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [anchor, setAnchor] = useState({ right: false, bottom: false });
+  const strip = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [themeChooser, setThemeChooser] = useState(false);
   const [theme, setTheme] = useState<PomodoroTheme>("follow");
@@ -43,7 +45,7 @@ export function PomodoroWidget() {
   const contextMenu = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ x: number; y: number; pointer: number } | null>(null);
-  const expanded = hovered || focused || menuOpen || dragging;
+  const expanded = controlsOpen;
   useDesktopHitRegions(
     ".pomodoro-widget,.pomodoro-widget-menu,.ui-hint,.ui-hint-arrow",
     true,
@@ -124,19 +126,18 @@ export function PomodoroWidget() {
         setLocalError(event.payload),
       ),
       listen("pomodoro-widget-dismissed", () => {
-        setHovered(false);
-        setFocused(false);
+        setControlsOpen(false);
         setMenuOpen(false);
         setThemeChooser(false);
         setDragging(false);
       }),
-      listen<boolean>("pomodoro-widget-pointer", (event) =>
-        setHovered(event.payload),
+      listen<{ right: boolean; bottom: boolean }>(
+        "pomodoro-widget-anchor",
+        (event) => setAnchor(event.payload),
       ),
-      listen<{ inside: boolean }>("pomodoro-widget-drag-ended", (event) => {
-        setDragging(false);
-        setHovered(event.payload.inside);
-      }),
+      listen<{ inside: boolean }>("pomodoro-widget-drag-ended", () =>
+        setDragging(false),
+      ),
     ];
     return () => {
       stops.forEach(
@@ -144,6 +145,25 @@ export function PomodoroWidget() {
       );
     };
   }, []);
+  useEffect(() => {
+    const node = strip.current;
+    if (!node) return;
+    let previous = "";
+    const update = () => {
+      const width = Math.ceil(node.getBoundingClientRect().width) + 16;
+      const height = Math.ceil(node.getBoundingClientRect().height) + 16;
+      const key = `${width}:${height}:${menuOpen}`;
+      if (previous === key) return;
+      previous = key;
+      void invoke("pomodoro_widget_layout", { width, height, menuOpen }).catch(
+        (cause) => setLocalError(String(cause)),
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [expanded, menuOpen]);
   const primary = data ? primaryPomodoroAction(data) : null;
   const status = data ? pomodoroStatus(data, true) : "读取中";
   const fail = (cause: unknown) =>
@@ -161,7 +181,6 @@ export function PomodoroWidget() {
     }
   }
   function down(event: PointerEvent<HTMLElement>) {
-    setFocused(false);
     if (
       !event.isPrimary ||
       event.button !== 0 ||
@@ -204,7 +223,11 @@ export function PomodoroWidget() {
       });
   }
   return (
-    <main className="pomodoro-widget-frame">
+    <main
+      className="pomodoro-widget-frame"
+      data-anchor-right={anchor.right}
+      data-anchor-bottom={anchor.bottom}
+    >
       <ContextMenu.Root
         open={menuOpen}
         onOpenChange={(open) => {
@@ -214,20 +237,12 @@ export function PomodoroWidget() {
       >
         <ContextMenu.Trigger asChild>
           <section
+            ref={strip}
             className="pomodoro-widget"
             aria-label="桌面番茄钟"
             data-status={data?.status}
             data-expanded={expanded}
             data-dragging={dragging}
-            onPointerEnter={() => setHovered(true)}
-            onPointerLeave={() => setHovered(false)}
-            onFocusCapture={(event) =>
-              setFocused(event.target.matches(":focus-visible"))
-            }
-            onBlurCapture={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget))
-                setFocused(false);
-            }}
             onKeyDown={(event) => {
               if (event.key === "Escape")
                 void invoke("desktop_dismiss").catch(fail);
@@ -277,6 +292,18 @@ export function PomodoroWidget() {
                 </button>
               </Hint>
             )}
+            <button
+              className="pomodoro-widget-toggle"
+              aria-label={expanded ? "收起计时操作" : "展开计时操作"}
+              aria-expanded={expanded}
+              onClick={() => setControlsOpen((value) => !value)}
+            >
+              {expanded ? (
+                <ChevronLeft size={14} />
+              ) : (
+                <ChevronRight size={14} />
+              )}
+            </button>
             {expanded && (
               <div
                 className="pomodoro-widget-actions"
@@ -293,9 +320,9 @@ export function PomodoroWidget() {
                   }}
                 >
                   {primary?.action === "pause" ? (
-                    <Pause size={14} />
+                    <Pause size={14} fill="currentColor" strokeWidth={0} />
                   ) : (
-                    <Play size={14} />
+                    <Play size={14} fill="currentColor" strokeWidth={0} />
                   )}
                 </button>
                 {data?.phase !== "idle" && data && (
@@ -304,7 +331,7 @@ export function PomodoroWidget() {
                     disabled={busy}
                     onClick={() => void act("end")}
                   >
-                    <Square size={12} />
+                    <Square size={11} fill="currentColor" strokeWidth={0} />
                   </button>
                 )}
                 <button aria-label="打开番茄钟" onClick={openPage}>

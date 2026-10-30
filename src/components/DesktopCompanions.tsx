@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AudioLines, Bell, Square, SquarePen, X } from "lucide-react";
+import { AudioLines, Bell, Square, SquarePen, ScanLine, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
@@ -46,7 +46,7 @@ export function DesktopPet() {
   const [activity, setActivity] = useState<AvatarActivity>();
   const [gesture, setGesture] = useState<AvatarGesture>();
   const [activities] = useState(() => new PetActivities());
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState("");
   const drag = useRef<{ id: number; x: number; y: number; moved: boolean; started: boolean } | null>(null);
@@ -73,14 +73,11 @@ export function DesktopPet() {
       if (old?.phase === "working") return { ...old, phase: result.current && activityPhase(result.current) === "waiting" ? "waiting" : "idle", startedAt: now };
       return old;
     });
-    const previous = inbox.list();
     const unread = inbox.accept(values);
     const fingerprint = JSON.stringify(unread);
     if (fingerprint !== taskFingerprint.current) {
       taskFingerprint.current = fingerprint;
       setTasks(unread);
-      const fresh = unread.some(task => !previous.some(old => old.runId === task.runId && old.runStatus === task.runStatus && old.taskStatus === task.taskStatus));
-      if (fresh && !quickVisible.current) setCollapsed(false);
     }
   }
   function strokePointer(event: PointerEvent) {
@@ -418,7 +415,7 @@ export function DesktopPet() {
           "--pet-top": layout.y == null ? undefined : `${layout.y}px`,
           "--pet-panel-top": `${panelTop}px`,
           "--pet-panel-height": `${Math.max(84, panelHeight)}px`,
-          "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 118 - avatarLeft, avatarSize / 2 - 56))}px`,
+          "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 152 - avatarLeft, avatarSize / 2 - 73))}px`,
           "--pet-menu-top": `${avatarTop >= 110 ? avatarTop - 108 : avatarTop + avatarSize + 8}px`,
         } as CSSProperties
       }
@@ -552,6 +549,7 @@ export function DesktopPet() {
         {(hovered || focused) && presence.phase === "idle" && gesture?.kind !== "drag" && !menu && (
           <div ref={hoverTools} className="pet-hover-tools" role="toolbar" aria-label="桌宠快捷操作" onPointerDown={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
             <Hint label="开始新聊天"><button aria-label="开始新聊天" onClick={() => startDesktopAsk()}><SquarePen size={16} /></button></Hint>
+            <button aria-label="截图" onClick={() => void invoke("desktop_capture_begin").catch(e => setError(desktopError(e)))}><ScanLine size={16} /></button>
             <span className="pet-toolbar-divider" />
             <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startDesktopAsk(true)}><AudioLines size={16} /></button></Hint>
             <span className="pet-toolbar-divider" />

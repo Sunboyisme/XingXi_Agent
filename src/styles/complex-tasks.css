@@ -208,3 +208,11 @@
 .complex-task-secondary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .complex-task-footer > button { margin-left: auto; min-height: 36px; padding-inline: 16px; }
 .complex-task-footer .detail-view-trigger { background: transparent; box-shadow: none; }
+
+.chat-task-panel { margin: 24px 0 8px; min-width: 0; }
+.chat-task-panel .complex-task-card { margin: 8px 0; }
+.chat-task-panel .complex-task-details { max-height: min(420px, 55vh); overflow: auto; }
+.task-resolution { margin-block: 12px; padding: 12px; border: 1px solid var(--ui-color-line); border-radius: 12px; }
+.chat-layout .chat-main { min-height: 0; }
+.chat-layout .chat-scroll { min-height: 0; flex: 1 1 0; }
+.chat-layout .composer-area { flex: 0 0 auto; }

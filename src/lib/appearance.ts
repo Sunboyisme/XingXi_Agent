@@ -6,9 +6,9 @@ const changedEvent = "xiaoxi-theme-changed";
 function savedTheme(): ThemePreference {
   try {
     const value = localStorage.getItem(THEME_KEY);
-    return value === "cream" || value === "system" ? value : "warm-dark";
+    return value === "cream" || value === "warm-dark" ? value : "system";
   } catch {
-    return "warm-dark";
+    return "system";
   }
 }
 
@@ -23,14 +23,18 @@ function applyTheme(theme: Theme) {
 
 export function currentThemePreference(): ThemePreference {
   const value = document.documentElement.dataset.themePreference;
-  return value === "cream" || value === "system" ? value : "warm-dark";
+  return value === "cream" || value === "warm-dark" ? value : "system";
 }
 
 function applyPreference(preference: ThemePreference) {
   document.documentElement.dataset.themePreference = preference;
-  applyTheme(preference === "system"
-    ? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "warm-dark" : "cream")
-    : preference);
+  applyTheme(
+    preference === "system"
+      ? window.matchMedia?.("(prefers-color-scheme: dark)").matches
+        ? "warm-dark"
+        : "cream"
+      : preference,
+  );
 }
 
 export function setTheme(theme: ThemePreference) {
@@ -56,7 +60,8 @@ export function initializeAppearance() {
   };
   media?.addEventListener("change", onSystemChange);
   const sync = (event: StorageEvent) => {
-    if (event.key === THEME_KEY || event.key === null) applyPreference(savedTheme());
+    if (event.key === THEME_KEY || event.key === null)
+      applyPreference(savedTheme());
   };
   window.addEventListener("storage", sync);
   return () => {

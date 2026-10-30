@@ -2,6 +2,7 @@ import { Hint } from "./ui/hint";
 
 export type ContextUsage = {
   used_tokens?: number;
+  estimated?: boolean;
   limit_tokens?: number;
   reserved_tokens?: number;
   provider_id?: string;
@@ -17,6 +18,7 @@ export function ContextMeter({
   limit: number;
   compacting: boolean;
 }) {
+  limit = usage?.limit_tokens || limit;
   const used = usage?.used_tokens;
   const reserved =
     usage?.reserved_tokens ??
@@ -33,9 +35,11 @@ export function ContextMeter({
         <>
           <strong>上下文用量</strong>
           {compacting && <span>正在整理上下文…</span>}
+          {used === undefined && <span>尚无用量统计</span>}
           {used !== undefined && (
             <span>
-              已用 {format(used)} token · 约 {percent}%
+              {usage?.estimated ? "估算已用" : "已用"} {format(used)} token · 约{" "}
+              {percent}%
             </span>
           )}
           <span>总额度 {format(limit)} token</span>

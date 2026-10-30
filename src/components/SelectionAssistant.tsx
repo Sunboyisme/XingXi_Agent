@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   BookOpen,
   BookmarkPlus,
+  FolderOpen,
   Check,
   Copy,
   Languages,
@@ -22,6 +23,7 @@ import {
   readEvents,
   selectedModel,
   type Settings,
+  type DesktopPreferences,
 } from "@/lib/desktopAssistant";
 import { copyText } from "@/lib/clipboard";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
@@ -49,7 +51,33 @@ const actionLabels: Record<Action, string> = {
 export function SelectionAssistant() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [settings, setSettings] = useState<Settings>();
-  const [modelKey, setModelKey] = useState("");
+  const [preferences, setPreferences] = useState<DesktopPreferences>();
+  const [sourceExpanded, setSourceExpanded] = useState(false);
+  const [sourceLong, setSourceLong] = useState(false);
+  const sourceText = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let alive = true;
+    const accept = (value: { preferences: DesktopPreferences }) => {
+      if (alive) setPreferences(value.preferences);
+    };
+    const stop = desktopListen<{ preferences: DesktopPreferences }>(
+      "desktop-preferences",
+      accept,
+    );
+    void stop
+      .then(() =>
+        invoke<{ preferences: DesktopPreferences }>("desktop_preferences"),
+      )
+      .then(accept)
+      .catch((cause) => {
+        if (alive) setConfigError(desktopError(cause));
+      });
+    return () => {
+      alive = false;
+      void stop.then((dispose) => dispose()).catch(() => {});
+    };
+  }, []);
+
   const [language, setLanguage] = useState("auto");
   const [action, setAction] = useState<Action>();
   const [answer, setAnswer] = useState("");
@@ -81,6 +109,19 @@ export function SelectionAssistant() {
   const scroll = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const root = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const node = sourceText.current;
+    if (!node) return;
+    const measure = () =>
+      setSourceLong(
+        node.scrollHeight >
+          parseFloat(getComputedStyle(node).lineHeight) * 4 + 2,
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [snapshot?.text, action]);
   const commands = useRef({ accept, hide, dismiss });
   commands.current = { accept, hide, dismiss };
   useDesktopHitRegions(
@@ -170,6 +211,7 @@ export function SelectionAssistant() {
     invalidate();
     current.current = value;
     setSnapshot(value);
+    setSourceExpanded(false);
     setAction(undefined);
     setAnswer("");
     setBusy(false);
@@ -334,7 +376,16 @@ export function SelectionAssistant() {
     setIncomplete(false);
     following.current = true;
     try {
-      const selected = selectedModel(settings, modelKey);
+      if (!preferences) throw new Error("划词配置尚未加载，请稍后重试。");
+      const configured = preferences.selectionModel;
+      const key = configured
+        ? `${configured.provider_id}:${configured.model_name}`
+        : "";
+      if (configured && !models(settings).some((choice) => choice.key === key))
+        throw new Error(
+          "划词模型不可用，请在设置 → 桌面助手 → 划词助手中重新选择。",
+        );
+      const selected = selectedModel(settings, key);
       const run = await api<{ id: string }>("/desktop/actions", "POST", {
         action: next,
         text: material.text,
@@ -399,14 +450,6 @@ export function SelectionAssistant() {
     }
   }
   if (!snapshot) return null;
-  const choices = models(settings);
-  const selectedKey = choices.some((model) => model.key === modelKey)
-    ? modelKey
-    : choices.find(
-        (model) =>
-          model.selection.provider_id === settings?.default_provider &&
-          model.selection.model_name === settings?.model_name,
-      )?.key || "";
   const toolDisabled = !snapshot.text;
   return (
     <main
@@ -528,6 +571,16 @@ export function SelectionAssistant() {
             )}
             添加到常用文本
           </button>
+          <button
+            onClick={() =>
+              void invoke("desktop_main", { page: "common-texts" })
+                .then(dismiss)
+                .catch((cause) => setError(desktopError(cause)))
+            }
+          >
+            <FolderOpen size={16} />
+            打开常用文本
+          </button>
           <Hint
             side="bottom"
             label={copied === "source" ? "已复制选中文字" : "复制选中文字"}
@@ -565,17 +618,6 @@ export function SelectionAssistant() {
           aria-label={`${actionLabels[action]}结果`}
         >
           <div className="selection-result-options">
-            <SoftSelect
-              label="处理模型"
-              value={selectedKey}
-              onValueChange={setModelKey}
-              options={choices.map((model) => ({
-                value: model.key,
-                label: model.label,
-              }))}
-              placeholder="选择模型"
-              disabled={busy}
-            />
             {action === "translate" && (
               <SoftSelect
                 label="翻译目标语言"
@@ -596,10 +638,22 @@ export function SelectionAssistant() {
               retry={() => setReloadSettings((n) => n + 1)}
             />
           )}
-          <details className="selection-source">
-            <summary>选中文字</summary>
-            <div>{snapshot.text}</div>
-          </details>
+          <div className="selection-source">
+            <div
+              ref={sourceText}
+              className={`selection-source-copy ${sourceExpanded ? "is-expanded" : ""}`}
+            >
+              {snapshot.text}
+            </div>
+            {sourceLong && (
+              <button
+                aria-expanded={sourceExpanded}
+                onClick={() => setSourceExpanded((value) => !value)}
+              >
+                {sourceExpanded ? "收起" : "展开"}
+              </button>
+            )}
+          </div>
           <div
             className="selection-answer"
             ref={scroll}

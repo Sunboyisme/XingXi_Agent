@@ -124,7 +124,7 @@ export function DesktopSettings() {
     }
   }
   function featureRow(
-    key: "enabled" | "pet" | "pomodoro",
+    key: "enabled" | "screenshotEnabled" | "pet" | "pomodoro",
     label: string,
     detail: string,
   ) {
@@ -135,9 +135,9 @@ export function DesktopSettings() {
           <p>{detail}</p>
         </div>
         <div className="desktop-feature-action">
-          {key === "enabled" && (
+          {(key === "enabled" || key === "screenshotEnabled") && (
             <span className="desktop-keycaps">
-              <kbd>右 Alt</kbd>
+              <kbd>{key === "enabled" ? "右 Alt" : "左 Alt + E"}</kbd>
             </span>
           )}
           <label className="module-toggle">
@@ -156,7 +156,7 @@ export function DesktopSettings() {
     );
   }
   if (!isTauri())
-    return <p>桌面截图问答、划词助手、桌宠和桌面番茄钟仅在桌面版中可用。</p>;
+    return <p>AI 对话、截图、划词助手、桌宠和桌面番茄钟仅在桌面版中可用。</p>;
   return (
     <section className="desktop-preferences" aria-label="桌面助手设置">
       <section className="settings-group">
@@ -164,15 +164,18 @@ export function DesktopSettings() {
         <div className="desktop-preference-card">
           {featureRow(
             "enabled",
-            "桌面截图问答",
+            "AI 对话",
             "短按右 Alt 唤出问答，按住右 Alt 语音输入。",
           )}
+          {featureRow("screenshotEnabled", "截图", "左 Alt+E 截图，可标注、复制、保存、贴图或发送给 AI。")}
         </div>
       </section>
       {status && (
         <SelectionSettings
           enabled={status.preferences.selectionEnabled}
           shortcut={status.preferences.selectionShortcut}
+          shortcutOnly={status.preferences.selectionShortcutOnly || false}
+          model={status.preferences.selectionModel || null}
           ownsShortcuts={status.ownsShortcuts}
           shortcutError={status.selectionShortcutError || ""}
           busy={busy}

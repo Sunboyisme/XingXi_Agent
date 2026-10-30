@@ -22,8 +22,11 @@ struct KeyEvent {
     down: bool,
     at: Instant,
     other_held: bool,
+    capture: bool,
 }
 static INPUT: OnceLock<mpsc::SyncSender<KeyEvent>> = OnceLock::new();
+static SCREENSHOT_ENABLED: AtomicBool = AtomicBool::new(false);
+static CAPTURE_KEY: AtomicBool = AtomicBool::new(false);
 static ALT_ENABLED: AtomicBool = AtomicBool::new(false);
 static ALT_HELD: AtomicBool = AtomicBool::new(false);
 static ALT_SUPPRESSED: AtomicBool = AtomicBool::new(false);
@@ -55,6 +58,19 @@ unsafe extern "system" fn hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRE
             } else {
                 false
             };
+            let screenshot = down && e.vkCode == 0x45 && SCREENSHOT_ENABLED.load(Ordering::Relaxed)
+                && pressed(VK_LMENU) && !pressed(VK_RMENU) && !pressed(VK_CONTROL) && !pressed(VK_SHIFT);
+            let consume_capture = if e.vkCode == 0x45 {
+                if screenshot { CAPTURE_KEY.store(true, Ordering::SeqCst); true }
+                else if !down { CAPTURE_KEY.swap(false, Ordering::SeqCst) } else { false }
+            } else { false };
+            if screenshot {
+                // Mask Alt's menu activation without changing the physical Alt gesture.
+                let mask = [false, true].map(|up| INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT { wVk: VK_CONTROL, dwFlags: if up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) }, ..Default::default() }
+                }});
+                let _ = unsafe { SendInput(&mask, std::mem::size_of::<INPUT>() as i32) };
+            }
             let mut consume_alt = false;
             if e.vkCode == VK_RMENU.0 as u32 {
                 if down {
@@ -77,9 +93,10 @@ unsafe extern "system" fn hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRE
                     down,
                     at: Instant::now(),
                     other_held,
+                    capture: screenshot,
                 });
             }
-            if consume_alt {
+            if consume_alt || consume_capture {
                 return LRESULT(1);
             }
             if e.vkCode != VK_RMENU.0 as u32 && down && ALT_SUPPRESSED.swap(false, Ordering::SeqCst)
@@ -139,6 +156,11 @@ fn pointer_surfaces(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("pet") {
         if w.is_visible().unwrap_or(false) {
             let (x, y) = cursor();
+            static LAST_CURSOR: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
+            let mut previous = LAST_CURSOR.lock().unwrap();
+            if *previous == Some((x, y)) { return; }
+            *previous = Some((x, y));
+            drop(previous);
             let _ = w.emit("desktop-cursor", serde_json::json!({"x":x,"y":y}));
         }
     }
@@ -157,11 +179,12 @@ pub fn start(app: tauri::AppHandle) {
         let mut chord = false;
         let mut down_keys = HashSet::new();
         let mut pointer_update = Instant::now();
+        let mut auto_selection = crate::selection::AutoSelection::default();
         let mut selection_hotkeys = crate::selection::Hotkeys::new(&app);
 
         loop {
             let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
-            let active = p.enabled || p.pet || p.selection_enabled;
+            let active = p.enabled || p.screenshot_enabled || p.pet || p.selection_enabled;
             if !owned && active {
                 let acquired = WaitForSingleObject(mutex, 0);
                 if acquired == WAIT_OBJECT_0 || acquired == WAIT_ABANDONED {
@@ -202,6 +225,7 @@ pub fn start(app: tauri::AppHandle) {
             selection_hotkeys.poll(&app, owned);
             let recording_shortcut = app.state::<crate::selection::Selection>().recording.load(Ordering::SeqCst);
             ALT_ENABLED.store(owned && p.enabled && !recording_shortcut, Ordering::Relaxed);
+            SCREENSHOT_ENABLED.store(owned && p.screenshot_enabled && !recording_shortcut, Ordering::Relaxed);
             let mut msg = MSG::default();
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
                 if msg.message == WM_HOTKEY && selection_hotkeys.receives(msg.wParam.0) && !recording_shortcut {
@@ -218,6 +242,13 @@ pub fn start(app: tauri::AppHandle) {
                     }
                 } else {
                     down_keys.remove(&e.key);
+                }
+                if e.capture && owned && !recording_shortcut {
+                    let a = app.clone();
+                    std::thread::spawn(move || { if let Err(error) = crate::desktop::begin_capture(&a) {
+                        let _ = a.emit_to("quick", "desktop-error", error);
+                    }});
+                    continue;
                 }
                 if !owned || !p.enabled || recording_shortcut {
                     alt = None;
@@ -247,7 +278,7 @@ pub fn start(app: tauri::AppHandle) {
                                 let a = app.clone();
                                 let _ = app.run_on_main_thread(move || {
                                     if let Err(error) = crate::desktop::desktop_toggle(a.clone()) {
-                                        let _ = crate::desktop::desktop_open(a.clone(), false);
+                                        let _ = crate::desktop::open_ai(a.clone());
                                         let _ = a.emit_to("quick", "desktop-error", error);
                                     }
                                 });
@@ -279,25 +310,16 @@ pub fn start(app: tauri::AppHandle) {
                         {
                             return;
                         }
-                        let active = a.state::<Desktop>().capture.lock().unwrap().is_some()
-                            || a.get_webview_window("quick")
+                        let active = a.get_webview_window("quick")
                                 .is_some_and(|w| w.is_visible().unwrap_or(false));
                         if active && a.state::<Desktop>().quick_busy.load(Ordering::SeqCst) {
                             return;
                         }
-                        if !active && crate::desktop::begin_ask_session(&a).is_err() {
+                        let needs_session = a.state::<Desktop>().ask_session.lock().unwrap().is_empty();
+                        if needs_session && crate::desktop::begin_ask_session(&a).is_err() {
                             return;
                         }
-                        let text = a
-                            .state::<Desktop>()
-                            .capture
-                            .lock()
-                            .unwrap()
-                            .as_ref()
-                            .map(|capture| capture.draft_text.clone())
-                            .unwrap_or_else(|| {
-                                a.state::<Desktop>().quick_text.lock().unwrap().clone()
-                            });
+                        let text = a.state::<Desktop>().quick_text.lock().unwrap().clone();
                         if crate::desktop::desktop_record(a.clone()).is_ok() {
                             crate::desktop::enqueue_quick(
                                 &a,
@@ -314,6 +336,7 @@ pub fn start(app: tauri::AppHandle) {
             if pointer_update.elapsed() >= Duration::from_millis(20) {
                 pointer_update = Instant::now();
                 pointer_surfaces(&app);
+                auto_selection.poll(&app, owned && p.selection_enabled && !p.selection_shortcut_only && !recording_shortcut);
             }
             std::thread::sleep(Duration::from_millis(5));
         }

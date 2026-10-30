@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  api,
+  models,
+  type Settings,
+  type DesktopPreferences,
+} from "@/lib/desktopAssistant";
+import { SoftSelect } from "./ui/soft-select";
 import { Button } from "./ui/button";
 
 export function SelectionSettings({
   enabled,
   shortcut,
+  shortcutOnly,
+  model,
   ownsShortcuts,
   shortcutError,
   busy,
@@ -12,14 +21,31 @@ export function SelectionSettings({
 }: {
   enabled: boolean;
   shortcut: string;
+  shortcutOnly: boolean;
+  model: DesktopPreferences["selectionModel"];
   ownsShortcuts: boolean;
   shortcutError: string;
   busy: boolean;
-  save: (value: {
-    selectionEnabled?: boolean;
-    selectionShortcut?: string;
-  }) => Promise<boolean>;
+  save: (value: Partial<DesktopPreferences>) => Promise<boolean>;
 }) {
+  const [modelSettings, setModelSettings] = useState<Settings>();
+  const [modelError, setModelError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<Settings>("/settings", "GET", undefined, {
+      signal: controller.signal,
+      timeoutMs: 10000,
+    })
+      .then(setModelSettings)
+      .catch((cause) => {
+        if (!controller.signal.aborted) setModelError(String(cause));
+      });
+    return () => controller.abort();
+  }, []);
+  const choices = models(modelSettings);
+  const modelKey = model
+    ? `${model.provider_id}:${model.model_name}`
+    : "default";
   const [draft, setDraft] = useState(shortcut);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState("");
@@ -63,8 +89,8 @@ export function SelectionSettings({
       <div className="desktop-preference-card">
         <div className="desktop-feature-row">
           <div className="desktop-feature-copy">
-            <strong>选中文字后唤出</strong>
-            <p>按快捷键解释、翻译、总结或收藏选中文字；不读取剪贴板。</p>
+            <strong>启用划词助手</strong>
+            <p>解释、翻译、总结或收藏选中文字。</p>
           </div>
           <label className="module-toggle">
             <input
@@ -81,6 +107,66 @@ export function SelectionSettings({
             <span>{enabled ? "已开启" : "已关闭"}</span>
           </label>
         </div>
+        <div className="desktop-feature-row">
+          <div className="desktop-feature-copy">
+            <strong>使用快捷键唤出</strong>
+            <p>
+              {shortcutOnly
+                ? "选中文字后按快捷键唤出。"
+                : "划选文字后自动弹出。"}
+            </p>
+          </div>
+          <label className="module-toggle">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label="使用快捷键唤出"
+              checked={shortcutOnly}
+              disabled={busy || !enabled || recording}
+              onChange={(event) =>
+                void save({ selectionShortcutOnly: event.target.checked })
+              }
+            />
+            <span>{shortcutOnly ? "已开启" : "已关闭"}</span>
+          </label>
+        </div>
+        <div className="desktop-feature-row">
+          <div className="desktop-feature-copy">
+            <strong>处理模型</strong>
+            <p>单独选择划词助手使用的模型。</p>
+          </div>
+          <SoftSelect
+            label="划词处理模型"
+            value={modelKey}
+            disabled={busy || !modelSettings}
+            options={[
+              { value: "default", label: "使用主默认模型" },
+              ...choices.map((choice) => ({
+                value: choice.key,
+                label: choice.label,
+              })),
+              ...(model && !choices.some((choice) => choice.key === modelKey)
+                ? [
+                    {
+                      value: modelKey,
+                      label: `${model.model_name}（不可用，请重新选择）`,
+                    },
+                  ]
+                : []),
+            ]}
+            onValueChange={(value) => {
+              const choice = choices.find((choice) => choice.key === value);
+              void save({
+                selectionModel: choice?.selection || null,
+              });
+            }}
+          />
+        </div>
+        {modelError && (
+          <p className="field-error" role="alert">
+            {modelError}
+          </p>
+        )}
         <div className="selection-shortcut-settings">
           <div className="desktop-feature-copy">
             <strong>唤出快捷键</strong>
@@ -174,9 +260,9 @@ export function SelectionSettings({
             </Button>
             <Button
               variant="ghost"
-              disabled={busy || recording || draft === "Ctrl+Shift+E"}
+              disabled={busy || recording || draft === "Alt+S"}
               onClick={() => {
-                setDraft("Ctrl+Shift+E");
+                setDraft("Alt+S");
                 setError("");
                 setNotice("");
               }}

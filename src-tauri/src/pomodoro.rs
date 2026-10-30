@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
         Mutex,
     },
     time::{Duration, Instant},
@@ -36,6 +36,7 @@ pub struct Widget {
     manual_visible: AtomicBool,
     hit_mode: AtomicU8,
     latest_snapshot: Mutex<Option<(u64, f64)>>,
+    notice_sequence: AtomicU64,
 }
 fn placement_path(app: &tauri::AppHandle) -> PathBuf {
     app.state::<crate::Backend>()
@@ -80,6 +81,11 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     .focused(false)
     .build()
     .map_err(|e| e.to_string())?;
+    WebviewWindowBuilder::new(app, "pomodoro-notice", WebviewUrl::App("index.html?view=pomodoro-notice".into()))
+        .title("XiaoXi · 专注完成").inner_size(360.0, 190.0).decorations(false)
+        .transparent(true).background_color(tauri::window::Color(0, 0, 0, 0)).always_on_top(true)
+        .skip_taskbar(true).resizable(false).shadow(false).focused(false).visible(false)
+        .build().map_err(|e| e.to_string())?;
     Ok(())
 }
 pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
@@ -118,8 +124,9 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
     .ok_or("无法读取显示器工作区")?;
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
-    let width = (276.0 * scale).round() as i32;
-    let height = (168.0 * scale).round() as i32;
+    let size = window.outer_size().map_err(|e| e.to_string())?;
+    let width = size.width as i32;
+    let height = size.height as i32;
     let at = desired.unwrap_or(Position {
         x: area.position.x + (f64::from(area.size.width) * 0.912).round() as i32 - width / 2,
         y: area.position.y + (f64::from(area.size.height) * 0.518).round() as i32
@@ -143,6 +150,103 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+#[tauri::command]
+pub fn pomodoro_widget_layout(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    width: f64,
+    height: f64,
+    menu_open: bool,
+) -> Result<(), String> {
+    if window.label() != "pomodoro-timer" || !width.is_finite() || !height.is_finite() {
+        return Err("计时条尺寸无效".into());
+    }
+    place_widget(&app)?;
+    let at = window.outer_position().map_err(|e| e.to_string())?;
+    let old_size = window.outer_size().map_err(|e| e.to_string())?;
+    let Some(monitor) = window.current_monitor().map_err(|e| e.to_string())? else {
+        return Ok(());
+    };
+    let area = monitor.work_area();
+    let scale = monitor.scale_factor();
+    let right = at.x + old_size.width as i32
+        >= area.position.x + area.size.width as i32 - (24.0 * scale) as i32;
+    let bottom = at.y + old_size.height as i32
+        >= area.position.y + area.size.height as i32 - (24.0 * scale) as i32;
+    let w = ((if menu_open { width.max(300.0) } else { width }).clamp(100.0, 600.0) * scale)
+        .round()
+        .min(area.size.width as f64) as u32;
+    let h = ((if menu_open { height.max(410.0) } else { height }).clamp(48.0, 700.0) * scale)
+        .round()
+        .min(area.size.height as f64) as u32;
+    let x = (if right {
+        at.x + old_size.width as i32 - w as i32
+    } else {
+        at.x
+    })
+    .clamp(
+        area.position.x,
+        area.position.x + area.size.width.saturating_sub(w) as i32,
+    );
+    let y = (if bottom {
+        at.y + old_size.height as i32 - h as i32
+    } else {
+        at.y
+    })
+    .clamp(
+        area.position.y,
+        area.position.y + area.size.height.saturating_sub(h) as i32,
+    );
+    window
+        .set_size(tauri::PhysicalSize::new(w, h))
+        .map_err(|e| e.to_string())?;
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|e| e.to_string())?;
+    let state = app.state::<Widget>();
+    *state.position.lock().unwrap() = Some(Position { x, y });
+    let _ = window.emit(
+        "pomodoro-widget-anchor",
+        serde_json::json!({"right":right,"bottom":bottom}),
+    );
+    Ok(())
+}
+#[tauri::command]
+pub fn pomodoro_notice_close(app: tauri::AppHandle, sequence: u64) {
+    if app.state::<Widget>().notice_sequence.load(Ordering::SeqCst) == sequence {
+        if let Some(window) = app.get_webview_window("pomodoro-notice") {
+            let _ = window.hide();
+            let _ = window.emit("pomodoro-notice-hidden", ());
+        }
+    }
+}
+fn show_focus_notice(app: &tauri::AppHandle, sequence: u64) {
+    let Some(window) = app.get_webview_window("pomodoro-notice") else {
+        return;
+    };
+    if let Ok(Some(monitor)) = window.primary_monitor() {
+        let area = monitor.work_area();
+        let scale = monitor.scale_factor();
+        let size = window
+            .outer_size()
+            .unwrap_or(tauri::PhysicalSize::new(360, 190));
+        let _ = window.set_position(PhysicalPosition::new(
+            area.position.x + area.size.width.saturating_sub(size.width) as i32
+                - (16.0 * scale) as i32,
+            area.position.y + area.size.height.saturating_sub(size.height) as i32
+                - (16.0 * scale) as i32,
+        ));
+    }
+    app.state::<Widget>()
+        .notice_sequence
+        .store(sequence, Ordering::SeqCst);
+    let _ = window.emit("pomodoro-notice-open", sequence);
+    if let Ok(hwnd) = window.hwnd() { unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+            windows::Win32::Foundation::HWND(hwnd.0), windows::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE);
+    }}
+}
+
 pub fn refresh_visibility(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("pomodoro-timer") else {
         return;
@@ -443,6 +547,12 @@ fn accept_snapshot(app: &tauri::AppHandle, value: &serde_json::Value) -> bool {
     }
     *latest = Some((revision, server_now));
     state.active.store(phase != "idle", Ordering::SeqCst);
+    drop(latest);
+    if phase != "waiting_break" {
+        if let Some(window) = app.get_webview_window("pomodoro-notice") {
+            let _ = window.hide(); let _ = window.emit("pomodoro-notice-hidden", ());
+        }
+    }
     true
 }
 pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
@@ -473,11 +583,15 @@ pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
                     if response.status().is_success() {
                         if let Ok(value) = response.json::<serde_json::Value>() {
                             if let Some(sequence) = value["notification_seq"].as_u64() {
-                                if accept_snapshot(&app, &value) {
+                                let accepted = accept_snapshot(&app, &value);
+                                if accepted {
                                     let _ = app.emit("pomodoro-snapshot", &value);
                                 }
-                                if seen.is_some_and(|previous| sequence > previous) {
-                                    if !widget_visible(&app) {
+                                if accepted && seen.is_some_and(|previous| sequence > previous) {
+                                    if value["notification_kind"] == "focus_complete" && value["phase"] == "waiting_break" {
+                                        show_focus_notice(&app, sequence);
+                                    }
+                                    if value["notification_kind"] != "focus_complete" && !widget_visible(&app) {
                                         let focus = value["notification_kind"] == "focus_complete";
                                         let _ = app
                                             .notification()

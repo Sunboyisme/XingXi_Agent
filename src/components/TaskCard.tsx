@@ -69,12 +69,21 @@ export function TaskCard({
     setSaving(true);
     setError("");
     try {
-      onUpdate(
-        await api<ComplexTask>(`/tasks/${task.id}/resolve`, "POST", {
+      const updated = await api<ComplexTask>(
+        `/tasks/${task.id}/resolve`,
+        "POST",
+        {
           operation_id: operationId,
           resolution,
-        }),
+        },
       );
+      onUpdate(updated);
+      if (
+        !updated.operations.some((operation) =>
+          ["unknown", "started"].includes(operation.status),
+        )
+      )
+        onResume?.(updated.id);
     } catch (error) {
       setError(errorMessage(error));
     } finally {
@@ -124,6 +133,46 @@ export function TaskCard({
           {task.reason && !["completed", "cancelled"].includes(task.status) && (
             <p className="complex-task-reason">{task.reason}</p>
           )}
+          {task.operations
+            .filter((operation) => operation.status === "unknown")
+            .map((operation) => (
+              <div className="task-resolution" key={operation.id}>
+                <strong>
+                  {operation.name || operation.tool_id} · 结果待核实
+                </strong>
+                <p>
+                  {String(
+                    operation.result.error ||
+                      "请核对这次操作的实际结果，再选择如何继续。",
+                  )}
+                </p>
+                <div className="complex-task-actions">
+                  <Button
+                    size="sm"
+                    disabled={busy || saving}
+                    onClick={() => void resolve(operation.id, "completed")}
+                  >
+                    已核实完成
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || saving}
+                    onClick={() => void resolve(operation.id, "retry")}
+                  >
+                    核对后重新提交
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy || saving}
+                    onClick={() => void resolve(operation.id, "skip")}
+                  >
+                    跳过该操作
+                  </Button>
+                </div>
+              </div>
+            ))}
           <div className="complex-task-progress" role="status">
             {task.steps.length
               ? `已完成 ${completed} / ${task.steps.length} 个步骤`
@@ -231,91 +280,62 @@ export function TaskCard({
         </div>
       )}
       {error && <p role="alert">{error}</p>}
-      {(task.operations.length > 0 || (task.status === "paused" && onResume)) && (
+      {(task.operations.length > 0 ||
+        (task.status === "paused" && onResume)) && (
         <footer className="complex-task-footer">
           <div className="complex-task-secondary-actions">
-          {task.operations.length > 0 && (
-            <DetailDialog
-              title="实际操作记录"
-              className="task-operation-records"
-              label={
-                <>
-                  <ClipboardList size={15} />
-                  <span>实际操作记录</span>
-                  <small>{task.operations.length}</small>
-                </>
-              }
-            >
-              {task.operations.map((operation) => (
-                <div className="complex-task-operation" key={operation.id}>
-                  <div className="task-operation-title">
-                    <strong>{operation.name || operation.tool_id}</strong>
-                    <small data-status={operation.status}>
-                      {states[operation.status] || operation.status}
-                    </small>
-                  </div>
-                  {Boolean(
-                    operation.result.error || operation.result.summary,
-                  ) && (
-                    <p>
-                      {String(
-                        operation.result.error || operation.result.summary,
-                      )}
-                    </p>
-                  )}
-                  <DetailDialog
-                    title="操作详情"
-                    className="task-operation-data"
-                    label={<>查看详情</>}
-                  >
-                    <pre>{JSON.stringify(operation.result, null, 2)}</pre>
-                  </DetailDialog>
-                  {operation.status === "unknown" &&
-                    task.status !== "cancelled" && (
-                      <div className="complex-task-actions">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy || saving}
-                          onClick={() =>
-                            void resolve(operation.id, "completed")
-                          }
-                        >
-                          已核实完成
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy || saving}
-                          onClick={() => void resolve(operation.id, "retry")}
-                        >
-                          核对后重新提交
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy || saving}
-                          onClick={() => void resolve(operation.id, "skip")}
-                        >
-                          跳过该操作
-                        </Button>
-                      </div>
+            {task.operations.length > 0 && (
+              <DetailDialog
+                title="实际操作记录"
+                className="task-operation-records"
+                label={
+                  <>
+                    <ClipboardList size={15} />
+                    <span>实际操作记录</span>
+                    <small>{task.operations.length}</small>
+                  </>
+                }
+              >
+                {task.operations.map((operation) => (
+                  <div className="complex-task-operation" key={operation.id}>
+                    <div className="task-operation-title">
+                      <strong>{operation.name || operation.tool_id}</strong>
+                      <small data-status={operation.status}>
+                        {states[operation.status] || operation.status}
+                      </small>
+                    </div>
+                    {Boolean(
+                      operation.result.error || operation.result.summary,
+                    ) && (
+                      <p>
+                        {String(
+                          operation.result.error || operation.result.summary,
+                        )}
+                      </p>
                     )}
-                </div>
-              ))}
-            </DetailDialog>
-          )}
+                    <DetailDialog
+                      title="操作详情"
+                      className="task-operation-data"
+                      label={<>查看详情</>}
+                    >
+                      <pre>{JSON.stringify(operation.result, null, 2)}</pre>
+                    </DetailDialog>
+                  </div>
+                ))}
+              </DetailDialog>
+            )}
           </div>
-      {task.status === "paused" && onResume && (
-        <Button
-          size="sm"
-          variant="default"
-          disabled={busy || saving}
-          onClick={() => onResume(task.id)}
-        >
-          继续任务<ArrowRight size={14} />
-        </Button>
-      )}
+          {task.status === "paused" && onResume && (
+            <Button
+              size="sm"
+              variant="default"
+              disabled={busy || saving}
+              onClick={() => onResume(task.id)}
+            >
+              继续任务
+              <ArrowRight size={14} />
+            </Button>
+          )}
         </footer>
       )}
     </section>

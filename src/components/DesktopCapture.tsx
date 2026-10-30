@@ -769,9 +769,7 @@ export function DesktopCapture() {
     e.stopPropagation();
     const p = point(e);
     if (!selection)
-      void invoke("capture_select", { id: session.id }).catch((e) =>
-        setError(desktopError(e)),
-      );
+
     setError("");
     if (text) {
       commitText();
@@ -897,9 +895,7 @@ export function DesktopCapture() {
       const box = rect(g.start, point(e));
       if (box.w < 2 || box.h < 2) {
         setSelection(null);
-        void invoke("desktop_open", { capture: false }).catch((e) =>
-          setError(desktopError(e)),
-        );
+
       }
     }
     gesture.current = null;
@@ -948,9 +944,19 @@ export function DesktopCapture() {
       ctx.translate(-selection.x, -selection.y);
       ctx.drawImage(source.current, 0, 0);
       outputMarks.forEach((m) => paint(ctx, m, source.current!));
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        output.toBlob(blob => {
+          if (!blob) { reject(new Error("截图编码失败，请重试")); return; }
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error("截图读取失败，请重试"));
+          reader.readAsDataURL(blob);
+        }, "image/png");
+      });
+      if (currentSession.current?.id !== id) return;
       await invoke("capture_export", {
-        id: session.id,
-        dataUrl: output.toDataURL("image/png"),
+        id,
+        dataUrl,
         action,
         x: session.x + Math.round(selection.x),
         y: session.y + Math.round(selection.y),
@@ -1101,7 +1107,7 @@ export function DesktopCapture() {
       {text && !dragging && (
         <div
           className="capture-text-editor"
-          style={{ left: text.at.x * sx, top: text.at.y * sy }}
+          style={{ left: text.at.x * sx - 8, top: text.at.y * sy - 8 }}
         >
           <span
             className="capture-text-move-area"
@@ -1302,9 +1308,7 @@ export function DesktopCapture() {
                 Crop,
                 () => {
                   resetSelection();
-                  void invoke("desktop_open", { capture: false }).catch((e) =>
-                    setError(desktopError(e)),
-                  );
+
                 },
                 false,
               ],
@@ -1325,7 +1329,7 @@ export function DesktopCapture() {
               ["pin", "钉住截图", Pin],
               ["ocr", "提取文字", ScanText],
               ["translate", "翻译截图", Languages],
-              ["attach", "添加到问答草稿", ImagePlus],
+              ["attach", "发给 AI", ImagePlus],
               ["save", "保存 PNG", Download],
             ] as const
           ).map(([action, label, Icon]) => (

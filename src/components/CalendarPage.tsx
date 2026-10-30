@@ -767,7 +767,7 @@ export function CalendarPage({
           onPointerCancel={cancelDrag}
           onClick={() => {
             if (Date.now() >= suppressClickUntil.current)
-              openAgenda(day, isRepeating(event) ? "repeat" : "todo");
+              edit(day, event);
           }}
         >
           {segment.continuesBefore && (
@@ -1204,6 +1204,7 @@ export function CalendarPage({
               timezone={timezone}
               onOpenDay={openAgenda}
               onCreate={startCreate}
+              onEdit={(day, event) => edit(day, event)}
             />
           ) : (
             <div

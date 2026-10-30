@@ -2,7 +2,6 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent } from "@/lib/api";
 import { occurrenceOrderKey } from "@/lib/calendarMonth";
 import { fitWeekPlans, planTimeRange, planStartTime } from "@/lib/calendarWeek";
-import { isRepeating } from "@/lib/planPresentation";
 
 const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
@@ -14,6 +13,7 @@ export function WeekCalendar({
   timezone,
   onOpenDay,
   onCreate,
+  onEdit,
 }: {
   days: string[];
   today: string;
@@ -22,6 +22,7 @@ export function WeekCalendar({
   timezone: string;
   onOpenDay: (day: string, tab?: "todo" | "repeat") => void;
   onCreate: (day: string) => void;
+  onEdit: (day: string, event: CalendarEvent) => void;
 }) {
   const timeline = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(480);
@@ -92,13 +93,7 @@ export function WeekCalendar({
                   aria-controls="plan-day-sidebar"
                   onClick={() => onOpenDay(day)}
                 >
-                  {allDay[index]
-                    .slice(0, 2)
-                    .map((event) => event.title)
-                    .join(" · ")}
-                  {allDay[index].length > 2
-                    ? ` +${allDay[index].length - 2}`
-                    : ""}
+                  {allDay[index].length} 项
                 </button>
               )}
             </div>
@@ -154,9 +149,7 @@ export function WeekCalendar({
                     }}
                     aria-label={`${event.title}，${planTimeRange(event, timezone)}${event.status === "completed" ? "，已完成" : event.status === "cancelled" ? "，已取消" : ""}`}
                     aria-controls="plan-day-sidebar"
-                    onClick={() =>
-                      onOpenDay(day, isRepeating(event) ? "repeat" : "todo")
-                    }
+                    onClick={() => onEdit(day, event)}
                   >
                     <span className="fit-event-start">
                       {planStartTime(event, timezone)}

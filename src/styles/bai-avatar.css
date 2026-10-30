@@ -48,7 +48,7 @@
 .bai-avatar[data-reaction="pet"] .bai-avatar-eyes { animation:none; transform:scaleY(.23); }
 .bai-avatar[data-reaction="drag"] .bai-avatar-response { transform:rotate(var(--bai-tilt,0deg)) scale(.94,1.08); transition:transform 100ms ease-out; }
 .bai-avatar[data-reaction="drop"] .bai-avatar-response { animation:bai-avatar-drop 500ms ease-out both; animation-delay:var(--bai-reaction-delay,0ms); }
-.bai-avatar[data-working] .bai-avatar-float { animation:bai-avatar-think 1600ms ease-in-out 2 both; animation-delay:var(--bai-work-delay,0ms); }
+.bai-avatar[data-working] .bai-avatar-float { animation:bai-avatar-think 1600ms ease-in-out infinite both; animation-delay:var(--bai-work-delay,0ms); }
 .bai-avatar[data-working] .bai-avatar-gaze { transform:translate(0,-3px); }
 .bai-avatar[data-reaction="success"] .bai-avatar-response { animation:bai-avatar-success 650ms ease-out both; animation-delay:var(--bai-reaction-delay,0ms); }
 .bai-avatar[data-reaction="success"] .bai-avatar-eyes { animation:none; transform:none; }

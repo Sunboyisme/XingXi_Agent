@@ -155,3 +155,7 @@ html[data-desktop] .pin-editor .pin-apply {
 .pin-window.is-editing .pin-feedback {
   bottom: 106px;
 }
+
+.pin-toolbar { opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+.pin-window:hover .pin-toolbar, .pin-window:focus-within .pin-toolbar,
+.pin-window[data-menu-open="true"] .pin-toolbar { opacity: 1; pointer-events: auto; }

@@ -477,7 +477,10 @@ html[data-desktop]
 .capture-text-editor {
   position: absolute;
   width: fit-content;
+  padding: 8px;
+  outline: 1px solid #6ca9f2;
 }
+.capture-text-editor .capture-text { position: relative; }
 .capture-text-object {
   position: absolute;
   cursor: move;
@@ -491,10 +494,8 @@ html[data-desktop]
 }
 .capture-text-move-area {
   position: absolute;
-  left: 8px;
-  right: 8px;
-  top: -4px;
-  height: 6px;
+  inset: 0;
+  border: 8px solid transparent;
   cursor: move;
 }
 html[data-desktop] .capture-text {
@@ -672,7 +673,7 @@ html[data-desktop] .capture-text {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  width: 112px;
+  width: 146px;
   min-height: 36px;
   padding: 4px 5px;
   border: 1px solid var(--ui-color-border);
@@ -886,3 +887,7 @@ html[data-desktop] .pet-error-close:hover { background: var(--surface-hover); co
     flex-basis: 100%;
   }
 }
+
+html[data-desktop] .quick-answer { background: var(--ui-color-surface); color: var(--ui-color-text); }
+html[data-desktop] .quick-answer :is(code, kbd) { color: var(--ui-color-text); background: var(--ui-color-surface-deep); }
+html[data-desktop] .quick-open-main { min-width: 32px; width: 32px; padding: 6px; }

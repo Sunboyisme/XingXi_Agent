@@ -13,6 +13,9 @@ import {
 
 export type DesktopPreferences = {
   enabled: boolean;
+  screenshotEnabled?: boolean;
+  selectionShortcutOnly?: boolean;
+  selectionModel?: { provider_id: string; model_name: string } | null;
   pet: boolean;
   pomodoro: boolean;
   pomodoroTheme?: PomodoroTheme;
@@ -101,12 +104,16 @@ export async function addDesktopFile(file: File): Promise<Attachment> {
     throw new Error(value.error || "附件解析失败");
   return value;
 }
+function decodeImage(dataUrl: string): Blob {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=\r\n]+)$/.exec(dataUrl);
+  if (!match) throw new Error("截图数据无效，请重新截图");
+  const bytes = Uint8Array.from(atob(match[1]), (c) => c.charCodeAt(0));
+  return new Blob([bytes], { type: "image/png" });
+}
 export async function imageFile(dataUrl: string) {
-  return new File(
-    [await (await fetch(dataUrl)).blob()],
-    `截图-${Date.now()}.png`,
-    { type: "image/png" },
-  );
+  return new File([decodeImage(dataUrl)], `截图-${Date.now()}.png`, {
+    type: "image/png",
+  });
 }
 export function desktopListen<T>(event: string, handler: (payload: T) => void) {
   return listen<T>(event, (e) => handler(e.payload));

@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { lazy, Suspense } from "react";
-import { App } from "./App";
+const App = lazy(() => import("./App").then((m) => ({ default: m.App })));
 import { initializeAppearance } from "./lib/appearance";
 import { initializeSelectionBridge } from "./lib/selectionBridge";
 import "./style.css";
@@ -32,12 +32,31 @@ const stopSelectionBridge = initializeSelectionBridge();
 import.meta.hot?.dispose(stopSelectionBridge);
 import.meta.hot?.dispose(stopAppearance);
 const desktopView = new URLSearchParams(location.search).get("view") || "";
-const isDesktopSurface = ["quick", "capture", "pet", "selection", "pomodoro-timer", "tray-menu"].includes(desktopView) || desktopView.startsWith("pin-");
+const isDesktopSurface =
+  [
+    "quick",
+    "capture",
+    "pet",
+    "selection",
+    "pomodoro-timer",
+    "pomodoro-notice",
+    "tray-menu",
+  ].includes(desktopView) || desktopView.startsWith("pin-");
 if (isDesktopSurface) document.documentElement.dataset.desktop = desktopView;
-const DesktopRoot = lazy(() => import("./components/DesktopRoot").then(m => ({ default: m.DesktopRoot })));
+const DesktopRoot = lazy(() =>
+  import("./components/DesktopGate").then((m) => ({ default: m.DesktopGate })),
+);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {isDesktopSurface ? <Suspense fallback={null}><DesktopRoot view={desktopView} /></Suspense> : <App />}
+    {isDesktopSurface ? (
+      <Suspense fallback={null}>
+        <DesktopRoot view={desktopView} />
+      </Suspense>
+    ) : (
+      <Suspense fallback={null}>
+        <App />
+      </Suspense>
+    )}
   </React.StrictMode>,
 );

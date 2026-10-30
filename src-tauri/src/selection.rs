@@ -1,4 +1,4 @@
-//! Explicit, read-only text selection. Never sends copy keystrokes or reads the clipboard.
+//! Explicit and gesture-triggered text selection, with a serialized copy fallback.
 use serde::Serialize;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -314,7 +314,8 @@ pub fn selection_resize(
     w.set_position(PhysicalPosition::new(x, y))
         .map_err(|e| e.to_string())
 }
-pub fn trigger(app: &tauri::AppHandle) {
+pub fn trigger(app: &tauri::AppHandle) { trigger_selection(app, false); }
+fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
     let foreground = unsafe { GetForegroundWindow() }.0 as usize;
     if app
         .get_webview_window("selection")
@@ -333,7 +334,7 @@ pub fn trigger(app: &tauri::AppHandle) {
     {
         return;
     }
-    dismiss(app);
+    if !automatic { dismiss(app); }
     let id = app
         .state::<Selection>()
         .generation
@@ -375,7 +376,13 @@ pub fn trigger(app: &tauri::AppHandle) {
             }
             result
         } else {
-            read_external(&app, foreground)
+            match read_external(&app, foreground) {
+                Ok(text) if text.trim().is_empty() => {
+                    let owner = app.get_webview_window("selection").and_then(|w| w.hwnd().ok()).map(|h| h.0 as usize).unwrap_or(0);
+                    crate::selection_clipboard::copy_selected(foreground, owner)
+                }
+                result => result,
+            }
         };
         if app.state::<Selection>().generation.load(Ordering::SeqCst) != id
             || unsafe { GetForegroundWindow() }.0 as usize != foreground
@@ -391,6 +398,7 @@ pub fn trigger(app: &tauri::AppHandle) {
                 Ok(text)
             }
         });
+        if automatic && result.is_err() { return; }
         let snapshot = Snapshot {
             id,
             x,
@@ -409,8 +417,14 @@ pub fn trigger(app: &tauri::AppHandle) {
             let _ = selection_resize(a.clone(), id, 720.0, 76.0);
             if let Some(w) = a.get_webview_window("selection") {
                 let _ = w.emit("selection-snapshot", snapshot);
-                let _ = w.show();
-                let _ = w.set_focus();
+                if automatic {
+                    if let Ok(hwnd) = w.hwnd() { unsafe {
+                        let _ = ShowWindow(windows::Win32::Foundation::HWND(hwnd.0), SW_SHOWNOACTIVATE);
+                    }}
+                } else {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
             }
         });
     });
@@ -427,7 +441,7 @@ fn read_external(app: &tauri::AppHandle, foreground: usize) -> Result<String, St
     let a = app.clone();
     std::thread::spawn(move || {
         let result = unsafe { read_uia(foreground) }.map_err(|_| {
-            "当前软件未提供可读取的选中文字，请在支持文本选区的软件中重试".to_string()
+            "当前软件未能安全读取选区，请重新选择文字后再试".to_string()
         });
         a.state::<Selection>()
             .uia_busy
@@ -462,7 +476,7 @@ unsafe fn read_uia(foreground: usize) -> windows::core::Result<String> {
         // the native ancestor instead of rejecting these process boundaries.
         for _ in 0..24 {
             if element.CurrentIsPassword()?.as_bool() {
-                return Ok(String::new());
+                return Err(windows::core::Error::from_hresult(windows::Win32::Foundation::E_ACCESSDENIED));
             }
             let handle = element.CurrentNativeWindowHandle()?;
             candidates.push(element.clone());
@@ -481,7 +495,7 @@ unsafe fn read_uia(foreground: usize) -> windows::core::Result<String> {
             }
         }
         if !belongs_to_foreground {
-            return Ok(String::new());
+            return Err(windows::core::Error::from_hresult(windows::Win32::Foundation::E_ACCESSDENIED));
         }
         for element in candidates {
             if let Ok(pattern) =
@@ -511,5 +525,74 @@ unsafe fn read_uia(foreground: usize) -> windows::core::Result<String> {
             }
         }
         Ok(String::new())
+    }
+}
+
+#[derive(Default)]
+pub struct AutoSelection {
+    down: Option<(i32, i32)>,
+    last_click: Option<((i32, i32), Instant)>,
+    scheduled: Option<Instant>,
+    shift_selecting: bool,
+}
+impl AutoSelection {
+    pub fn poll(&mut self, app: &tauri::AppHandle, enabled: bool) {
+        if !enabled {
+            self.down = None;
+            self.scheduled = None;
+            self.shift_selecting = false;
+            return;
+        }
+        let held = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(key.0 as i32) < 0 };
+        let point = crate::desktop_input::cursor();
+        if held(VK_LBUTTON) {
+            self.down.get_or_insert(point);
+            self.scheduled = None;
+        } else if let Some(start) = self.down.take() {
+            let moved = (point.0 - start.0).abs() + (point.1 - start.1).abs() > 5;
+            let double = self.last_click.is_some_and(|(old, at)| {
+                at.elapsed() < Duration::from_millis(unsafe { GetDoubleClickTime() } as u64)
+                    && (point.0 - old.0).abs() + (point.1 - old.1).abs() < 8
+            });
+            if moved || double {
+                self.scheduled = Some(Instant::now() + Duration::from_millis(200));
+            }
+            self.last_click = Some((point, Instant::now()));
+        }
+        let selecting = held(VK_SHIFT)
+            && [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END]
+                .iter()
+                .any(|key| held(*key));
+        if self.shift_selecting && !selecting {
+            self.scheduled = Some(Instant::now() + Duration::from_millis(200));
+        }
+        self.shift_selecting = selecting;
+        if self.scheduled.is_some_and(|at| Instant::now() >= at)
+            && !held(VK_LBUTTON)
+            && !held(VK_SHIFT)
+        {
+            self.scheduled = None;
+            let foreground = unsafe { GetForegroundWindow() }.0 as usize;
+            let excluded = app.webview_windows().into_iter().any(|(label, window)| {
+                label != "main"
+                    && window
+                        .hwnd()
+                        .ok()
+                        .is_some_and(|hwnd| hwnd.0 as usize == foreground)
+            });
+            if excluded
+                || app
+                    .state::<crate::desktop::Desktop>()
+                    .capture
+                    .lock()
+                    .unwrap()
+                    .is_some()
+            {
+                self.down = None;
+                self.scheduled = None;
+                return;
+            }
+            trigger_selection(app, true);
+        }
     }
 }

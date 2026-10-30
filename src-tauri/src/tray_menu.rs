@@ -59,7 +59,7 @@ pub fn show(app: &tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
     let width = (270.0 * scale).round().min(area.size.width as f64) as u32;
-    let height = (434.0 * scale).round().min(area.size.height as f64) as u32;
+    let height = (510.0 * scale).round().min(area.size.height as f64) as u32;
     let left = (x.round() as i32 - width as i32 / 2).clamp(
         area.position.x,
         area.position.x + area.size.width.saturating_sub(width) as i32,
@@ -159,6 +159,8 @@ pub async fn tray_menu_action(
         return Err("托盘菜单已关闭，请重新打开。".into());
     }
     match action.as_str() {
+        "ai" => { dismiss(&app); crate::desktop::desktop_ai_open(app).await?; }
+        "capture" => { dismiss(&app); crate::desktop::desktop_capture_begin(app).await?; }
         "pet" => {
             crate::desktop::desktop_preferences_save(
                 app,

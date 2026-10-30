@@ -65,6 +65,7 @@ export function DesktopPinned() {
   const menuRequest = useRef<string | null>(null);
   const menuReady = useRef<Promise<() => void>>(Promise.resolve(() => {}));
   const menuOpening = useRef(false);
+  const [menuShown, setMenuShown] = useState(false);
   const zooming = useRef(false);
   const zoomTarget = useRef({ scale: 1, x: 0.5, y: 0.5 });
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -106,6 +107,9 @@ export function DesktopPinned() {
       ) {
         actions.current.dispatch(event.payload.action);
       }
+    });
+    const menuClosed = listen<string>("pinned-menu-closed", event => {
+      if (event.payload === menuRequest.current && alive) { setMenuShown(false); }
     });
     menuReady.current = menuListener;
     const onWheel = (event: WheelEvent) => {
@@ -163,6 +167,7 @@ export function DesktopPinned() {
       clearTimeout(noticeTimer.current);
       void scaleListener.then((unlisten) => unlisten()).catch(() => {});
       void menuListener.then((unlisten) => unlisten()).catch(() => {});
+      void menuClosed.then(unlisten => unlisten()).catch(() => {});
       if (menuRequest.current)
         void invoke("pinned_menu_close", {
           requestId: menuRequest.current,
@@ -431,6 +436,7 @@ export function DesktopPinned() {
       if (!mounted.current) return;
       const requestId = crypto.randomUUID();
       menuRequest.current = requestId;
+      setMenuShown(true);
       await invoke("pinned_menu_open", {
         requestId,
         x,
@@ -438,7 +444,7 @@ export function DesktopPinned() {
         view: { editing, shadow, opacity, busy: busy || !source, zoomOnly },
       });
     } catch (e) {
-      if (mounted.current) setError(desktopError(e));
+      if (mounted.current) { setMenuShown(false); setError(desktopError(e)); }
     } finally {
       menuOpening.current = false;
     }
@@ -561,6 +567,7 @@ export function DesktopPinned() {
         event.preventDefault();
         void openMenu(event.clientX, event.clientY);
       }}
+      data-menu-open={menuShown || undefined}
       aria-label="钉住的截图"
       aria-busy={busy}
     >

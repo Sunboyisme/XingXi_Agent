@@ -1,14 +1,44 @@
-import { DesktopQuickAsk } from "./DesktopQuickAsk";
-import { DesktopCapture } from "./DesktopCapture";
-import { DesktopPet } from "./DesktopCompanions";
-import { PomodoroWidget } from "./PomodoroWidget";
-import { TrayMenu } from "./TrayMenu";
-import { DesktopPinned } from "./DesktopPinned";
-import { PinnedContextMenu } from "./PinnedContextMenu";
-import { SelectionAssistant } from "./SelectionAssistant";
+const PomodoroNotice = lazy(() =>
+  import("./PomodoroNotice").then((m) => ({ default: m.PomodoroNotice })),
+);
+import { lazy } from "react";
+const DesktopQuickAsk = lazy(() =>
+  import("./DesktopQuickAsk").then((m) => ({ default: m.DesktopQuickAsk })),
+);
+const DesktopCapture = lazy(() =>
+  import("./DesktopCapture").then((m) => ({ default: m.DesktopCapture })),
+);
+const DesktopPet = lazy(() =>
+  import("./DesktopCompanions").then((m) => ({ default: m.DesktopPet })),
+);
+const PomodoroWidget = lazy(() =>
+  import("./PomodoroWidget").then((m) => ({ default: m.PomodoroWidget })),
+);
+const TrayMenu = lazy(() =>
+  import("./TrayMenu").then((m) => ({ default: m.TrayMenu })),
+);
+const DesktopPinned = lazy(() =>
+  import("./DesktopPinned").then((m) => ({ default: m.DesktopPinned })),
+);
+const PinnedContextMenu = lazy(() =>
+  import("./PinnedContextMenu").then((m) => ({ default: m.PinnedContextMenu })),
+);
+const SelectionAssistant = lazy(() =>
+  import("./SelectionAssistant").then((m) => ({
+    default: m.SelectionAssistant,
+  })),
+);
 import "../styles/desktop-assistant.css";
 export function DesktopRoot({ view }: { view: string }) {
-  return view === "tray-menu" ? <TrayMenu /> : view === "pin-menu" ? <PinnedContextMenu /> : view === "pomodoro-timer" ? <PomodoroWidget /> : view === "selection" ? (
+  return view === "pomodoro-notice" ? (
+    <PomodoroNotice />
+  ) : view === "tray-menu" ? (
+    <TrayMenu />
+  ) : view === "pin-menu" ? (
+    <PinnedContextMenu />
+  ) : view === "pomodoro-timer" ? (
+    <PomodoroWidget />
+  ) : view === "selection" ? (
     <SelectionAssistant />
   ) : view === "quick" ? (
     <DesktopQuickAsk />

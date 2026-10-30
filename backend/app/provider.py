@@ -214,7 +214,7 @@ def message_text(content):
 
 async def ask_json(
     schema: type[BaseModel], instructions: str, text: str, attachment_ids=None,
-    *, model_config=None, on_partial=None, on_usage=None, image_data=None,
+    *, model_config=None, on_partial=None, on_usage=None, image_data=None, run_id=None,
 ) -> BaseModel:
     llm = model(model_config, usage_purpose="image_reading" if image_data else None)
     messages = [
@@ -226,6 +226,14 @@ async def ask_json(
         HumanMessage(content=[{"type": "text", "text": text}, {"type": "image_url", "image_url": {"url": "data:" + image_data[1] + ";base64," + base64.b64encode(image_data[0]).decode()}}] if image_data else user_content(text, attachment_ids, model_config)),
     ]
     for attempt in range(2):
+        if run_id and model_config:
+            from .context import limits
+            from .loop_compaction import message_cost
+            from .runs import emit
+            total, reserve, _ = limits(model_config)
+            emit(run_id, "context", {"status": "usage", "used_tokens": sum(message_cost(message) for message in messages),
+                "limit_tokens": total, "reserved_tokens": reserve, "estimated": True,
+                "provider_id": model_config.get("provider_id"), "model_name": model_config.get("model_name")})
         if on_partial:
             raw, last_update, last_fields = "", 0.0, {}
             on_partial({})

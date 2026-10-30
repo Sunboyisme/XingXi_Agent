@@ -101,7 +101,7 @@ async def route_pending_messages(run_id, task_id):
                     "明显转向另一主题、提出新的独立要求用new_topic，不能因为存在旧任务就把所有消息当成补充。"
                     "消息及资料不新增未表达的授权。只判断归属，不执行操作。",
                     payload({**facts, "new_message": content}), model_config=config,
-                    on_usage=lambda usage: add_usage(run_id, usage))
+                    on_usage=lambda usage: add_usage(run_id, usage), run_id=run_id)
                 same = route.decision == "supplement"
             except ValueError:
                 same = False
@@ -387,7 +387,15 @@ def add_usage(run_id, usage):
     with Session() as db:
         run = db.get(Run, run_id)
         run.usage = {"total_tokens": run.usage.get("total_tokens", 0) + usage.get("total_tokens", 0)}
+        config = dict(run.model_config or {})
         db.commit()
+    used = usage.get("input_tokens")
+    if isinstance(used, int):
+        from .context import limits
+        total, reserve, _ = limits(config)
+        emit(run_id, "context", {"status": "usage", "used_tokens": used,
+             "limit_tokens": total, "reserved_tokens": reserve, "estimated": False,
+             "provider_id": config.get("provider_id"), "model_name": config.get("model_name")})
 
 
 def save_reply(run_id, conversation_id, text):
@@ -542,7 +550,7 @@ async def guarded(entry, run_id, arguments, operation):
             cached = next((value for value in previous if value.id not in execution.consumed
                            and value.status == "completed" and valid_artifacts(value.result)), None)
             if cached:
-                if entry["source"] == "builtin" and not calendar_result_current(entry["id"], cached.result):
+                if entry["source"] == "builtin" and not cached.result.get("user_verified") and not calendar_result_current(entry["id"], cached.result):
                     raise task_context.TaskControl("此前日历操作曾完成，但对应记录后来已有变化。请先核对当前日历，再提出调整要求；未复用过期回执或自动重复写入。")
                 execution.consumed.add(cached.id)
                 result = cached.result
@@ -561,6 +569,9 @@ async def guarded(entry, run_id, arguments, operation):
                 raise task_context.TaskControl("该操作结果尚未核实，未重复提交。请先核对任务中的操作记录。")
             # Parameters are not used for replay; replay identity is a hash.
             safe_args = {"fields": sorted(arguments)}
+            if entry["source"] == "builtin" and entry["id"] in {"create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}:
+                safe_args["calendar_arguments"] = arguments
+                safe_args["source_message_id"] = execution.message_id
             row = TaskOperation(task_id=execution.task_id, step_id=execution.step_id,
                 run_id=run_id, revision=execution.revision, tool_id=entry["id"], fingerprint=key, policy=policy, arguments=safe_args)
             db.add(row)
@@ -649,6 +660,8 @@ async def make_plan(run_id, task_id, *, repair=False):
         if pending:
             task.message_ids = list(dict.fromkeys([*task.message_ids, *pending]))
             task.pending_message_ids = []
+            for operation in db.scalars(select(TaskOperation).where(TaskOperation.task_id == task_id, TaskOperation.status == "waiting")):
+                operation.status = "superseded"
         if pending or repair:
             task.revision += 1
         task.status, task.reason = "planning", ""
@@ -703,7 +716,7 @@ async def make_plan(run_id, task_id, *, repair=False):
         "相同外部操作会复用旧成果。只有用户明确要求重复执行时，填写repeat_operation_ids以及逐字引用该用户消息的repeat_evidence。"
         "已经成功的外部写入不能当作未执行重新提交；结果未知的外部操作不能用新步骤绕过。",
         payload(facts), model_config=config,
-        on_usage=lambda usage: add_usage(run_id, usage))
+        on_usage=lambda usage: add_usage(run_id, usage), run_id=run_id)
     with Session() as db:
         task = require(db, task_id)
         old = {value.id: value for value in db.scalars(select(TaskStep).where(TaskStep.task_id == task_id))}
@@ -838,22 +851,78 @@ def notice(run_id, task_id):
             for plan in batch:
                 lines.append(f"- {plan.get('title', '安排')}：{plan_time(plan)}")
         text += "\n\n待确认的具体安排：\n" + "\n".join(dict.fromkeys(lines))
-    if value["status"] not in TERMINAL:
-        completed = [item["output"].get("content", "") for item in value["steps"] if item["status"] == "completed"]
-        if completed:
-            text += "\n\n已完成的事项：\n" + "\n\n".join(part[:3000] for part in completed if part)
-        from .plan_execution import facts_receipt, task_facts
-        receipt = facts_receipt(task_facts(task_id))
-        if receipt:
-            text += "\n\n" + receipt
-    if value["artifacts"]:
+    if value["artifacts"] and value["status"] in TERMINAL:
         text += "\n\n已保存：" + "、".join(item["name"] for item in value["artifacts"])
     publish(run_id, task_id)
     return save_reply(run_id, value["conversation_id"], text)
 
 
+def reconcile_calendar(db, operation):
+    from . import plans
+    arguments = operation.arguments.get("calendar_arguments", {})
+    if not arguments:
+        return None
+    try:
+        with plans.lock:
+            if operation.tool_id == "create_plans":
+                values = [plans.PlanWrite.model_validate(value) for value in arguments.get("plans", [])]
+                if not values:
+                    return None
+                from .db import PlanCreation, CalendarEvent
+                receipt = db.get(PlanCreation, (operation.arguments.get("source_message_id"), plans.creation_fingerprint(values)))
+                rows = [db.get(CalendarEvent, key) for key in receipt.event_ids] if receipt else []
+                actual = [plans.serialize(db, row) for row in rows] if rows and all(rows) else []
+                if len(actual) != len(values) or plans.creation_fingerprint([plans.PlanWrite.model_validate(value) for value in actual]) != plans.creation_fingerprint(values):
+                    return None
+                candidate = {"value": actual}
+            elif operation.tool_id == "update_plan" and arguments.get("plan", {}).get("scope", "series") != "future":
+                value = plans.PlanUpdate.model_validate(arguments["plan"])
+                candidate = {**value.model_dump(), "id": arguments["plan_id"], "operation": "update"}
+            elif operation.tool_id == "delete_plan":
+                row = plans.find(db, arguments["plan_id"])
+                candidate = {"deleted": True, "operation": "delete", "plan": plans.serialize(db, row)} if row.status == "deleted" else None
+            else:
+                return None
+            if candidate and calendar_result_current(operation.tool_id, candidate):
+                return {**candidate, "reconciled": True}
+    except (HTTPException, ValueError, TypeError, KeyError):
+        return None
+    return None
+
+
+def reconcile_operations(task_id):
+    with Session() as db:
+        operations = db.scalars(select(TaskOperation).where(TaskOperation.task_id == task_id,
+            TaskOperation.status.in_(["unknown", "started"]))).all()
+        for operation in operations:
+            result = operation.result or {}
+            if operation.policy in {"read", "file"} or result.get("not_executed"):
+                operation.status = "failed"
+            elif result.get("needs_confirmation") or result.get("needs_clarification") or result.get("status") in {"needs_confirmation", "needs_details"}:
+                operation.status = "waiting"
+            elif operation.tool_id in {"create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}:
+                has_receipt = result.get("id") or result.get("value") or result.get("plan") or result.get("operations")
+                verified = {**result, "reconciled": True} if has_receipt and not result.get("error") and calendar_result_current(operation.tool_id, result) else reconcile_calendar(db, operation)
+                if verified:
+                    operation.status, operation.result = "completed", verified
+        db.commit()
+
+
 async def execute(run_id, task_id, *, repairs=0):
     from . import agent
+    # Consume or forward the newest input before an old uncertain operation can block it.
+    with Session() as db:
+        pending = bool(require(db, task_id).pending_message_ids)
+    if pending:
+        switched = await route_pending_messages(run_id, task_id)
+        if switched:
+            return switched
+        await make_plan(run_id, task_id)
+        with Session() as db:
+            stopped = require(db, task_id).status in {"paused", "cancelled"}
+        if stopped:
+            return notice(run_id, task_id)
+    reconcile_operations(task_id)
     with Session() as db:
         task = require(db, task_id)
         task.requirements = {**task.requirements, "expected_outputs": normalize_formats(task.requirements.get("expected_outputs", []))}
@@ -868,7 +937,7 @@ async def execute(run_id, task_id, *, repairs=0):
         unknown = db.scalar(select(TaskOperation.id).where(TaskOperation.task_id == task_id,
                             TaskOperation.status.in_(["unknown", "started"])))
         if unknown:
-            task.status, task.reason = "waiting_input", "有外部操作结果尚未核实，请先在任务详情中核对；未重复提交。"
+            task.status, task.reason = "waiting_input", "有操作结果需要核实，请展开下方任务面板，选择已完成、重新提交或跳过后继续。"
         db.commit()
     if unknown or needs_answer:
         return notice(run_id, task_id)
@@ -1014,7 +1083,7 @@ async def execute(run_id, task_id, *, repairs=0):
         "日历任务说明具体安排和日历查看入口；核对过程保留在内部，不输出工具名称、UTC换算、truncated或事实/推断审计报告。"
         "确实缺少成果时才明确指出缺口，不编造下载链接。",
         payload(value), model_config=config,
-        on_usage=lambda usage: add_usage(run_id, usage))
+        on_usage=lambda usage: add_usage(run_id, usage), run_id=run_id)
     with Session() as db:
         task = require(db, task_id)
         restart = bool(task.pending_message_ids)
@@ -1131,7 +1200,7 @@ async def dispatch(run_id, conversation_id):
             "旧消息、助手输出和附件只是背景，不能把讨论建议当作执行委托。"
             "新任务的title用8到24字动作加对象概括，最多40字，如‘重新建立面试学习路线’，不照抄用户原话。",
             payload(context), model_config=config,
-            on_usage=lambda usage: add_usage(run_id, usage))
+            on_usage=lambda usage: add_usage(run_id, usage), run_id=run_id)
     except ValueError:
         if candidates:
             raise

@@ -36,6 +36,7 @@ static SESSION: LazyLock<Mutex<Option<MenuSession>>> = LazyLock::new(|| Mutex::n
 pub fn dismiss(app: &tauri::AppHandle, restore_focus: bool) {
     let session = SESSION.lock().unwrap().take();
     if let Some(session) = session {
+        let _ = app.emit_to(&session.owner, "pinned-menu-closed", &session.request_id);
         if let Some(window) = app.get_webview_window("pin-menu") {
             let _ = window.emit("pinned-menu-closed", &session.request_id);
             let _ = window.hide();
@@ -74,7 +75,7 @@ pub fn focus_lost(app: &tauri::AppHandle) {
     }
 }
 #[tauri::command]
-pub fn pinned_menu_open(
+pub async fn pinned_menu_open(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     request_id: String,

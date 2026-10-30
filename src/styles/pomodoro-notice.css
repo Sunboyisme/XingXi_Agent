@@ -1,0 +1,23 @@
+.pomodoro-notice {
+  margin: 8px;
+  padding: 20px;
+  border-radius: 18px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  border: 1px solid var(--ui-color-line);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+.pomodoro-notice strong {
+  color: var(--ui-color-heading);
+  font-size: 16px;
+}
+.pomodoro-notice p {
+  margin: 8px 0 14px;
+  font-size: 13px;
+}
+.pomodoro-notice > div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

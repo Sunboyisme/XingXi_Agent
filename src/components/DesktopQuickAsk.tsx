@@ -8,7 +8,8 @@ import {
   Check,
   Loader2,
   ExternalLink,
-  PanelTop,
+  ArrowUpRight,
+  ScanLine,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -722,8 +723,8 @@ export function DesktopQuickAsk() {
                   disabled={openingMain}
                   onClick={() => void openMain()}
                 >
-                  <PanelTop size={15} aria-hidden="true" />
-                  <span>{draft.conversationId ? "继续对话" : "主窗口"}</span>
+                  <ArrowUpRight size={17} aria-hidden="true" />
+
                 </button>
               </Hint>
               <Hint label="收起回答">
@@ -843,7 +844,8 @@ export function DesktopQuickAsk() {
               }
             }}
           />
-          {fileButton}
+          <button className="quick-add-file" aria-label="截图" disabled={uploading} onClick={() => void invoke("desktop_capture_begin").catch(e => setError(desktopError(e)))}><ScanLine size={19} /></button>
+      {fileButton}
           <SpeechInputButton
             speech={speech}
             disabled={busy || uploading}

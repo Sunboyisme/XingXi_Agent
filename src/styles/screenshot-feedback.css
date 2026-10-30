@@ -235,72 +235,6 @@
   color: var(--ui-color-danger);
   font-size: 11px;
 }
-.current-task-summary {
-  margin: 0 0 9px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--ui-color-surface) 94%, transparent);
-  color: var(--ui-color-text);
-  backdrop-filter: blur(16px);
-}
-.current-task-summary summary {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 11px 14px;
-  cursor: pointer;
-  list-style: none;
-  font-size: 12px;
-}
-.current-task-summary summary::-webkit-details-marker {
-  display: none;
-}
-.current-task-summary summary > strong {
-  max-width: 38%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.current-task-summary summary > span {
-  flex: 1;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--ui-color-text-muted);
-}
-.current-task-summary summary > small {
-  font-variant-numeric: tabular-nums;
-  color: var(--ui-color-text-muted);
-}
-.current-task-summary[open] summary > svg:last-child {
-  transform: rotate(180deg);
-}
-.current-task-summary-body {
-  max-height: min(35vh, 280px);
-  overflow-y: auto;
-  border-top: 1px solid var(--ui-color-line);
-  padding: 8px 16px 12px;
-  font-size: 12px;
-}
-.current-task-summary-body p {
-  color: var(--ui-color-text-muted);
-  margin: 4px 0 9px;
-}
-.current-task-summary-body ol {
-  padding-left: 20px;
-  margin: 0;
-}
-.current-task-summary-body li {
-  padding: 4px 0;
-}
-.current-task-summary-body li span {
-  float: right;
-  margin-left: 12px;
-  color: var(--ui-color-text-muted);
-}
-.current-task-summary-body li[data-status="completed"] {
-  color: var(--ui-color-text-muted);
-}
 .learning-course-card {
   display: flex;
   align-items: center;
@@ -363,15 +297,6 @@
     grid-template-columns: minmax(0, 1fr) 148px;
     gap: 12px;
     padding: 12px 0;
-  }
-  .current-task-summary summary > strong {
-    max-width: 55%;
-  }
-  .current-task-summary summary > span {
-    display: none;
-  }
-  .current-task-summary summary > small {
-    margin-left: auto;
   }
 }
 @media (prefers-reduced-motion: reduce) {
