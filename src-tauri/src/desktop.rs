@@ -16,6 +16,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 pub struct Preferences {
     pub enabled: bool,
     pub pet: bool,
+    pub pomodoro: bool,
     pub pet_x: Option<i32>,
     pub pet_y: Option<i32>,
     pub pet_size: u16,
@@ -24,11 +25,12 @@ pub struct Preferences {
     pub selection_enabled: bool,
     pub selection_shortcut: String,
 }
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreferencePatch {
     pub enabled: Option<bool>,
     pub pet: Option<bool>,
+    pub pomodoro: Option<bool>,
     pub pet_size: Option<u16>,
     pub selection_enabled: Option<bool>,
     pub selection_shortcut: Option<String>,
@@ -58,6 +60,7 @@ impl Default for Preferences {
         Self {
             enabled: true,
             pet: true,
+            pomodoro: true,
             pet_x: None,
             pet_y: None,
             pet_size: 100,
@@ -187,6 +190,9 @@ pub async fn desktop_preferences_save(
     if let Some(v) = preferences.pet {
         next.pet = v;
     }
+    if let Some(v) = preferences.pomodoro {
+        next.pomodoro = v;
+    }
     let selection_changed = preferences.selection_enabled.is_some() || preferences.selection_shortcut.is_some();
     if let Some(v) = preferences.selection_enabled { next.selection_enabled = v; }
     if let Some(v) = preferences.selection_shortcut { next.selection_shortcut = v; }
@@ -240,6 +246,7 @@ pub async fn desktop_preferences_save(
         finish_capture(&app, None);
         desktop_dismiss_label(&app, "quick");
     }
+    crate::pomodoro::preferences_changed(&app, previous.pomodoro, preferences.pomodoro);
     let value = desktop_preferences(app.clone());
     let _ = app.emit("desktop-preferences", &value);
     Ok(value)
@@ -743,7 +750,9 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
     let mut capture = match desktop_image() {
         Ok(c) => c,
         Err(e) => {
-            for label in std::mem::take(&mut *app.state::<Desktop>().hidden.lock().unwrap()) {
+            let hidden = std::mem::take(&mut *app.state::<Desktop>().hidden.lock().unwrap());
+            for label in hidden {
+                if label == "pomodoro-timer" { crate::pomodoro::refresh_visibility(app); continue; }
                 if let Some(w) = app.get_webview_window(&label) {
                     let _ = w.show();
                     if label == "quick" { quick_presence(app, true); }

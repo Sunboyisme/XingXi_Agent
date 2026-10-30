@@ -122,7 +122,11 @@ export function DesktopSettings() {
       if (mounted.current) setBusy(false);
     }
   }
-  function featureRow(key: "enabled" | "pet", label: string, detail: string) {
+  function featureRow(
+    key: "enabled" | "pet" | "pomodoro",
+    label: string,
+    detail: string,
+  ) {
     return (
       <div className="desktop-feature-row">
         <div className="desktop-feature-copy">
@@ -150,7 +154,8 @@ export function DesktopSettings() {
       </div>
     );
   }
-  if (!isTauri()) return <p>桌面截图问答、划词助手和桌宠仅在桌面版中可用。</p>;
+  if (!isTauri())
+    return <p>桌面截图问答、划词助手、桌宠和桌面番茄钟仅在桌面版中可用。</p>;
   return (
     <section className="desktop-preferences" aria-label="桌面助手设置">
       <section className="settings-group">
@@ -163,7 +168,26 @@ export function DesktopSettings() {
           )}
         </div>
       </section>
-      {status && <SelectionSettings enabled={status.preferences.selectionEnabled} shortcut={status.preferences.selectionShortcut} ownsShortcuts={status.ownsShortcuts} shortcutError={status.selectionShortcutError || ""} busy={busy} save={save} />}
+      {status && (
+        <SelectionSettings
+          enabled={status.preferences.selectionEnabled}
+          shortcut={status.preferences.selectionShortcut}
+          ownsShortcuts={status.ownsShortcuts}
+          shortcutError={status.selectionShortcutError || ""}
+          busy={busy}
+          save={save}
+        />
+      )}
+      <section className="settings-group">
+        <h2>桌面番茄钟</h2>
+        <div className="desktop-preference-card">
+          {featureRow(
+            "pomodoro",
+            "启用桌面计时条",
+            "无需开启桌宠。专注时自动显示，也可从番茄钟页面或系统托盘打开；收起后继续计时。",
+          )}
+        </div>
+      </section>
       <section className="settings-group">
         <h2>桌面宠物</h2>
         <div className="desktop-preference-card">
@@ -179,7 +203,7 @@ export function DesktopSettings() {
           {featureRow(
             "pet",
             "显示桌宠",
-            "拖动调整位置，轻触控制番茄钟，双击打开主窗口；小计时默认在头顶，可独立拖动。",
+            "拖动调整位置，轻触打开番茄钟，双击打开主窗口。桌面计时条可独立使用。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">

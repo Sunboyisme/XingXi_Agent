@@ -685,6 +685,8 @@ fn main() {
             )?;
             let new_chat = MenuItem::with_id(app, "new_chat", "新建对话", true, None::<&str>)?;
             let plans = MenuItem::with_id(app, "plans", "打开今日安排", true, None::<&str>)?;
+            let pomodoro = MenuItem::with_id(app, "pomodoro", "打开番茄钟", true, None::<&str>)?;
+            let pomodoro_widget = MenuItem::with_id(app, "pomodoro_widget", "显示桌面计时条", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "连接与设置", true, None::<&str>)?;
             let pins = MenuItem::with_id(app, "show_pins", "显示贴图", true, None::<&str>)?;
             let exit = MenuItem::with_id(
@@ -694,7 +696,7 @@ fn main() {
                 true,
                 None::<&str>,
             )?;
-            let menu = Menu::with_items(app, &[&show, &new_chat, &plans, &settings, &pins, &exit])?;
+            let menu = Menu::with_items(app, &[&show, &new_chat, &plans, &pomodoro, &pomodoro_widget, &settings, &pins, &exit])?;
             let icon = app.default_window_icon().cloned().ok_or("应用图标缺失")?;
             TrayIconBuilder::new()
                 .icon(icon)
@@ -704,6 +706,15 @@ fn main() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => open_main(app),
                     "show_pins" => pinned::show_all(app),
+                    "pomodoro" => { let _ = desktop::desktop_main(app.clone(), None, None, None, None, Some("pomodoro".into())); },
+                    "pomodoro_widget" => {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(error) = pomodoro::pomodoro_show_controls(app.clone(), Some(true), None).await {
+                                let _ = app.notification().builder().title("无法打开桌面计时条").body(error).show();
+                            }
+                        });
+                    }
                     "new_chat" | "plans" | "settings" => {
                         open_main(app);
                         let _ = app.emit("bai-tray-action", event.id.as_ref());

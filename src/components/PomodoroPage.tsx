@@ -83,8 +83,10 @@ export function PomodoroPage() {
         isTauri()
       ) {
         try {
-          await invoke("pomodoro_show_controls");
-          await getCurrentWindow().hide();
+          const shown = await invoke<boolean>("pomodoro_show_controls", {
+            automatic: true,
+          });
+          if (shown) await getCurrentWindow().hide();
         } catch {
           setWindowError("专注已开始，主窗口暂未收起，可以手动最小化。");
         }
@@ -93,20 +95,39 @@ export function PomodoroPage() {
       /* The shared clock displays the failed action. */
     }
   }
+  async function showDesktopClock() {
+    setWindowError("");
+    try {
+      await invoke("pomodoro_show_controls", { focus: true });
+    } catch {
+      setWindowError("桌面计时条暂时无法打开，请稍后重试。");
+    }
+  }
   return (
     <section className="pomodoro-page">
       <header className="pomodoro-heading">
         <h1>番茄钟</h1>
-        <Hint label="番茄钟设置">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="番茄钟设置"
-            onClick={() => setDialog("settings")}
-          >
-            <Settings2 size={18} />
-          </Button>
-        </Hint>
+        <div className="pomodoro-heading-actions">
+          {isTauri() && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void showDesktopClock()}
+            >
+              桌面计时
+            </Button>
+          )}
+          <Hint label="番茄钟设置">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="番茄钟设置"
+              onClick={() => setDialog("settings")}
+            >
+              <Settings2 size={18} />
+            </Button>
+          </Hint>
+        </div>
       </header>
       {(windowError || error) && (
         <ErrorNotice

@@ -27,6 +27,11 @@
   font-weight: 600;
   color: var(--ui-color-heading);
 }
+.pomodoro-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .pomodoro-page > .error-notice {
   flex-shrink: 0;
 }

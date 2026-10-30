@@ -28,6 +28,7 @@ struct DragOrigin {
 #[derive(Default)]
 pub struct Widget {
     position: Mutex<Option<Position>>,
+    standalone_position: Mutex<Option<Position>>,
     dragging: AtomicBool,
     drag_origin: Mutex<Option<DragOrigin>>,
     active: AtomicBool,
@@ -101,7 +102,9 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
     let mut desired = *state.position.lock().unwrap();
     let mut anchor = desired;
     let mut below = None;
-    if desired.is_none() {
+    let attached_to_pet = desired.is_none() && pet_visible(app);
+    if attached_to_pet {
+        state.standalone_position.lock().unwrap().take();
         let pet = app.get_webview_window("pet").ok_or("桌宠窗口不可用")?;
         let at = pet.outer_position().map_err(|e| e.to_string())?;
         let scale = pet.scale_factor().map_err(|e| e.to_string())?;
@@ -128,14 +131,13 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
             x: at.x + ((left + diameter / 2.0 - 138.0) * scale).round() as i32,
             y: at.y + ((top - 58.0) * scale).round() as i32,
         });
+    } else if desired.is_none() {
+        desired = *state.standalone_position.lock().unwrap();
+        anchor = desired;
     }
-    let at = desired.unwrap();
-    let anchor = anchor.unwrap_or(at);
-    let monitor = window
-        .available_monitors()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .min_by_key(|monitor| {
+    let monitors = window.available_monitors().map_err(|e| e.to_string())?;
+    let monitor = if let Some(anchor) = anchor {
+        monitors.into_iter().min_by_key(|monitor| {
             let area = monitor.work_area();
             let dx = i64::from(anchor.x)
                 - i64::from(anchor.x).clamp(
@@ -149,11 +151,27 @@ pub fn place_widget(app: &tauri::AppHandle) -> Result<(), String> {
                 );
             dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
         })
-        .ok_or("无法读取显示器工作区")?;
+    } else {
+        // With no pet or saved position, use the screen where the user opened it.
+        let (x, y) = crate::desktop_input::cursor();
+        window
+            .monitor_from_point(f64::from(x), f64::from(y))
+            .map_err(|e| e.to_string())?
+            .or(window.primary_monitor().map_err(|e| e.to_string())?)
+    }
+    .ok_or("无法读取显示器工作区")?;
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
     let width = (276.0 * scale).round() as i32;
     let height = (168.0 * scale).round() as i32;
+    let margin = (24.0 * scale).round() as i32;
+    let at = desired.unwrap_or(Position {
+        x: area.position.x + area.size.width as i32 - width - margin,
+        y: area.position.y + area.size.height as i32 - height - margin,
+    });
+    if !attached_to_pet && state.position.lock().unwrap().is_none() {
+        *state.standalone_position.lock().unwrap() = Some(at);
+    }
     let target = PhysicalPosition::new(
         at.x.clamp(
             area.position.x,
@@ -179,7 +197,17 @@ pub fn refresh_visibility(app: &tauri::AppHandle) {
         return;
     };
     let state = app.state::<Widget>();
-    let show = pet_visible(app)
+    let desktop = app.state::<crate::desktop::Desktop>();
+    let enabled = desktop.prefs.lock().unwrap().pomodoro;
+    let capturing = desktop.capture.lock().unwrap().is_some()
+        || desktop
+            .hidden
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|label| label == "pomodoro-timer");
+    let show = enabled
+        && !capturing
         && !state.suppressed.load(Ordering::SeqCst)
         && (state.active.load(Ordering::SeqCst) || state.previewing.load(Ordering::SeqCst));
     if show {
@@ -191,6 +219,23 @@ pub fn refresh_visibility(app: &tauri::AppHandle) {
         let _ = window.emit("pomodoro-widget-dismissed", ());
         let _ = window.hide();
     }
+}
+pub fn preferences_changed(app: &tauri::AppHandle, previous: bool, enabled: bool) {
+    let state = app.state::<Widget>();
+    if enabled && !previous {
+        state.suppressed.store(false, Ordering::SeqCst);
+        state
+            .previewing
+            .store(!state.active.load(Ordering::SeqCst), Ordering::SeqCst);
+    } else if !enabled {
+        state.previewing.store(false, Ordering::SeqCst);
+        state.suppressed.store(true, Ordering::SeqCst);
+    }
+    refresh_visibility(app);
+}
+fn widget_visible(app: &tauri::AppHandle) -> bool {
+    app.get_webview_window("pomodoro-timer")
+        .is_some_and(|window| window.is_visible().unwrap_or(false))
 }
 pub fn hide_widget(app: &tauri::AppHandle) {
     app.state::<Widget>()
@@ -282,18 +327,44 @@ pub fn pointer_update(app: &tauri::AppHandle) {
     }
 }
 #[tauri::command]
-pub fn pomodoro_show_controls(app: tauri::AppHandle, focus: Option<bool>) {
+pub async fn pomodoro_show_controls(
+    app: tauri::AppHandle,
+    focus: Option<bool>,
+    automatic: Option<bool>,
+) -> Result<bool, String> {
+    let enabled = app
+        .state::<crate::desktop::Desktop>()
+        .prefs
+        .lock()
+        .unwrap()
+        .pomodoro;
+    if !enabled {
+        if automatic.unwrap_or(false) {
+            return Ok(false);
+        }
+        crate::desktop::desktop_preferences_save(
+            app.clone(),
+            crate::desktop::PreferencePatch {
+                pomodoro: Some(true),
+                ..Default::default()
+            },
+        )
+        .await?;
+    }
     let state = app.state::<Widget>();
     state.suppressed.store(false, Ordering::SeqCst);
     state
         .previewing
         .store(!state.active.load(Ordering::SeqCst), Ordering::SeqCst);
     refresh_visibility(&app);
-    if focus.unwrap_or(false) {
-        if let Some(window) = app.get_webview_window("pomodoro-timer") {
-            let _ = window.set_focus();
-        }
+    let shown = widget_visible(&app);
+    if shown && focus.unwrap_or(false) {
+        app.get_webview_window("pomodoro-timer")
+            .ok_or("计时浮窗不可用")?
+            .set_focus()
+            .map_err(|e| e.to_string())?;
     }
+    Ok(shown)
 }
 #[tauri::command]
 pub fn pomodoro_widget_reset(app: tauri::AppHandle) -> Result<(), String> {
@@ -302,6 +373,11 @@ pub fn pomodoro_widget_reset(app: tauri::AppHandle) -> Result<(), String> {
     }
     persist(&app, None)?;
     *app.state::<Widget>().position.lock().unwrap() = None;
+    app.state::<Widget>()
+        .standalone_position
+        .lock()
+        .unwrap()
+        .take();
     place_widget(&app)
 }
 #[tauri::command]
@@ -471,10 +547,7 @@ pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
                                     let _ = app.emit("pomodoro-snapshot", &value);
                                 }
                                 if seen.is_some_and(|previous| sequence > previous) {
-                                    app.state::<Widget>()
-                                        .suppressed
-                                        .store(false, Ordering::SeqCst);
-                                    if !pet_visible(&app) {
+                                    if !widget_visible(&app) {
                                         let focus = value["notification_kind"] == "focus_complete";
                                         let _ = app
                                             .notification()

@@ -13,6 +13,7 @@ import {
 export type DesktopPreferences = {
   enabled: boolean;
   pet: boolean;
+  pomodoro: boolean;
   petX: number | null;
   petY: number | null;
   petSize: number;

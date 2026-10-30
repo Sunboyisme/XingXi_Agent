@@ -230,6 +230,11 @@ export function PomodoroWidget() {
               返回默认位置
             </ContextMenu.Item>
             <ContextMenu.Item onSelect={openPage}>打开番茄钟</ContextMenu.Item>
+            <ContextMenu.Item
+              onSelect={() => void invoke("desktop_dismiss").catch(fail)}
+            >
+              收起计时条
+            </ContextMenu.Item>
           </ContextMenu.Content>
         </ContextMenu.Portal>
       </ContextMenu.Root>
