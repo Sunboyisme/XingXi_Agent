@@ -7,6 +7,7 @@ import {
   X,
   Copy,
   ExternalLink,
+  PanelTop,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { isActiveRun } from "@/lib/avatarActivity";
 import { Hint, Markdown } from "./common";
 import { Picture } from "./ImageAttachments";
 import { SpeechInputButton } from "./SpeechInputButton";
+import { Reasoning } from "./Reasoning";
 import { useSpeechInput } from "@/lib/useSpeechInput";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import {
@@ -36,6 +38,7 @@ import {
   type Run,
   type Attachment,
 } from "@/lib/desktopAssistant";
+import type { RunEvent } from "@/lib/api";
 type IncomingImage = {
   id: string;
   dataUrl: string;
@@ -61,6 +64,10 @@ export function DesktopQuickAsk() {
   const commandsPending = useRef(false);
   const [settings, setSettings] = useState<Settings>();
   const [answer, setAnswer] = useState("");
+  const [reasoning, setReasoning] = useState("");
+  const [reasoningActive, setReasoningActive] = useState(false);
+  const [reasoningIncomplete, setReasoningIncomplete] = useState(false);
+  const [openingMain, setOpeningMain] = useState(false);
   const [question, setQuestion] = useState("");
   const [error, setError] = useState("");
   const [answerCollapsed, setAnswerCollapsed] = useState(false);
@@ -72,6 +79,9 @@ export function DesktopQuickAsk() {
   const [floatingBelow, setFloatingBelow] = useState(false);
   const modeVersion = useRef(0);
   const input = useRef<HTMLTextAreaElement>(null);
+  const answerScroll = useRef<HTMLDivElement>(null);
+  const followingAnswer = useRef(true);
+  const resumeRequest = useRef(0);
   const current = useRef(draft);
   const mounted = useRef(false);
   const visible = useRef(false);
@@ -152,6 +162,11 @@ export function DesktopQuickAsk() {
   useEffect(() => {
     if (sessionId) void functions.current.drainCommands();
   }, [sessionId]);
+  useEffect(() => {
+    const element = answerScroll.current;
+    if (element && followingAnswer.current)
+      element.scrollTop = element.scrollHeight;
+  }, [answer, reasoning, answerCollapsed]);
   useEffect(() => {
     mounted.current = true;
     const listeners = [
@@ -271,9 +286,18 @@ export function DesktopQuickAsk() {
     if (work.current.busy && current.current.runId === id) return;
     if (work.current.busy) throw new Error("当前问答正在处理另一项任务，请先完成或停止它。");
     const epoch = generation.current;
+    const request = ++resumeRequest.current;
     const run = await api<Run>(`/runs/${id}`);
-    if (!mounted.current || epoch !== generation.current || work.current.busy) return;
+    if (
+      !mounted.current || epoch !== generation.current ||
+      request !== resumeRequest.current || work.current.busy
+    ) return;
     avatar.clearCelebration();
+    followingAnswer.current = true;
+    setReasoning("");
+    setReasoningActive(false);
+    setReasoningIncomplete(run.status !== "completed");
+    setError(run.error || "");
     setQuestion("桌面任务");
     updateDraft(value => ({ ...value, conversationId: run.conversation_id || null }));
     if (isActiveRun(run.status)) {
@@ -283,6 +307,27 @@ export function DesktopQuickAsk() {
       const text = run.result?.text;
       setAnswer(typeof text === "string" ? text : "");
       setError(run.error || "");
+      try {
+        const history = await api<RunEvent[]>(`/runs/${id}/tools`);
+        if (
+          !mounted.current || epoch !== generation.current ||
+          request !== resumeRequest.current || work.current.busy
+        ) return;
+        const steps = new Map<string, string>();
+        history
+          .filter(event => event.kind === "reasoning")
+          .forEach(event => {
+            const step = String(event.data.step || "");
+            steps.set(step, (steps.get(step) || "") + String(event.data.text || ""));
+          });
+        setReasoning([...steps.values()].join("\n\n"));
+      } catch {
+        if (
+          mounted.current && epoch === generation.current &&
+          request === resumeRequest.current && !work.current.busy && !run.error
+        )
+          setError("回答已恢复，思考内容暂未加载，请稍后重新打开。");
+      }
     }
   }
   function resetSession(id: string) {
@@ -302,6 +347,10 @@ export function DesktopQuickAsk() {
     setFileBusy(false);
     updateDraft(emptyQuickDraft());
     setAnswer("");
+    setReasoning("");
+    setReasoningActive(false);
+    setReasoningIncomplete(false);
+    setOpeningMain(false);
     setQuestion("");
     setError("");
     setAnswerCollapsed(false);
@@ -357,7 +406,12 @@ export function DesktopQuickAsk() {
     const controller = new AbortController();
     tracker.current = controller;
     setRunBusy(true);
+    followingAnswer.current = true;
     setAnswer("");
+    setReasoning("");
+    setReasoningActive(false);
+    setReasoningIncomplete(false);
+    let reasoningStep = "";
     avatar.begin(run);
     try {
       const result = await readEvents(
@@ -370,9 +424,21 @@ export function DesktopQuickAsk() {
             controller.signal.aborted
           )
             return;
-          if (e.kind === "delta")
+          if (e.kind === "reasoning") {
+            const step = String(e.data.step || "");
+            const separator = reasoningStep && step !== reasoningStep ? "\n\n" : "";
+            reasoningStep = step;
+            setReasoning(text => text + separator + String(e.data.text || ""));
+            setReasoningActive(true);
+          }
+          if (e.kind === "delta") {
+            setReasoningActive(false);
             setAnswer((a) => a + String(e.data.text || ""));
-          if (e.kind === "answer") setAnswer(String(e.data.text || ""));
+          }
+          if (e.kind === "answer") {
+            setReasoningActive(false);
+            setAnswer(String(e.data.text || ""));
+          }
           if (e.kind === "error")
             setError(String(e.data.message || "回答失败"));
         },
@@ -384,6 +450,7 @@ export function DesktopQuickAsk() {
         sequence === tracking.current
       ) {
         const text = (result.result as { text?: string })?.text;
+        setReasoningIncomplete(result.status !== "completed");
         if (text) setAnswer(text);
         if (result.error) setError(result.error);
         avatar.finish(result, visible.current);
@@ -403,6 +470,7 @@ export function DesktopQuickAsk() {
         sequence === tracking.current
       ) {
         avatar.finish({ ...run, status: "interrupted" }, visible.current);
+        setReasoningIncomplete(true);
         setError(desktopError(e));
       }
     } finally {
@@ -412,6 +480,7 @@ export function DesktopQuickAsk() {
         sequence === tracking.current
       ) {
         setRunBusy(false);
+        setReasoningActive(false);
         updateDraft((d) => ({ ...d, runId: null }));
       }
     }
@@ -602,8 +671,22 @@ export function DesktopQuickAsk() {
   function cancelVoice() {
     speech.cancel();
   }
+  async function openMain() {
+    if (openingMain) return;
+    const epoch = generation.current;
+    setOpeningMain(true);
+    try {
+      await invoke("desktop_main", {
+        conversationId: current.current.conversationId,
+      });
+    } catch (error) {
+      if (mounted.current && epoch === generation.current) setError(desktopError(error));
+    } finally {
+      if (mounted.current && epoch === generation.current) setOpeningMain(false);
+    }
+  }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
-  const hasAnswer = Boolean(answer || busy || error);
+  const hasAnswer = Boolean(answer || reasoning || busy || error);
   useDesktopTaskRead(draft.conversationId, Boolean(answer) && !answerCollapsed, input);
   const fileButton = (
     <Hint label="添加文件">
@@ -632,16 +715,19 @@ export function DesktopQuickAsk() {
                   <Copy size={15} />
                 </button>
               </Hint>
-              <Hint label="打开主窗口">
+              <Hint
+                label={draft.conversationId
+                  ? "在主窗口打开这段对话，继续提问或查看完整内容"
+                  : "打开 XiaoXi 主窗口"}
+              >
                 <button
-                  aria-label="打开主窗口"
-                  onClick={() =>
-                    void invoke("desktop_main", {
-                      conversationId: draft.conversationId,
-                    })
-                  }
+                  className="quick-open-main"
+                  aria-label={draft.conversationId ? "在主窗口继续对话" : "打开主窗口"}
+                  disabled={openingMain}
+                  onClick={() => void openMain()}
                 >
-                  <ExternalLink size={15} />
+                  <PanelTop size={15} aria-hidden="true" />
+                  <span>{draft.conversationId ? "继续对话" : "主窗口"}</span>
                 </button>
               </Hint>
               <Hint label="收起回答">
@@ -658,9 +744,32 @@ export function DesktopQuickAsk() {
               </Hint>
             </div>
           </header>
-          <div className="quick-answer-scroll">
+          <div
+            className="quick-answer-scroll"
+            ref={answerScroll}
+            role="region"
+            aria-label="桌面问答内容"
+            tabIndex={0}
+            onWheel={(event) => {
+              if (event.deltaY < 0) followingAnswer.current = false;
+            }}
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              followingAnswer.current =
+                element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+            }}
+          >
+            <Reasoning
+              text={reasoning}
+              active={reasoningActive}
+              incomplete={!busy && reasoningIncomplete}
+            />
             <Markdown>{answer}</Markdown>
-            {busy && <p role="status">正在处理…</p>}
+            {busy && (
+              <p className="quick-answer-status" role="status">
+                {reasoningActive ? "正在思考…" : "正在回答…"}
+              </p>
+            )}
             {error && (
               <div className="quick-error" role="alert">
                 <p className="desktop-error">{error}</p>
@@ -671,9 +780,7 @@ export function DesktopQuickAsk() {
                       void invoke("desktop_main", {
                         settings: true,
                         settingsTab: "services",
-                      })
-                        .then(() => dismiss())
-                        .catch((e) => setError(desktopError(e)));
+                      }).catch((e) => setError(desktopError(e)));
                     }}
                   >
                     配置语音服务 <ExternalLink size={14} />

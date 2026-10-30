@@ -179,57 +179,61 @@
 }
 .model-effort-settings {
   display: grid;
-  gap: 18px;
-  padding: 18px;
-  margin-top: 12px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 14px;
-  background: var(--ui-color-surface);
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--ui-color-line);
 }
 .model-effort-heading > strong {
   font-size: 13px;
   font-weight: 500;
 }
 .model-effort-heading > p {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   color: var(--ui-color-text-muted);
   font-size: 11px;
+  line-height: 1.6;
 }
 .model-effort-row {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 .model-effort-row > span {
-  padding-top: 6px;
   color: var(--ui-color-heading);
   font-size: 12px;
 }
 .model-effort-row > span > small {
-  display: block;
-  margin-top: 4px;
+  margin-left: 8px;
   color: var(--ui-color-text-muted);
   font-size: 11px;
 }
-.model-effort-levels,
-.model-effort-default {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+.model-effort-levels {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
 }
-.model-effort-levels > button,
-.model-effort-default > button {
-  min-width: 44px;
-  padding: 7px 11px;
+.model-effort-levels > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 6px;
   border: 1px solid var(--ui-color-line);
-  border-radius: 9px;
+  border-radius: 8px;
   background: transparent;
   color: var(--ui-color-text-muted);
   font-size: 12px;
 }
-.model-effort-levels > button[data-state="on"],
-.model-effort-default > button[data-state="checked"] {
+.model-effort-levels > button > svg {
+  flex-shrink: 0;
+  visibility: hidden;
+}
+.model-effort-levels > button[data-state="on"] > svg {
+  visibility: visible;
+}
+.model-effort-levels > button[data-state="on"] {
   border-color: color-mix(
     in srgb,
     var(--ui-color-action) 50%,
@@ -246,17 +250,25 @@
 .model-effort-settings button:enabled:hover {
   background: var(--surface-hover);
 }
+.model-effort-levels > button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+.model-effort-default.soft-select {
+  width: min(100%, 240px);
+  min-height: 36px;
+}
+.model-dialog-redesign .model-thinking-switch {
+  justify-self: end;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.model-thinking-switch input {
+  margin: 0;
+}
 @media (max-width: 620px) {
-  .model-effort-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 9px;
-  }
-  .model-effort-row > span {
-    padding-top: 0;
-  }
-  .model-effort-row > span > small {
-    display: inline;
-    margin-left: 8px;
+  .model-effort-levels {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 @container composer (max-width: 380px) {

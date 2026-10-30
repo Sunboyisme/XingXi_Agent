@@ -1033,16 +1033,20 @@ pub fn desktop_main(
     settings: Option<bool>,
     settings_tab: Option<String>,
     new_chat: Option<bool>,
-) {
-    if new_chat.unwrap_or(false) {
-        desktop_dismiss_label(&app, "quick");
-    }
-    crate::open_main(&app);
-    let _ = app.emit_to(
+) -> Result<(), String> {
+    let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    crate::window_layout::ensure_visible(&window).map_err(|e| e.to_string())?;
+    app.emit_to(
         "main",
         "desktop-navigate",
         serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false)}),
-    );
+    ).map_err(|e| e.to_string())?;
+    // The screenshot and answer surfaces are always on top. End them before
+    // focusing main, including when opening an existing conversation.
+    desktop_dismiss_label(&app, "quick");
+    window.set_focus().map_err(|e| e.to_string())
 }
 #[tauri::command]
 pub async fn desktop_pick_files(

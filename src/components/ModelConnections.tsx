@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import { DropdownMenu, RadioGroup, ToggleGroup } from "radix-ui";
+import { DropdownMenu, ToggleGroup } from "radix-ui";
 import { api, fetchApi, type Settings } from "@/lib/api";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -807,7 +807,10 @@ export function ModelConnections({
                               />
                               {model.thinking_mode === "auto" && (
                                 <Hint label="识别依据是当前服务商接口和完整模型名，不使用默认模型代替。">
-                                  <small className="model-thinking-detected">
+                                  <small
+                                    className="model-thinking-detected"
+                                    tabIndex={0}
+                                  >
                                     {model.thinking_control &&
                                     model.thinking_control !== "auto"
                                       ? `自动识别：${thinkingControlLabels[model.thinking_control]}`
@@ -817,7 +820,7 @@ export function ModelConnections({
                               )}
                             </span>
                           </div>
-                          <label className="model-option-row model-thinking-enabled">
+                          <div className="model-option-row model-thinking-enabled">
                             <span className="model-option-copy">
                               <strong>启用思考</strong>
                               <small>
@@ -828,58 +831,110 @@ export function ModelConnections({
                                     : "聊天使用此模型时，沿用这里的开关与下方强度"}
                               </small>
                             </span>
-                            <Checkbox
-                              aria-label={`模型 ${index + 1} 启用思考`}
-                              checked={
-                                modelThinkingControl(model) === "always" ||
-                                (modelThinkingControl(model) !== "none" && Boolean(model.default_thinking_enabled))
-                              }
-                              disabled={busy || ["none", "always"].includes(modelThinkingControl(model))}
-                              onCheckedChange={(enabled) =>
-                                updateModel(index, { default_thinking_enabled: enabled === true })
-                              }
-                            />
-                          </label>
+                            <label className="module-toggle model-thinking-switch">
+                              <span>
+                                {modelThinkingControl(model) === "always"
+                                  ? "始终开启"
+                                  : modelThinkingControl(model) !== "none" &&
+                                      model.default_thinking_enabled
+                                    ? "已开启"
+                                    : "已关闭"}
+                              </span>
+                              <input
+                                type="checkbox"
+                                role="switch"
+                                aria-label={`模型 ${index + 1} 启用思考`}
+                                checked={
+                                  modelThinkingControl(model) === "always" ||
+                                  (modelThinkingControl(model) !== "none" &&
+                                    Boolean(model.default_thinking_enabled))
+                                }
+                                disabled={
+                                  busy ||
+                                  ["none", "always"].includes(modelThinkingControl(model))
+                                }
+                                onChange={(event) =>
+                                  updateModel(index, {
+                                    default_thinking_enabled: event.target.checked,
+                                  })
+                                }
+                              />
+                            </label>
+                          </div>
                         </div>
                         {(model.thinking_mode === "reasoning_effort" || Boolean(model.reasoning_efforts?.length)) && (
                           <div className="model-effort-settings">
                             <div className="model-effort-heading">
                               <strong>思考强度</strong>
-                              <p>配置接口实际支持的档位，聊天中可直接选择。</p>
+                              <p>
+                                勾选接口支持的档位，再选择聊天时默认使用的强度。
+                              </p>
                             </div>
                             <div className="model-effort-row">
-                              <span>可用档位<small>至少保留一档</small></span>
-                              <ToggleGroup.Root type="multiple" className="model-effort-levels"
+                              <span>
+                                可用档位<small>至少保留一档</small>
+                              </span>
+                              <ToggleGroup.Root
+                                type="multiple"
+                                className="model-effort-levels"
                                 aria-label={`模型 ${index + 1} 支持的思考强度`}
                                 value={model.reasoning_efforts ?? ["low", "medium", "high"]}
                                 disabled={busy}
                                 onValueChange={(values) => {
                                   if (!values.length) return;
                                   updateModel(index, {
-                                    reasoning_efforts: effortOptions.filter((option) => values.includes(option.value)).map((option) => option.value),
-                                    default_reasoning_effort: values.includes(model.default_reasoning_effort || "") ? model.default_reasoning_effort : null,
+                                    reasoning_efforts: effortOptions
+                                      .filter((option) => values.includes(option.value))
+                                      .map((option) => option.value),
+                                    default_reasoning_effort: values.includes(
+                                      model.default_reasoning_effort || "",
+                                    ) ? model.default_reasoning_effort : null,
                                   });
-                                }}>
+                                }}
+                              >
                                 {effortOptions.map((option) => {
                                   const levels = model.reasoning_efforts ?? ["low", "medium", "high"];
-                                  return <ToggleGroup.Item key={option.value} value={option.value}
-                                    disabled={busy || (levels.length === 1 && levels.includes(option.value))}
-                                    aria-label={`模型 ${index + 1} 支持${option.label}强度`}>{option.label}</ToggleGroup.Item>;
+                                  return (
+                                    <ToggleGroup.Item
+                                      key={option.value}
+                                      value={option.value}
+                                      disabled={
+                                        busy ||
+                                        (levels.length === 1 && levels.includes(option.value))
+                                      }
+                                      aria-label={`模型 ${index + 1} 支持${option.label}强度`}
+                                    >
+                                      <Check size={13} aria-hidden="true" />
+                                      {option.label}
+                                    </ToggleGroup.Item>
+                                  );
                                 })}
                               </ToggleGroup.Root>
                             </div>
                             <div className="model-effort-row">
-                              <span>默认强度<small>未单独选择时使用</small></span>
-                              <RadioGroup.Root className="model-effort-default" aria-label={`模型 ${index + 1} 默认思考强度`}
-                                value={model.default_reasoning_effort || "auto"} disabled={busy}
-                                onValueChange={(value) => updateModel(index, {
-                                  default_reasoning_effort: value === "auto" ? null : value as typeof model.default_reasoning_effort,
-                                })}>
-                                <RadioGroup.Item value="auto">服务商默认</RadioGroup.Item>
-                                {effortOptions.filter((option) => (model.reasoning_efforts ?? ["low", "medium", "high"]).includes(option.value)).map((option) => (
-                                  <RadioGroup.Item key={option.value} value={option.value}>{option.label}</RadioGroup.Item>
-                                ))}
-                              </RadioGroup.Root>
+                              <span>
+                                默认强度<small>未单独选择时使用</small>
+                              </span>
+                              <SoftSelect
+                                className="model-effort-default"
+                                label={`模型 ${index + 1} 默认思考强度`}
+                                value={model.default_reasoning_effort || "auto"}
+                                disabled={busy}
+                                onValueChange={(value) =>
+                                  updateModel(index, {
+                                    default_reasoning_effort: value === "auto"
+                                      ? null
+                                      : value as typeof model.default_reasoning_effort,
+                                  })
+                                }
+                                options={[
+                                  { value: "auto", label: "服务商默认" },
+                                  ...effortOptions.filter((option) =>
+                                    (model.reasoning_efforts ?? ["low", "medium", "high"])
+                                      .includes(option.value),
+                                  ),
+                                ]}
+                              />
                             </div>
                           </div>
                         )}

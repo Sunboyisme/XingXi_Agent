@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Brain, ChevronDown } from "lucide-react";
 import { Markdown } from "./common";
 
 export function Reasoning({
@@ -12,6 +12,7 @@ export function Reasoning({
   incomplete?: boolean;
 }) {
   const [open, setOpen] = useState(active);
+  const contentId = useId();
   const content = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   useEffect(() => {
@@ -33,9 +34,10 @@ export function Reasoning({
         type="button"
         className="reasoning-toggle"
         aria-expanded={open}
+        aria-controls={open ? contentId : undefined}
         onClick={() => setOpen(!open)}
       >
-        <Sparkles size={15} aria-hidden="true" />
+        <Brain size={16} aria-hidden="true" />
         <span>
           {active
             ? "XiaoXi 正在思考"
@@ -48,6 +50,10 @@ export function Reasoning({
       {open && (
         <div
           className="reasoning-content"
+          id={contentId}
+          role="region"
+          aria-label="思考内容"
+          tabIndex={0}
           ref={content}
           onWheel={(event) => {
             if (event.deltaY < 0) following.current = false;

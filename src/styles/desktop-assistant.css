@@ -68,6 +68,10 @@ html[data-desktop] .ui-hint {
   line-height: 1.45;
 }
 .quick-window {
+  --quick-detail-color: #d9c7b6;
+  --quick-detail-icon: #edc4a5;
+  --quick-detail-bg: rgba(255, 255, 255, 0.04);
+  --quick-detail-line: rgba(234, 214, 201, 0.2);
   position: absolute;
   inset: 12px;
   display: flex;
@@ -123,7 +127,15 @@ html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
   position: relative;
   flex-shrink: 0;
 }
-.quick-window.is-floating { inset: 12px 8px 8px; gap: 10px; color: var(--ui-color-text); }
+.quick-window.is-floating {
+  --quick-detail-color: var(--ui-color-text-muted);
+  --quick-detail-icon: var(--ui-color-action);
+  --quick-detail-bg: var(--ui-color-surface-deep);
+  --quick-detail-line: var(--ui-color-line);
+  inset: 12px 8px 8px;
+  gap: 10px;
+  color: var(--ui-color-text);
+}
 .quick-window.is-floating.is-below { flex-direction: column-reverse; }
 .quick-window.is-floating .quick-bar { min-height: 50px; padding: 7px 9px; gap: 9px; border: 1px solid var(--ui-color-border); border-radius: 30px; background: var(--ui-color-surface); }
 html[data-desktop] .quick-window.is-floating .quick-bar textarea { height: 32px; max-height: 70px; padding: 4px 0; font-size: 15px; line-height: 24px; color: var(--ui-color-text); }
@@ -158,6 +170,8 @@ html[data-desktop] .quick-floating-close:hover { background: var(--surface-hover
   gap: 12px;
 }
 .quick-answer header strong {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -166,15 +180,52 @@ html[data-desktop] .quick-floating-close:hover { background: var(--surface-hover
 .quick-answer header > div {
   display: flex;
   flex-shrink: 0;
+  gap: 3px;
+}
+html[data-desktop] .quick-open-main {
+  padding-inline: 8px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .quick-answer-scroll {
+  flex: 1;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 12px 18px;
   min-height: 50px;
   line-height: 1.7;
 }
 .quick-answer-scroll .markdown {
   color: inherit;
+}
+html[data-desktop] .quick-answer .reasoning-toggle {
+  justify-content: flex-start;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--quick-detail-line);
+  border-radius: 10px;
+  background: var(--quick-detail-bg);
+  color: var(--quick-detail-color);
+  font-size: 12px;
+}
+html[data-desktop] .quick-answer .reasoning-toggle:is(:hover, [aria-expanded="true"]) {
+  color: var(--quick-detail-icon);
+}
+.quick-answer .reasoning-toggle > svg:first-child {
+  color: var(--quick-detail-icon);
+}
+.quick-answer .reasoning-content {
+  max-height: min(180px, 30dvh);
+  padding: 10px 12px;
+  border-color: var(--quick-detail-line);
+  background: var(--quick-detail-bg);
+  color: var(--quick-detail-color);
+}
+.quick-answer-status {
+  margin: 8px 0 0;
+  color: var(--quick-detail-color);
+  font-size: 12px;
 }
 html[data-desktop] .quick-settings-link {
   color: #edc4a5;

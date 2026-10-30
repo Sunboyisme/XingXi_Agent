@@ -60,11 +60,24 @@ export function models(settings?: Settings) {
     ) || []
   );
 }
-export function selectedModel(
-  settings: Settings | undefined,
-  key: string,
-) {
-  return models(settings).find((m) => m.key === key)?.selection;
+export function selectedModel(settings: Settings | undefined, key: string) {
+  if (!settings) throw new Error("模型配置尚未加载，请稍后再试。");
+  const choices = models(settings);
+  const selected =
+    choices.find((model) => model.key === key) ||
+    choices.find(
+      (model) =>
+        model.selection.provider_id === settings.default_provider &&
+        model.selection.model_name === settings.model_name,
+    );
+  if (!selected) throw new Error("请先在设置中添加模型并选择默认模型。");
+  // Desktop questions are direct conversations, including the default-model path.
+  return {
+    ...selected.selection,
+    mode: "chat" as const,
+    use_memory: true,
+    use_knowledge: true,
+  };
 }
 export async function addDesktopFile(file: File): Promise<Attachment> {
   const image = /\.(png|jpe?g|webp)$/i.test(file.name);

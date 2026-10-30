@@ -53,7 +53,8 @@
   padding: 6px 11px;
   border: 1px solid
     color-mix(in srgb, var(--ui-color-action) 14%, var(--ui-color-line));
-  border-radius: 13px 13px 13px 5px;
+  max-width: 100%;
+  border-radius: 10px;
   background: color-mix(
     in srgb,
     var(--ui-color-action) 5%,
@@ -83,10 +84,18 @@
 
 .reasoning-toggle > svg:first-child {
   color: var(--ui-color-action);
+  flex-shrink: 0;
 }
 
 .reasoning-toggle > svg:last-child {
+  flex-shrink: 0;
   transition: transform 180ms ease;
+}
+
+.reasoning-toggle:focus-visible,
+.reasoning-content:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
 }
 
 .reasoning-content {
@@ -95,7 +104,8 @@
   padding: 11px 14px 12px;
   border: 1px solid
     color-mix(in srgb, var(--ui-color-action) 10%, var(--ui-color-line));
-  border-radius: 5px 16px 16px;
+  border-radius: 10px;
+  overscroll-behavior: contain;
   background: color-mix(
     in srgb,
     var(--ui-color-action) 3.5%,
