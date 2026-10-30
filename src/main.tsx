@@ -23,6 +23,7 @@ import "./styles/version-018.css";
 import "./styles/feedback-018.css";
 import "./styles/screenshot-feedback.css";
 import "./styles/model-picker.css";
+import "./styles/composer-action.css";
 
 const stopAppearance = initializeAppearance();
 const stopSelectionBridge = initializeSelectionBridge();

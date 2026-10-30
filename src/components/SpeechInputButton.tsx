@@ -64,9 +64,9 @@ export function SpeechInputButton({
             ))}
           </span>
         ) : v?.phase === "starting" || v?.phase === "transcribing" ? (
-          <LoaderCircle size={19} className="speech-input-spinner" />
+          <LoaderCircle size={18} className="speech-input-spinner" />
         ) : (
-          <MicrophoneIcon size={20} />
+          <MicrophoneIcon size={18} className="speech-input-microphone" />
         )}
       </button>
     </Hint>

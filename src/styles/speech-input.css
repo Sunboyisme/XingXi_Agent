@@ -9,21 +9,26 @@ html[data-desktop] .speech-input-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
   flex-shrink: 0;
-  padding: 6px;
+  padding: 4px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 10px;
   box-shadow: none;
   background: transparent;
   color: var(--ui-color-text-muted, #e5d3c5);
   cursor: pointer;
 }
-.speech-input-button:hover {
+.speech-input-button:hover,
+.composer-submit .speech-input-button:hover,
+html[data-desktop] .speech-input-button:hover {
   background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.speech-input-microphone {
+  stroke-width: 1.6;
 }
 .speech-input-button:focus-visible {
   outline: 2px solid var(--ui-color-focus, #e2b08d);
@@ -83,5 +88,15 @@ html[data-desktop] .speech-input-button.is-recording:hover {
   .speech-input-waves i {
     transform: scaleY(0.5) !important;
     transition: none;
+  }
+}
+@media (pointer: coarse) {
+  .speech-input-button,
+  .composer-submit .speech-input-button,
+  html[data-desktop] .speech-input-button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
   }
 }

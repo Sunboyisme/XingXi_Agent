@@ -11,7 +11,7 @@
 .composer-bottom > .composer-submit {
   min-width: 0;
   margin-left: auto;
-  gap: 10px;
+  gap: 8px;
 }
 .composer-model-controls {
   display: flex;
@@ -30,15 +30,16 @@
   min-width: 0;
   max-width: min(220px, 34cqi);
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  padding: 5px 4px;
+  padding: 5px 7px;
   gap: 8px;
   color: var(--ui-color-text);
 }
-.composer-model-controls .composer-model:hover,
+.composer-model-controls .composer-model:enabled:hover,
+.composer-model-controls .composer-model:focus-visible,
 .composer-model-controls .composer-model[data-state="open"] {
-  background: transparent;
+  background: var(--surface-hover);
   color: var(--ui-color-heading);
 }
 .composer-model .composer-model-name {
@@ -50,6 +51,10 @@
   flex-shrink: 0;
   color: var(--ui-color-text-muted);
   font-size: 11px;
+}
+.composer-model .composer-model-chevron {
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
 }
 .composer-model-controls .composer-model:focus-visible {
   outline: 2px solid var(--ui-color-focus);

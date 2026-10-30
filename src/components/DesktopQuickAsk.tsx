@@ -3,7 +3,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowUp,
   Plus,
-  Square,
   X,
   Copy,
   Check,
@@ -853,9 +852,11 @@ export function DesktopQuickAsk() {
           />
           <Hint label={submitting ? "正在提交，任务创建后可停止回答" : stopping ? "正在停止回答" : busy ? "停止回答" : "发送"}>
             <button
-              className="quick-send"
+              className="quick-send composer-action"
+              data-action={busy ? "stop" : "send"}
               aria-label={submitting ? "正在提交" : stopping ? "正在停止回答" : busy ? "停止回答" : "发送"}
               aria-disabled={submitting || stopping || undefined}
+              aria-busy={submitting || stopping}
               disabled={
                 !busy &&
                 (uploading ||
@@ -866,7 +867,22 @@ export function DesktopQuickAsk() {
                 if (!submitting && !stopping) void (busy ? stop() : send());
               }}
             >
-              {submitting || stopping ? <Loader2 size={17} className="spin" /> : busy ? <Square size={17} /> : <ArrowUp size={21} />}
+              {submitting || stopping ? (
+                <Loader2
+                  size={18}
+                  className="composer-action-icon composer-action-progress size-[18px]"
+                  aria-hidden="true"
+                />
+              ) : busy ? (
+                <span className="composer-action-stop" aria-hidden="true" />
+              ) : (
+                <ArrowUp
+                  size={18}
+                  strokeWidth={2}
+                  className="composer-action-icon size-[18px]"
+                  aria-hidden="true"
+                />
+              )}
             </button>
           </Hint>
           <Hint label="关闭问答">

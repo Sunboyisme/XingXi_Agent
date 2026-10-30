@@ -1,0 +1,115 @@
+.composer-submit .composer-action,
+html[data-desktop] .quick-bar .composer-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  gap: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--ui-color-action);
+  color: var(--ui-color-on-action);
+  box-shadow: none;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+.composer-submit .composer-action[data-action="send"]:enabled:hover,
+html[data-desktop]
+  .quick-bar
+  .composer-action[data-action="send"]:enabled:hover {
+  background: var(--ui-color-action-hover);
+}
+.composer-submit .composer-action[data-action="stop"],
+html[data-desktop] .quick-bar .composer-action[data-action="stop"] {
+  border-color: var(--ui-color-line);
+  background: color-mix(
+    in srgb,
+    var(--ui-color-text) 5%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-text);
+}
+.composer-submit .composer-action[data-action="stop"]:enabled:hover,
+html[data-desktop]
+  .quick-bar
+  .composer-action[data-action="stop"]:enabled:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-action) 40%,
+    var(--ui-color-line)
+  );
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 12%,
+    var(--ui-color-surface)
+  );
+  color: var(--ui-color-action);
+}
+.composer-submit .composer-action:disabled,
+html[data-desktop] .quick-bar .composer-action:disabled {
+  border-color: transparent;
+  background: color-mix(
+    in srgb,
+    var(--ui-color-text) 5%,
+    var(--ui-color-surface)
+  );
+  color: color-mix(
+    in srgb,
+    var(--ui-color-text-muted) 50%,
+    var(--ui-color-surface)
+  );
+  opacity: 1;
+  cursor: default;
+}
+.composer-submit .composer-action:focus-visible,
+html[data-desktop] .quick-bar .composer-action:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.composer-action .composer-action-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+.composer-action-stop {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2.5px;
+  background: currentColor;
+}
+.composer-action-progress {
+  animation: composer-action-spin 900ms linear infinite;
+}
+@keyframes composer-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (pointer: coarse) {
+  .composer-submit .composer-action,
+  html[data-desktop] .quick-bar .composer-action {
+    flex-basis: 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-submit .composer-action,
+  html[data-desktop] .quick-bar .composer-action {
+    transition: none;
+  }
+  .composer-action-progress {
+    animation: none;
+  }
+}

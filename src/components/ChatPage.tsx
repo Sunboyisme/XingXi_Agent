@@ -36,7 +36,6 @@ import {
   Plus,
   LoaderCircle,
   RotateCcw,
-  Square,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { Button } from "@/components/ui/button";
@@ -2118,23 +2117,61 @@ export function ChatPage({
                     disabled={submitting || stopping || uploading || movingProject}
                   />
                 )}
-                <Button
-                  aria-label={showStop ? "停止生成" : "发送消息"}
-                  size="icon"
-                  disabled={
-                    submitting ||
-                    movingProject ||
-                    stopping ||
-                    (!showStop && speech.busy) ||
-                    (showStop ? !run : uploading || !modelReady || !hasDraft)
+                <Hint
+                  label={
+                    submitting
+                      ? "正在提交"
+                      : stopping
+                        ? "正在停止生成"
+                        : showStop
+                          ? "停止生成"
+                          : "发送消息"
                   }
-                  onClick={() => {
-                    if (showStop) void stop();
-                    else void send();
-                  }}
                 >
-                  {showStop ? <Square size={15} /> : <ArrowUp size={19} />}
-                </Button>
+                  <Button
+                    className="composer-action"
+                    data-action={showStop ? "stop" : "send"}
+                    aria-label={
+                      submitting
+                        ? "正在提交"
+                        : stopping
+                          ? "正在停止生成"
+                          : showStop
+                            ? "停止生成"
+                            : "发送消息"
+                    }
+                    aria-busy={submitting || stopping}
+                    size="icon"
+                    disabled={
+                      submitting ||
+                      movingProject ||
+                      stopping ||
+                      (!showStop && speech.busy) ||
+                      (showStop ? !run : uploading || !modelReady || !hasDraft)
+                    }
+                    onClick={() => {
+                      if (showStop) void stop();
+                      else void send();
+                    }}
+                  >
+                    {submitting || stopping ? (
+                      <LoaderCircle
+                        size={18}
+                        className="composer-action-icon composer-action-progress size-[18px]"
+                        aria-hidden="true"
+                      />
+                    ) : showStop ? (
+                      <span className="composer-action-stop" aria-hidden="true" />
+                    ) : (
+                      <ArrowUp
+                        size={18}
+                        strokeWidth={2}
+                        className="composer-action-icon size-[18px]"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </Button>
+                </Hint>
               </div>
             </div>
           </div>

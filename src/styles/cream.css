@@ -393,18 +393,6 @@
 .composer-model svg {
   flex-shrink: 0;
 }
-.composer-submit [data-slot="button"] {
-  border-radius: 50%;
-  width: 40px;
-  min-width: 40px;
-  min-height: 40px;
-}
-.composer-submit [data-slot="button"]:disabled {
-  opacity: 1;
-  border-color: var(--ui-color-surface-deep);
-  background: var(--ui-color-surface-deep);
-  color: var(--ui-color-action);
-}
 .composer-submit > span {
   font-size: 12px;
 }
@@ -1049,11 +1037,6 @@
     padding: 4px 5px;
     max-width: 145px;
     font-size: 12px;
-  }
-  .composer-submit [data-slot="button"] {
-    width: 34px;
-    min-width: 34px;
-    min-height: 34px;
   }
   .page-content {
     padding: 23px 18px 30px;
