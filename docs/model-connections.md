@@ -21,3 +21,17 @@
 本轮使用本地协议服务验证请求参数、流式工具调用、独立凭据、持久化、迁移和界面交互；没有使用用户真实密钥调用这些服务商。安装包需等待本轮桌面测试验收后构建。
 
 验证结果：139 项后端测试、26 项前端测试、17 项浏览器交互检查通过；TypeScript 与 Vite 构建通过。原生测试窗口视口为 1266 × 710，配置弹窗和保存按钮均在可见区域内；700 × 480 的窄矮窗口检查也通过。Vite 仍有单个 JS chunk 超过 500 kB 的构建提示，本轮未做无关拆包。
+
+## 2026-10-31：快速配置与共享密钥
+
+模型连接页新增两个快速入口：硅基流动用于首次配置，阿里云百炼用于已有阿里云账户（北京地域）。用户粘贴一份 API Key，系统读取 `/models`，从维护的推荐列表选择对话模型，并补齐空的语义检索、生图、语音输入和朗读配置。已有默认模型和能力设置保留；部分配置、已停用但保留型号的能力也不覆盖。联网搜索仍单独配置。
+
+模型列表不是调用权限或余额的证明。百炼的兼容模型列表可能不包含原生生图等服务，这些服务和语音能力会填写官方预设；完成页显示保存结果，实际调用由用户确认。推荐模型不在对话列表中时不保存新连接，提供手动配置路径。快速配置不发起生图、合成或其他生成探测。
+
+能力设置中的“密钥来源”可选择同一接口来源的已有模型连接，也可使用独立密钥。JSON 只保存 `credential_connection_id`，每次调用按连接 ID 从系统凭据管理读取密钥，换密钥无需逐项重填。协议、域名和端口必须与来源连接相同，标准默认端口按同一来源处理。仍有能力引用的连接不能直接删除或更换接口域名，应先调整能力密钥来源。原有独立凭据不迁移、不清除。
+
+硅基流动生图使用 `image_size` 和 `images` 响应结构；百炼千问生图沿用原生协议并由服务商选择默认尺寸。语音朗读同时处理普通播放和设置内试听的凭据引用；记忆与知识库共用 Embedding 凭据解析。
+
+预设依据：[硅基流动快速开始](https://docs.siliconflow.cn/docs/userguide/quickstart)、[Agent 配置示例](https://docs.siliconflow.cn/docs/usercases/use-siliconcloud-in-yan)、[语音合成](https://docs.siliconflow.cn/docs/userguide/capabilities/text-to-speech)，以及[百炼接口地址](https://help.aliyun.com/zh/model-studio/base-url)、[视觉理解模型](https://help.aliyun.com/zh/model-studio/vision-model)、[Embedding 兼容接口](https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai)。
+
+本轮完成接口类型生成、编译和语法／差异检查，没有执行本轮自动化或真实模型验收；不沿用上文历史版本的通过结论。实际效果仍待用户在固定数据目录的独立测试版中确认。

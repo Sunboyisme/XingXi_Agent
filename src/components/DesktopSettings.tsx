@@ -23,6 +23,7 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import { ConnectionCard } from "./ConnectionCard";
+import { SharedCredentialSource } from "./SharedCredentials";
 import { BaiAvatar } from "./BaiAvatar";
 import { SelectionSettings } from "./SelectionSettings";
 import { pomodoroThemes, readPomodoroTheme } from "@/lib/pomodoroAppearance";
@@ -399,8 +400,8 @@ export function SpeechConnection({
     onConfigureHandled?.();
   }, [configureRequested, onConfigureHandled, configure]);
   function change(
-    field: "url" | "model" | "api_key",
-    value: string | undefined,
+    field: "url" | "model" | "api_key" | "credential_connection_id",
+    value: string | null | undefined,
   ) {
     setError("");
     setNotice("");
@@ -410,7 +411,8 @@ export function SpeechConnection({
         s && {
           ...s,
           profiles: s.profiles.map((p) =>
-            p.provider === s.selected ? { ...p, [field]: value } : p,
+            p.provider === s.selected ? { ...p, [field]: value,
+              ...(field === "credential_connection_id" ? { api_key: undefined } : {}) } : p,
           ),
         },
     );
@@ -548,7 +550,9 @@ export function SpeechConnection({
                 />
                 {fields.model && <p className="field-error">{fields.model}</p>}
               </div>
-              <div className="form-field">
+              <SharedCredentialSource connectionId={profile.credential_connection_id} url={profile.url} disabled={busy}
+                onChange={(id) => change("credential_connection_id", id)} />
+              {!profile.credential_connection_id && <div className="form-field">
                 <div className="speech-secret-heading">
                   <Label htmlFor="speech-key">API 密钥</Label>
                   {profile.key_configured && (
@@ -586,7 +590,7 @@ export function SpeechConnection({
                     change("api_key", e.target.value || undefined)
                   }
                 />
-              </div>
+              </div>}
               {calls.length > 0 && (
                 <details className="speech-activity">
                   <summary>最近语音调用</summary>

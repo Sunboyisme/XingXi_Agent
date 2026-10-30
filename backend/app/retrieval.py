@@ -10,7 +10,7 @@ import time
 from langchain_openai import OpenAIEmbeddings
 from sqlalchemy import select
 
-from . import config
+from . import config, service_credentials
 from .context import MEMORY_TOKENS, tokens
 from .db import Memory, MemoryVector, Session, Settings
 
@@ -44,12 +44,16 @@ def valid(row, memory, value):
     )
 
 
+def credential_key(value):
+    return service_credentials.key(value, "embedding")
+
+
 def client(value, *, purpose="embedding"):
     from .usage_cost import MeteredAsyncClient, metadata
     return OpenAIEmbeddings(
         base_url=value["url"],
         model=value["model"],
-        api_key=config.secret_get("embedding"),
+        api_key=credential_key(value),
         check_embedding_ctx_length=False,
         max_retries=0,
         request_timeout=10,
@@ -141,7 +145,8 @@ def status():
         "enabled": value.get("enabled", False),
         "url": value.get("url", "https://api.openai.com/v1"),
         "model": value.get("model", ""),
-        "key_configured": bool(config.secret_get("embedding")),
+        "credential_connection_id": value.get("credential_connection_id"),
+        "key_configured": bool(credential_key(value)),
         "indexed": sum(valid(vectors.get(m.id), m, value) for m in memories),
         "total": len(memories),
         "indexing": indexing,
@@ -152,7 +157,7 @@ def status():
 async def index_once():
     global indexing, last_error
     value = settings()
-    if not value.get("enabled") or not config.secret_get("embedding"):
+    if not value.get("enabled") or not credential_key(value):
         return
     with Session() as db:
         memories = list(
@@ -255,7 +260,7 @@ async def retrieve_detailed(query: str, purpose="preview", project_id=None, *, f
     mode = "keyword"
     if not value.get("enabled"):
         fallback = "语义检索未启用"
-    elif not config.secret_get("embedding"):
+    elif not credential_key(value):
         fallback = "Embedding 密钥未配置"
     elif not eligible:
         fallback = "暂无可用向量，等待索引更新"

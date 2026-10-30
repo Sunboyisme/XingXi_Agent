@@ -24,6 +24,7 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 import "../styles/tts-settings.css";
+import { SharedCredentialSource } from "./SharedCredentials";
 
 type Editable = Omit<TTSSettings, "profiles"> & {
   profiles: (TTSSettings["profiles"][number] & { api_key?: string | null })[];
@@ -219,6 +220,7 @@ export function TTSConnection({
       url: row.url.trim(),
       model: row.model.trim(),
       voice: row.voice.trim(),
+      credential_connection_id: row.credential_connection_id ?? null,
       api_key: row.api_key === "" ? "" : row.api_key?.trim() || null,
     };
   }
@@ -253,7 +255,7 @@ export function TTSConnection({
     }
     if (!profile || !validate()) return;
     if (
-      profile.provider !== "custom" &&
+      profile.provider !== "custom" && !profile.credential_connection_id &&
       (profile.api_key === "" ||
         (!profile.key_configured && !profile.api_key?.trim()))
     ) {
@@ -432,7 +434,9 @@ export function TTSConnection({
                 )}
                 {fields.voice && <p className="field-error">{fields.voice}</p>}
               </div>
-              <div className="form-field">
+              <SharedCredentialSource connectionId={profile.credential_connection_id} url={profile.url} disabled={saving}
+                onChange={(id) => change({ credential_connection_id: id, api_key: null })} />
+              {!profile.credential_connection_id && <div className="form-field">
                 <div className="tts-secret-heading">
                   <Label htmlFor="tts-key">API 密钥</Label>
                   {profile.key_configured && (
@@ -476,7 +480,7 @@ export function TTSConnection({
                     {fields.api_key}
                   </p>
                 )}
-              </div>
+              </div>}
               <div className="tts-preset-actions">
                 <Button
                   type="button"

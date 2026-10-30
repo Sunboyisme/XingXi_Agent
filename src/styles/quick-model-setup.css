@@ -1,0 +1,130 @@
+.quick-model-setup {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+  background: var(--ui-color-surface);
+}
+.quick-setup-heading h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.quick-setup-heading p,
+.quick-setup-account-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ui-color-text-muted);
+}
+.quick-setup-providers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.quick-setup-provider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px;
+  min-width: 0;
+  text-align: left;
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface);
+  border: 1px solid var(--ui-color-line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.quick-setup-provider:hover {
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 7%,
+    var(--ui-color-surface)
+  );
+}
+.quick-setup-provider:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 3px;
+}
+.quick-setup-provider strong {
+  font-size: 14px;
+}
+.quick-setup-provider small {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  line-height: 1.6;
+}
+.quick-setup-provider > svg {
+  flex-shrink: 0;
+}
+[data-slot="dialog-content"].quick-setup-dialog {
+  width: min(540px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.quick-setup-form {
+  display: grid;
+  gap: 16px;
+  padding: 6px 0;
+}
+.quick-setup-form > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-size: 13px;
+  color: var(--ui-color-action);
+}
+.quick-setup-results {
+  display: grid;
+  gap: 12px;
+}
+.quick-setup-result {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ui-color-line);
+}
+.quick-setup-result:last-child {
+  border-bottom: 0;
+}
+.quick-setup-result > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.quick-setup-result strong {
+  font-size: 13px;
+}
+.quick-setup-result span {
+  font-size: 12px;
+  color: var(--ui-color-text-muted);
+  white-space: nowrap;
+}
+.quick-setup-result p {
+  margin: 5px 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.quick-setup-result small {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.shared-credential-source {
+  grid-column: 1 / -1;
+}
+.shared-credential-source small {
+  color: var(--ui-color-text-muted);
+  line-height: 1.6;
+}
+.shared-credential-source small.field-error {
+  color: var(--ui-color-danger);
+}
+@media (max-width: 850px) {
+  .quick-setup-providers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

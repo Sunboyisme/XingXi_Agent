@@ -12,8 +12,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 
-from . import config, context, db as store, model_profiles, provider, runs
-from .schemas import ModelSelection
+from . import config, context, db as store, model_profiles, provider, runs, service_credentials
+from .schemas import ModelSelection, CredentialBinding
 
 router = APIRouter()
 
@@ -32,7 +32,7 @@ PRESETS = {
 }
 
 
-class SpeechProfile(BaseModel):
+class SpeechProfile(CredentialBinding):
     provider: Literal["siliconflow", "bailian", "custom"]
     url: str = Field(max_length=2048)
     model: str = Field(max_length=200)
@@ -59,7 +59,7 @@ def speech_settings():
         saved = db.get(store.Settings, config.PROFILE_ID).speech_config or {}
     return {"selected": saved.get("selected", "siliconflow"), "profiles": [
         {"provider": key, **saved.get("profiles", {}).get(key, preset),
-         "key_configured": bool(config.secret_get("speech:" + key))}
+         "key_configured": bool(service_credentials.key(saved.get("profiles", {}).get(key, preset), "speech:" + key))}
         for key, preset in PRESETS.items()]}
 
 
@@ -71,8 +71,12 @@ def save_speech(value: SpeechWrite):
         row = db.get(store.Settings, config.PROFILE_ID)
         profiles = dict((row.speech_config or {}).get("profiles", {}))
         for p in value.profiles:
-            profiles[p.provider] = {"url": p.url, "model": p.model.strip()}
-            config.secret_set("speech:" + p.provider, p.api_key)
+            service_credentials.draft(p.model_dump(), "speech:" + p.provider, row)
+        for p in value.profiles:
+            profiles[p.provider] = {"url": p.url, "model": p.model.strip(),
+                                    "credential_connection_id": p.credential_connection_id}
+            if not p.credential_connection_id:
+                config.secret_set("speech:" + p.provider, p.api_key)
         row.speech_config = {"selected": value.selected, "profiles": profiles}
         db.commit()
     return speech_settings()
@@ -110,7 +114,7 @@ async def transcribe(file: UploadFile = File(), request_id: str = Form(max_lengt
         call_id = call.id
     status, error_message = "failed", "语音识别未完成"
     try:
-        headers = {"Authorization": "Bearer " + config.secret_get("speech:" + selected)}
+        headers = {"Authorization": "Bearer " + service_credentials.key(profile, "speech:" + selected)}
         async with httpx.AsyncClient(timeout=75, follow_redirects=False) as client:
             if selected == "bailian":
                 response = await client.post(profile["url"] + "/chat/completions", headers=headers, json={

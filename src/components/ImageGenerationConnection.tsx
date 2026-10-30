@@ -8,6 +8,7 @@ import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { SoftSelect } from "./ui/soft-select";
+import { SharedCredentialSource } from "./SharedCredentials";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,7 @@ export function ImageGenerationConnection() {
       model: form.model.trim(),
       size: form.size.trim(),
       response_format: form.response_format,
+      credential_connection_id: form.credential_connection_id ?? null,
       api_key: clearKey ? "" : key || null,
     };
   }
@@ -139,7 +141,7 @@ export function ImageGenerationConnection() {
   const canSave = Boolean(
     form.url.trim() &&
     form.model.trim() &&
-    (key.trim() || (status.key_configured && !clearKey)),
+    (form.credential_connection_id || key.trim() || (status.key_configured && !clearKey)),
   );
   return (
     <ConnectionCard
@@ -241,7 +243,9 @@ export function ImageGenerationConnection() {
                 autoComplete="off"
               />
             </div>
-            <div className="form-field">
+            <SharedCredentialSource connectionId={form.credential_connection_id} url={form.url} disabled={busy}
+              onChange={(id) => { change({ credential_connection_id: id }); setKey(""); setClearKey(false); }} />
+            {!form.credential_connection_id && <div className="form-field">
               <div className="image-generation-key-label">
                 <Label htmlFor="image-generation-key">API 密钥</Label>
                 {status.key_configured && (
@@ -281,7 +285,7 @@ export function ImageGenerationConnection() {
                 }
                 autoComplete="new-password"
               />
-            </div>
+            </div>}
             <div className="form-field">
               <Label htmlFor="image-generation-size">尺寸（可选）</Label>
               <Input

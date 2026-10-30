@@ -24,6 +24,7 @@ import {
 } from "./ui/dialog";
 import { errorMessage } from "@/lib/utils";
 import "../styles/embedding-settings.css";
+import { SharedCredentialSource } from "./SharedCredentials";
 
 type Status = components["schemas"]["EmbeddingRead"];
 const initial: Status = {
@@ -86,6 +87,7 @@ export function EmbeddingSettings() {
         enabled: form.enabled,
         url: form.url,
         model: form.model,
+        credential_connection_id: form.credential_connection_id ?? null,
         api_key: clear ? "" : key || null,
       });
       setStatus(value);
@@ -202,7 +204,9 @@ export function EmbeddingSettings() {
                 placeholder="例如：qwen3.7-text-embedding-flash"
               />
             </div>
-            <div className="form-field">
+            <SharedCredentialSource connectionId={form.credential_connection_id} url={form.url} disabled={busy}
+              onChange={(id) => { change({ credential_connection_id: id }); setKey(""); setClear(false); }} />
+            {!form.credential_connection_id && <div className="form-field">
               <div className="embedding-label-row">
                 <Label htmlFor="embedding-key">
                   <KeyRound size={13} />
@@ -246,7 +250,7 @@ export function EmbeddingSettings() {
                       : "输入 API 密钥"
                 }
               />
-            </div>
+            </div>}
           </div>
           {error && <ErrorNotice message={error} />}
           {(status.error || status.indexing) && (

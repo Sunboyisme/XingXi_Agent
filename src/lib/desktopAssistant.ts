@@ -32,6 +32,7 @@ type SpeechProfile = {
   url: string;
   model: string;
   key_configured: boolean;
+  credential_connection_id?: string | null;
   api_key?: string;
 };
 export type SpeechSettings = {

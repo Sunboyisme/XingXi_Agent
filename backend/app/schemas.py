@@ -391,7 +391,11 @@ class MessageRead(RecordRead):
     has_learning_course: bool = False
 
 
-class ImageGenerationWrite(BaseModel):
+class CredentialBinding(BaseModel):
+    credential_connection_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+
+
+class ImageGenerationWrite(CredentialBinding):
     enabled: bool = False
     url: HttpUrl = "https://api.openai.com/v1"
     model: str = Field(default="", max_length=200)
@@ -411,7 +415,7 @@ class ImageGenerationWrite(BaseModel):
         return self
 
 
-class ImageGenerationRead(BaseModel):
+class ImageGenerationRead(CredentialBinding):
     enabled: bool = False
     url: str = "https://api.openai.com/v1"
     model: str = ""
@@ -431,7 +435,7 @@ class ImageGenerationTestRead(BaseModel):
     http_status: int | None = None
 
 
-class EmbeddingWrite(BaseModel):
+class EmbeddingWrite(CredentialBinding):
     enabled: bool = False
     url: HttpUrl = "https://api.openai.com/v1"
     model: str = Field(default="", max_length=200)
@@ -454,7 +458,7 @@ class EmbeddingWrite(BaseModel):
         return self
 
 
-class EmbeddingRead(BaseModel):
+class EmbeddingRead(CredentialBinding):
     enabled: bool = False
     url: str = "https://api.openai.com/v1"
     model: str = ""

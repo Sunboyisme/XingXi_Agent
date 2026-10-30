@@ -13,7 +13,7 @@ import httpx
 from langchain_core.tools import tool
 from sqlalchemy import select
 
-from . import artifacts, config, schemas
+from . import artifacts, config, schemas, service_credentials
 from .db import Artifact, RunEvent, Session, Settings
 from .runs import emit
 
@@ -23,7 +23,7 @@ def settings():
         row = db.get(Settings, config.PROFILE_ID)
         saved = row.image_generation_config if row else {}
     return schemas.ImageGenerationRead(
-        **(saved or {}), key_configured=bool(config.secret_get("image_generation"))
+        **(saved or {}), key_configured=bool(service_credentials.key(saved or {}, "image_generation"))
     ).model_dump()
 
 
@@ -66,6 +66,11 @@ def request_spec(value, prompt):
         return "dashscope", url, body
     if not parsed.path.endswith("/images/generations"):
         url += "/images/generations"
+    if host == "api.siliconflow.cn":
+        body = {"model": value["model"], "prompt": prompt}
+        if value.get("size") and value["size"] != "auto":
+            body["image_size"] = value["size"]
+        return "siliconflow", url, body
     body = {"model": value["model"], "prompt": prompt, "n": 1}
     if value["size"]:
         body["size"] = value["size"]
@@ -77,7 +82,7 @@ def request_spec(value, prompt):
 def response_image(payload):
     if not isinstance(payload, dict):
         return None
-    data = payload.get("data")
+    data = payload.get("data") or payload.get("images")
     if isinstance(data, list) and data and isinstance(data[0], dict):
         return data[0]
     output = payload.get("output")
@@ -241,7 +246,7 @@ async def generate(run_id, prompt, name):
         })
 
     image, result = await request_image(
-        value, config.secret_get("image_generation"), prompt, progress
+        value, service_credentials.key(value, "image_generation"), prompt, progress
     )
     if image is not None:
         await progress("save")

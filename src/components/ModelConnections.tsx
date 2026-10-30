@@ -32,6 +32,7 @@ import { ConfirmDelete, ErrorNotice, Toast } from "./common";
 import { errorMessage } from "@/lib/utils";
 import { effortOptions } from "@/lib/reasoningEffort";
 import { ChatIcon, ConnectionIcon } from "./SoftIcons";
+import { QuickModelSetup } from "./QuickModelSetup";
 
 type Connection = Settings["providers"][number];
 type Draft = Connection & { api_key?: string | null };
@@ -70,11 +71,13 @@ function modelThinkingControl(model: Connection["models"][number]) {
 export function ModelConnections({
   settings,
   onSaved,
+  onQuickSaved,
   contextTarget,
   onContextTargetHandled,
 }: {
   settings: Settings;
   onSaved: (value: Settings) => void;
+  onQuickSaved?: (value: Settings) => void;
   contextTarget?: ModelContextTarget;
   onContextTargetHandled?: () => void;
 }) {
@@ -368,14 +371,15 @@ export function ModelConnections({
           <span className="model-hub-eyebrow">对话与推理</span>
           <h2>模型连接</h2>
           <p>
-            每个连接独立保存接口、模型和密钥。先添加服务商，再从中选择默认对话模型。
+            可快速配置常用能力，也可手动添加接口和模型。
           </p>
         </div>
         <Button className="model-add-button" onClick={add} disabled={busy}>
           <Plus size={15} />
-          添加模型连接
+          手动添加连接
         </Button>
       </div>
+      <QuickModelSetup onSaved={onQuickSaved || onSaved} />
       {!draft && notice && (
         <Toast message={notice} onClose={() => setNotice("")} />
       )}
@@ -441,7 +445,7 @@ export function ModelConnections({
                 </div>
                 <span className={`connection-state ${ready ? "ready" : ""}`}>
                   <i />
-                  {ready ? "可使用" : "待完善"}
+                  {ready ? "已配置" : "待完善"}
                 </span>
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>

@@ -317,10 +317,12 @@ def image_generation_settings():
 @router.put("/settings/image-generation", response_model=s.ImageGenerationRead)
 def save_image_generation(value: s.ImageGenerationWrite, db=Depends(database)):
     from . import image_generation
-    key = secret_get("image_generation") if value.api_key is None else value.api_key.strip()
+    from . import service_credentials
+    key = service_credentials.draft(value.model_dump(mode="json"), "image_generation", db.get(store.Settings, PROFILE_ID))
     if value.enabled and not key:
         raise HTTPException(400, "请填写图片生成 API 密钥。")
-    secret_set("image_generation", value.api_key)
+    if not value.credential_connection_id:
+        secret_set("image_generation", value.api_key)
     db.get(store.Settings, PROFILE_ID).image_generation_config = value.model_dump(
         mode="json", exclude={"api_key"}
     )
@@ -331,7 +333,8 @@ def save_image_generation(value: s.ImageGenerationWrite, db=Depends(database)):
 @router.post("/settings/image-generation/test", response_model=s.ImageGenerationTestRead)
 async def test_image_generation(value: s.ImageGenerationWrite):
     from . import image_generation
-    key = secret_get("image_generation") if value.api_key is None else value.api_key.strip()
+    from . import service_credentials
+    key = service_credentials.draft(value.model_dump(mode="json"), "image_generation")
     if not value.model:
         raise HTTPException(400, "请填写图片模型名称。")
     if not key:
@@ -341,12 +344,15 @@ async def test_image_generation(value: s.ImageGenerationWrite):
 
 @router.put("/settings/embedding", response_model=s.EmbeddingRead)
 def save_embedding(value: s.EmbeddingWrite, db=Depends(database)):
-    key = secret_get("embedding") if value.api_key is None else value.api_key.strip()
+    from . import service_credentials
+    key = service_credentials.draft(value.model_dump(mode="json"), "embedding", db.get(store.Settings, PROFILE_ID))
     if value.enabled and not key:
         raise HTTPException(400, "请填写 Embedding API 密钥。")
-    secret_set("embedding", value.api_key)
+    if not value.credential_connection_id:
+        secret_set("embedding", value.api_key)
     db.get(store.Settings, PROFILE_ID).embedding_config = {
         "enabled": value.enabled, "url": str(value.url).rstrip("/"), "model": value.model,
+        "credential_connection_id": value.credential_connection_id,
     }
     db.commit()
     retrieval.last_error = ""
@@ -356,7 +362,7 @@ def save_embedding(value: s.EmbeddingWrite, db=Depends(database)):
 @router.post("/settings/embedding/test")
 async def test_embedding():
     value = retrieval.settings()
-    if not value.get("model") or not secret_get("embedding"):
+    if not value.get("model") or not retrieval.credential_key(value):
         raise HTTPException(400, "请先保存 Embedding 模型与密钥。")
     try:
         vector = retrieval.checked(await retrieval.client(value, purpose="connection_test").aembed_query("连接测试"))
@@ -485,6 +491,13 @@ def get_run_tools(run_id: str, db=Depends(database)):
 def update_settings(value: s.SettingsUpdate, db=Depends(database)):
     settings = db.get(store.Settings, PROFILE_ID)
     profiles = {x["id"]: x for x in model_profiles.profiles(settings)}
+    from . import service_credentials
+    updates = [(p.id, p.model_url) for p in value.providers] if value.providers is not None else [("custom", value.model_url)]
+    for connection_id, next_url in updates:
+        previous = profiles.get(connection_id)
+        references = service_credentials.dependents(settings, connection_id)
+        if previous and references and service_credentials.origin(previous["model_url"]) != service_credentials.origin(next_url):
+            raise HTTPException(409, "这个连接仍被" + "、".join(references) + "共享密钥，请先在能力连接中更换密钥来源，再修改接口域名。")
     default_provider = value.default_provider or settings.default_provider
     if value.providers is not None:
         for profile in value.providers:
@@ -528,6 +541,10 @@ def delete_model_provider(provider_id: str, db=Depends(database)):
     profiles = model_profiles.profiles(settings)
     if not any(x["id"] == provider_id for x in profiles):
         raise HTTPException(404, "模型连接不存在。")
+    from . import service_credentials
+    references = service_credentials.dependents(settings, provider_id)
+    if references:
+        raise HTTPException(409, "这个连接仍被" + "、".join(references) + "共享密钥，请先在能力连接中更换密钥来源。")
     try:
         secret_set(model_profiles.secret_ref(provider_id), "")
     except Exception:
@@ -1452,4 +1469,6 @@ router.include_router(desktop_assistant.router)
 router.include_router(common_texts.router)
 router.include_router(pomodoro.router)
 router.include_router(tts.router)
+from . import quick_setup
+router.include_router(quick_setup.router)
 app.include_router(router)

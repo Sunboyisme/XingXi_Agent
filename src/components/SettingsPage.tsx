@@ -40,6 +40,7 @@ import type { RuntimeEditorState } from "@/lib/runtimeEditor";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { UsageCosts } from "./UsageCosts";
 import { errorMessage } from "@/lib/utils";
+import { SharedCredentialsContext } from "./SharedCredentials";
 import "../styles/desktop-assistant.css";
 import "../styles/settings-page.css";
 
@@ -74,7 +75,7 @@ const settingGroups = [
         id: "connections",
         label: "模型连接",
         icon: ConnectionIcon,
-        keywords: "LLM 服务商 API 密钥 对话 推理 上下文 思考 默认模型",
+        keywords: "LLM 服务商 API 密钥 对话 推理 上下文 思考 默认模型 快速配置 硅基流动 百炼",
       },
       {
         id: "services",
@@ -188,6 +189,7 @@ export function SettingsPage({
 }) {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [capabilityRevision, setCapabilityRevision] = useState(0);
   const [openedTabs, setOpenedTabs] = useState(() => new Set([tab]));
   const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -263,13 +265,17 @@ export function SettingsPage({
           <ModelConnections
             settings={settings}
             onSaved={onSaved}
+            onQuickSaved={(value) => {
+              onSaved(value);
+              setCapabilityRevision((revision) => revision + 1);
+            }}
             contextTarget={tab === "connections" ? contextTarget : undefined}
             onContextTargetHandled={onContextTargetHandled}
           />
         );
       case "services":
         return (
-          <section className="settings-group">
+          <section className="settings-group" key={capabilityRevision}>
             <h2>扩展能力</h2>
             <div className="connections-services">
               <EmbeddingSettings />
@@ -319,6 +325,7 @@ export function SettingsPage({
   }
 
   return (
+    <SharedCredentialsContext.Provider value={settings.providers}>
     <div className="settings-page">
       <aside className="settings-sidebar" aria-label="设置导航">
         <div className="settings-sidebar-header">
@@ -440,5 +447,6 @@ export function SettingsPage({
         </div>
       </div>
     </div>
+    </SharedCredentialsContext.Provider>
   );
 }

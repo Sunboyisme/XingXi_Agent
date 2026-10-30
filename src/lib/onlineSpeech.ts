@@ -110,6 +110,7 @@ export class OnlineSpeechPlayer {
           );
         profile = {
           provider: selected.provider,
+          credential_connection_id: selected.credential_connection_id ?? null,
           url: selected.url,
           model: selected.model,
           voice: selected.voice,

@@ -284,6 +284,8 @@ export interface components {
         };
         /** EmbeddingRead */
         EmbeddingRead: {
+            /** Credential Connection Id */
+            credential_connection_id?: string | null;
             /**
              * Enabled
              * @default false
@@ -327,6 +329,8 @@ export interface components {
         };
         /** EmbeddingWrite */
         EmbeddingWrite: {
+            /** Credential Connection Id */
+            credential_connection_id?: string | null;
             /**
              * Enabled
              * @default false
@@ -445,6 +449,8 @@ export interface components {
         };
         /** ImageGenerationRead */
         ImageGenerationRead: {
+            /** Credential Connection Id */
+            credential_connection_id?: string | null;
             /**
              * Enabled
              * @default false
@@ -498,6 +504,8 @@ export interface components {
         };
         /** ImageGenerationWrite */
         ImageGenerationWrite: {
+            /** Credential Connection Id */
+            credential_connection_id?: string | null;
             /**
              * Enabled
              * @default false
@@ -1698,6 +1706,38 @@ export interface components {
             /** Api Key */
             api_key?: string | null;
         };
+        /** QuickPresetRead */
+        QuickPresetRead: {
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "siliconflow" | "bailian";
+            /** Label */
+            label: string;
+            /** Description */
+            description: string;
+            /** Key Url */
+            key_url: string;
+        };
+        /** QuickSetupRead */
+        QuickSetupRead: {
+            settings: components["schemas"]["SettingsRead"];
+            /** Connection Id */
+            connection_id: string;
+            /** Items */
+            items: components["schemas"]["SetupItem"][];
+        };
+        /** QuickSetupWrite */
+        QuickSetupWrite: {
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "siliconflow" | "bailian";
+            /** Api Key */
+            api_key: string;
+        };
         /** ReminderAction */
         ReminderAction: {
             /**
@@ -1982,6 +2022,23 @@ export interface components {
             /** Default Provider */
             default_provider?: string | null;
         };
+        /** SetupItem */
+        SetupItem: {
+            /** Capability */
+            capability: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "configured" | "preserved" | "unavailable";
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /** Message */
+            message: string;
+        };
         /** SkillPreview */
         SkillPreview: {
             /** Preview Id */
@@ -2038,6 +2095,8 @@ export interface components {
         };
         /** SpeechProfile */
         SpeechProfile: {
+            /** Credential Connection Id */
+            credential_connection_id?: string | null;
             /**
              * Provider
              * @enum {string}
@@ -2099,6 +2158,8 @@ export interface components {
         };
         /** TTSProfileRead */
         TTSProfileRead: {
+            /** Credential Connection Id */
+            credential_connection_id?: string | null;
             /**
              * Provider
              * @enum {string}
@@ -2115,6 +2176,8 @@ export interface components {
         };
         /** TTSProfileWrite */
         TTSProfileWrite: {
+            /** Credential Connection Id */
+            credential_connection_id?: string | null;
             /**
              * Provider
              * @enum {string}

@@ -9,7 +9,8 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from . import config, db as store
+from . import config, db as store, service_credentials
+from .schemas import CredentialBinding
 
 router = APIRouter()
 Provider = Literal["bailian", "siliconflow", "minimax", "custom"]
@@ -92,7 +93,7 @@ PRESETS = [
 ]
 
 
-class TTSProfileWrite(BaseModel):
+class TTSProfileWrite(CredentialBinding):
     provider: Provider
     url: str = Field(max_length=2048)
     model: str = Field(max_length=200)
@@ -115,7 +116,7 @@ class TTSProfileWrite(BaseModel):
         return value.strip()
 
 
-class TTSProfileRead(BaseModel):
+class TTSProfileRead(CredentialBinding):
     provider: Provider
     url: str
     model: str
@@ -148,7 +149,7 @@ def settings():
     for preset in PRESETS:
         profile = {key: getattr(preset, key) for key in ("provider", "url", "model", "voice")}
         profile.update((saved.get("profiles") or {}).get(preset.provider, {}))
-        profiles.append(TTSProfileRead(**profile, key_configured=bool(config.secret_get("tts:" + preset.provider))))
+        profiles.append(TTSProfileRead(**profile, key_configured=bool(service_credentials.key(profile, "tts:" + preset.provider))))
     return TTSSettingsRead(selected=saved.get("selected", "bailian"), profiles=profiles, presets=PRESETS)
 
 
@@ -158,8 +159,11 @@ def save_settings(value: TTSSettingsWrite):
         row = db.get(store.Settings, config.PROFILE_ID)
         profiles = dict((row.tts_config or {}).get("profiles", {}))
         for profile in value.profiles:
+            service_credentials.draft(profile.model_dump(), "tts:" + profile.provider, row)
+        for profile in value.profiles:
             profiles[profile.provider] = profile.model_dump(exclude={"provider", "api_key"})
-            config.secret_set("tts:" + profile.provider, profile.api_key)
+            if not profile.credential_connection_id:
+                config.secret_set("tts:" + profile.provider, profile.api_key)
         row.tts_config = {"selected": value.selected, "profiles": profiles}
         db.commit()
     return settings()
@@ -227,7 +231,7 @@ async def synthesize(value):
     if profile is None:
         saved = settings()
         profile = TTSProfileWrite(**next(p.model_dump() for p in saved.profiles if p.provider == saved.selected))
-    key = config.secret_get("tts:" + profile.provider) if profile.api_key is None else profile.api_key.strip()
+    key = service_credentials.draft(profile.model_dump(), "tts:" + profile.provider)
     if not profile.url or not profile.model or not profile.voice or (profile.provider != "custom" and not key):
         raise HTTPException(400, "请在「连接与设置 → 能力连接 → 语音朗读」配置接口、模型、音色和密钥")
     url, body = request_spec(profile, value.text)

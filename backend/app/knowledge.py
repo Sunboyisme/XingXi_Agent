@@ -70,7 +70,7 @@ def status():
                            and v.signature == retrieval.signature(value)) for c in chunks)
         return {"enabled": enabled(db), "documents": len(documents), "chunks": len(chunks), "indexed": indexed,
                 "parsing": sum(d.status in {"queued", "parsing"} for d in documents),
-                "mode": "hybrid" if value.get("enabled") and config.secret_get("embedding") and indexed and not index_error else "keyword",
+                "mode": "hybrid" if value.get("enabled") and retrieval.credential_key(value) and indexed and not index_error else "keyword",
                 "indexing": enabled(db) and bool(value.get("enabled")) and indexed < len(chunks),
                 "error": index_error}
 
@@ -240,7 +240,7 @@ async def index_once():
     global index_error
     value = retrieval.settings()
     with store.Session() as db:
-        if not enabled(db) or not value.get("enabled") or not config.secret_get("embedding"):
+        if not enabled(db) or not value.get("enabled") or not retrieval.credential_key(value):
             return
         chunks = list(db.scalars(select(store.KnowledgeChunk).join(store.KnowledgeDocument).where(
             store.KnowledgeDocument.profile_id == config.PROFILE_ID)))
@@ -295,7 +295,7 @@ async def retrieve(query, run_id=None):
     lexical = sorted(((retrieval.keyword_score(query, c.content), c.id) for c, _ in rows), reverse=True)
     lists = [[key for score, key in lexical if score > 0][:20]]
     eligible = [c for c, _ in rows if (v := vectors.get(c.id)) and v.content_hash == c.content_hash and v.signature == retrieval.signature(value)]
-    if eligible and value.get("enabled") and config.secret_get("embedding"):
+    if eligible and value.get("enabled") and retrieval.credential_key(value):
         try:
             with usage_cost.scope(run_id=run_id, purpose="knowledge_query"):
                 vector = retrieval.checked(await retrieval.client(value, purpose="knowledge_query").aembed_query(query[:6000]))
