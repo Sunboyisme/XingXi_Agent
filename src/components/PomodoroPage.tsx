@@ -11,6 +11,8 @@ import {
   Trash2,
   Pencil,
   Check,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -37,18 +39,16 @@ import "../styles/pomodoro.css";
 
 export function PomodoroPage() {
   const { data, error, busy, remaining, refresh } = usePomodoro();
-  const [title, setTitle] = useState("");
   const [windowError, setWindowError] = useState("");
-  const loadedSession = useRef<string | null | undefined>(undefined);
+  const [presetPage, setPresetPage] = useState(0);
   const [dialog, setDialog] = useState<"add" | "settings" | null>(null);
   useEffect(() => {
     if (!data) return;
-    const id = data.session?.id ?? null;
-    if (id !== loadedSession.current) {
-      loadedSession.current = id;
-      if (id) setTitle(data.session?.title || "");
-    }
-  }, [data?.session?.id, data?.session?.title]);
+    const index = data.preferences.presets.findIndex(
+      (preset) => preset.id === data.preferences.selected_preset,
+    );
+    setPresetPage(Math.max(0, Math.floor(index / 6)));
+  }, [data?.preferences.selected_preset]);
   if (!data)
     return (
       <section className="pomodoro-page">
@@ -64,11 +64,17 @@ export function PomodoroPage() {
   const preset = data.preferences.presets.find(
     (p) => p.id === data.preferences.selected_preset,
   )!;
-  const canEditTitle = data.phase === "idle" || data.phase === "waiting_focus";
+  const readyForFocus = data.phase === "idle" || data.phase === "waiting_focus";
+  const pageCount = Math.ceil(data.preferences.presets.length / 6);
+  const currentPage = Math.min(presetPage, pageCount - 1);
+  const visiblePresets = data.preferences.presets.slice(
+    currentPage * 6,
+    currentPage * 6 + 6,
+  );
   const isBreak = data.phase === "break" || data.phase === "waiting_break";
   const minutes = isBreak
     ? data.session!.break_minutes
-    : canEditTitle
+    : readyForFocus
       ? preset.focus_minutes
       : data.session!.focus_minutes;
   const progress =
@@ -78,7 +84,7 @@ export function PomodoroPage() {
   async function act(action: Parameters<typeof pomodoroAction>[0]) {
     setWindowError("");
     try {
-      const next = await pomodoroAction(action, title);
+      const next = await pomodoroAction(action);
       if (
         next?.phase === "focus" &&
         next.status === "running" &&
@@ -93,16 +99,13 @@ export function PomodoroPage() {
         }
       }
     } catch {
-      /* The shared clock displays the error without losing this draft. */
+      /* The shared clock displays the failed action. */
     }
   }
   return (
     <section className="pomodoro-page">
       <header className="pomodoro-heading">
-        <div>
-          <h1>番茄钟</h1>
-          <p>专注眼前，时间交给小曦。</p>
-        </div>
+        <h1>番茄钟</h1>
         <Hint label="番茄钟设置">
           <Button
             variant="ghost"
@@ -128,9 +131,6 @@ export function PomodoroPage() {
           data-phase={data.phase}
         >
           <div className="pomodoro-card-top">
-            <span className="pomodoro-section-label">
-              {isBreak ? "放松片刻" : "当下专注"}
-            </span>
             <span className="pomodoro-state">
               <i aria-hidden="true" />
               {pomodoroStatus(data)}
@@ -179,22 +179,6 @@ export function PomodoroPage() {
               </span>
             </div>
           </div>
-          <div className="pomodoro-topic-area">
-            {canEditTitle ? (
-              <Input
-                aria-label="本轮专注事项（可选）"
-                maxLength={80}
-                placeholder="这次，想专心做什么？"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            ) : (
-              <p>
-                {data.session?.title ||
-                  (isBreak ? "让眼睛和身体休息一下" : "做好眼前这一件事")}
-              </p>
-            )}
-          </div>
           <div className="pomodoro-controls">
             <Button
               className="pomodoro-primary"
@@ -222,7 +206,7 @@ export function PomodoroPage() {
               </Hint>
             )}
           </div>
-          {isBreak ? (
+          {isBreak && (
             <Button
               className="pomodoro-footnote"
               variant="ghost"
@@ -232,31 +216,58 @@ export function PomodoroPage() {
               <SkipForward size={14} />
               跳过休息
             </Button>
-          ) : (
-            <p className="pomodoro-footnote">开始专注后，主窗口会自动收起</p>
           )}
         </section>
         <aside className="pomodoro-side">
           <section className="pomodoro-rhythm-card">
             <div className="pomodoro-section-heading">
               <h2>专注节奏</h2>
-              <Hint label="新增自定义预设">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="新增自定义预设"
-                  onClick={() => setDialog("add")}
-                >
-                  <Plus size={17} />
-                </Button>
-              </Hint>
+              <div className="pomodoro-preset-tools">
+                {pageCount > 1 && (
+                  <div className="pomodoro-preset-pages" aria-label="预设翻页">
+                    <Hint label="上一组预设">
+                      <button
+                        type="button"
+                        aria-label="上一组预设"
+                        disabled={currentPage === 0}
+                        onClick={() => setPresetPage(currentPage - 1)}
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                    </Hint>
+                    <span>
+                      {currentPage + 1}/{pageCount}
+                    </span>
+                    <Hint label="下一组预设">
+                      <button
+                        type="button"
+                        aria-label="下一组预设"
+                        disabled={currentPage + 1 === pageCount}
+                        onClick={() => setPresetPage(currentPage + 1)}
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </Hint>
+                  </div>
+                )}
+                <Hint label="新增自定义预设">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="新增自定义预设"
+                    onClick={() => setDialog("add")}
+                  >
+                    <Plus size={17} />
+                  </Button>
+                </Hint>
+              </div>
             </div>
             <div
               className="pomodoro-presets"
               role="group"
               aria-label="专注与休息时长预设"
             >
-              {data.preferences.presets.map((value) => (
+              {visiblePresets.map((value) => (
                 <Hint
                   key={value.id}
                   label={`专注 ${value.focus_minutes} 分钟，休息 ${value.break_minutes} 分钟；用于下一轮`}
@@ -290,7 +301,6 @@ export function PomodoroPage() {
           <section className="pomodoro-history-card">
             <div className="pomodoro-section-heading">
               <h2>专注积累</h2>
-              <span>每一段都算数</span>
             </div>
             <div className="pomodoro-statistics" aria-label="专注统计">
               {(
