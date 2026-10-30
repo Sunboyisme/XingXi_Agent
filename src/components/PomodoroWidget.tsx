@@ -15,7 +15,7 @@ import {
 import "../styles/pomodoro-widget.css";
 
 export function PomodoroWidget() {
-  const { data, remaining, busy, error } = usePomodoro();
+  const { data, remaining, busy, error, refresh } = usePomodoro();
   const [localError, setLocalError] = useState("");
   const drag = useRef<{ x: number; y: number; pointer: number } | null>(null);
   useDesktopHitRegions(".pomodoro-widget,.pomodoro-widget-menu,.ui-hint");
@@ -28,41 +28,44 @@ export function PomodoroWidget() {
     };
   }, []);
   const primary = data ? primaryPomodoroAction(data) : null;
-  const status = !data
-    ? "读取中"
-    : data.status === "paused"
-      ? "已暂停"
-      : {
-          idle: "待开始",
-          focus: "专注",
-          break: "休息",
-          waiting_break: "待休息",
-          waiting_focus: "待开始",
-        }[data.phase];
+  const status = data ? pomodoroStatus(data, true) : "读取中";
   const fail = (cause: unknown) =>
     setLocalError(cause instanceof Error ? cause.message : String(cause));
-  const openPage = () =>
+  const openPage = () => {
+    setLocalError("");
     void invoke("desktop_main", { page: "pomodoro" }).catch(fail);
+  };
   async function act(action: Parameters<typeof pomodoroAction>[0]) {
     setLocalError("");
     try {
-      await pomodoroAction(action, data?.session?.title || "");
+      await pomodoroAction(action);
     } catch {
       /* The same clock exposes the failed action through its inline Hint. */
     }
   }
   function down(event: PointerEvent<HTMLElement>) {
-    if (event.button !== 0 || (event.target as Element).closest("button"))
+    if (
+      !event.isPrimary ||
+      event.button !== 0 ||
+      (event.target as Element).closest("button")
+    )
       return;
     drag.current = {
       x: event.clientX,
       y: event.clientY,
       pointer: event.pointerId,
     };
+    setLocalError("");
     event.currentTarget.setPointerCapture(event.pointerId);
   }
   function move(event: PointerEvent<HTMLElement>) {
     const gesture = drag.current;
+    if (!(event.buttons & 1)) {
+      drag.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
     if (
       !gesture ||
       gesture.pointer !== event.pointerId ||
@@ -96,12 +99,6 @@ export function PomodoroWidget() {
               label={
                 <>
                   {data ? pomodoroStatus(data) : "读取番茄钟"}
-                  {data?.session?.title && (
-                    <>
-                      <br />
-                      {data.session.title}
-                    </>
-                  )}
                   <br />
                   按住拖动，右键可返回默认位置
                 </>
@@ -121,10 +118,23 @@ export function PomodoroWidget() {
               </div>
             </Hint>
             {(localError || error) && (
-              <Hint side="bottom" label={localError || error}>
+              <Hint
+                side="bottom"
+                label={
+                  <>
+                    {localError || error}
+                    <br />
+                    重新读取计时状态
+                  </>
+                }
+              >
                 <button
                   className="pomodoro-widget-error"
-                  aria-label={localError || error}
+                  aria-label="重新读取番茄钟状态"
+                  onClick={() => {
+                    setLocalError("");
+                    void refresh();
+                  }}
                 >
                   <CircleAlert size={14} />
                 </button>
@@ -171,7 +181,10 @@ export function PomodoroWidget() {
             collisionPadding={8}
           >
             <ContextMenu.Item
-              onSelect={() => void invoke("pomodoro_widget_reset").catch(fail)}
+              onSelect={() => {
+                setLocalError("");
+                void invoke("pomodoro_widget_reset").catch(fail);
+              }}
             >
               返回默认位置
             </ContextMenu.Item>

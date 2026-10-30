@@ -60,6 +60,10 @@ export function DesktopPet() {
   const rub = useRef<{ extreme: number; direction: number; turns: number; since: number } | null>(null);
   const rubCooldown = useRef(0);
   const suppressClick = useRef(false);
+  const pendingClick = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const doubleClickMs = useRef(500);
+  function cancelPetClick() { clearTimeout(pendingClick.current); pendingClick.current = undefined; }
+  function updateDoubleClickInterval(value?: number) { if (value && Number.isFinite(value)) doubleClickMs.current = value; }
   const taskFingerprint = useRef("");
   const position = useRef({ x: 0, y: 0, scale: 1 });
   function acceptTasks(values: DesktopTaskActivity[]) {
@@ -123,8 +127,9 @@ export function DesktopPet() {
     const w = getCurrentWindow();
     let alive = true;
     let layoutSeen = false;
-    const acceptPreferences = (value: { preferences: DesktopPreferences }) => {
+    const acceptPreferences = (value: { preferences: DesktopPreferences; doubleClickMs?: number }) => {
       if (!alive) return;
+      updateDoubleClickInterval(value.doubleClickMs);
       layoutSeen = true;
       setLayout({
         size: value.preferences.petSize,
@@ -142,7 +147,7 @@ export function DesktopPet() {
     void update();
     const moved = w.onMoved(() => void update());
     const focus = w.onFocusChanged((event) => {
-      if (!event.payload) { setMenu(false); setFocused(false); }
+      if (!event.payload) { cancelPetClick(); setMenu(false); setFocused(false); }
     });
     const refreshUnread = (value?: DesktopTaskRead) => {
       const unread = value ? inbox.read(value) : inbox.list();
@@ -178,6 +183,7 @@ export function DesktopPet() {
           if (!alive || value.epoch <= presenceEpoch.current) return;
           presenceEpoch.current = value.epoch;
           presencePhase.current = value.shown ? "enter" : "leave";
+          cancelPetClick();
           hoverState.current = false;
           setHovered(false);
           setFocused(false);
@@ -268,10 +274,12 @@ export function DesktopPet() {
           preferences: DesktopPreferences;
           quickShown: boolean;
           quickEpoch: number;
+          doubleClickMs?: number;
         }>("desktop_preferences"),
       )
       .then(async (value) => {
         if (!alive) return;
+        updateDoubleClickInterval(value.doubleClickMs);
         if (!layoutSeen) acceptPreferences(value);
         acceptQuickPresence({ shown: value.quickShown, epoch: value.quickEpoch });
         const shown = await w.isVisible();
@@ -283,6 +291,7 @@ export function DesktopPet() {
       .catch(() => {});
     return () => {
       alive = false;
+      cancelPetClick();
       window.removeEventListener("pointermove", strokePointer);
       window.removeEventListener("storage", storage);
       listeners.forEach((p) => void p.then((f) => f()).catch(() => {}));
@@ -475,6 +484,7 @@ export function DesktopPet() {
         className="pet-avatar"
         onDoubleClick={event => {
           if ((event.target as HTMLElement).closest(".pet-hover-tools")) return;
+          cancelPetClick();
           if (suppressClick.current || drag.current?.moved) return;
           openMainWindow();
         }}
@@ -482,12 +492,14 @@ export function DesktopPet() {
         onBlurCapture={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
         onContextMenu={(e) => {
           e.preventDefault();
+          cancelPetClick();
           setError("");
           void getCurrentWindow().setFocus();
           setMenu((m) => !m);
         }}
         onPointerDown={(e) => {
           if (e.button === 0) {
+            cancelPetClick();
             e.currentTarget.querySelector("button")?.setPointerCapture(e.pointerId);
             suppressClick.current = false;
             rub.current = null;
@@ -544,8 +556,13 @@ export function DesktopPet() {
             gazeRange={Infinity}
             pressFeedback="blink"
             onClick={(event) => {
+              cancelPetClick();
               if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; return false; }
-              if (event.detail <= 1) void invoke("pomodoro_show_controls", { focus: event.detail === 0 }).catch(error => setError(desktopError(error)));
+              if (event.detail === 0) void invoke("pomodoro_show_controls", { focus: true }).catch(error => setError(desktopError(error)));
+              else if (event.detail === 1) pendingClick.current = setTimeout(() => {
+                pendingClick.current = undefined;
+                void invoke("pomodoro_show_controls", { focus: false }).catch(error => setError(desktopError(error)));
+              }, doubleClickMs.current);
             }}
           />
         </span>

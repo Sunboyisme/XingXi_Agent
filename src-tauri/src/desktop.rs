@@ -167,7 +167,8 @@ pub fn desktop_preferences(app: tauri::AppHandle) -> serde_json::Value {
     let d = app.state::<Desktop>();
     let quick_epoch = d.quick_epoch.load(Ordering::SeqCst);
     let quick_shown = app.get_webview_window("quick").is_some_and(|w| w.is_visible().unwrap_or(false));
-    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"selectionShortcutError":app.state::<crate::selection::Selection>().shortcut_error.lock().unwrap().clone(),"quickShown":quick_shown,"quickEpoch":quick_epoch})
+    let double_click_ms = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime() };
+    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"selectionShortcutError":app.state::<crate::selection::Selection>().shortcut_error.lock().unwrap().clone(),"quickShown":quick_shown,"quickEpoch":quick_epoch,"doubleClickMs":double_click_ms})
 }
 #[tauri::command]
 pub async fn desktop_preferences_save(

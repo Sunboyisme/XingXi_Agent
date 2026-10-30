@@ -8,7 +8,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tauri::{Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Listener, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_notification::NotificationExt;
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -23,6 +23,7 @@ pub struct Widget {
     active: AtomicBool,
     suppressed: AtomicBool,
     preview_until: Mutex<Option<Instant>>,
+    latest_snapshot: Mutex<Option<(u64, f64)>>,
 }
 fn placement_path(app: &tauri::AppHandle) -> PathBuf {
     app.state::<crate::Backend>()
@@ -256,7 +257,43 @@ fn finish_drag(app: &tauri::AppHandle) {
     state.dragging.store(false, Ordering::SeqCst);
     let _ = place_widget(app);
 }
+fn accept_snapshot(app: &tauri::AppHandle, value: &serde_json::Value) -> bool {
+    let (Some(revision), Some(server_now), Some(phase)) = (
+        value["revision"].as_u64(),
+        value["server_now"].as_f64(),
+        value["phase"].as_str(),
+    ) else {
+        return false;
+    };
+    if !server_now.is_finite()
+        || !["idle", "focus", "break", "waiting_break", "waiting_focus"].contains(&phase)
+    {
+        return false;
+    }
+    let state = app.state::<Widget>();
+    let mut latest = state.latest_snapshot.lock().unwrap();
+    if latest.is_some_and(|(old_revision, old_time)| {
+        revision < old_revision || (revision == old_revision && server_now <= old_time)
+    }) {
+        return false;
+    }
+    *latest = Some((revision, server_now));
+    let active = phase != "idle";
+    let was_active = state.active.swap(active, Ordering::SeqCst);
+    if active || was_active {
+        state.preview_until.lock().unwrap().take();
+    }
+    true
+}
 pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
+    let bridge = app.clone();
+    app.listen("pomodoro-snapshot", move |event| {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(event.payload()) {
+            if accept_snapshot(&bridge, &value) {
+                refresh_visibility(&bridge);
+            }
+        }
+    });
     std::thread::spawn(move || {
         let Ok(client) = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(2))
@@ -277,9 +314,9 @@ pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
                     if response.status().is_success() {
                         if let Ok(value) = response.json::<serde_json::Value>() {
                             if let Some(sequence) = value["notification_seq"].as_u64() {
-                                let active = value["phase"] != "idle";
-                                app.state::<Widget>().active.store(active, Ordering::SeqCst);
-                                let _ = app.emit("pomodoro-snapshot", &value);
+                                if accept_snapshot(&app, &value) {
+                                    let _ = app.emit("pomodoro-snapshot", &value);
+                                }
                                 if seen.is_some_and(|previous| sequence > previous) {
                                     app.state::<Widget>()
                                         .suppressed

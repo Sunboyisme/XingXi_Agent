@@ -52,13 +52,11 @@ class PomodoroSettingsWrite(PomodoroPreferences):
 class PomodoroAction(BaseModel):
     action: Literal["start_focus", "start_break", "pause", "resume", "end", "skip_break", "pause_exit"]
     expected_revision: int | None = Field(default=None, ge=0)
-    title: str = Field(default="", max_length=80)
 
 
 class PomodoroSessionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
-    title: str
     focus_minutes: int
     break_minutes: int
 
@@ -247,7 +245,7 @@ def action(value: PomodoroAction):
             if previous and previous.ended_at is None:
                 previous.ended_at = current
             preset = selected(state)
-            session = store.PomodoroSession(title=value.title.strip(), focus_minutes=preset.focus_minutes,
+            session = store.PomodoroSession(focus_minutes=preset.focus_minutes,
                                             break_minutes=preset.break_minutes)
             db.add(session)
             db.flush()

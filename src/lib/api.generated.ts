@@ -1468,11 +1468,6 @@ export interface components {
             action: "start_focus" | "start_break" | "pause" | "resume" | "end" | "skip_break" | "pause_exit";
             /** Expected Revision */
             expected_revision?: number | null;
-            /**
-             * Title
-             * @default
-             */
-            title: string;
         };
         /** PomodoroPreferences */
         PomodoroPreferences: {
@@ -1524,8 +1519,6 @@ export interface components {
         PomodoroSessionRead: {
             /** Id */
             id: string;
-            /** Title */
-            title: string;
             /** Focus Minutes */
             focus_minutes: number;
             /** Break Minutes */

@@ -7,14 +7,19 @@ import { errorMessage } from "./utils";
 
 export type Pomodoro = components["schemas"]["PomodoroRead"];
 export type PomodoroPreferences = components["schemas"]["PomodoroPreferences"];
-export type PomodoroPreset = components["schemas"]["PomodoroPreset"];
 type Action = components["schemas"]["PomodoroAction"]["action"];
 type ClockStore = {
   data: Pomodoro | null;
-  error: string;
+  connectionError: string;
+  actionError: string;
   busy: boolean;
 };
-let store: ClockStore = { data: null, error: "", busy: false };
+let store: ClockStore = {
+  data: null,
+  connectionError: "",
+  actionError: "",
+  busy: false,
+};
 const subscribers = new Set<() => void>();
 let stop: (() => void) | undefined;
 let reading: Promise<void> | undefined;
@@ -31,13 +36,14 @@ function accept(value: Pomodoro) {
       (value.revision === old.revision && value.server_now < old.server_now))
   )
     return;
-  publish({ data: value, error: "" });
+  publish({ data: value, connectionError: "" });
 }
-export function refreshPomodoro() {
+function refreshPomodoro(clearActionError = false) {
+  if (clearActionError) publish({ actionError: "" });
   if (!reading)
     reading = api<Pomodoro>("/pomodoro", "GET", undefined, { timeoutMs: 5000 })
       .then(accept)
-      .catch((cause) => publish({ error: errorMessage(cause) }))
+      .catch((cause) => publish({ connectionError: errorMessage(cause) }))
       .finally(() => {
         reading = undefined;
       });
@@ -47,18 +53,24 @@ function subscribe(callback: () => void) {
   subscribers.add(callback);
   if (subscribers.size === 1) {
     let alive = true;
-    const unlisten = isTauri()
+    const native = isTauri();
+    let lastNativeSnapshot = performance.now();
+    const unlisten = native
       ? listen<Pomodoro>("pomodoro-snapshot", (event) => {
+          lastNativeSnapshot = performance.now();
           if (alive) accept(event.payload);
         })
       : undefined;
     void unlisten?.catch((cause) => {
-      if (alive) publish({ error: errorMessage(cause) });
+      if (alive) publish({ connectionError: errorMessage(cause) });
     });
-    // Native snapshots arrive every second; browser development has its own single polling source.
+    // Poll only when the native bridge is silent; browser development has no bridge.
     const timer = window.setInterval(
-      () => void refreshPomodoro(),
-      isTauri() ? 10_000 : 1000,
+      () => {
+        if (!native || performance.now() - lastNativeSnapshot > 5000)
+          void refreshPomodoro();
+      },
+      native ? 5000 : 1000,
     );
     const focus = () => void refreshPomodoro();
     window.addEventListener("focus", focus);
@@ -95,32 +107,37 @@ export function usePomodoro() {
           : state.data.remaining_seconds,
       )
     : 0;
-  return { ...state, remaining, refresh: refreshPomodoro };
+  return {
+    data: state.data,
+    busy: state.busy,
+    error: state.actionError || state.connectionError,
+    remaining,
+    refresh: () => refreshPomodoro(true),
+  };
 }
 async function write(path: string, method: string, body: object) {
   if (store.busy) throw new Error("番茄钟正在保存，请稍候再试。");
-  publish({ busy: true, error: "" });
+  publish({ busy: true, actionError: "" });
   try {
     const value = await api<Pomodoro>(path, method, body, { timeoutMs: 5000 });
     accept(value);
-    if (isTauri()) void emit("pomodoro-snapshot", value).catch(() => {});
+    if (isTauri()) await emit("pomodoro-snapshot", value).catch(() => {});
     return value;
   } catch (cause) {
     await refreshPomodoro();
-    publish({ error: errorMessage(cause) });
+    publish({ actionError: errorMessage(cause) });
     throw cause;
   } finally {
     publish({ busy: false });
   }
 }
-export async function pomodoroAction(action: Action, title = "") {
-  if (!store.data && action !== "pause_exit") return Promise.resolve(undefined);
-  const value = await write("/pomodoro/actions", "POST", {
+export function pomodoroAction(action: Action) {
+  if (!store.data && action !== "pause_exit")
+    return Promise.reject(new Error("番茄钟尚未读取完成，请稍后重试。"));
+  return write("/pomodoro/actions", "POST", {
     action,
-    title,
     expected_revision: store.data?.revision,
   });
-  return value;
 }
 export function savePomodoroPreferences(
   preferences: PomodoroPreferences,
@@ -137,15 +154,16 @@ export function formatCountdown(seconds: number) {
     .toString()
     .padStart(2, "0")}:${(value % 60).toString().padStart(2, "0")}`;
 }
-export function pomodoroStatus(data: Pomodoro) {
+const phaseLabels = {
+  idle: ["准备开始", "待开始"],
+  focus: ["专注中", "专注"],
+  break: ["休息中", "休息"],
+  waiting_break: ["专注完成", "待休息"],
+  waiting_focus: ["准备下一轮", "待开始"],
+} as const;
+export function pomodoroStatus(data: Pomodoro, compact = false) {
   if (data.status === "paused") return "已暂停";
-  return {
-    idle: "准备开始",
-    focus: "专注中",
-    waiting_break: "专注完成",
-    break: "休息中",
-    waiting_focus: "准备下一轮",
-  }[data.phase];
+  return phaseLabels[data.phase][compact ? 1 : 0];
 }
 export function primaryPomodoroAction(data: Pomodoro): {
   action: Action;

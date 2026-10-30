@@ -163,7 +163,7 @@
   font-size: 12px;
   color: var(--ui-color-text-muted);
 }
-.pomodoro-footnote {
+.pomodoro-skip {
   flex-shrink: 0;
   height: 28px;
   min-height: 28px;
@@ -493,4 +493,21 @@
   .pomodoro-ring-progress {
     transition: none;
   }
+}
+
+.pomodoro-settings {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+.pomodoro-editor {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.pomodoro-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
 }

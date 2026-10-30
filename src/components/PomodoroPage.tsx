@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -8,22 +8,12 @@ import {
   Settings2,
   SkipForward,
   Square,
-  Trash2,
-  Pencil,
   Check,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
+import { PomodoroSettings } from "./PomodoroSettings";
 import { ErrorNotice, Hint } from "./common";
 import {
   formatCountdown,
@@ -32,23 +22,25 @@ import {
   primaryPomodoroAction,
   savePomodoroPreferences,
   usePomodoro,
-  type Pomodoro,
-  type PomodoroPreferences,
 } from "@/lib/pomodoro";
 import "../styles/pomodoro.css";
+
+const presetsPerPage = 6;
 
 export function PomodoroPage() {
   const { data, error, busy, remaining, refresh } = usePomodoro();
   const [windowError, setWindowError] = useState("");
   const [presetPage, setPresetPage] = useState(0);
   const [dialog, setDialog] = useState<"add" | "settings" | null>(null);
-  useEffect(() => {
-    if (!data) return;
-    const index = data.preferences.presets.findIndex(
+  const selectedPresetIndex =
+    data?.preferences.presets.findIndex(
       (preset) => preset.id === data.preferences.selected_preset,
+    ) ?? 0;
+  useEffect(() => {
+    setPresetPage(
+      Math.max(0, Math.floor(selectedPresetIndex / presetsPerPage)),
     );
-    setPresetPage(Math.max(0, Math.floor(index / 6)));
-  }, [data?.preferences.selected_preset]);
+  }, [data?.preferences.selected_preset, selectedPresetIndex]);
   if (!data)
     return (
       <section className="pomodoro-page">
@@ -65,11 +57,11 @@ export function PomodoroPage() {
     (p) => p.id === data.preferences.selected_preset,
   )!;
   const readyForFocus = data.phase === "idle" || data.phase === "waiting_focus";
-  const pageCount = Math.ceil(data.preferences.presets.length / 6);
+  const pageCount = Math.ceil(data.preferences.presets.length / presetsPerPage);
   const currentPage = Math.min(presetPage, pageCount - 1);
   const visiblePresets = data.preferences.presets.slice(
-    currentPage * 6,
-    currentPage * 6 + 6,
+    currentPage * presetsPerPage,
+    (currentPage + 1) * presetsPerPage,
   );
   const isBreak = data.phase === "break" || data.phase === "waiting_break";
   const minutes = isBreak
@@ -208,7 +200,7 @@ export function PomodoroPage() {
           </div>
           {isBreak && (
             <Button
-              className="pomodoro-footnote"
+              className="pomodoro-skip"
               variant="ghost"
               disabled={busy}
               onClick={() => void act("skip_break")}
@@ -343,255 +335,5 @@ export function PomodoroPage() {
         />
       )}
     </section>
-  );
-}
-
-function PomodoroSettings({
-  data,
-  mode,
-  onClose,
-}: {
-  data: Pomodoro;
-  mode: "add" | "settings";
-  onClose: () => void;
-}) {
-  const [preferences, setPreferences] = useState<PomodoroPreferences>(
-    data.preferences,
-  );
-  const originalPreferences = useRef(JSON.stringify(data.preferences));
-  const [focus, setFocus] = useState("25");
-  const [rest, setRest] = useState("5");
-  const [editing, setEditing] = useState<string>();
-  const [errors, setErrors] = useState({ focus: "", rest: "", form: "" });
-  const [saving, setSaving] = useState(false);
-  const custom = preferences.presets.filter(
-    (p) => !p.id.startsWith("builtin-"),
-  );
-  function addPreset() {
-    const f = /^\d+$/.test(focus) ? Number(focus) : NaN;
-    const b = /^\d+$/.test(rest) ? Number(rest) : NaN;
-    const nextErrors = {
-      focus:
-        !Number.isInteger(f) || f < 1 || f > 180
-          ? "请输入 1–180 的整数分钟"
-          : "",
-      rest:
-        !Number.isInteger(b) || b < 1 || b > 60 ? "请输入 1–60 的整数分钟" : "",
-      form: "",
-    };
-    setErrors(nextErrors);
-    if (nextErrors.focus || nextErrors.rest) return;
-    if (!editing && preferences.presets.length >= 24) {
-      setErrors({
-        ...nextErrors,
-        form: "最多保存 20 个自定义预设，请先删除不需要的预设。",
-      });
-      return;
-    }
-    const preset = {
-      id: editing || crypto.randomUUID(),
-      focus_minutes: f,
-      break_minutes: b,
-    };
-    const next = {
-      ...preferences,
-      selected_preset: preset.id,
-      presets: editing
-        ? preferences.presets.map((p) => (p.id === editing ? preset : p))
-        : [...preferences.presets, preset],
-    };
-    setPreferences(next);
-    setEditing(undefined);
-    return next;
-  }
-  async function save(value: PomodoroPreferences) {
-    if (JSON.stringify(data.preferences) !== originalPreferences.current) {
-      setErrors((old) => ({
-        ...old,
-        form: "设置已在另一窗口更新，请关闭后重新打开。",
-      }));
-      return;
-    }
-    setSaving(true);
-    try {
-      await savePomodoroPreferences(value, data.revision);
-      onClose();
-    } catch (cause) {
-      setErrors((old) => ({
-        ...old,
-        form: cause instanceof Error ? cause.message : "保存失败，请重试。",
-      }));
-    } finally {
-      setSaving(false);
-    }
-  }
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !saving) onClose();
-      }}
-    >
-      <DialogContent className="pomodoro-settings">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "add" ? "自定义专注节奏" : "番茄钟设置"}
-          </DialogTitle>
-          <DialogDescription>
-            专注与休息都由你手动开始，时长修改用于下一轮。
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (mode === "add") {
-              const next = addPreset();
-              if (next) void save(next);
-            } else void save(preferences);
-          }}
-        >
-          {mode === "settings" && (
-            <>
-              <label className="pomodoro-sound">
-                <span>到时播放一声短提示音</span>
-                <input
-                  type="checkbox"
-                  checked={preferences.sound_enabled}
-                  disabled={saving}
-                  onChange={(event) =>
-                    setPreferences((old) => ({
-                      ...old,
-                      sound_enabled: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-              <div className="pomodoro-custom-list">
-                <strong>自定义预设</strong>
-                {!custom.length && <p>还没有自定义预设，可以在下方添加。</p>}
-                {custom.map((p) => (
-                  <div key={p.id}>
-                    <span>
-                      专注 {p.focus_minutes} 分钟 / 休息 {p.break_minutes} 分钟
-                    </span>
-                    <Hint label="编辑预设">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={saving}
-                        aria-label={`编辑 ${p.focus_minutes}/${p.break_minutes} 预设`}
-                        onClick={() => {
-                          setEditing(p.id);
-                          setFocus(String(p.focus_minutes));
-                          setRest(String(p.break_minutes));
-                        }}
-                      >
-                        <Pencil size={15} />
-                      </Button>
-                    </Hint>
-                    <Hint label="删除预设">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={saving}
-                        aria-label={`删除 ${p.focus_minutes}/${p.break_minutes} 预设`}
-                        onClick={() => {
-                          setPreferences((old) => ({
-                            ...old,
-                            presets: old.presets.filter((v) => v.id !== p.id),
-                            selected_preset:
-                              old.selected_preset === p.id
-                                ? "builtin-25-5"
-                                : old.selected_preset,
-                          }));
-                          if (editing === p.id) setEditing(undefined);
-                        }}
-                      >
-                        <Trash2 size={15} />
-                      </Button>
-                    </Hint>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          <div className="pomodoro-duration-fields">
-            <label htmlFor="pomodoro-focus-minutes">
-              专注（分钟）
-              <Input
-                id="pomodoro-focus-minutes"
-                inputMode="numeric"
-                value={focus}
-                disabled={saving}
-                onChange={(event) => setFocus(event.target.value)}
-                aria-invalid={Boolean(errors.focus)}
-                aria-describedby={
-                  errors.focus ? "pomodoro-focus-error" : undefined
-                }
-              />
-              {errors.focus && (
-                <span className="field-error" id="pomodoro-focus-error">
-                  {errors.focus}
-                </span>
-              )}
-            </label>
-            <label htmlFor="pomodoro-break-minutes">
-              休息（分钟）
-              <Input
-                id="pomodoro-break-minutes"
-                inputMode="numeric"
-                value={rest}
-                disabled={saving}
-                onChange={(event) => setRest(event.target.value)}
-                aria-invalid={Boolean(errors.rest)}
-                aria-describedby={
-                  errors.rest ? "pomodoro-break-error" : undefined
-                }
-              />
-              {errors.rest && (
-                <span className="field-error" id="pomodoro-break-error">
-                  {errors.rest}
-                </span>
-              )}
-            </label>
-          </div>
-          {mode === "settings" && (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={saving}
-              onClick={() => addPreset()}
-            >
-              {editing ? "更新这个预设" : "添加预设"}
-            </Button>
-          )}
-          {errors.form && (
-            <p className="field-error" role="alert">
-              {errors.form}
-            </p>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={saving}
-              onClick={onClose}
-            >
-              取消
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving
-                ? "正在保存…"
-                : mode === "add"
-                  ? "添加并使用"
-                  : "保存设置"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

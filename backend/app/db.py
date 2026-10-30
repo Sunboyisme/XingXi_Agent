@@ -631,6 +631,7 @@ class PomodoroState(Base):
 
 class PomodoroSession(Record, Base):
     __tablename__ = "pomodoro_sessions"
+    # Retain existing user data and portable-schema compatibility after removing the topic input.
     title: Mapped[str] = mapped_column(String(80), default="")
     focus_minutes: Mapped[int] = mapped_column(Integer)
     break_minutes: Mapped[int] = mapped_column(Integer)
