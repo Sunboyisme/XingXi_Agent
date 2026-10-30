@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-30",
+  "source": "Original procedural synthesis; no third-party samples.",
+  "status": "Candidates for user selection; not connected to the application.",
+  "sample_rate_hz": 48000,
+  "channels": 2,
+  "pcm_bits": 16,
+  "comparison_gap_seconds": 0.8,
+  "proposals": [
+    {
+      "id": "01-soft-duet",
+      "name": "轻柔双音",
+      "duration": 1.45,
+      "character": "两声柔和上行，简洁、清楚，作为默认款的候选。",
+      "peak_dbfs": -8.93,
+      "wav": "01-soft-duet.wav",
+      "mp3": "01-soft-duet.mp3"
+    },
+    {
+      "id": "02-wooden-taps",
+      "name": "木质轻敲",
+      "duration": 1.2,
+      "character": "三次短促木质敲击，干净、低调，尾音较短。",
+      "peak_dbfs": -8.72,
+      "wav": "02-wooden-taps.wav",
+      "mp3": "02-wooden-taps.mp3"
+    },
+    {
+      "id": "03-glass-chimes",
+      "name": "清透风铃",
+      "duration": 1.95,
+      "character": "带轻微空间尾音的清透铃声，完成感更鲜明。",
+      "peak_dbfs": -9.09,
+      "wav": "03-glass-chimes.wav",
+      "mp3": "03-glass-chimes.mp3"
+    },
+    {
+      "id": "04-warm-chord",
+      "name": "温暖和弦",
+      "duration": 1.85,
+      "character": "低一些的电钢琴式和弦，圆润、平静。",
+      "peak_dbfs": -6.3,
+      "wav": "04-warm-chord.wav",
+      "mp3": "04-warm-chord.mp3"
+    },
+    {
+      "id": "05-soft-bubbles",
+      "name": "软糯气泡",
+      "duration": 1.05,
+      "character": "两颗轻弹气泡，圆润、活泼，呼应小曦软团形象。",
+      "peak_dbfs": -9.87,
+      "wav": "05-soft-bubbles.wav",
+      "mp3": "05-soft-bubbles.mp3"
+    },
+    {
+      "id": "06-little-finish",
+      "name": "完成小乐句",
+      "duration": 2.05,
+      "character": "四音上行的小乐句，完成一轮时更有轻量庆祝感。",
+      "peak_dbfs": -9.73,
+      "wav": "06-little-finish.wav",
+      "mp3": "06-little-finish.mp3"
+    }
+  ]
+}
