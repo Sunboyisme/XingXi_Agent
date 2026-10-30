@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type SoftIconProps = { size?: number; className?: string };
 
 /**
- * 侧栏与列表用的圆润图标：粗圆头线条，外形下方叠一层底色，
+ * 圆润图标：粗圆头线条，外形下方叠一层底色，
  * 由样式控制底色透明度（选中时淡淡填充，平时不显示）。
  */
 function softIcon(name: string, shape: ReactNode, details?: ReactNode) {
@@ -96,6 +96,12 @@ export const ConnectionIcon = softIcon(
   "ConnectionIcon",
   <rect x="4.25" y="5.5" width="15.5" height="13" rx="3" />,
   <path d="M8 9.5h8M8 14.5h4.5" />,
+);
+
+export const MicrophoneIcon = softIcon(
+  "MicrophoneIcon",
+  <rect x="8" y="3.5" width="8" height="11" rx="4" />,
+  <path d="M5.5 10.5v1a6.5 6.5 0 0 0 13 0v-1M12 18v2.5M9.5 20.5h5" />,
 );
 
 export const MemoryIcon = softIcon(

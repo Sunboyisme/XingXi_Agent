@@ -1,7 +1,10 @@
-import { LoaderCircle, Mic, RotateCw } from "lucide-react";
+import { LoaderCircle, RotateCw } from "lucide-react";
 import { Hint } from "./common";
+import { MicrophoneIcon } from "./SoftIcons";
 import type { SpeechInputController } from "@/lib/useSpeechInput";
 import "../styles/speech-input.css";
+
+const VOICE_BAR_FACTORS = [0.35, 0.65, 1, 0.65, 0.35];
 
 export function SpeechInputButton({
   speech,
@@ -13,6 +16,10 @@ export function SpeechInputButton({
   desktopShortcut?: boolean;
 }) {
   const v = speech.voice;
+  const level =
+    v?.phase === "recording" && Number.isFinite(v.level)
+      ? Math.min(1, Math.max(0, v.level) * 1.8)
+      : 0;
   const state =
     v?.phase === "recording"
       ? `正在录音 ${Math.floor(v.seconds)} 秒，点击结束`
@@ -47,24 +54,23 @@ export function SpeechInputButton({
         disabled={disabled && !speech.busy}
         onClick={speech.toggle}
       >
-        {v?.phase === "starting" || v?.phase === "transcribing" ? (
-          <LoaderCircle size={19} className="speech-input-spinner" />
-        ) : v?.retryable ? (
-          <RotateCw size={19} />
-        ) : (
-          <Mic size={19} />
-        )}
-        {v?.phase === "recording" && (
+        {v?.phase === "recording" ? (
           <span className="speech-input-waves" aria-hidden="true">
-            {[0.65, 1, 0.8].map((factor, i) => (
+            {VOICE_BAR_FACTORS.map((factor, i) => (
               <i
                 key={i}
                 style={{
-                  height: `${4 + Math.min(1, v.level * 3) * 10 * factor}px`,
+                  transform: `scaleY(${(4 + level * 14 * factor) / 18})`,
                 }}
               />
             ))}
           </span>
+        ) : v?.phase === "starting" || v?.phase === "transcribing" ? (
+          <LoaderCircle size={19} className="speech-input-spinner" />
+        ) : v?.retryable ? (
+          <RotateCw size={19} />
+        ) : (
+          <MicrophoneIcon size={20} />
         )}
       </button>
     </Hint>
