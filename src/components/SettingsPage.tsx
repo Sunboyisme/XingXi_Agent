@@ -25,6 +25,7 @@ import { MemoryPage } from "./MemoryPage";
 import { EmbeddingSettings } from "./EmbeddingSettings";
 import { SearchConnection } from "./SearchConnection";
 import { ImageGenerationConnection } from "./ImageGenerationConnection";
+import { TTSConnection } from "./TTSConnection";
 import { SkillsSettings } from "./SkillsSettings";
 import { DataSettings } from "./DataSettings";
 import { ScriptRuntimeSettings } from "./ScriptRuntimeSettings";
@@ -72,7 +73,7 @@ const settingGroups = [
         id: "services",
         label: "能力连接",
         icon: AudioLines,
-        keywords: "向量 嵌入 embedding 语音 识别 图片 生成 联网 搜索 Tavily",
+        keywords: "向量 嵌入 embedding 语音 识别 朗读 TTS 音色 百炼 硅基流动 MiniMax 图片 生成 联网 搜索 Tavily",
       },
       {
         id: "tools",
@@ -267,6 +268,7 @@ export function SettingsPage({
                 onConfigureHandled={onSpeechConfigureHandled}
               />
               <ImageGenerationConnection />
+              <TTSConnection active={tab === "services"} />
               <SearchConnection settings={settings} onSaved={onSaved} />
             </div>
           </section>

@@ -1986,6 +1986,97 @@ export interface components {
             /** Exercise Id */
             exercise_id?: string | null;
         };
+        /** TTSPreset */
+        TTSPreset: {
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "bailian" | "siliconflow" | "minimax" | "custom";
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+            /** Model */
+            model: string;
+            /** Voice */
+            voice: string;
+            /** Models */
+            models: string[];
+            /** Voices */
+            voices: components["schemas"]["TTSVoice"][];
+            /** Description */
+            description: string;
+            /** Docs Url */
+            docs_url: string;
+        };
+        /** TTSProfileRead */
+        TTSProfileRead: {
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "bailian" | "siliconflow" | "minimax" | "custom";
+            /** Url */
+            url: string;
+            /** Model */
+            model: string;
+            /** Voice */
+            voice: string;
+            /** Key Configured */
+            key_configured: boolean;
+        };
+        /** TTSProfileWrite */
+        TTSProfileWrite: {
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "bailian" | "siliconflow" | "minimax" | "custom";
+            /** Url */
+            url: string;
+            /** Model */
+            model: string;
+            /** Voice */
+            voice: string;
+            /** Api Key */
+            api_key?: string | null;
+        };
+        /** TTSSettingsRead */
+        TTSSettingsRead: {
+            /**
+             * Selected
+             * @enum {string}
+             */
+            selected: "bailian" | "siliconflow" | "minimax" | "custom";
+            /** Profiles */
+            profiles: components["schemas"]["TTSProfileRead"][];
+            /** Presets */
+            presets: components["schemas"]["TTSPreset"][];
+        };
+        /** TTSSettingsWrite */
+        TTSSettingsWrite: {
+            /**
+             * Selected
+             * @enum {string}
+             */
+            selected: "bailian" | "siliconflow" | "minimax" | "custom";
+            /** Profiles */
+            profiles: components["schemas"]["TTSProfileWrite"][];
+        };
+        /** TTSSynthesisWrite */
+        TTSSynthesisWrite: {
+            /** Text */
+            text: string;
+            profile?: components["schemas"]["TTSProfileWrite"] | null;
+        };
+        /** TTSVoice */
+        TTSVoice: {
+            /** Value */
+            value: string;
+            /** Label */
+            label: string;
+        };
         /** TaskRead */
         TaskRead: {
             /** Id */

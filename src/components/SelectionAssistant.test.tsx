@@ -13,6 +13,8 @@ const mock = vi.hoisted(() => ({
   invoke: vi.fn(),
   readEvents: vi.fn(),
   copyText: vi.fn(),
+  playSpeech: vi.fn(),
+  stopSpeech: vi.fn(),
   handlers: new Map<string, (value: any) => void>(),
 }));
 vi.mock("@/lib/desktopAssistant", async (importOriginal) => ({
@@ -39,12 +41,23 @@ vi.mock("./BaiAvatar", () => ({
 }));
 vi.mock("@/lib/commonTexts", () => ({ notifyCommonTextsChanged: vi.fn() }));
 vi.mock("@/lib/clipboard", () => ({ copyText: mock.copyText }));
+vi.mock("@/lib/onlineSpeech", () => ({
+  OnlineSpeechPlayer: class {
+    play(text: string, options: unknown) {
+      return mock.playSpeech(text, options);
+    }
+    stop() {
+      mock.stopSpeech();
+    }
+  },
+}));
 import { SelectionAssistant } from "./SelectionAssistant";
 
 beforeEach(() => {
   vi.clearAllMocks();
   mock.handlers.clear();
   mock.copyText.mockResolvedValue(undefined);
+  mock.playSpeech.mockResolvedValue(undefined);
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -244,42 +257,46 @@ test("an earlier success timer cannot dismiss a fresh selection or a switched ac
   );
 });
 
-test("source and translated speech are scoped and a fresh selection stops playback", async () => {
+test("online source and translation playback ignore old completion and stop on a fresh selection", async () => {
+  let finishSource!: () => void;
+  let finishTranslation!: () => void;
+  mock.playSpeech
+    .mockImplementationOnce((_text, options) => {
+      options.onPhase("playing");
+      return new Promise<void>((resolve) => {
+        finishSource = resolve;
+      });
+    })
+    .mockImplementationOnce((_text, options) => {
+      options.onPhase("playing");
+      return new Promise<void>((resolve) => {
+        finishTranslation = resolve;
+      });
+    });
   render(<SelectionAssistant />);
   fireEvent.click(await screen.findByRole("button", { name: "朗读选中文字" }));
   await waitFor(() =>
-    expect(mock.invoke).toHaveBeenCalledWith("read_aloud_start", {
-      selectionId: 2,
-      id: expect.any(String),
-      text: "春天到了，花开了。",
-    }),
+    expect(mock.playSpeech).toHaveBeenCalledWith(
+      "春天到了，花开了。",
+      expect.any(Object),
+    ),
   );
-  const sourceId = mock.invoke.mock.calls.find(
-    (call) => call[0] === "read_aloud_start",
-  )![1].id;
+  const stoppedBeforeSwitch = mock.stopSpeech.mock.calls.length;
   fireEvent.click(screen.getByRole("button", { name: "翻译" }));
   await screen.findByText("结果");
-  expect(mock.invoke).toHaveBeenCalledWith("read_aloud_stop", { id: sourceId });
+  expect(mock.stopSpeech.mock.calls.length).toBeGreaterThan(
+    stoppedBeforeSwitch,
+  );
   fireEvent.click(screen.getByRole("button", { name: "朗读译文" }));
   await waitFor(() =>
-    expect(mock.invoke).toHaveBeenLastCalledWith("read_aloud_start", {
-      selectionId: 2,
-      id: expect.any(String),
-      text: "结果",
-    }),
+    expect(mock.playSpeech).toHaveBeenLastCalledWith(
+      "结果",
+      expect.any(Object),
+    ),
   );
-  const translationId = mock.invoke.mock.calls
-    .filter((call) => call[0] === "read_aloud_start")
-    .at(-1)![1].id;
-  act(() =>
-    mock.handlers.get("selection-reading")?.({
-      id: sourceId,
-      selectionId: 2,
-      phase: "finished",
-      error: "",
-    }),
-  );
+  await act(async () => finishSource());
   expect(screen.getByRole("button", { name: "停止朗读" })).toBeVisible();
+  const stoppedBeforeSelection = mock.stopSpeech.mock.calls.length;
   act(() =>
     mock.handlers.get("selection-snapshot")?.({
       id: 4,
@@ -289,8 +306,9 @@ test("source and translated speech are scoped and a fresh selection stops playba
       y: 50,
     }),
   );
-  expect(mock.invoke).toHaveBeenCalledWith("read_aloud_stop", {
-    id: translationId,
-  });
+  expect(mock.stopSpeech.mock.calls.length).toBeGreaterThan(
+    stoppedBeforeSelection,
+  );
+  await act(async () => finishTranslation());
   expect(screen.getByRole("button", { name: "朗读选中文字" })).toBeVisible();
 });

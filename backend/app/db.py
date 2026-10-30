@@ -54,6 +54,7 @@ class Settings(Base):
     knowledge_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     image_generation_config: Mapped[dict] = mapped_column(JSON, default=dict)
     speech_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    tts_config: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class SpeechCall(Record, Base):

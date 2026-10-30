@@ -6,7 +6,6 @@ mod drop_files;
 mod desktop;
 mod desktop_input;
 mod selection;
-mod read_aloud;
 mod voice;
 
 use serde::Serialize;
@@ -497,7 +496,6 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(desktop::Desktop::default())
         .manage(selection::Selection::default())
-        .manage(read_aloud::ReadAloud::default())
         .manage(voice::Voice::default())
         .manage(backend)
         .manage(drop_files::DroppedPaths::default())
@@ -524,8 +522,6 @@ fn main() {
             selection::selection_dismiss,
             selection::selection_resize,
             selection::selection_shortcut_recording,
-            read_aloud::read_aloud_start,
-            read_aloud::read_aloud_stop,
             desktop::desktop_preferences_save,
             desktop::desktop_open,
             desktop::desktop_pet_drag,

@@ -1,0 +1,81 @@
+.tts-form {
+  display: grid;
+  gap: 15px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 3px;
+}
+.tts-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+}
+.tts-dialog > [data-slot="dialog-header"],
+.tts-dialog > [data-slot="dialog-footer"] {
+  flex-shrink: 0;
+}
+.tts-form .form-field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+.tts-help {
+  margin: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.tts-voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tts-voice-row input {
+  flex: 1;
+  min-width: 0;
+}
+.tts-voice-row .soft-select {
+  flex-shrink: 0;
+  max-width: 180px;
+}
+.tts-secret-heading,
+.tts-preset-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tts-preset-actions {
+  flex-wrap: wrap;
+}
+.tts-preset-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.tts-model-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tts-footer {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tts-footer > span {
+  margin-right: auto;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+@media (max-width: 560px) {
+  .tts-voice-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .tts-voice-row .soft-select {
+    max-width: 100%;
+  }
+}

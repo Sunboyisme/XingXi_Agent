@@ -439,7 +439,11 @@ export function SelectionAssistant() {
               }}
             >
               {reading.kind === "source" ? (
-                <Square size={16} />
+                reading.phase === "loading" ? (
+                  <Loader2 size={16} className="spin" />
+                ) : (
+                  <Square size={16} />
+                )
               ) : (
                 <Volume2 size={16} />
               )}
@@ -636,11 +640,19 @@ export function SelectionAssistant() {
                 }}
               >
                 {reading.kind === "translation" ? (
-                  <Square size={14} />
+                  reading.phase === "loading" ? (
+                    <Loader2 size={14} className="spin" />
+                  ) : (
+                    <Square size={14} />
+                  )
                 ) : (
                   <Volume2 size={14} />
                 )}
-                {reading.kind === "translation" ? "停止朗读" : "朗读译文"}
+                {reading.kind === "translation"
+                  ? reading.phase === "loading"
+                    ? "合成中…"
+                    : "停止朗读"
+                  : "朗读译文"}
               </button>
             )}
             {busy ? (
