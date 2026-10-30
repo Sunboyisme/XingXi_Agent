@@ -147,19 +147,6 @@
   overflow: hidden;
 }
 
-@keyframes chat-thinking-dot {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.45;
-  }
-  30% {
-    transform: translateY(-3px);
-    opacity: 1;
-  }
-}
-
 @keyframes chat-buddy-in {
   from {
     opacity: 0;

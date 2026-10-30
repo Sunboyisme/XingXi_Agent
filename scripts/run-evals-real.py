@@ -442,7 +442,6 @@ class Runner:
         return await self.api("POST", "/projects", {"name": name, "workspace_path": workspace})
 
     async def import_knowledge(self):
-        import httpx
         paths = list((MATERIAL / "知识库").glob("*.md"))
         response = await self.client.post("/api/v1/knowledge/import",
             files=[("files", (p.name, p.read_bytes(), "text/markdown")) for p in paths],
@@ -689,7 +688,7 @@ class Runner:
             await self.wait_run(await self.api("POST", "/learning/reviews", {"goal_id": goal["id"], "session_id": self.context["session"]["id"]}))
             self.observe("独立复习记录", await self.api("GET", "/learning/reviews", params={"goal_id": goal["id"]}))
         elif n == 132:
-            chat = await self.prompts(n)
+            await self.prompts(n)
             self.note("实际提醒数据已记录；到点原生弹窗及连续点击防重复未验证。", "partial_execution")
         elif n == 133:
             session = await self.api("GET", f"/learning/sessions/{self.context['session']['id']}")
@@ -837,7 +836,7 @@ class Runner:
             await self.prompts(n)
         elif n == 165:
             await self.prompts(n, indices=[0])
-            chat = await self.prompts(n, indices=[1, 2])
+            await self.prompts(n, indices=[1, 2])
             await self.say("下次面试我要重点准备什么？")
         elif n == 168:
             await self.prompts(n)

@@ -13,7 +13,7 @@
     "backend:bundle": "pwsh -NoProfile -File scripts/build-backend.ps1",
     "release:windows": "pwsh -NoProfile -File scripts/build-installer.ps1",
     "test": "vitest run",
-    "api:types": "uv run --project backend python scripts/export-openapi.py && openapi-typescript .local-data/openapi.json -o src/lib/api.generated.ts",
+    "api:types": "uv run --project backend python scripts/export-openapi.py && node scripts/generate-api-types.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

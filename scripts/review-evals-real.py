@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")

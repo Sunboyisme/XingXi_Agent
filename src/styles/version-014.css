@@ -1803,15 +1803,10 @@ body:has(.reminder-popup),
 
 .ui-hint {
   z-index: 110;
-  max-width: min(320px, calc(100vw - 24px));
-  padding: 5px 8px;
   border: 1px solid var(--ui-color-line);
-  border-radius: 8px;
   background: color-mix(in srgb, var(--ui-color-surface) 96%, transparent);
   box-shadow: 0 5px 16px rgb(50 36 24 / 9%);
   color: var(--ui-color-text);
-  font-size: 11px;
-  line-height: 1.45;
   backdrop-filter: blur(14px);
   animation: navigation-tooltip-in 130ms ease-out;
 }

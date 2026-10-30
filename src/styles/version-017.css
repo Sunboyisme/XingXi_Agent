@@ -110,9 +110,6 @@
 .conversation-row-actions > .conversation-pin[aria-pressed="true"] {
   color: var(--ui-color-action);
 }
-.conversation-row-actions > .conversation-delete {
-  color: var(--ui-color-danger);
-}
 .conversation-row-actions > button:disabled {
   opacity: 0.45;
   cursor: default;
@@ -228,7 +225,6 @@
   outline-offset: 2px;
 }
 .composer-add-menu {
-  width: 220px;
   min-width: 0;
   max-width: calc(100vw - 32px);
   padding: 6px;

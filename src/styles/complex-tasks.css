@@ -187,10 +187,6 @@
 .lesson-stream {
   min-width: 0;
 }
-.ui-hint {
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
 @media (max-width: 600px) {
   .complex-task-card {
     margin-left: 0;

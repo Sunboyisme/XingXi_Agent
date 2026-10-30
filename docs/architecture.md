@@ -20,7 +20,7 @@ flowchart LR
 
 ## 代码分工
 
-- `src/components`：对话、学习、记忆、提醒、设置；`src/lib/api.ts` 统一请求和 SSE，`api.generated.ts` 从 OpenAPI 生成。
+- `src/components`：对话、学习、记忆、提醒、设置；`src/lib/api.ts` 统一请求和 SSE，`api.generated.ts` 通过 `pnpm api:types` 从 OpenAPI 生成，仅保留前端使用的 `components` 数据结构；完整接口描述仍导出到 `.local-data/openapi.json`。
 - `src-tauri/src/main.rs`：启动本机 Python 子进程、连接认证、单实例、托盘、通知窗口、正常退出时停止自己启动的后端。
 - `backend/app/main.py`：受本机 bearer token 保护的领域 API、上传校验、任务入口。
 - `agent.py`：LangChain Agent、搜索/正文/记忆/提醒/学习目标工具及审计。

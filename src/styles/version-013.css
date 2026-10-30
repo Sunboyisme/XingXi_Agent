@@ -587,8 +587,6 @@
   flex-direction: column;
 }
 .calendar-page .plan-toolbar {
-  flex: 0 0 auto;
-  min-height: 64px;
   gap: 12px;
   flex-wrap: nowrap;
 }
@@ -634,8 +632,6 @@
 }
 .calendar-page .plan-weekdays {
   flex: 0 0 auto;
-  padding-top: 9px;
-  padding-bottom: 9px;
 }
 .calendar-page .plan-month-grid {
   flex: 1;

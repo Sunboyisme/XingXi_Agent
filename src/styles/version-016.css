@@ -29,10 +29,6 @@
 .model-dialog-status .error-notice {
   margin: 0;
 }
-.model-dialog-status .connection-notice {
-  align-items: center;
-  min-height: 24px;
-}
 .model-dialog-status .app-feedback.error-notice,
 .model-dialog-status .connection-notice {
   --feedback-accent: var(--ui-color-action);
