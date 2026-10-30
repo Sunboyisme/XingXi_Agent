@@ -1459,6 +1459,100 @@ export interface components {
             /** Reminder At */
             reminder_at?: string | null;
         };
+        /** PomodoroAction */
+        PomodoroAction: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "start_focus" | "start_break" | "pause" | "resume" | "end" | "skip_break" | "pause_exit";
+            /** Expected Revision */
+            expected_revision?: number | null;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** PomodoroPreferences */
+        PomodoroPreferences: {
+            /** Presets */
+            presets: components["schemas"]["PomodoroPreset"][];
+            /** Selected Preset */
+            selected_preset: string;
+            /** Sound Enabled */
+            sound_enabled: boolean;
+        };
+        /** PomodoroPreset */
+        PomodoroPreset: {
+            /** Id */
+            id: string;
+            /** Focus Minutes */
+            focus_minutes: number;
+            /** Break Minutes */
+            break_minutes: number;
+        };
+        /** PomodoroRead */
+        PomodoroRead: {
+            /** Revision */
+            revision: number;
+            /** Server Now */
+            server_now: number;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "idle" | "focus" | "waiting_break" | "break" | "waiting_focus";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "idle" | "running" | "paused" | "waiting";
+            /** Remaining Seconds */
+            remaining_seconds: number;
+            /** Deadline At */
+            deadline_at: number | null;
+            session: components["schemas"]["PomodoroSessionRead"] | null;
+            preferences: components["schemas"]["PomodoroPreferences"];
+            statistics: components["schemas"]["PomodoroStatistics"];
+            /** Notification Seq */
+            notification_seq: number;
+            /** Notification Kind */
+            notification_kind: ("focus_complete" | "break_complete") | null;
+        };
+        /** PomodoroSessionRead */
+        PomodoroSessionRead: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Focus Minutes */
+            focus_minutes: number;
+            /** Break Minutes */
+            break_minutes: number;
+        };
+        /** PomodoroSettingsWrite */
+        PomodoroSettingsWrite: {
+            /** Presets */
+            presets: components["schemas"]["PomodoroPreset"][];
+            /** Selected Preset */
+            selected_preset: string;
+            /** Sound Enabled */
+            sound_enabled: boolean;
+            /** Expected Revision */
+            expected_revision: number;
+        };
+        /** PomodoroStatistics */
+        PomodoroStatistics: {
+            /** Today Seconds */
+            today_seconds: number;
+            /** Week Seconds */
+            week_seconds: number;
+            /** Total Seconds */
+            total_seconds: number;
+            /** Completed Rounds */
+            completed_rounds: number;
+        };
         /** PresentationRead */
         PresentationRead: {
             /** Artifacts */

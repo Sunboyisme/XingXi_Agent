@@ -60,6 +60,12 @@ export const PlanIcon = softIcon(
   <path d="M8.5 4v3.25M15.5 4v3.25M4.5 10.25h15" />,
 );
 
+export const PomodoroIcon = softIcon(
+  "PomodoroIcon",
+  <circle cx="12" cy="13.5" r="7.5" />,
+  <path d="M9.5 2.75h5M12 3v3M17.5 6.5 19 5M12 9.5v4l2.5 1.5" />,
+);
+
 export const KnowledgeIcon = softIcon(
   "KnowledgeIcon",
   <>

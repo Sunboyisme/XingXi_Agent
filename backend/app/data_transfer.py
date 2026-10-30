@@ -22,6 +22,7 @@ COUNTS = {"todos": "待办", "knowledge_documents": "知识库文件", "knowledg
           "learning_sessions": "学习会话", "learning_intakes": "目标访谈", "learning_reviews": "复习记录", "usage_calls": "模型调用", "usage_prices": "计价配置",
           "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
           "common_texts": "常用文本", "common_text_categories": "文本分类",
+          "pomodoro_sessions": "番茄钟轮次", "pomodoro_segments": "专注时间段",
           "memory_vectors": "向量", "reminders": "提醒时间", "goals": "学习目标",
           "attachments": "附件", "office_files": "办公资料", "calendar_events": "计划", "plan_occurrences": "单次状态记录", "plan_segments": "重复规则调整", "artifacts": "工具产物", "complex_tasks": "复杂任务"}
 

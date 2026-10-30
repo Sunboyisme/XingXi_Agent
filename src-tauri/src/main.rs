@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod backend_port;
+mod pomodoro;
 mod window_layout;
 mod drop_files;
 mod desktop;
@@ -496,6 +497,7 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(desktop::Desktop::default())
+        .manage(pomodoro::Widget::default())
         .manage(selection::Selection::default())
         .manage(voice::Voice::default())
         .manage(backend)
@@ -518,6 +520,9 @@ fn main() {
             ensure_window_visible,
             restore_window_layout,
             desktop::desktop_preferences,
+            pomodoro::pomodoro_show_controls,
+            pomodoro::pomodoro_widget_reset,
+            pomodoro::pomodoro_widget_drag,
             selection::selection_snapshot,
             selection::selection_dom_reply,
             selection::selection_dismiss,
@@ -659,6 +664,7 @@ fn main() {
             }
             let is_preview = app.config().identifier.ends_with(".preview");
             desktop::setup(app.handle()).map_err(std::io::Error::other)?;
+            pomodoro::setup(app.handle()).map_err(std::io::Error::other)?;
             let tray_name = if is_preview {
                 "XiaoXi（测试版）"
             } else {
@@ -712,6 +718,7 @@ fn main() {
                     window.show()?;
                 }
             }
+            pomodoro::start(app.handle().clone(), backend_url.clone(), data_dir.clone());
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let client = reqwest::blocking::Client::builder()
@@ -811,7 +818,7 @@ fn main() {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Focused(false)) {
                 window.state::<selection::Selection>().recording.store(false, std::sync::atomic::Ordering::SeqCst);
             }
-            if ["quick", "capture", "pet", "selection"].contains(&window.label()) {
+            if ["quick", "capture", "pet", "selection", "pomodoro-timer"].contains(&window.label()) {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     desktop::desktop_dismiss_label(window.app_handle(),window.label());

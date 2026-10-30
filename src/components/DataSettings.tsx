@@ -19,6 +19,7 @@ type Preview = components["schemas"]["DataImportRead"];
 type Exported = components["schemas"]["DataExportRead"];
 // Category totals count stored records, including each category's related records.
 const countGroups = [
+  { title: "番茄钟", keys: ["pomodoro_sessions", "pomodoro_segments"] },
   { title: "常用文本", keys: ["common_texts", "common_text_categories"] },
   {
     title: "对话",

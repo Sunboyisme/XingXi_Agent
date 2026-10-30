@@ -7,7 +7,7 @@ import {
 test("old and malformed preferences preserve every feature once", () => {
   expect(
     normalizeNavigationOrder(["knowledge", "unknown", "knowledge"]),
-  ).toEqual(["knowledge", "projects", "learning", "plans", "common-texts"]);
+  ).toEqual(["knowledge", "projects", "learning", "plans", "common-texts", "pomodoro"]);
 });
 test("moving a feature preserves the order and presence of the other entries", () => {
   expect(
@@ -16,5 +16,5 @@ test("moving a feature preserves the order and presence of the other entries", (
       "common-texts",
       "projects",
     ),
-  ).toEqual(["common-texts", "projects", "learning", "plans", "knowledge"]);
+  ).toEqual(["common-texts", "projects", "learning", "plans", "knowledge", "pomodoro"]);
 });

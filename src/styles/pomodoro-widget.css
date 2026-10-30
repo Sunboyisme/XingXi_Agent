@@ -1,0 +1,123 @@
+.pomodoro-widget-frame {
+  position: absolute;
+  inset: 0;
+  padding: 8px;
+  pointer-events: none;
+}
+.pomodoro-widget {
+  box-sizing: border-box;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 260px;
+  height: 40px;
+  padding: 5px 7px 5px 5px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 22px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 3px 12px #00000016;
+}
+.pomodoro-widget-drag {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding-left: 2px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+.pomodoro-widget-drag:active {
+  cursor: grabbing;
+}
+.pomodoro-widget-drag > svg {
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
+  opacity: 0.55;
+}
+.pomodoro-widget-drag > span {
+  font-size: 10px;
+  color: var(--ui-color-text-muted);
+  white-space: nowrap;
+}
+.pomodoro-widget-drag > strong {
+  flex: 1;
+  text-align: center;
+  color: var(--ui-color-heading);
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pomodoro-widget-divider {
+  width: 1px;
+  height: 15px;
+  margin: 0 3px;
+  background: var(--ui-color-line);
+}
+html[data-desktop] .pomodoro-widget button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 5px;
+  border-radius: 50%;
+  color: var(--ui-color-text-muted);
+  background: transparent;
+}
+html[data-desktop] .pomodoro-widget .pomodoro-widget-primary {
+  color: var(--ui-color-action);
+  background: color-mix(in srgb, var(--ui-color-action) 12%, transparent);
+}
+html[data-desktop] .pomodoro-widget button:hover {
+  color: var(--ui-color-action);
+  background: var(--surface-hover);
+}
+html[data-desktop] .pomodoro-widget button:focus-visible,
+.pomodoro-widget-drag:focus-visible {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 1px;
+}
+.pomodoro-widget[data-status="waiting"] {
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-action) 60%,
+    var(--ui-color-line)
+  );
+}
+.pomodoro-widget-menu {
+  pointer-events: auto;
+  z-index: 100;
+  min-width: 152px;
+  padding: 5px;
+  border-radius: 11px;
+  border: 1px solid var(--ui-color-line);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 5px 18px #00000020;
+}
+.pomodoro-widget-menu [role="menuitem"] {
+  outline: none;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.pomodoro-widget-menu [data-highlighted] {
+  background: var(--surface-hover);
+  color: var(--ui-color-action);
+}
+
+html[data-desktop="pomodoro-timer"] .ui-hint {
+  max-width: 244px;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}

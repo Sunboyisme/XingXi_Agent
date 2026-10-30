@@ -362,9 +362,9 @@ export function DesktopPet() {
     setCollapsed(true);
     void invoke("desktop_start", { newChat: !voice, voice }).catch(error => { quickVisible.current = false; setQuickShown(false); setError(desktopError(error)); });
   }
-  function startMainChat() {
+  function openMainWindow() {
     setError("");
-    void invoke("desktop_main", { newChat: true }).catch(error => setError(desktopError(error)));
+    void invoke("desktop_main", { page: "current" }).catch(error => setError(desktopError(error)));
   }
   const avatarSize = (82 * layout.size) / 100;
   const avatarTop = layout.y ?? 132;
@@ -473,6 +473,11 @@ export function DesktopPet() {
       <div
         ref={petElement}
         className="pet-avatar"
+        onDoubleClick={event => {
+          if ((event.target as HTMLElement).closest(".pet-hover-tools")) return;
+          if (suppressClick.current || drag.current?.moved) return;
+          openMainWindow();
+        }}
         onFocusCapture={() => setFocused(true)}
         onBlurCapture={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
         onContextMenu={(e) => {
@@ -532,7 +537,7 @@ export function DesktopPet() {
         >
           <BaiAvatar
             interactive
-            label="打开主窗口新对话"
+            label="轻触控制番茄钟，双击打开主窗口"
             activity={activity}
             gesture={gesture}
             presence={presence.phase}
@@ -540,7 +545,7 @@ export function DesktopPet() {
             pressFeedback="blink"
             onClick={(event) => {
               if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; return false; }
-              startMainChat();
+              if (event.detail <= 1) void invoke("pomodoro_show_controls", { focus: event.detail === 0 }).catch(error => setError(desktopError(error)));
             }}
           />
         </span>

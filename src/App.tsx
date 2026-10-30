@@ -61,6 +61,7 @@ import {
   KnowledgeIcon,
   LearningIcon,
   PlanIcon,
+  PomodoroIcon,
   ProjectIcon,
   SettingsIcon,
 } from "./components/SoftIcons";
@@ -72,7 +73,8 @@ import { ProjectsPage } from "./components/ProjectsPage";
 import { NavigationOverflowMenu, NavigationTooltip, type NavigationFeatureItem } from "./components/NavigationOverflowMenu";
 import { ProjectManagement, type ProjectManagementRequest } from "./components/ProjectManagement";
 
-type Page = "chat" | "projects" | "learning" | "plans" | "knowledge" | "common-texts" | "settings";
+type Page = "chat" | "projects" | "learning" | "plans" | "knowledge" | "common-texts" | "pomodoro" | "settings";
+const PomodoroPage = lazy(() => import("./components/PomodoroPage").then(module => ({ default: module.PomodoroPage })));
 const CommonTextsPage = lazy(() => import("./components/CommonTextsPage").then(module => ({ default: module.CommonTextsPage })));
 const KnowledgePage = lazy(() => import("./components/KnowledgePage").then((module) => ({ default: module.KnowledgePage })));
 import type { KnowledgeSource } from "./components/KnowledgeSources";
@@ -97,6 +99,7 @@ const featurePages: NavigationFeatureItem[] = [
   },
   { id: "knowledge", label: "知识库", icon: KnowledgeIcon },
   { id: "common-texts", label: "常用文本", icon: CommonTextsIcon },
+  { id: "pomodoro", label: "番茄钟", icon: PomodoroIcon },
 ];
 
 type PendingAgenda = {
@@ -135,9 +138,10 @@ export function App() {
         await flushLearningDrafts();
         await api("/learning/sessions/end-all", "POST");
         window.dispatchEvent(new Event("xiaoxi-learning-ended"));
+        if (event.payload) await api("/pomodoro/actions", "POST", { action: "pause_exit" }, { timeoutMs: 5000 });
         await invoke("finish_learning_close", { quit: event.payload });
       } catch (cause) {
-        setError(`结束学习未完成，窗口已保留：${errorMessage(cause)}`);
+        setError(`保存退出状态未完成，窗口已保留：${errorMessage(cause)}`);
         await getCurrentWindow().show(); await getCurrentWindow().setFocus();
       } finally { learningClosing.current = false; }
     });
@@ -221,7 +225,9 @@ export function App() {
   }
   useEffect(() => {
     if (!isTauri()) return;
-    const stop = listen<{ conversationId?: string; settings?: boolean; settingsTab?: string; newChat?: boolean }>("desktop-navigate", event => {
+    const stop = listen<{ conversationId?: string; settings?: boolean; settingsTab?: string; newChat?: boolean; page?: "pomodoro" | "current" }>("desktop-navigate", event => {
+      if (event.payload.page === "pomodoro") { navigate("pomodoro"); return; }
+      if (event.payload.page === "current") return;
       if (event.payload.settings) {
         navigate("settings");
         setSettingsTab(event.payload.settingsTab === "services" ? "services" : "desktop");
@@ -823,6 +829,7 @@ export function App() {
               )}
               {page === "knowledge" && <KnowledgePage openSource={knowledgeSource} onOpened={() => setKnowledgeSource(undefined)} />}
               {page === "common-texts" && <CommonTextsPage />}
+              {page === "pomodoro" && <PomodoroPage />}
               {page === "settings" && (
                 <SettingsPage
                   settings={settings}

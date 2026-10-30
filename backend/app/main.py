@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from . import features, skills, office, complex_tasks, conversation_cleanup, projects, artifacts, local_files, learning_sessions, learning_handoff, usage_cost, learning_workflows
 from .learning_public import LEARNING_KINDS, public as public_learning
+from . import pomodoro
 from . import composer_suggestions, todos, knowledge, desktop_assistant, common_texts, tts
 from . import (
     agent,
@@ -55,6 +56,7 @@ async def lifespan(app: FastAPI):
     data_transfer.recover_interrupted()
     store.migrate()
     data_transfer.apply_pending()
+    pomodoro.recover()
     usage_cost.recover_interrupted()
     desktop_assistant.recover()
     office.recover_uploads()
@@ -84,11 +86,13 @@ async def lifespan(app: FastAPI):
             max_instances=1,
             coalesce=True,
         )
+        scheduler.add_job(pomodoro.tick, "interval", seconds=1, id="pomodoro", max_instances=1, coalesce=True)
         scheduler.start()
         await reminders.tick()
         app.state.wechat = wechat.WechatChannel()
         app.state.wechat.start()
         yield
+        pomodoro.recover()
         await composer_suggestions.close()
         await app.state.wechat.close()
         await skills.close()
@@ -1446,5 +1450,6 @@ router.include_router(todos.router)
 router.include_router(knowledge.router)
 router.include_router(desktop_assistant.router)
 router.include_router(common_texts.router)
+router.include_router(pomodoro.router)
 router.include_router(tts.router)
 app.include_router(router)

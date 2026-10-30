@@ -179,7 +179,7 @@ export function DesktopSettings() {
           {featureRow(
             "pet",
             "显示桌宠",
-            "拖动调整位置，点击打开主窗口；悬停的新聊天和语音入口打开截图问答。",
+            "拖动调整位置，轻触控制番茄钟，双击打开主窗口；小计时默认在头顶，可独立拖动。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">

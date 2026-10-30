@@ -6,6 +6,7 @@ const navigationFeatures = [
   "plans",
   "knowledge",
   "common-texts",
+  "pomodoro",
 ] as const;
 export type NavigationFeature = (typeof navigationFeatures)[number];
 

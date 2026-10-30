@@ -30,7 +30,7 @@ const stopSelectionBridge = initializeSelectionBridge();
 import.meta.hot?.dispose(stopSelectionBridge);
 import.meta.hot?.dispose(stopAppearance);
 const desktopView = new URLSearchParams(location.search).get("view") || "";
-const isDesktopSurface = ["quick", "capture", "pet", "selection"].includes(desktopView) || desktopView.startsWith("pin-");
+const isDesktopSurface = ["quick", "capture", "pet", "selection", "pomodoro-timer"].includes(desktopView) || desktopView.startsWith("pin-");
 if (isDesktopSurface) document.documentElement.dataset.desktop = desktopView;
 const DesktopRoot = lazy(() => import("./components/DesktopRoot").then(m => ({ default: m.DesktopRoot })));
 

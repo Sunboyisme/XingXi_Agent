@@ -613,6 +613,38 @@ class OfficeFile(Base):
     warnings: Mapped[list] = mapped_column(JSON, default=list)
 
 
+class PomodoroState(Base):
+    __tablename__ = "pomodoro_state"
+    profile_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=PROFILE_ID)
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict)
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    session_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    phase: Mapped[str] = mapped_column(String(24), default="idle")
+    status: Mapped[str] = mapped_column(String(16), default="idle")
+    remaining_seconds: Mapped[float] = mapped_column(Float, default=0)
+    checkpoint_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    deadline_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    segment_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    notification_seq: Mapped[int] = mapped_column(Integer, default=0)
+    notification_kind: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
+
+class PomodoroSession(Record, Base):
+    __tablename__ = "pomodoro_sessions"
+    title: Mapped[str] = mapped_column(String(80), default="")
+    focus_minutes: Mapped[int] = mapped_column(Integer)
+    break_minutes: Mapped[int] = mapped_column(Integer)
+    completed_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ended_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class PomodoroSegment(Record, Base):
+    __tablename__ = "pomodoro_segments"
+    session_id: Mapped[str] = mapped_column(ForeignKey("pomodoro_sessions.id", ondelete="CASCADE"), index=True)
+    started_at: Mapped[float] = mapped_column(Float)
+    ended_at: Mapped[float] = mapped_column(Float)
+
+
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False, "timeout": 20}

@@ -360,6 +360,7 @@ fn position_pet(
         "desktop-pet-layout",
         serde_json::json!({"x":offset_x,"y":offset_y,"size":p.pet_size}),
     );
+    let _ = crate::pomodoro::place_widget(app);
     Ok(())
 }
 pub fn finish_pet_drag(app: &tauri::AppHandle) {
@@ -388,6 +389,7 @@ pub fn set_pet_visible(app: &tauri::AppHandle, shown: bool) {
     }
     let epoch = state.pet_visibility_epoch.fetch_add(1, Ordering::SeqCst) + 1;
     state.pet_exiting.store(!shown, Ordering::SeqCst);
+    if !shown { crate::pomodoro::refresh_visibility(app); }
     if shown {
         if state.capture.lock().unwrap().is_some() {
             let mut hidden = state.hidden.lock().unwrap();
@@ -443,6 +445,7 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
     }
     let hidden = std::mem::take(&mut *app.state::<Desktop>().hidden.lock().unwrap());
     for label in hidden {
+        if label == "pomodoro-timer" { crate::pomodoro::refresh_visibility(app); continue; }
         if label == "quick" {
             continue;
         }
@@ -460,6 +463,7 @@ fn finish_capture(app: &tauri::AppHandle, id: Option<&str>) -> bool {
     true
 }
 pub fn desktop_dismiss_label(app: &tauri::AppHandle, label: &str) {
+    if label == "pomodoro-timer" { crate::pomodoro::hide_widget(app); return; }
     if label == "selection" { crate::selection::dismiss(app); return; }
     if label == "capture" {
         let selection = app
@@ -723,7 +727,7 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
     let _ = app.emit_to("pet", "desktop-pet-hide-menu", ());
     let mut hidden = vec![];
     for w in app.webview_windows().values() {
-        if ["pet", "quick"].contains(&w.label()) || w.label().starts_with("pin-") {
+        if ["pet", "quick", "pomodoro-timer"].contains(&w.label()) || w.label().starts_with("pin-") {
             if w.is_visible().unwrap_or(false) {
                 hidden.push(w.label().to_owned());
                 w.hide().map_err(|e| e.to_string())?;
@@ -951,6 +955,7 @@ pub fn desktop_main(
     settings: Option<bool>,
     settings_tab: Option<String>,
     new_chat: Option<bool>,
+    page: Option<String>,
 ) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
     window.show().map_err(|e| e.to_string())?;
@@ -959,7 +964,7 @@ pub fn desktop_main(
     app.emit_to(
         "main",
         "desktop-navigate",
-        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false)}),
+        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false),"page":page.filter(|value| value == "pomodoro" || value == "current")}),
     ).map_err(|e| e.to_string())?;
     // The screenshot and answer surfaces are always on top. End them before
     // focusing main, including when opening an existing conversation.
@@ -1052,7 +1057,7 @@ pub fn desktop_hit_regions(
     window: tauri::WebviewWindow,
     regions: Vec<HitRegion>,
 ) -> Result<(), String> {
-    if !["quick", "pet", "selection"].contains(&window.label()) {
+    if !["quick", "pet", "selection", "pomodoro-timer"].contains(&window.label()) {
         return Ok(());
     }
     if regions.len() > 32
