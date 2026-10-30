@@ -125,6 +125,7 @@ fn publish(app: &tauri::AppHandle) {
     );
 }
 fn pointer_surfaces(app: &tauri::AppHandle) {
+    crate::pomodoro::pointer_update(app);
     let state = app.state::<Desktop>();
     if state.pet_dragging.load(Ordering::SeqCst) && !pressed(VK_LBUTTON) {
         state.pet_dragging.store(false, Ordering::SeqCst);

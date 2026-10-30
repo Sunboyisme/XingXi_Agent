@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
         Mutex,
     },
     time::{Duration, Instant},
@@ -22,7 +22,8 @@ pub struct Widget {
     dragging: AtomicBool,
     active: AtomicBool,
     suppressed: AtomicBool,
-    preview_until: Mutex<Option<Instant>>,
+    previewing: AtomicBool,
+    mouse_buttons: AtomicU8,
     latest_snapshot: Mutex<Option<(u64, f64)>>,
 }
 fn placement_path(app: &tauri::AppHandle) -> PathBuf {
@@ -59,6 +60,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     .inner_size(276.0, 168.0)
     .decorations(false)
     .transparent(true)
+    .background_color(tauri::window::Color(0, 0, 0, 0))
     .always_on_top(true)
     .skip_taskbar(true)
     .resizable(false)
@@ -166,38 +168,95 @@ pub fn refresh_visibility(app: &tauri::AppHandle) {
         return;
     };
     let state = app.state::<Widget>();
-    let preview = state
-        .preview_until
-        .lock()
-        .unwrap()
-        .is_some_and(|until| Instant::now() < until || window.is_focused().unwrap_or(false));
     let show = pet_visible(app)
         && !state.suppressed.load(Ordering::SeqCst)
-        && (state.active.load(Ordering::SeqCst) || preview);
+        && (state.active.load(Ordering::SeqCst) || state.previewing.load(Ordering::SeqCst));
     if show {
         let _ = place_widget(app);
         if !window.is_visible().unwrap_or(false) {
             let _ = window.show();
         }
     } else if window.is_visible().unwrap_or(false) {
+        let _ = window.emit("pomodoro-widget-dismissed", ());
         let _ = window.hide();
     }
 }
 pub fn hide_widget(app: &tauri::AppHandle) {
     app.state::<Widget>()
+        .previewing
+        .store(false, Ordering::SeqCst);
+    app.state::<Widget>()
         .suppressed
         .store(true, Ordering::SeqCst);
     refresh_visibility(app);
+}
+pub fn focus_lost(app: &tauri::AppHandle) {
+    // Running / paused sessions stay visible; only the idle preview is dismissed.
+    app.state::<Widget>()
+        .previewing
+        .store(false, Ordering::SeqCst);
+    if let Some(window) = app.get_webview_window("pomodoro-timer") {
+        let _ = window.emit("pomodoro-widget-dismissed", ());
+    }
+    refresh_visibility(app);
+}
+pub fn pointer_update(app: &tauri::AppHandle) {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
+    };
+    let state = app.state::<Widget>();
+    let mut buttons = 0u8;
+    for (index, key) in [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON].iter().enumerate() {
+        if unsafe { GetAsyncKeyState(i32::from(key.0)) } < 0 {
+            buttons |= 1 << index;
+        }
+    }
+    let previous = state.mouse_buttons.swap(buttons, Ordering::SeqCst);
+    finish_drag(app);
+    if buttons & !previous == 0
+        || !state.previewing.load(Ordering::SeqCst)
+        || state.active.load(Ordering::SeqCst)
+        || state.dragging.load(Ordering::SeqCst)
+    {
+        return;
+    }
+    let Some(window) = app.get_webview_window("pomodoro-timer") else {
+        return;
+    };
+    if !window.is_visible().unwrap_or(false) {
+        return;
+    }
+    let (Ok(at), Ok(scale)) = (window.outer_position(), window.scale_factor()) else {
+        return;
+    };
+    let (x, y) = crate::desktop_input::cursor();
+    let x = f64::from(x - at.x) / scale;
+    let y = f64::from(y - at.y) / scale;
+    let inside = app
+        .state::<crate::desktop::Desktop>()
+        .hit_regions
+        .lock()
+        .unwrap()
+        .get("pomodoro-timer")
+        .is_some_and(|regions| {
+            regions.iter().any(|r| {
+                x >= r.x - 1.0
+                    && x <= r.x + r.width + 1.0
+                    && y >= r.y - 1.0
+                    && y <= r.y + r.height + 1.0
+            })
+        });
+    if !inside {
+        focus_lost(app);
+    }
 }
 #[tauri::command]
 pub fn pomodoro_show_controls(app: tauri::AppHandle, focus: Option<bool>) {
     let state = app.state::<Widget>();
     state.suppressed.store(false, Ordering::SeqCst);
-    *state.preview_until.lock().unwrap() = if state.active.load(Ordering::SeqCst) {
-        None
-    } else {
-        Some(Instant::now() + Duration::from_secs(5))
-    };
+    state
+        .previewing
+        .store(!state.active.load(Ordering::SeqCst), Ordering::SeqCst);
     refresh_visibility(&app);
     if focus.unwrap_or(false) {
         if let Some(window) = app.get_webview_window("pomodoro-timer") {
@@ -281,7 +340,7 @@ fn accept_snapshot(app: &tauri::AppHandle, value: &serde_json::Value) -> bool {
     let active = phase != "idle";
     let was_active = state.active.swap(active, Ordering::SeqCst);
     if active || was_active {
-        state.preview_until.lock().unwrap().take();
+        state.previewing.store(false, Ordering::SeqCst);
     }
     true
 }
@@ -304,7 +363,6 @@ pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
         let mut seen: Option<u64> = None;
         loop {
             let start = Instant::now();
-            finish_drag(&app);
             if let Ok(token) = std::fs::read_to_string(data_dir.join("auth-token")) {
                 if let Ok(response) = client
                     .get(format!("{backend_url}/pomodoro"))

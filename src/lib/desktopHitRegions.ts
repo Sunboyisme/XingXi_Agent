@@ -2,7 +2,7 @@ import { useLayoutEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 /** Report actual visible controls, including portals, rather than guessing a transparent window's hit area. */
-export function useDesktopHitRegions(selector: string) {
+export function useDesktopHitRegions(selector: string, rounded = false) {
   useLayoutEffect(() => {
     const regionSelector = `${selector},.picture-overlay,.picture-viewer,.picture-close`;
     let disposed = false;
@@ -22,10 +22,21 @@ export function useDesktopHitRegions(selector: string) {
           observed.add(node);
         }
       const regions = nodes
-        .map((node) => node.getBoundingClientRect())
+        .map((node) => {
+          const r = node.getBoundingClientRect();
+          return {
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.height,
+            border_radius: rounded
+              ? parseFloat(window.getComputedStyle(node).borderTopLeftRadius) ||
+                0
+              : 0,
+          };
+        })
         .filter((r) => r.width > 0 && r.height > 0)
-        .slice(0, 32)
-        .map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height }));
+        .slice(0, 32);
       void invoke("desktop_hit_regions", { regions }).catch(() => {});
     };
     const schedule = () => {
@@ -68,5 +79,5 @@ export function useDesktopHitRegions(selector: string) {
       document.removeEventListener("animationend", schedule, true);
       document.removeEventListener("transitionend", schedule, true);
     };
-  }, [selector]);
+  }, [selector, rounded]);
 }

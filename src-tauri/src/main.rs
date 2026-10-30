@@ -820,6 +820,7 @@ fn main() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event { pinned_menu::owner_closed(window.app_handle(), window.label()); }
             if window.label() == "pin-menu" && matches!(event, tauri::WindowEvent::Focused(false)) { pinned_menu::focus_lost(window.app_handle()); }
+            if window.label() == "pomodoro-timer" && matches!(event, tauri::WindowEvent::Focused(false)) { pomodoro::focus_lost(window.app_handle()); }
             if let tauri::WindowEvent::ScaleFactorChanged { .. } = event { desktop::refresh_hit_regions(window.app_handle(),window.label()); }
             if let tauri::WindowEvent::Destroyed = event { desktop::forget_pin(window.label()); }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Focused(false)) {

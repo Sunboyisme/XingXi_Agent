@@ -147,7 +147,9 @@ export function PomodoroSettings({
           <DialogTitle>
             {mode === "add" ? "自定义专注节奏" : "番茄钟设置"}
           </DialogTitle>
-          <DialogDescription>时长修改用于下一轮专注。</DialogDescription>
+          <DialogDescription>
+            桌宠与主页面共用默认时长，修改用于下一轮专注。
+          </DialogDescription>
         </DialogHeader>
         <form
           noValidate
@@ -158,6 +160,26 @@ export function PomodoroSettings({
         >
           {mode === "settings" && (
             <>
+              <label className="pomodoro-default-duration">
+                <span>默认时长</span>
+                <select
+                  value={preferences.selected_preset}
+                  disabled={saving}
+                  onChange={(event) =>
+                    setPreferences((old) => ({
+                      ...old,
+                      selected_preset: event.target.value,
+                    }))
+                  }
+                >
+                  {preferences.presets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      专注 {preset.focus_minutes} 分钟 / 休息{" "}
+                      {preset.break_minutes} 分钟
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="pomodoro-sound">
                 <span>到时播放一声短提示音</span>
                 <input

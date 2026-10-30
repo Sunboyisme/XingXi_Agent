@@ -17,14 +17,30 @@ import "../styles/pomodoro-widget.css";
 export function PomodoroWidget() {
   const { data, remaining, busy, error, refresh } = usePomodoro();
   const [localError, setLocalError] = useState("");
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const drag = useRef<{ x: number; y: number; pointer: number } | null>(null);
-  useDesktopHitRegions(".pomodoro-widget,.pomodoro-widget-menu,.ui-hint");
+  const expanded = hovered || focused || menuOpen;
+  useDesktopHitRegions(
+    ".pomodoro-widget,.pomodoro-widget-menu,.ui-hint,.ui-hint-arrow",
+    true,
+  );
   useEffect(() => {
-    const stop = listen<string>("pomodoro-widget-error", (event) =>
-      setLocalError(event.payload),
-    );
+    const stops = [
+      listen<string>("pomodoro-widget-error", (event) =>
+        setLocalError(event.payload),
+      ),
+      listen("pomodoro-widget-dismissed", () => {
+        setHovered(false);
+        setFocused(false);
+        setMenuOpen(false);
+      }),
+    ];
     return () => {
-      void stop.then((dispose) => dispose()).catch(() => {});
+      stops.forEach(
+        (stop) => void stop.then((dispose) => dispose()).catch(() => {}),
+      );
     };
   }, []);
   const primary = data ? primaryPomodoroAction(data) : null;
@@ -40,10 +56,11 @@ export function PomodoroWidget() {
     try {
       await pomodoroAction(action);
     } catch {
-      /* The same clock exposes the failed action through its inline Hint. */
+      /* The clock exposes failed actions through the error control. */
     }
   }
   function down(event: PointerEvent<HTMLElement>) {
+    setFocused(false);
     if (
       !event.isPrimary ||
       event.button !== 0 ||
@@ -79,12 +96,26 @@ export function PomodoroWidget() {
   }
   return (
     <main className="pomodoro-widget-frame">
-      <ContextMenu.Root>
+      <ContextMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <ContextMenu.Trigger asChild>
           <section
             className="pomodoro-widget"
             aria-label="桌面番茄钟"
             data-status={data?.status}
+            data-expanded={expanded}
+            onPointerEnter={() => setHovered(true)}
+            onPointerLeave={() => setHovered(false)}
+            onFocusCapture={(event) =>
+              setFocused(event.target.matches(":focus-visible"))
+            }
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget))
+                setFocused(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape")
+                void invoke("desktop_dismiss").catch(fail);
+            }}
             onPointerDown={down}
             onPointerMove={move}
             onPointerUp={() => {
@@ -94,29 +125,19 @@ export function PomodoroWidget() {
               drag.current = null;
             }}
           >
-            <Hint
-              side="bottom"
-              label={
-                <>
-                  {data ? pomodoroStatus(data) : "读取番茄钟"}
-                  <br />
-                  按住拖动，右键可返回默认位置
-                </>
-              }
+            <div
+              className="pomodoro-widget-drag"
+              tabIndex={0}
+              aria-label={`${status}，${data ? formatCountdown(remaining) : "正在读取"}`}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") openPage();
+              }}
             >
-              <div
-                className="pomodoro-widget-drag"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") openPage();
-                }}
-              >
-                <span>{status}</span>
-                <strong role="timer" aria-live="off">
-                  {data ? formatCountdown(remaining) : "--:--"}
-                </strong>
-              </div>
-            </Hint>
+              <span>{status}</span>
+              <strong role="timer" aria-live="off">
+                {data ? formatCountdown(remaining) : "--:--"}
+              </strong>
+            </div>
             {(localError || error) && (
               <Hint
                 side="bottom"
@@ -140,39 +161,41 @@ export function PomodoroWidget() {
                 </button>
               </Hint>
             )}
-            <span className="pomodoro-widget-divider" aria-hidden="true" />
-            <Hint side="bottom" label={primary?.label || "正在读取"}>
-              <button
-                className="pomodoro-widget-primary"
-                aria-label={primary?.label || "正在读取"}
-                disabled={busy || !primary}
-                onClick={() => {
-                  if (primary) void act(primary.action);
-                }}
+            {expanded && (
+              <div
+                className="pomodoro-widget-actions"
+                role="group"
+                aria-label="计时操作"
               >
-                {primary?.action === "pause" ? (
-                  <Pause size={14} />
-                ) : (
-                  <Play size={14} />
-                )}
-              </button>
-            </Hint>
-            {data?.phase !== "idle" && data && (
-              <Hint side="bottom" label="结束本轮，保留已专注时长">
+                <span className="pomodoro-widget-divider" aria-hidden="true" />
                 <button
-                  aria-label="结束本轮"
-                  disabled={busy}
-                  onClick={() => void act("end")}
+                  className="pomodoro-widget-primary"
+                  aria-label={primary?.label || "正在读取"}
+                  disabled={busy || !primary}
+                  onClick={() => {
+                    if (primary) void act(primary.action);
+                  }}
                 >
-                  <Square size={12} />
+                  {primary?.action === "pause" ? (
+                    <Pause size={14} />
+                  ) : (
+                    <Play size={14} />
+                  )}
                 </button>
-              </Hint>
+                {data?.phase !== "idle" && data && (
+                  <button
+                    aria-label="结束本轮"
+                    disabled={busy}
+                    onClick={() => void act("end")}
+                  >
+                    <Square size={12} />
+                  </button>
+                )}
+                <button aria-label="打开番茄钟" onClick={openPage}>
+                  <ArrowUpRight size={15} />
+                </button>
+              </div>
             )}
-            <Hint side="bottom" label="打开番茄钟">
-              <button aria-label="打开番茄钟" onClick={openPage}>
-                <ArrowUpRight size={15} />
-              </button>
-            </Hint>
           </section>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>

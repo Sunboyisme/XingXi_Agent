@@ -25,7 +25,7 @@ import {
 } from "@/lib/pomodoro";
 import "../styles/pomodoro.css";
 
-const presetsPerPage = 6;
+const presetsPerPage = 4;
 
 export function PomodoroPage() {
   const { data, error, busy, remaining, refresh } = usePomodoro();
@@ -128,87 +128,89 @@ export function PomodoroPage() {
               {pomodoroStatus(data)}
             </span>
           </div>
-          <div
-            className="pomodoro-dial"
-            role="progressbar"
-            aria-label="当前阶段进度"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progress * 100)}
-          >
-            <svg viewBox="0 0 280 280" aria-hidden="true">
-              <circle
-                className="pomodoro-ring-track"
-                cx="140"
-                cy="140"
-                r="128"
-              />
-              <circle
-                className="pomodoro-ring-progress"
-                cx="140"
-                cy="140"
-                r="128"
-                pathLength="100"
-                strokeDasharray="100"
-                strokeDashoffset={100 - progress * 100}
-              />
-            </svg>
-            <div className="pomodoro-dial-copy">
-              <span>{isBreak ? "休息时间" : "专注时间"}</span>
-              <strong
-                role="timer"
-                aria-live="off"
-                aria-label={`剩余 ${formatCountdown(remaining)}`}
-              >
-                {formatCountdown(remaining)}
-              </strong>
-              <span>
-                {data.status === "paused"
-                  ? "已暂停 · 等你继续"
-                  : data.status === "waiting"
-                    ? "准备好后，手动开始"
-                    : `${minutes} 分钟${isBreak ? "休息" : "专注"}`}
-              </span>
-            </div>
-          </div>
-          <div className="pomodoro-controls">
-            <Button
-              className="pomodoro-primary"
-              disabled={busy}
-              onClick={() => void act(primary.action)}
+          <div className="pomodoro-focus-content">
+            <div
+              className="pomodoro-dial"
+              role="progressbar"
+              aria-label="当前阶段进度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progress * 100)}
             >
-              {primary.action === "pause" ? (
-                <Pause size={18} />
-              ) : (
-                <Play size={18} />
-              )}
-              {primary.label}
-            </Button>
-            {data.phase !== "idle" && (
-              <Hint label="结束本轮，保留已专注时长">
+              <svg viewBox="0 0 280 280" aria-hidden="true">
+                <circle
+                  className="pomodoro-ring-track"
+                  cx="140"
+                  cy="140"
+                  r="128"
+                />
+                <circle
+                  className="pomodoro-ring-progress"
+                  cx="140"
+                  cy="140"
+                  r="128"
+                  pathLength="100"
+                  strokeDasharray="100"
+                  strokeDashoffset={100 - progress * 100}
+                  visibility={progress > 0 ? "visible" : "hidden"}
+                />
+              </svg>
+              <div className="pomodoro-dial-copy">
+                <span>{isBreak ? "休息时间" : "专注时间"}</span>
+                <strong
+                  role="timer"
+                  aria-live="off"
+                  aria-label={`剩余 ${formatCountdown(remaining)}`}
+                >
+                  {formatCountdown(remaining)}
+                </strong>
+                <span>
+                  {data.status === "paused"
+                    ? "已暂停 · 等你继续"
+                    : data.status === "waiting"
+                      ? "准备好后，手动开始"
+                      : `${minutes} 分钟${isBreak ? "休息" : "专注"}`}
+                </span>
+              </div>
+            </div>
+            <div className="pomodoro-controls">
+              <Button
+                className="pomodoro-primary"
+                disabled={busy}
+                onClick={() => void act(primary.action)}
+              >
+                {primary.action === "pause" ? (
+                  <Pause size={18} />
+                ) : (
+                  <Play size={18} />
+                )}
+                {primary.label}
+              </Button>
+              {data.phase !== "idle" && (
                 <Button
                   variant="ghost"
                   className="pomodoro-end"
+                  aria-label="结束本轮"
                   disabled={busy}
                   onClick={() => void act("end")}
                 >
                   <Square size={14} />
-                  结束
+                  <span>结束</span>
                 </Button>
-              </Hint>
+              )}
+            </div>
+            {isBreak && (
+              <Button
+                className="pomodoro-skip"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void act("skip_break")}
+              >
+                <SkipForward size={14} />
+                跳过休息
+              </Button>
             )}
           </div>
-          {isBreak && (
-            <Button
-              className="pomodoro-skip"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => void act("skip_break")}
-            >
-              <SkipForward size={14} />
-              跳过休息
-            </Button>
-          )}
         </section>
         <aside className="pomodoro-side">
           <section className="pomodoro-rhythm-card">
@@ -260,33 +262,29 @@ export function PomodoroPage() {
               aria-label="专注与休息时长预设"
             >
               {visiblePresets.map((value) => (
-                <Hint
+                <button
                   key={value.id}
-                  label={`专注 ${value.focus_minutes} 分钟，休息 ${value.break_minutes} 分钟；用于下一轮`}
+                  type="button"
+                  aria-pressed={value.id === preset.id}
+                  disabled={busy}
+                  onClick={() =>
+                    void savePomodoroPreferences({
+                      ...data.preferences,
+                      selected_preset: value.id,
+                    }).catch(() => {})
+                  }
                 >
-                  <button
-                    type="button"
-                    aria-pressed={value.id === preset.id}
-                    disabled={busy}
-                    onClick={() =>
-                      void savePomodoroPreferences({
-                        ...data.preferences,
-                        selected_preset: value.id,
-                      }).catch(() => {})
-                    }
-                  >
-                    <span className="pomodoro-preset-focus">
-                      <strong>{value.focus_minutes}</strong>
-                      <span>分钟专注</span>
-                    </span>
-                    <span className="pomodoro-preset-break">
-                      休息 {value.break_minutes} 分钟
-                    </span>
-                    {value.id === preset.id && (
-                      <Check className="pomodoro-preset-check" size={14} />
-                    )}
-                  </button>
-                </Hint>
+                  <span className="pomodoro-preset-focus">
+                    <strong>{value.focus_minutes}</strong>
+                    <span>分钟专注</span>
+                  </span>
+                  <span className="pomodoro-preset-break">
+                    休息 {value.break_minutes} 分钟
+                  </span>
+                  {value.id === preset.id && (
+                    <Check className="pomodoro-preset-check" size={14} />
+                  )}
+                </button>
               ))}
             </div>
           </section>
