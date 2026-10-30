@@ -37,9 +37,18 @@ class TTSPreset(BaseModel):
 PRESETS = [
     TTSPreset(provider="bailian", label="阿里云百炼", url="https://dashscope.aliyuncs.com" + ALI_PATH,
         model="qwen3-tts-flash", voice="Cherry", models=["qwen3-tts-flash"],
-        voices=[TTSVoice(value="Cherry", label="Cherry（默认）")],
+        # System voices supported by qwen3-tts-flash; names from the official voice list.
+        voices=[TTSVoice(value=key, label=label) for key, label in (
+            ("Cherry", "芊悦 · 自然女声（默认）"), ("Serena", "苏瑶 · 温柔女声"),
+            ("Ethan", "晨煦 · 阳光男声"), ("Chelsie", "千雪 · 二次元女声"),
+            ("Momo", "茉兔 · 活泼女声"), ("Maia", "四月 · 知性女声"),
+            ("Moon", "月白 · 率性男声"), ("Kai", "凯 · 男声"),
+            ("Jennifer", "詹妮弗 · 美语女声"), ("Ryan", "甜茶 · 表现力男声"),
+            ("Neil", "阿闻 · 新闻播报男声"), ("Seren", "小婉 · 舒缓女声"),
+            ("Dylan", "晓东 · 北京话男声"), ("Sunny", "晴儿 · 四川话女声"),
+            ("Rocky", "阿强 · 粤语男声"), ("Kiki", "阿清 · 粤语女声"))],
         description="通义千问语音合成；默认使用北京地域，可修改地址匹配自己的地域与密钥。",
-        docs_url="https://help.aliyun.com/zh/model-studio/qwen-tts-api"),
+        docs_url="https://help.aliyun.com/zh/model-studio/qwen-tts-voice-list"),
     TTSPreset(provider="siliconflow", label="硅基流动", url="https://api.siliconflow.cn/v1/audio/speech",
         model="FunAudioLLM/CosyVoice2-0.5B", voice="FunAudioLLM/CosyVoice2-0.5B:alex",
         models=["FunAudioLLM/CosyVoice2-0.5B"],

@@ -63,13 +63,13 @@ test("failed saves retain the draft; successful saves clear the typed secret", a
   fireEvent.change(await screen.findByLabelText("API 密钥"), {
     target: { value: "synthetic-tts-key" },
   });
-  fireEvent.change(screen.getByLabelText("音色 ID"), {
-    target: { value: "own-voice" },
+  fireEvent.change(screen.getByLabelText("语音模型"), {
+    target: { value: "own-model" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存" }));
   expect(await screen.findByText("暂时无法保存")).toBeVisible();
   expect(screen.getByLabelText("API 密钥")).toHaveValue("synthetic-tts-key");
-  expect(screen.getByLabelText("音色 ID")).toHaveValue("own-voice");
+  expect(screen.getByLabelText("语音模型")).toHaveValue("own-model");
   fail = false;
   fireEvent.click(screen.getByRole("button", { name: "保存" }));
   expect(await screen.findByText("在线朗读配置已保存")).toBeVisible();
@@ -80,7 +80,7 @@ test("failed saves retain the draft; successful saves clear the typed secret", a
     expect.objectContaining({
       profiles: [
         expect.objectContaining({
-          voice: "own-voice",
+          model: "own-model",
           api_key: "synthetic-tts-key",
         }),
       ],
@@ -98,8 +98,8 @@ test("preview uses the draft and closing cancels it without saving", async () =>
   );
   render(<TTSConnection />);
   fireEvent.click(await screen.findByRole("button", { name: "配置语音朗读" }));
-  fireEvent.change(await screen.findByLabelText("音色 ID"), {
-    target: { value: "preview-voice" },
+  fireEvent.change(await screen.findByLabelText("语音模型"), {
+    target: { value: "preview-model" },
   });
   fireEvent.change(screen.getByLabelText("API 密钥"), {
     target: { value: "synthetic-preview-key" },
@@ -109,7 +109,7 @@ test("preview uses the draft and closing cancels it without saving", async () =>
     expect(mock.play).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        profile: expect.objectContaining({ voice: "preview-voice" }),
+        profile: expect.objectContaining({ model: "preview-model" }),
       }),
     ),
   );

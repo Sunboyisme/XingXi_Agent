@@ -56,6 +56,15 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
   const preset = form?.presets.find(
     (value) => value.provider === form.selected,
   );
+  const bailianVoiceOptions = preset
+    ? profile?.voice &&
+      !preset.voices.some((voice) => voice.value === profile.voice)
+      ? [
+          { value: profile.voice, label: "已保存音色（可重新选择）" },
+          ...preset.voices,
+        ]
+      : preset.voices
+    : [];
   const saved = status?.profiles.find(
     (value) => value.provider === status.selected,
   );
@@ -169,7 +178,9 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
       issues.url = "请填写完整的接口地址";
     }
     if (!profile.model.trim()) issues.model = "请填写语音模型";
-    if (!profile.voice.trim()) issues.voice = "请选择或填写音色 ID";
+    if (!profile.voice.trim())
+      issues.voice =
+        profile.provider === "bailian" ? "请选择音色" : "请选择或填写音色 ID";
     setFields(issues);
     return !Object.keys(issues).length;
   }
@@ -263,7 +274,12 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
         error && !open
           ? "点击配置重试"
           : ready
-            ? `${savedPreset?.label} · ${saved!.voice}`
+            ? `${savedPreset?.label} · ${
+                savedPreset?.voices.find(
+                  (voice) => voice.value === saved!.voice,
+                )?.label ||
+                (saved!.provider === "bailian" ? "已保存音色" : saved!.voice)
+              }`
             : "预置百炼、硅基流动和 MiniMax"
       }
       onConfigure={() => {
@@ -368,34 +384,50 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
                 {fields.model && <p className="field-error">{fields.model}</p>}
               </div>
               <div className="form-field">
-                <Label htmlFor="tts-voice">音色 ID</Label>
-                <div className="tts-voice-row">
-                  <Input
+                <Label htmlFor="tts-voice">
+                  {profile.provider === "bailian" ? "音色" : "音色 ID"}
+                </Label>
+                {profile.provider === "bailian" ? (
+                  <SoftSelect
                     id="tts-voice"
+                    label="音色"
                     value={profile.voice}
+                    placeholder="选择百炼音色"
                     disabled={saving}
-                    maxLength={300}
-                    aria-invalid={Boolean(fields.voice)}
-                    placeholder="输入服务商提供的音色 ID"
-                    onChange={(event) => change({ voice: event.target.value })}
+                    options={bailianVoiceOptions}
+                    onValueChange={(voice) => change({ voice })}
                   />
-                  {preset.voices.length > 0 && (
-                    <SoftSelect
-                      label="常用音色"
-                      value={
-                        preset.voices.some(
-                          (voice) => voice.value === profile.voice,
-                        )
-                          ? profile.voice
-                          : ""
-                      }
-                      placeholder="选择常用音色"
+                ) : (
+                  <div className="tts-voice-row">
+                    <Input
+                      id="tts-voice"
+                      value={profile.voice}
                       disabled={saving}
-                      options={preset.voices}
-                      onValueChange={(voice) => change({ voice })}
+                      maxLength={300}
+                      aria-invalid={Boolean(fields.voice)}
+                      placeholder="输入服务商提供的音色 ID"
+                      onChange={(event) =>
+                        change({ voice: event.target.value })
+                      }
                     />
-                  )}
-                </div>
+                    {preset.voices.length > 0 && (
+                      <SoftSelect
+                        label="常用音色"
+                        value={
+                          preset.voices.some(
+                            (voice) => voice.value === profile.voice,
+                          )
+                            ? profile.voice
+                            : ""
+                        }
+                        placeholder="选择常用音色"
+                        disabled={saving}
+                        options={preset.voices}
+                        onValueChange={(voice) => change({ voice })}
+                      />
+                    )}
+                  </div>
+                )}
                 {fields.voice && <p className="field-error">{fields.voice}</p>}
               </div>
               <div className="form-field">

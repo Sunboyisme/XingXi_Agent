@@ -11,7 +11,10 @@ test("online TTS presets, voice selection and failed saves work in a short windo
       url: "https://example.com/ali",
       model: "qwen3-tts-flash",
       voice: "Cherry",
-      voices: [{ value: "Cherry", label: "Cherry" }],
+      voices: [
+        { value: "Cherry", label: "芊悦 · 自然女声（默认）" },
+        { value: "Serena", label: "苏瑶 · 温柔女声" },
+      ],
     },
     {
       provider: "siliconflow",
@@ -94,9 +97,17 @@ test("online TTS presets, voice selection and failed saves work in a short windo
   await page.getByRole("tab", { name: "能力连接", exact: true }).click();
   await page.getByRole("button", { name: "配置语音朗读", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "语音朗读", exact: true });
-  await expect(dialog.getByLabel("音色 ID", { exact: true })).toHaveValue(
-    "Cherry",
-  );
+  await expect(
+    dialog.getByRole("combobox", { name: "音色", exact: true }),
+  ).toHaveText("芊悦 · 自然女声（默认）");
+  await expect(dialog.getByLabel("音色 ID", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("combobox", { name: "音色", exact: true }).click();
+  await page
+    .getByRole("option", { name: "苏瑶 · 温柔女声", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("combobox", { name: "音色", exact: true }),
+  ).toHaveText("苏瑶 · 温柔女声");
   await dialog.getByRole("combobox", { name: "朗读服务", exact: true }).click();
   await page.getByRole("option", { name: "硅基流动", exact: true }).click();
   await expect(dialog.getByLabel("语音模型", { exact: true })).toHaveValue(
