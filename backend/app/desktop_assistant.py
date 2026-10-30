@@ -151,7 +151,11 @@ class DesktopAction(BaseModel):
     action: Literal["translate", "ocr", "explain", "summarize"]
     attachment_id: str | None = None
     text: str | None = Field(default=None, max_length=50000)
-    target_language: Literal["auto", "简体中文", "English"] = "auto"
+    target_language: Literal[
+        "auto", "简体中文", "繁體中文", "English", "日本語", "한국어",
+        "Français", "Deutsch", "Español", "Português", "Italiano", "Русский",
+        "العربية", "ไทย", "Tiếng Việt", "Bahasa Indonesia", "हिन्दी",
+    ] = "auto"
     model_selection: ModelSelection | None = None
 
     @model_validator(mode="after")
@@ -173,7 +177,8 @@ async def desktop_action(value: DesktopAction):
         "summarize": "用简体中文总结用户提供文字的主要内容，保留关键事实，不编造。",
         "ocr": "逐字提取图片中的可辨认文字，保留段落与表格；不猜测模糊内容。",
         "translate": "翻译用户提供的材料，只输出译文。目标语言：" + (
-            "中文材料译为英文，其他语言译为简体中文" if value.target_language == "auto" else value.target_language),
+            "自动识别原文语言：以中文为主的材料译为英文，其他任何语言均译为简体中文；保留原文的段落和格式。"
+            if value.target_language == "auto" else value.target_language),
     }
     selection = value.model_selection
     if value.text is not None and selection:

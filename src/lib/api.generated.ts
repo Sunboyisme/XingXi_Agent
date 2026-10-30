@@ -258,7 +258,7 @@ export interface components {
              * @default auto
              * @enum {string}
              */
-            target_language: "auto" | "简体中文" | "English";
+            target_language: "auto" | "简体中文" | "繁體中文" | "English" | "日本語" | "한국어" | "Français" | "Deutsch" | "Español" | "Português" | "Italiano" | "Русский" | "العربية" | "ไทย" | "Tiếng Việt" | "Bahasa Indonesia" | "हिन्दी";
             model_selection?: components["schemas"]["ModelSelection"] | null;
         };
         /** DocumentRead */

@@ -66,7 +66,10 @@ export function SpeechInputButton({
         ) : v?.phase === "starting" || v?.phase === "transcribing" ? (
           <LoaderCircle size={18} className="speech-input-spinner" />
         ) : (
-          <MicrophoneIcon size={18} className="speech-input-microphone" />
+          <MicrophoneIcon
+            size={desktopShortcut ? 22 : 18}
+            className="speech-input-microphone"
+          />
         )}
       </button>
     </Hint>

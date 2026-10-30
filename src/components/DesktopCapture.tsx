@@ -66,6 +66,7 @@ type Session = {
   monitorY: number;
   monitorWidth: number;
   monitorHeight: number;
+  windows: Rect[];
 };
 type Gesture = {
   pointerId: number;
@@ -74,6 +75,7 @@ type Gesture = {
   handle?: string;
   mark?: Mark;
   erase?: boolean;
+  automatic?: Rect;
 };
 type TextGesture = {
   pointerId: number;
@@ -232,6 +234,7 @@ function markBounds(mark: Mark, ctx: CanvasRenderingContext2D): Rect {
 export function DesktopCapture() {
   const [session, setSession] = useState<Session>();
   const [selection, setSelection] = useState<Rect | null>(null);
+  const [automatic, setAutomatic] = useState<Rect | null>(null);
   const [marks, setMarks] = useState<Mark[]>([]);
   const [redo, setRedo] = useState<Mark[][]>([]);
   const [history, setHistory] = useState<Mark[][]>([]);
@@ -301,6 +304,7 @@ export function DesktopCapture() {
       const current = ++epoch.current;
       let active = false;
       setSelection(null);
+      setAutomatic(null);
       setMarks([]);
       setHistory([]);
       setRedo([]);
@@ -336,6 +340,15 @@ export function DesktopCapture() {
           .getContext("2d")!
           .putImageData(new ImageData(pixels, s.width, s.height), 0, 0);
         source.current = bitmap;
+        setCursor({
+          x: (s.cursorX * innerWidth) / s.width,
+          y: (s.cursorY * innerHeight) / s.height,
+        });
+        setAutomatic(
+          s.windows.find((window) =>
+            inside(window, { x: s.cursorX, y: s.cursorY }),
+          ) || null,
+        );
         setSession(s);
         if (alive && current === epoch.current)
           await invoke("capture_present", { id: s.id });
@@ -371,6 +384,7 @@ export function DesktopCapture() {
       source.current = null;
       setSession(undefined);
       setSelection(null);
+      setAutomatic(null);
       setMarks([]);
       setHistory([]);
       setRedo([]);
@@ -449,6 +463,7 @@ export function DesktopCapture() {
     gestureTarget.current = null;
     gesture.current = null;
     setSelection(null);
+    setAutomatic(null);
     setMarks([]);
     setHistory([]);
     setRedo([]);
@@ -539,12 +554,13 @@ export function DesktopCapture() {
     const ctx = canvas.current.getContext("2d")!;
     ctx.clearRect(0, 0, session.width, session.height);
     ctx.drawImage(source.current, 0, 0);
-    ctx.fillStyle = selection ? "rgba(0,0,0,.42)" : "rgba(0,0,0,.14)";
+    const region = selection || automatic;
+    ctx.fillStyle = selection ? "rgba(0,0,0,.48)" : "rgba(0,0,0,.22)";
     ctx.fillRect(0, 0, session.width, session.height);
-    if (selection) {
+    if (region) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(selection.x, selection.y, selection.w, selection.h);
+      ctx.rect(region.x, region.y, region.w, region.h);
       ctx.clip();
       ctx.drawImage(source.current, 0, 0);
       marks.forEach((m, index) => {
@@ -553,7 +569,7 @@ export function DesktopCapture() {
       if (live) paint(ctx, live, source.current);
       ctx.restore();
     }
-  }, [session, selection, marks, live, text?.index]);
+  }, [session, selection, automatic, marks, live, text?.index]);
   function addMark(mark: Mark) {
     setHistory((h) => [...h, marks]);
     setMarks((m) => [...m, mark]);
@@ -799,8 +815,12 @@ export function DesktopCapture() {
       original,
       handle,
       mark,
+      automatic: !selection
+        ? session.windows.find((window) => inside(window, p))
+        : undefined,
     };
     if (!original && !mark) {
+      setAutomatic(null);
       setSelection({ ...p, w: 0, h: 0 });
       setMarks([]);
       setHistory([]);
@@ -817,7 +837,15 @@ export function DesktopCapture() {
     }
     setCursor({ x: e.clientX, y: e.clientY });
     const g = gesture.current;
-    if (!g || !session || g.pointerId !== e.pointerId) return;
+    if (!session) return;
+    if (!g) {
+      if (!selection)
+        setAutomatic(
+          session.windows.find((window) => inside(window, point(e))) || null,
+        );
+      return;
+    }
+    if (g.pointerId !== e.pointerId) return;
     const p = point(e),
       dx = p.x - g.start.x,
       dy = p.y - g.start.y;
@@ -881,8 +909,12 @@ export function DesktopCapture() {
     } else if (g.mark) addMark(g.mark);
     if (!g.erase && !g.mark && !g.original) {
       const box = rect(g.start, point(e));
-      if (box.w < 2 || box.h < 2) {
+      if (g.automatic && Math.hypot(box.w * sx, box.h * sy) < 5) {
+        setSelection(g.automatic);
+      } else if (box.w < 2 || box.h < 2) {
         setSelection(null);
+      } else {
+        setSelection(box);
       }
     }
     gesture.current = null;
@@ -898,6 +930,11 @@ export function DesktopCapture() {
       return;
     }
     if (gesture.current?.pointerId !== e.pointerId) return;
+    const cancelled = gesture.current;
+    if (!cancelled.erase && !cancelled.mark) {
+      setSelection(cancelled.original || null);
+      setAutomatic(cancelled.original ? null : cancelled.automatic || null);
+    }
     gesture.current = null;
     setLive(null);
     setEraseBox(null);
@@ -993,14 +1030,20 @@ export function DesktopCapture() {
       />
       {!selection && (
         <>
+          {automatic && (
+            <div
+              className="capture-auto-selection"
+              style={styleRect(automatic)}
+            />
+          )}
           <span
             className="capture-cursor-hint"
             style={{
-              left: Math.min(viewport.w - 100, cursor.x + 18),
+              left: Math.max(0, Math.min(viewport.w - 200, cursor.x + 18)),
               top: Math.min(viewport.h - 45, cursor.y + 22),
             }}
           >
-            拖拽截图
+            点击选窗 · 拖动框选
           </span>
         </>
       )}

@@ -1,5 +1,5 @@
 import { Select } from "radix-ui";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 export function SoftSelect({
   value,
@@ -43,10 +43,7 @@ export function SoftSelect({
           sideOffset={6}
           collisionPadding={12}
         >
-          <Select.ScrollUpButton className="soft-select-scroll">
-            <ChevronUp size={14} />
-          </Select.ScrollUpButton>
-          <Select.Viewport>
+          <Select.Viewport className="soft-select-viewport">
             {options.map((option) => (
               <Select.Item
                 key={option.value}
@@ -61,9 +58,6 @@ export function SoftSelect({
               </Select.Item>
             ))}
           </Select.Viewport>
-          <Select.ScrollDownButton className="soft-select-scroll">
-            <ChevronDown size={14} />
-          </Select.ScrollDownButton>
         </Select.Content>
       </Select.Portal>
     </Select.Root>

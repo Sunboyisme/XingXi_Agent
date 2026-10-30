@@ -121,6 +121,7 @@ pub struct Capture {
     pub height: u32,
     pub x: i32,
     pub y: i32,
+    pub windows: Vec<crate::capture_windows::WindowRect>,
 }
 
 fn path(app: &tauri::AppHandle) -> PathBuf {
@@ -481,15 +482,11 @@ fn restore_capture_windows(app: &tauri::AppHandle) {
             crate::pomodoro::refresh_visibility(app);
             continue;
         }
-        if (label == "pet" && !preferences.pet) || (label == "quick" && !preferences.enabled) {
+        if label == "quick" || label == "selection" || label == "pin-menu" || (label == "pet" && !preferences.pet) {
             continue;
         }
         if let Some(window) = app.get_webview_window(&label) {
             let _ = show_without_focus(&window);
-            if label == "quick" {
-                quick_presence(app, true);
-                let _ = window.emit("desktop-shown", serde_json::json!({"focus":false}));
-            }
         }
     }
 }
@@ -738,11 +735,20 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
     if desktop_state.capture.lock().unwrap().is_some() { return Ok(()); }
     let epoch = desktop_state.capture_epoch.fetch_add(1, Ordering::SeqCst) + 1;
     crate::selection::dismiss(app);
+    dismiss_label(app, "quick")?;
     crate::pinned_menu::dismiss(app, false);
+    crate::tray_menu::dismiss(app);
+    // Dismiss callbacks can enqueue a hide. Wait for the native surfaces too,
+    // before taking pixels; menu hosts must never enter the restore list.
+    for label in ["selection", "pin-menu", "tray-menu"] {
+        if let Some(window) = app.get_webview_window(label) {
+            crate::desktop_window::hide(&window)?;
+        }
+    }
     let _ = app.emit_to("pet", "desktop-pet-hide-menu", ());
     let mut hidden = vec![];
     for w in app.webview_windows().values() {
-        if (["pet", "quick", "pomodoro-timer"].contains(&w.label()) || w.label().starts_with("pin-"))
+        if (["pet", "pomodoro-timer", "pomodoro-notice"].contains(&w.label()) || (w.label().starts_with("pin-") && w.label() != "pin-menu"))
             && w.is_visible().unwrap_or(false)
         {
             if let Err(error) = crate::desktop_window::hide(w) {
@@ -751,12 +757,6 @@ pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
                 return Err(error);
             }
             hidden.push(w.label().to_owned());
-            if w.label() == "quick" {
-                quick_presence(app, false);
-                let session_id = desktop_state.ask_session.lock().unwrap().clone();
-                let _ = w.emit("desktop-hidden", serde_json::json!({"sessionId":session_id}));
-                crate::voice::cancel_owner(app, "quick");
-            }
         }
     }
     *app.state::<Desktop>().hidden.lock().unwrap() = hidden;
@@ -819,7 +819,7 @@ pub fn capture_get(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     Ok(
         serde_json::json!({"id":c.id,"width":c.width,"height":c.height,"x":c.x,"y":c.y,"cursorX":px-c.x,"cursorY":py-c.y,
         "monitorX":area.map(|a|a.position.x-c.x).unwrap_or(0),"monitorY":area.map(|a|a.position.y-c.y).unwrap_or(0),
-        "monitorWidth":area.map(|a|a.size.width).unwrap_or(c.width),"monitorHeight":area.map(|a|a.size.height).unwrap_or(c.height)}),
+        "monitorWidth":area.map(|a|a.size.width).unwrap_or(c.width),"monitorHeight":area.map(|a|a.size.height).unwrap_or(c.height),"windows":c.windows}),
     )
 }
 #[tauri::command]
@@ -949,42 +949,6 @@ pub fn desktop_main(
     // focusing main, including when opening an existing conversation.
     desktop_dismiss_label(&app, "quick");
     window.set_focus().map_err(|e| e.to_string())
-}
-#[tauri::command]
-pub async fn desktop_pick_files(
-    app: tauri::AppHandle,
-) -> Result<Vec<crate::drop_files::DropFile>, String> {
-    let _dialog = NativeDialog::new(&app);
-    let mut dialog = rfd::AsyncFileDialog::new()
-        .set_title("添加文件")
-        .add_filter(
-            "支持的附件",
-            &[
-                "png", "jpg", "jpeg", "webp", "pdf", "docx", "xlsx", "txt", "md", "csv", "json",
-            ],
-        );
-    if let Ok(folder) = app.path().desktop_dir() {
-        dialog = dialog.set_directory(folder);
-    }
-    if let Some(w) = app.get_webview_window("quick") {
-        dialog = dialog.set_parent(&w);
-    }
-    let Some(files) = dialog.pick_files().await else {
-        return Ok(vec![]);
-    };
-    if files.len() > 4 {
-        return Err("每次最多提交 4 个附件".into());
-    }
-    let paths: Vec<String> = files
-        .iter()
-        .map(|f| f.path().to_string_lossy().into_owned())
-        .collect();
-    app.state::<crate::drop_files::DroppedPaths>()
-        .0
-        .lock()
-        .unwrap()
-        .extend(files.iter().map(|f| f.path().to_path_buf()));
-    crate::drop_files::read_dropped_files(app.state(), paths, false, Some(false)).await
 }
 pub(crate) struct NativeDialog(tauri::AppHandle);
 impl NativeDialog {
@@ -1140,6 +1104,7 @@ fn desktop_image() -> Result<Capture, String> {
         if width <= 0 || height <= 0 || width as u64 * height as u64 > 80_000_000 {
             return Err("屏幕尺寸超出支持范围".into());
         }
+        let windows = crate::capture_windows::snapshot(x, y, width, height);
         let screen = GetDC(None);
         if screen.0.is_null() {
             return Err("无法读取桌面".into());
@@ -1207,6 +1172,7 @@ fn desktop_image() -> Result<Capture, String> {
             height: height as u32,
             x,
             y,
+            windows,
         })
     }
 }

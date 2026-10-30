@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowUp,
-  Plus,
   X,
   Copy,
   Check,
@@ -12,6 +11,7 @@ import {
   ScanLine,
   ChevronDown,
   ChevronUp,
+  SquarePen,
 } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { useAvatarActivity } from "@/lib/useAvatarActivity";
@@ -24,6 +24,7 @@ import { SpeechInputButton } from "./SpeechInputButton";
 import { Reasoning } from "./Reasoning";
 import { useSpeechInput } from "@/lib/useSpeechInput";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
+import { nativeFile, useNativeDrop } from "@/lib/nativeDrop";
 import {
   api,
   invoke,
@@ -79,6 +80,13 @@ export function DesktopQuickAsk() {
   const [stopping, setStopping] = useState(false);
   const stopRequest = useRef(false);
   const [uploading, setUploading] = useState(false);
+  const [readingFiles, setReadingFiles] = useState(false);
+  const nativeReading = useRef(false);
+  const [surfaceVisible, setSurfaceVisible] = useState(false);
+  const [creatingChat, setCreatingChat] = useState(false);
+  const creatingChatLock = useRef(false);
+  const dropTarget = useRef<HTMLDivElement>(null);
+  const fileFingerprints = useRef(new Map<string, string>());
   const [pendingCount, setPendingCount] = useState(0);
   const [hiddenEpoch, setHiddenEpoch] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -106,7 +114,11 @@ export function DesktopQuickAsk() {
       work.current.locked = locked;
     },
     onBegin: () => setAnswerCollapsed(false),
-    isBlocked: () => work.current.busy || work.current.uploading,
+    isBlocked: () =>
+      work.current.busy ||
+      work.current.uploading ||
+      nativeReading.current ||
+      creatingChatLock.current,
     isVisible: () => visible.current,
   });
   const { voice } = speech;
@@ -149,12 +161,17 @@ export function DesktopQuickAsk() {
     if (!sessionId) return;
     void invoke("desktop_quick_state", {
       sessionId,
-      busy: busy || uploading || Boolean(voice && voice.phase !== "error"),
+      busy:
+        busy ||
+        uploading ||
+        readingFiles ||
+        Boolean(voice && voice.phase !== "error"),
     }).catch(() => {});
-  }, [sessionId, busy, uploading, voice?.phase]);
+  }, [sessionId, busy, uploading, readingFiles, voice?.phase]);
   useEffect(() => {
-    if (!busy && !uploading && !voice) void functions.current.drainImages();
-  }, [busy, uploading, voice, pendingCount]);
+    if (!busy && !uploading && !readingFiles && !voice)
+      void functions.current.drainImages();
+  }, [busy, uploading, readingFiles, voice, pendingCount]);
   useEffect(() => {
     if (sessionId) void functions.current.drainCommands();
   }, [sessionId]);
@@ -184,6 +201,9 @@ export function DesktopQuickAsk() {
       desktopListen<{ sessionId: string }>("desktop-hidden", (v) => {
         if (v.sessionId !== session.current) return;
         visible.current = false;
+        setSurfaceVisible(false);
+        nativeReading.current = false;
+        setReadingFiles(false);
         avatar.clearCelebration();
         cancelVoice();
         setHiddenEpoch((value) => value + 1);
@@ -237,6 +257,7 @@ export function DesktopQuickAsk() {
   }
   async function shown(focus = true) {
     visible.current = true;
+    setSurfaceVisible(true);
     if (
       focus &&
       document.hasFocus() &&
@@ -260,6 +281,7 @@ export function DesktopQuickAsk() {
   async function dismiss() {
     cancelVoice();
     visible.current = false;
+    setSurfaceVisible(false);
     avatar.clearCelebration();
     setError("");
     try {
@@ -267,6 +289,7 @@ export function DesktopQuickAsk() {
     } catch (cause) {
       if (mounted.current) {
         visible.current = true;
+        setSurfaceVisible(true);
         setError(desktopError(cause));
       }
     }
@@ -347,6 +370,9 @@ export function DesktopQuickAsk() {
     startRequest.current = false;
     pending.current = [];
     seen.current.clear();
+    fileFingerprints.current.clear();
+    nativeReading.current = false;
+    setReadingFiles(false);
     imageWorking.current = false;
     setPendingCount(0);
     setRunBusy(false);
@@ -508,6 +534,8 @@ export function DesktopQuickAsk() {
       work.current.busy ||
       work.current.uploading ||
       work.current.locked ||
+      nativeReading.current ||
+      creatingChatLock.current ||
       (!value.text.trim() && !value.attachments.length)
     )
       return;
@@ -594,37 +622,51 @@ export function DesktopQuickAsk() {
       }
     }
   }
-  async function pickFiles() {
-    if (work.current.uploading || work.current.locked || work.current.busy)
-      return;
-    setFileBusy(true);
-    setError("");
-    const epoch = generation.current;
-    try {
-      const files =
-        await invoke<{ name: string; bytes: number[] }[]>("desktop_pick_files");
+  async function uploadFiles(files: File[], epoch: number) {
+    const unique = new Map<string, File>();
+    for (const file of files) {
+      const path =
+        (file as File & { nativePath?: string }).nativePath || file.name;
+      const key = `${path}:${file.size}:${file.lastModified}`;
+      const attachedId = fileFingerprints.current.get(key);
+      if (
+        !attachedId ||
+        !current.current.attachments.some((item) => item.id === attachedId)
+      )
+        unique.set(key, file);
+    }
+    if (unique.size + current.current.attachments.length > 4)
+      throw new Error("每次最多提交 4 个附件");
+    for (const [key, file] of unique) {
       if (!mounted.current || epoch !== generation.current) return;
-      if (files.length + current.current.attachments.length > 4)
-        throw new Error("每次最多提交 4 个附件");
-      for (const file of files) {
-        const attachment = await addDesktopFile(
-          new File([new Uint8Array(file.bytes)], file.name),
-        );
-        if (!mounted.current || epoch !== generation.current) return;
-        updateDraft((d) => ({
-          ...d,
-          attachments: [...d.attachments, attachment],
-        }));
-      }
-    } catch (e) {
-      if (mounted.current && epoch === generation.current)
-        setError(desktopError(e));
+      const attachment = await addDesktopFile(file);
+      if (!mounted.current || epoch !== generation.current) return;
+      fileFingerprints.current.set(key, attachment.id);
+      updateDraft((value) => ({
+        ...value,
+        attachments: [...value.attachments, attachment],
+      }));
+    }
+  }
+  async function newChat() {
+    if (
+      work.current.busy ||
+      work.current.uploading ||
+      work.current.locked ||
+      nativeReading.current ||
+      creatingChatLock.current
+    )
+      return;
+    creatingChatLock.current = true;
+    setCreatingChat(true);
+    setError("");
+    try {
+      await invoke("desktop_start", { newChat: true });
+    } catch (cause) {
+      if (mounted.current) setError(desktopError(cause));
     } finally {
-      if (mounted.current && epoch === generation.current) {
-        setFileBusy(false);
-        if (visible.current && document.hasFocus() && !work.current.locked)
-          input.current?.focus({ preventScroll: true });
-      }
+      creatingChatLock.current = false;
+      if (mounted.current) setCreatingChat(false);
     }
   }
   function receiveImage(value: IncomingImage) {
@@ -640,6 +682,7 @@ export function DesktopQuickAsk() {
       work.current.busy ||
       work.current.uploading ||
       work.current.locked ||
+      nativeReading.current ||
       !pending.current.length
     )
       return;
@@ -719,23 +762,43 @@ export function DesktopQuickAsk() {
     }
   }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
+  const filesBusy = uploading || readingFiles;
+  useNativeDrop(
+    dropTarget,
+    async (files) => {
+      const epoch = generation.current;
+      setFileBusy(true);
+      setError("");
+      try {
+        if (files.some((file) => file.directory))
+          throw new Error("请拖入文件；桌面问答暂不支持文件夹");
+        await uploadFiles(files.map(nativeFile), epoch);
+      } catch (cause) {
+        if (mounted.current && epoch === generation.current)
+          setError(desktopError(cause));
+      } finally {
+        if (mounted.current && epoch === generation.current) setFileBusy(false);
+      }
+    },
+    setError,
+    false,
+    !surfaceVisible ||
+      !sessionId ||
+      busy ||
+      uploading ||
+      voiceBusy ||
+      creatingChat,
+    `${sessionId}:${hiddenEpoch}`,
+    (value) => {
+      nativeReading.current = value;
+      setReadingFiles(value);
+    },
+  );
   const hasAnswer = Boolean(answer || reasoning || busy || error);
   useDesktopTaskRead(
     draft.conversationId,
     Boolean(answer) && !answerCollapsed,
     input,
-  );
-  const fileButton = (
-    <Hint label="添加文件">
-      <button
-        className="quick-add-file"
-        aria-label="添加文件"
-        disabled={busy || uploading || Boolean(voiceBusy)}
-        onClick={() => void pickFiles()}
-      >
-        <Plus size={21} />
-      </button>
-    </Hint>
   );
   return (
     <main className="quick-window">
@@ -849,7 +912,7 @@ export function DesktopQuickAsk() {
           </div>
         </section>
       )}
-      <div className="quick-composer-group">
+      <div className="quick-composer-group" ref={dropTarget}>
         {draft.attachments.length > 0 && (
           <div className="quick-attachments">
             {draft.attachments.map((a) => (
@@ -866,7 +929,7 @@ export function DesktopQuickAsk() {
                 <Hint label="移除附件">
                   <button
                     aria-label="移除附件"
-                    disabled={busy || uploading}
+                    disabled={busy || filesBusy || creatingChat}
                     onClick={() =>
                       updateDraft((d) => ({
                         ...d,
@@ -909,9 +972,8 @@ export function DesktopQuickAsk() {
             }}
           />
           <button
-            className="quick-add-file"
             aria-label="截图"
-            disabled={uploading}
+            disabled={filesBusy || creatingChat}
             onClick={() =>
               void invoke("desktop_capture_begin").catch((e) =>
                 setError(desktopError(e)),
@@ -920,10 +982,22 @@ export function DesktopQuickAsk() {
           >
             <ScanLine size={19} />
           </button>
-          {fileButton}
+          <Hint label="新建对话">
+            <button
+              aria-label="新建对话"
+              disabled={busy || filesBusy || voiceBusy || creatingChat}
+              onClick={() => void newChat()}
+            >
+              {creatingChat ? (
+                <Loader2 size={19} className="spin" />
+              ) : (
+                <SquarePen size={19} />
+              )}
+            </button>
+          </Hint>
           <SpeechInputButton
             speech={speech}
-            disabled={busy || uploading}
+            disabled={busy || filesBusy || creatingChat}
             desktopShortcut
           />
           <Hint
@@ -953,7 +1027,8 @@ export function DesktopQuickAsk() {
               aria-busy={submitting || stopping}
               disabled={
                 !busy &&
-                (uploading ||
+                (filesBusy ||
+                  creatingChat ||
                   Boolean(voiceBusy) ||
                   (!draft.text.trim() && !draft.attachments.length))
               }
@@ -1000,7 +1075,12 @@ export function DesktopQuickAsk() {
             </Hint>
           )}
         </div>
-        {pendingCount > 0 && !uploading && (
+        {readingFiles && (
+          <p className="quick-pending" role="status">
+            正在读取拖入的文件…
+          </p>
+        )}
+        {pendingCount > 0 && !filesBusy && (
           <div className="quick-pending">
             <span>有 {pendingCount} 张暂存截图</span>
             <button

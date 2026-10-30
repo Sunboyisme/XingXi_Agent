@@ -127,6 +127,14 @@ html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
   position: relative;
   flex-shrink: 0;
 }
+.quick-composer-group.image-drag-over::after {
+  content: "松开以添加文件";
+  inset: 4px;
+  border-color: var(--ui-color-action);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  font-size: 14px;
+}
 html[data-desktop] .quick-send[aria-disabled="true"] { opacity: 0.7; cursor: progress; }
 .quick-answer {
   min-height: 0;
@@ -273,11 +281,15 @@ html[data-desktop] .picture-close {
   padding: 5px 10px;
   font-size: 13px;
 }
-.capture-selection {
+.capture-selection,
+.capture-auto-selection {
   position: absolute;
   border: 2px solid #368df5;
   box-sizing: border-box;
   background: transparent;
+}
+.capture-auto-selection {
+  pointer-events: none;
 }
 .capture-dimensions {
   position: absolute;

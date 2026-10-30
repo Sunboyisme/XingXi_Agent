@@ -6,6 +6,7 @@ mod desktop_window;
 mod window_layout;
 mod drop_files;
 mod desktop;
+mod capture_windows;
 mod pinned;
 mod pinned_menu;
 mod tray_menu;
@@ -553,7 +554,6 @@ fn main() {
             desktop::desktop_main,
             desktop::desktop_resume,
             desktop::desktop_start,
-            desktop::desktop_pick_files,
             desktop::capture_get,
             desktop::capture_present,
             desktop::capture_pixels,

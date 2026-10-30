@@ -245,7 +245,7 @@ pub fn dismiss(app: &tauri::AppHandle) {
     *state.snapshot.lock().unwrap() = Snapshot::default();
     if let Some(w) = app.get_webview_window("selection") {
         let _ = w.emit("selection-hidden", generation);
-        let _ = w.hide();
+        let _ = crate::desktop_window::hide(&w);
     }
 }
 #[tauri::command]
@@ -316,7 +316,12 @@ pub fn selection_resize(
         SWP_NOACTIVATE | SWP_NOZORDER).map_err(|error| error.to_string()) }
 }
 pub fn trigger(app: &tauri::AppHandle) { trigger_selection(app, false); }
+fn capture_active(app: &tauri::AppHandle) -> bool {
+    let desktop = app.state::<crate::desktop::Desktop>();
+    desktop.capture_starting.load(Ordering::SeqCst) || desktop.capture.lock().unwrap().is_some()
+}
 fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
+    if capture_active(app) { return; }
     let foreground = unsafe { GetForegroundWindow() }.0 as usize;
     if app
         .get_webview_window("selection")
@@ -324,15 +329,6 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
         .is_some_and(|h| h.0 as usize == foreground)
     {
         dismiss(app);
-        return;
-    }
-    if app
-        .state::<crate::desktop::Desktop>()
-        .capture
-        .lock()
-        .unwrap()
-        .is_some()
-    {
         return;
     }
     if !automatic { dismiss(app); }
@@ -389,7 +385,7 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
                 result => result,
             }
         };
-        if app.state::<Selection>().generation.load(Ordering::SeqCst) != id
+        if capture_active(&app) || app.state::<Selection>().generation.load(Ordering::SeqCst) != id
             || crate::desktop_input::keyboard_input_generation() != input_generation
             || unsafe { GetForegroundWindow() }.0 as usize != foreground
         {
@@ -414,7 +410,7 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
         };
         let a = app.clone();
         let _ = app.run_on_main_thread(move || {
-            if a.state::<Selection>().generation.load(Ordering::SeqCst) != id
+            if capture_active(&a) || a.state::<Selection>().generation.load(Ordering::SeqCst) != id
                 || crate::desktop_input::keyboard_input_generation() != input_generation
                 || unsafe { GetForegroundWindow() }.0 as usize != foreground
             {
@@ -568,7 +564,7 @@ impl AutoSelection {
         let keyboard = crate::desktop_input::keyboard_input_generation();
         let held = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(key.0 as i32) < 0 };
         let foreground = unsafe { GetForegroundWindow() }.0 as usize;
-        if !enabled {
+        if !enabled || capture_active(app) {
             self.down = None;
             self.last_click = None;
             self.scheduled = None;

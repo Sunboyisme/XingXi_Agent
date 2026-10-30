@@ -29,7 +29,15 @@ type Editable = Omit<TTSSettings, "profiles"> & {
   profiles: (TTSSettings["profiles"][number] & { api_key?: string | null })[];
 };
 
-export function TTSConnection({ active = true }: { active?: boolean }) {
+export function TTSConnection({
+  active = true,
+  configureRequested = false,
+  onConfigureHandled,
+}: {
+  active?: boolean;
+  configureRequested?: boolean;
+  onConfigureHandled?: () => void;
+}) {
   const [status, setStatus] = useState<TTSSettings>();
   const [form, setForm] = useState<Editable>();
   const [open, setOpen] = useState(false);
@@ -48,6 +56,7 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
   const previewEpoch = useRef(0);
   const loadEpoch = useRef(0);
   const loader = useRef<AbortController | null>(null);
+  const requestHandled = useRef(false);
   const player = useRef<OnlineSpeechPlayer | null>(null);
   if (!player.current) player.current = new OnlineSpeechPlayer();
   const profile = form?.profiles.find(
@@ -132,6 +141,26 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
       setOpen(false);
     }
   }, [active]);
+  function configure() {
+    stopPreview();
+    setForm(undefined);
+    setFields({});
+    setNotice("");
+    setOpen(true);
+    void load(true);
+  }
+  const configureAction = useRef(configure);
+  configureAction.current = configure;
+  useEffect(() => {
+    if (!configureRequested) {
+      requestHandled.current = false;
+      return;
+    }
+    if (!active || requestHandled.current) return;
+    requestHandled.current = true;
+    configureAction.current();
+    onConfigureHandled?.();
+  }, [active, configureRequested, onConfigureHandled]);
 
   function change(patch: Partial<TTSProfile>) {
     stopPreview();
@@ -282,14 +311,7 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
               }`
             : "预置百炼、硅基流动和 MiniMax"
       }
-      onConfigure={() => {
-        stopPreview();
-        setForm(undefined);
-        setFields({});
-        setNotice("");
-        setOpen(true);
-        void load(true);
-      }}
+      onConfigure={configure}
     >
       <Dialog open={open} onOpenChange={close}>
         <DialogContent

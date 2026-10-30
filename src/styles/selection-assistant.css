@@ -119,3 +119,91 @@ html[data-desktop="selection"] .error-notice {
 .selection-source > .selection-source-copy { line-height: 1.6; max-height: 6.4em; padding: 0; overflow: hidden; }
 .selection-source > .selection-source-copy.is-expanded { max-height: 220px; overflow: auto; }
 .selection-source > button { margin-top: 5px; color: var(--ui-color-action); }
+
+.selection-texts {
+  min-width: 0;
+}
+.selection-texts-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.selection-texts-heading strong {
+  flex: 1;
+  font-size: 14px;
+}
+.selection-texts-filters {
+  display: flex;
+  gap: 8px;
+  padding: 12px 4px;
+}
+.selection-texts-filters input {
+  flex: 1;
+  min-width: 0;
+}
+html[data-desktop="selection"] .selection-texts-filters .soft-select {
+  min-width: 120px;
+  max-width: 45%;
+  justify-content: space-between;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.selection-texts-browser {
+  display: grid;
+  grid-template-columns: minmax(150px, 32%) minmax(0, 1fr);
+  height: 360px;
+  max-height: calc(100vh - 140px);
+  border-top: 1px solid var(--ui-color-border);
+}
+.selection-texts-list {
+  overflow: auto;
+  padding: 8px 8px 8px 0;
+  border-right: 1px solid var(--ui-color-border);
+}
+html[data-desktop="selection"] .selection-texts-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+}
+.selection-texts-list small {
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.selection-texts-list span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+.selection-texts-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 6px 0 14px;
+}
+.selection-texts-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.selection-texts-preview footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+.selection-texts-empty {
+  padding: 28px 12px;
+  color: var(--ui-color-text-muted);
+  text-align: center;
+  font-size: 13px;
+}

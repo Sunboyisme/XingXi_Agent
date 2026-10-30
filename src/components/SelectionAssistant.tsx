@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   BookOpen,
@@ -32,7 +39,17 @@ import { BaiAvatar } from "./BaiAvatar";
 import { notifyCommonTextsChanged } from "@/lib/commonTexts";
 import { ErrorNotice, Hint, Markdown } from "./common";
 import { SoftSelect } from "./ui/soft-select";
+import {
+  translationLanguages,
+  type TranslationLanguage,
+} from "@/lib/translationLanguages";
 import "../styles/selection-assistant.css";
+
+const SelectionCommonTexts = lazy(() =>
+  import("./SelectionCommonTexts").then((module) => ({
+    default: module.SelectionCommonTexts,
+  })),
+);
 
 type Snapshot = {
   id: number;
@@ -78,14 +95,18 @@ export function SelectionAssistant() {
     };
   }, []);
 
-  const [language, setLanguage] = useState("auto");
+  const [language, setLanguage] = useState<TranslationLanguage>("auto");
+  const [page, setPage] = useState<"assistant" | "common-texts">("assistant");
+  const currentPage = useRef(page);
+  currentPage.current = page;
   const [action, setAction] = useState<Action>();
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [incomplete, setIncomplete] = useState(false);
   const [error, setError] = useState("");
-  const reading = useReadAloud(setError);
+  const [readingError, setReadingError] = useState("");
+  const reading = useReadAloud(setReadingError);
   const [notice, setNotice] = useState("");
   const [savingText, setSavingText] = useState(false);
   const [savedText, setSavedText] = useState(false);
@@ -121,7 +142,7 @@ export function SelectionAssistant() {
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [snapshot?.text, action]);
+  }, [snapshot?.text, action, page]);
   const commands = useRef({ accept, hide, dismiss });
   commands.current = { accept, hide, dismiss };
   useDesktopHitRegions(
@@ -133,6 +154,7 @@ export function SelectionAssistant() {
     clearTimeout(feedbackTimer.current);
   }
   function success(message: string, id: number) {
+    if (currentPage.current !== "assistant") return;
     clearFeedback();
     const own = feedbackEpoch.current;
     setNotice(message);
@@ -198,6 +220,8 @@ export function SelectionAssistant() {
     current.current = undefined;
     setSnapshot(undefined);
     setAction(undefined);
+    setPage("assistant");
+    setReadingError("");
     setSavingText(false);
     setSavedText(false);
     saveRequest.current = null;
@@ -212,6 +236,8 @@ export function SelectionAssistant() {
     current.current = value;
     setSnapshot(value);
     setSourceExpanded(false);
+    setPage("assistant");
+    setReadingError("");
     setAction(undefined);
     setAnswer("");
     setBusy(false);
@@ -301,19 +327,20 @@ export function SelectionAssistant() {
   useLayoutEffect(() => {
     if (!snapshot) return;
     let active = true;
-    const expandedHeight = action ? 590 : 140;
+    const expanded = Boolean(action) || page === "common-texts";
+    const expandedHeight = expanded ? 590 : 140;
     const resize = () => {
       if (active)
         void invoke("selection_resize", {
           id: snapshot.id,
-          width: action
+          width: expanded
             ? 720
             : Math.ceil(
                 (root.current?.getBoundingClientRect().width || 640) + 16,
               ),
           height: Math.max(
             expandedHeight,
-            (root.current?.scrollHeight || 64) + (action ? 20 : 64),
+            (root.current?.scrollHeight || 64) + (expanded ? 20 : 64),
           ),
         }).catch((cause) => {
           if (active) setError(desktopError(cause));
@@ -326,7 +353,7 @@ export function SelectionAssistant() {
       active = false;
       observer.disconnect();
     };
-  }, [snapshot?.id, action]);
+  }, [snapshot?.id, action, page]);
   useEffect(() => {
     const element = scroll.current;
     if (element && following.current) element.scrollTop = element.scrollHeight;
@@ -361,7 +388,7 @@ export function SelectionAssistant() {
     setStopping(true);
     if (runId.current) await cancel(runId.current, operation.current);
   }
-  async function process(next: Action) {
+  async function process(next: Action, targetLanguage = language) {
     const material = current.current;
     if (!material?.text) return;
     invalidate();
@@ -370,6 +397,7 @@ export function SelectionAssistant() {
     setAnswer("");
     setCopied(null);
     setError("");
+    setReadingError("");
     setNotice("");
     setBusy(true);
     setStopping(false);
@@ -389,7 +417,7 @@ export function SelectionAssistant() {
       const run = await api<{ id: string }>("/desktop/actions", "POST", {
         action: next,
         text: material.text,
-        target_language: language,
+        target_language: targetLanguage,
         model_selection: {
           ...selected,
           thinking_enabled: false,
@@ -453,283 +481,335 @@ export function SelectionAssistant() {
   const toolDisabled = !snapshot.text;
   return (
     <main
-      className={`selection-window${action ? " has-result" : ""}`}
+      className={`selection-window${action || page === "common-texts" ? " has-result" : ""}`}
       ref={root}
       aria-label="划词助手"
     >
-      <div className="selection-toolbar">
-        <div className="selection-actions">
-          <span className="selection-avatar">
-            <BaiAvatar motion="still" />
-          </span>
-          <Hint
-            side="bottom"
-            label={
-              reading.kind === "source" ? "停止朗读选中文字" : "朗读选中文字"
-            }
-          >
-            <button
-              disabled={toolDisabled}
-              aria-label={
-                reading.kind === "source" ? "停止朗读选中文字" : "朗读选中文字"
-              }
-              aria-pressed={reading.kind === "source"}
-              onClick={() => {
-                clearFeedback();
-                setNotice("");
-                setError("");
-                void reading.toggle(snapshot.text, "source", snapshot.id);
-              }}
-            >
-              {reading.kind === "source" ? (
-                reading.phase === "loading" ? (
-                  <Loader2 size={16} className="spin" />
-                ) : (
-                  <Square size={16} />
-                )
-              ) : (
-                <Volume2 size={16} />
-              )}
-              朗读
-            </button>
-          </Hint>
-          <button
-            disabled={toolDisabled}
-            aria-pressed={action === "explain"}
-            onClick={() => void process("explain")}
-          >
-            <BookOpen size={16} />
-            解释
-          </button>
-          <button
-            disabled={toolDisabled}
-            aria-pressed={action === "translate"}
-            onClick={() => void process("translate")}
-          >
-            <Languages size={16} />
-            翻译
-          </button>
-          <button
-            disabled={toolDisabled}
-            aria-pressed={action === "summarize"}
-            onClick={() => void process("summarize")}
-          >
-            <FileText size={16} />
-            总结
-          </button>
-          <button
-            disabled={toolDisabled || savingText || savedText}
-            onClick={async () => {
-              const material = current.current;
-              if (
-                !material?.text ||
-                saveRequest.current === material.id ||
-                savedText
-              )
-                return;
-              saveRequest.current = material.id;
-              const own = operation.current;
-              clearFeedback();
-              setSavingText(true);
-              setError("");
-              setNotice("");
-              try {
-                await api("/common-texts", "POST", {
-                  content: material.text,
-                  category_id: null,
-                });
-                notifyCommonTextsChanged();
-                if (
-                  mounted.current &&
-                  current.current?.id === material.id &&
-                  own === operation.current
-                ) {
-                  setSavedText(true);
-                  success("已添加到默认分类", material.id);
-                }
-              } catch (cause) {
-                if (
-                  mounted.current &&
-                  current.current?.id === material.id &&
-                  own === operation.current
-                )
-                  setError(desktopError(cause));
-              } finally {
-                if (saveRequest.current === material.id) {
-                  saveRequest.current = null;
-                  if (mounted.current) setSavingText(false);
-                }
-              }
-            }}
-          >
-            {savingText ? (
-              <Loader2 size={16} className="spin" />
-            ) : savedText ? (
-              <Check size={16} />
-            ) : (
-              <BookmarkPlus size={16} />
-            )}
-            添加到常用文本
-          </button>
-          <button
-            onClick={() =>
+      {page === "common-texts" ? (
+        <Suspense fallback={<p role="status">正在打开常用文本…</p>}>
+          <SelectionCommonTexts
+            onBack={() => setPage("assistant")}
+            onClose={dismiss}
+            onManage={() =>
               void invoke("desktop_main", { page: "common-texts" })
                 .then(dismiss)
                 .catch((cause) => setError(desktopError(cause)))
             }
-          >
-            <FolderOpen size={16} />
-            打开常用文本
-          </button>
-          <Hint
-            side="bottom"
-            label={copied === "source" ? "已复制选中文字" : "复制选中文字"}
-          >
-            <button
-              disabled={toolDisabled}
-              onClick={() => void copy(snapshot.text, "source")}
-            >
-              {copied === "source" ? <Check size={16} /> : <Copy size={16} />}
-              复制
-            </button>
-          </Hint>
-        </div>
-        <Hint side="bottom" label="关闭划词助手（Esc）">
-          <button
-            className="selection-close"
-            aria-label="关闭划词助手"
-            onClick={dismiss}
-          >
-            <X size={15} />
-          </button>
-        </Hint>
-      </div>
-      {(snapshot.error || error) && (
-        <ErrorNotice message={snapshot.error || error} />
-      )}
-      {notice && (
-        <p className="selection-notice" role="status">
-          {notice}
-        </p>
-      )}
-      {action && (
-        <section
-          className="selection-result"
-          aria-label={`${actionLabels[action]}结果`}
-        >
-          <div className="selection-result-options">
-            {action === "translate" && (
-              <SoftSelect
-                label="翻译目标语言"
-                value={language}
-                onValueChange={setLanguage}
-                disabled={busy}
-                options={[
-                  { value: "auto", label: "自动中英互译" },
-                  { value: "简体中文", label: "简体中文" },
-                  { value: "English", label: "English" },
-                ]}
-              />
-            )}
-          </div>
-          {configError && (
-            <ErrorNotice
-              message={configError}
-              retry={() => setReloadSettings((n) => n + 1)}
-            />
-          )}
-          <div className="selection-source">
-            <div
-              ref={sourceText}
-              className={`selection-source-copy ${sourceExpanded ? "is-expanded" : ""}`}
-            >
-              {snapshot.text}
-            </div>
-            {sourceLong && (
-              <button
-                aria-expanded={sourceExpanded}
-                onClick={() => setSourceExpanded((value) => !value)}
+          />
+        </Suspense>
+      ) : (
+        <>
+          <div className="selection-toolbar">
+            <div className="selection-actions">
+              <span className="selection-avatar">
+                <BaiAvatar motion="still" />
+              </span>
+              <Hint
+                side="bottom"
+                label={
+                  reading.kind === "source"
+                    ? "停止朗读选中文字"
+                    : "朗读选中文字"
+                }
               >
-                {sourceExpanded ? "收起" : "展开"}
-              </button>
-            )}
-          </div>
-          <div
-            className="selection-answer"
-            ref={scroll}
-            tabIndex={0}
-            onWheel={(event) => {
-              if (event.deltaY < 0) following.current = false;
-            }}
-            onScroll={(event) => {
-              const node = event.currentTarget;
-              following.current =
-                node.scrollHeight - node.scrollTop - node.clientHeight < 24;
-            }}
-          >
-            {answer && <Markdown>{answer}</Markdown>}
-            {busy && (
-              <p className="selection-progress" role="status">
-                <Loader2 size={14} className="spin" />
-                {stopping ? "正在停止…" : "正在处理…"}
-              </p>
-            )}
-            {!busy && !answer && !error && (
-              <p className="common-text-muted">点击重试开始处理。</p>
-            )}
-            {!busy && incomplete && (
-              <p className="common-text-muted">处理未完成，已有内容已保留。</p>
-            )}
-          </div>
-          <div className="selection-result-actions">
-            {action === "translate" && (
+                <button
+                  disabled={toolDisabled}
+                  aria-label={
+                    reading.kind === "source"
+                      ? "停止朗读选中文字"
+                      : "朗读选中文字"
+                  }
+                  aria-pressed={reading.kind === "source"}
+                  onClick={() => {
+                    clearFeedback();
+                    setNotice("");
+                    setError("");
+                    setReadingError("");
+                    void reading.toggle(snapshot.text, "source", snapshot.id);
+                  }}
+                >
+                  {reading.kind === "source" ? (
+                    reading.phase === "loading" ? (
+                      <Loader2 size={16} className="spin" />
+                    ) : (
+                      <Square size={16} />
+                    )
+                  ) : (
+                    <Volume2 size={16} />
+                  )}
+                  朗读
+                </button>
+              </Hint>
               <button
-                disabled={!answer || busy}
-                aria-pressed={reading.kind === "translation"}
-                onClick={() => {
+                disabled={toolDisabled}
+                aria-pressed={action === "explain"}
+                onClick={() => void process("explain")}
+              >
+                <BookOpen size={16} />
+                解释
+              </button>
+              <button
+                disabled={toolDisabled}
+                aria-pressed={action === "translate"}
+                onClick={() => void process("translate")}
+              >
+                <Languages size={16} />
+                翻译
+              </button>
+              <button
+                disabled={toolDisabled}
+                aria-pressed={action === "summarize"}
+                onClick={() => void process("summarize")}
+              >
+                <FileText size={16} />
+                总结
+              </button>
+              <button
+                disabled={toolDisabled || savingText || savedText}
+                onClick={async () => {
+                  const material = current.current;
+                  if (
+                    !material?.text ||
+                    saveRequest.current === material.id ||
+                    savedText
+                  )
+                    return;
+                  saveRequest.current = material.id;
+                  const own = operation.current;
                   clearFeedback();
-                  setNotice("");
+                  setSavingText(true);
                   setError("");
-                  void reading.toggle(answer, "translation", snapshot.id);
+                  setNotice("");
+                  try {
+                    await api("/common-texts", "POST", {
+                      content: material.text,
+                      category_id: null,
+                    });
+                    notifyCommonTextsChanged();
+                    if (
+                      mounted.current &&
+                      current.current?.id === material.id &&
+                      own === operation.current
+                    ) {
+                      setSavedText(true);
+                      success("已添加到默认分类", material.id);
+                    }
+                  } catch (cause) {
+                    if (
+                      mounted.current &&
+                      current.current?.id === material.id &&
+                      own === operation.current
+                    )
+                      setError(desktopError(cause));
+                  } finally {
+                    if (saveRequest.current === material.id) {
+                      saveRequest.current = null;
+                      if (mounted.current) setSavingText(false);
+                    }
+                  }
                 }}
               >
-                {reading.kind === "translation" ? (
-                  reading.phase === "loading" ? (
-                    <Loader2 size={14} className="spin" />
-                  ) : (
-                    <Square size={14} />
-                  )
+                {savingText ? (
+                  <Loader2 size={16} className="spin" />
+                ) : savedText ? (
+                  <Check size={16} />
                 ) : (
-                  <Volume2 size={14} />
+                  <BookmarkPlus size={16} />
                 )}
-                {reading.kind === "translation"
-                  ? reading.phase === "loading"
-                    ? "合成中…"
-                    : "停止朗读"
-                  : "朗读译文"}
+                添加到常用文本
               </button>
-            )}
-            {busy ? (
-              <button disabled={stopping} onClick={() => void stop()}>
-                <Square size={14} />
-                {stopping ? "停止中…" : "停止"}
+              <button
+                onClick={() => {
+                  clearFeedback();
+                  reading.stop();
+                  setReadingError("");
+                  setError("");
+                  setPage("common-texts");
+                }}
+              >
+                <FolderOpen size={16} />
+                打开常用文本
               </button>
-            ) : (
-              <button onClick={() => void process(action)}>
-                <RotateCcw size={14} />
-                重试
+              <Hint
+                side="bottom"
+                label={copied === "source" ? "已复制选中文字" : "复制选中文字"}
+              >
+                <button
+                  disabled={toolDisabled}
+                  onClick={() => void copy(snapshot.text, "source")}
+                >
+                  {copied === "source" ? (
+                    <Check size={16} />
+                  ) : (
+                    <Copy size={16} />
+                  )}
+                  复制
+                </button>
+              </Hint>
+            </div>
+            <Hint side="bottom" label="关闭划词助手（Esc）">
+              <button
+                className="selection-close"
+                aria-label="关闭划词助手"
+                onClick={dismiss}
+              >
+                <X size={15} />
               </button>
-            )}
-            <button
-              disabled={!answer}
-              onClick={() => void copy(answer, "result")}
-            >
-              {copied === "result" ? <Check size={14} /> : <Copy size={14} />}
-              复制结果
-            </button>
+            </Hint>
           </div>
-        </section>
+          {snapshot.error && <ErrorNotice message={snapshot.error} />}
+          {readingError && (
+            <ErrorNotice
+              message={readingError}
+              action={{
+                label: "语音设置",
+                onClick: () =>
+                  void invoke("desktop_main", {
+                    settings: true,
+                    settingsTab: "tts",
+                  })
+                    .then(dismiss)
+                    .catch((cause) => setReadingError(desktopError(cause))),
+              }}
+            />
+          )}
+          {notice && (
+            <p className="selection-notice" role="status">
+              {notice}
+            </p>
+          )}
+          {action && (
+            <section
+              className="selection-result"
+              aria-label={`${actionLabels[action]}结果`}
+            >
+              <div className="selection-result-options">
+                {action === "translate" && (
+                  <SoftSelect
+                    label="翻译目标语言"
+                    value={language}
+                    onValueChange={(value) => {
+                      const next = translationLanguages.find(
+                        (option) => option.value === value,
+                      )?.value;
+                      if (next) {
+                        setLanguage(next);
+                        void process("translate", next);
+                      }
+                    }}
+                    disabled={busy}
+                    options={translationLanguages}
+                  />
+                )}
+              </div>
+              {configError && (
+                <ErrorNotice
+                  message={configError}
+                  retry={() => setReloadSettings((n) => n + 1)}
+                />
+              )}
+              <div className="selection-source">
+                <div
+                  ref={sourceText}
+                  className={`selection-source-copy ${sourceExpanded ? "is-expanded" : ""}`}
+                >
+                  {snapshot.text}
+                </div>
+                {sourceLong && (
+                  <button
+                    aria-expanded={sourceExpanded}
+                    onClick={() => setSourceExpanded((value) => !value)}
+                  >
+                    {sourceExpanded ? "收起" : "展开"}
+                  </button>
+                )}
+              </div>
+              <div
+                className="selection-answer"
+                ref={scroll}
+                tabIndex={0}
+                onWheel={(event) => {
+                  if (event.deltaY < 0) following.current = false;
+                }}
+                onScroll={(event) => {
+                  const node = event.currentTarget;
+                  following.current =
+                    node.scrollHeight - node.scrollTop - node.clientHeight < 24;
+                }}
+              >
+                {answer && <Markdown>{answer}</Markdown>}
+                {busy && (
+                  <p className="selection-progress" role="status">
+                    <Loader2 size={14} className="spin" />
+                    {stopping ? "正在停止…" : "正在处理…"}
+                  </p>
+                )}
+                {!busy && !answer && !error && (
+                  <p className="common-text-muted">点击重试开始处理。</p>
+                )}
+                {!busy && incomplete && (
+                  <p className="common-text-muted">
+                    处理未完成，已有内容已保留。
+                  </p>
+                )}
+              </div>
+              <div className="selection-result-actions">
+                {action === "translate" && (
+                  <button
+                    disabled={!answer || busy}
+                    aria-pressed={reading.kind === "translation"}
+                    onClick={() => {
+                      clearFeedback();
+                      setNotice("");
+                      setError("");
+                      setReadingError("");
+                      void reading.toggle(answer, "translation", snapshot.id);
+                    }}
+                  >
+                    {reading.kind === "translation" ? (
+                      reading.phase === "loading" ? (
+                        <Loader2 size={14} className="spin" />
+                      ) : (
+                        <Square size={14} />
+                      )
+                    ) : (
+                      <Volume2 size={14} />
+                    )}
+                    {reading.kind === "translation"
+                      ? reading.phase === "loading"
+                        ? "合成中…"
+                        : "停止朗读"
+                      : "朗读译文"}
+                  </button>
+                )}
+                {busy ? (
+                  <button disabled={stopping} onClick={() => void stop()}>
+                    <Square size={14} />
+                    {stopping ? "停止中…" : "停止"}
+                  </button>
+                ) : (
+                  <button onClick={() => void process(action)}>
+                    <RotateCcw size={14} />
+                    重试
+                  </button>
+                )}
+                <button
+                  disabled={!answer}
+                  onClick={() => void copy(answer, "result")}
+                >
+                  {copied === "result" ? (
+                    <Check size={14} />
+                  ) : (
+                    <Copy size={14} />
+                  )}
+                  复制结果
+                </button>
+              </div>
+            </section>
+          )}
+        </>
       )}
+      {error && <ErrorNotice message={error} />}
     </main>
   );
 }

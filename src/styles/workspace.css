@@ -591,10 +591,18 @@ textarea:not(#chat-message):not(.learning-message-input):focus-visible,
 .soft-select-option[data-disabled] {
   opacity: 0.4;
 }
-.soft-select-scroll {
-  display: flex;
-  justify-content: center;
-  padding: 3px;
+.soft-select-menu .soft-select-viewport {
+  max-height: min(328px, calc(var(--radix-select-content-available-height) - 12px));
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.soft-select-menu .soft-select-viewport::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+.soft-select-menu .soft-select-viewport::-webkit-scrollbar-thumb {
+  background: var(--ui-color-border);
+  border-radius: 6px;
 }
 .models-heading {
   display: flex;

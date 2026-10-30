@@ -164,6 +164,7 @@ export function App() {
   const [planAgenda, setPlanAgenda] = useState<PendingAgenda>();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [speechConfigureRequested, setSpeechConfigureRequested] = useState(false);
+  const [ttsConfigureRequested, setTtsConfigureRequested] = useState(false);
   const [contextSettingsTarget, setContextSettingsTarget] = useState<ModelContextTarget>();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [runtimeEditor, setRuntimeEditor] = useState(emptyRuntimeEditor);
@@ -239,9 +240,11 @@ export function App() {
     if (request.page === "notifications") { setNotificationOpen(true); return; }
     if (request.settings) {
       navigate("settings");
-      const tab = isSettingsTab(request.settingsTab) ? request.settingsTab : "desktop";
+      const tts = request.settingsTab === "tts";
+      const tab = tts ? "services" : isSettingsTab(request.settingsTab) ? request.settingsTab : "desktop";
       setSettingsTab(tab);
-      setSpeechConfigureRequested(tab === "services");
+      setSpeechConfigureRequested(tab === "services" && !tts);
+      setTtsConfigureRequested(tts);
     } else if (request.conversationId) {
       void api<Conversation[]>("/conversations").then(values => {
         if (navigationEpoch.current !== epoch) return;
@@ -844,6 +847,8 @@ export function App() {
                   onContextTargetHandled={() => setContextSettingsTarget(undefined)}
                   speechConfigureRequested={speechConfigureRequested}
                   onSpeechConfigureHandled={() => setSpeechConfigureRequested(false)}
+                  ttsConfigureRequested={ttsConfigureRequested}
+                  onTtsConfigureHandled={() => setTtsConfigureRequested(false)}
                   onTab={setSettingsTab}
                   createRequested={createKey}
                 />

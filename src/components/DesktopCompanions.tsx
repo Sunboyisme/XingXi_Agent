@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AudioLines, Bell, Square, SquarePen, ScanLine, X } from "lucide-react";
+import { AudioLines, Bell, Square, MessageCircle, ScanLine, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
@@ -357,7 +357,7 @@ export function DesktopPet() {
     quickVisible.current = true;
     setQuickShown(true);
     setCollapsed(true);
-    void invoke("desktop_start", { newChat: !voice, voice }).catch(error => { quickVisible.current = false; setQuickShown(false); setError(desktopError(error)); });
+    void (voice ? invoke("desktop_start", { newChat: false, voice: true }) : invoke("desktop_ai_open")).catch(error => { quickVisible.current = false; setQuickShown(false); setError(desktopError(error)); });
   }
   function openMainWindow() {
     setError("");
@@ -548,7 +548,7 @@ export function DesktopPet() {
         </span>
         {(hovered || focused) && presence.phase === "idle" && gesture?.kind !== "drag" && !menu && (
           <div ref={hoverTools} className="pet-hover-tools" role="toolbar" aria-label="桌宠快捷操作" onPointerDown={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
-            <Hint label="开始新聊天"><button aria-label="开始新聊天" onClick={() => startDesktopAsk()}><SquarePen size={16} /></button></Hint>
+            <Hint label="AI 对话"><button aria-label="AI 对话" onClick={() => startDesktopAsk()}><MessageCircle size={16} /></button></Hint>
             <button aria-label="截图" onClick={() => void invoke("desktop_capture_begin").catch(e => setError(desktopError(e)))}><ScanLine size={16} /></button>
             <span className="pet-toolbar-divider" />
             <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startDesktopAsk(true)}><AudioLines size={16} /></button></Hint>
