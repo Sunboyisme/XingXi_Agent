@@ -10,10 +10,13 @@ $env:BAI_DATA_DIR = if ($env:BAI_PREVIEW_DATA_DIR) { $env:BAI_PREVIEW_DATA_DIR }
 $env:BAI_BACKEND_PORT = '8790'
 $env:BAI_BACKEND_URL = 'http://127.0.0.1:8790'
 $env:BAI_FRONTEND_ORIGIN = 'http://127.0.0.1:5190'
+# Keep preview binaries separate from static checks and any older running build.
+# This changes only compiler output; the preview identity and data stay stable.
+$env:CARGO_TARGET_DIR = Join-Path $previewRoot '.local-data\cargo-preview'
 New-Item -ItemType Directory -Path $env:BAI_DATA_DIR -Force | Out-Null
 $previewLogName = if ($LogName) { $LogName } else { 'desktop-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff') + '.log' }
 $previewLog = Join-Path $env:BAI_DATA_DIR $previewLogName
-$previewExecutable = Join-Path $previewRoot '.local-data\cargo-ui-review\debug\bai-agent.exe'
+$previewExecutable = Join-Path $env:CARGO_TARGET_DIR 'debug\bai-agent.exe'
 if ($Worker) {
     Set-Content -LiteralPath (Join-Path $env:BAI_DATA_DIR 'latest-preview-log.txt') -Value $previewLogName -Encoding UTF8
     $previewPnpm = (Get-Command pnpm.cmd -ErrorAction Stop).Source
@@ -39,7 +42,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $previewRoot 'backend\.venv\Scripts\
 $previewPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $previewScript = Join-Path $PSScriptRoot 'start-preview.ps1'
 $previewWorker = Start-Process -FilePath $previewPowerShell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $previewScript + '"'), '-Worker', '-LogName', $previewLogName) -WorkingDirectory $previewRoot -WindowStyle Hidden -PassThru
-$previewDeadline = [DateTime]::UtcNow.AddMinutes(3)
+$previewDeadline = [DateTime]::UtcNow.AddMinutes(10)
 while ([DateTime]::UtcNow -lt $previewDeadline) {
     $previewWindow = Get-Process -Name 'bai-agent' -ErrorAction SilentlyContinue | Where-Object {
         $_.Path -eq $previewExecutable -and $_.MainWindowHandle -ne 0
