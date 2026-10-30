@@ -335,7 +335,8 @@ export function ProjectManagement({
               </Button>
               <Button
                 disabled={busy || picking || droppingFolders || !name.trim()}
-                onClick={() =>
+                onClick={() => {
+                  const own = editorSequence.current;
                   void mutate(async () => {
                     const creating = !editing;
                     const value = await api<Project>(
@@ -347,10 +348,11 @@ export function ProjectManagement({
                         workspace_paths: workspacePaths,
                       },
                     );
+                    if (own !== editorSequence.current) return;
                     closeEditor();
                     if (creating) onProject(value.id, value);
-                  })
-                }
+                  });
+                }}
               >
                 {busy ? "保存中…" : "保存"}
               </Button>{" "}
@@ -362,6 +364,7 @@ export function ProjectManagement({
               项目名称
               <Input
                 value={name}
+                disabled={busy}
                 maxLength={200}
                 onChange={(event) => setName(event.target.value)}
               />
@@ -370,6 +373,7 @@ export function ProjectManagement({
               项目说明（可选）
               <Textarea
                 value={instructions}
+                disabled={busy}
                 maxLength={12000}
                 rows={3}
                 placeholder="项目目标、背景和回答要求…"

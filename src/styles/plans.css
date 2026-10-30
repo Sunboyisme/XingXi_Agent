@@ -498,6 +498,12 @@
 .plan-editor-fields {
   display: contents;
 }
+.plan-field-error {
+  margin: 0;
+  color: var(--ui-color-danger);
+  font-size: 12px;
+  line-height: 1.6;
+}
 @container plans (max-width: 820px) {
   .calendar-page .plan-toolbar {
     grid-template-columns: minmax(0, 1fr) auto;

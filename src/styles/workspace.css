@@ -1461,6 +1461,12 @@ textarea:not(#chat-message):not(.learning-message-input):focus-visible,
 .calendar-time input[aria-invalid="true"] {
   border-color: var(--appearance-danger, #bd5f49);
 }
+.calendar-time-error {
+  margin: 8px 0 0;
+  color: var(--ui-color-danger);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .calendar-time b {
   color: var(--appearance-muted, #ac9a85);
   font-weight: 400;

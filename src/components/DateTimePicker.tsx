@@ -46,6 +46,9 @@ export function DateTimePicker({
   const grid = useRef<HTMLDivElement>(null);
   const shouldFocus = useRef(false);
   const today = zonedToday(timezone);
+  const displayDate = value
+    ? dateLabel(value.split("T")[0]).replace(" 星期", " 周")
+    : "";
   const first = `${month}-01`;
   const offset = (new Date(`${first}T00:00:00Z`).getUTCDay() + 6) % 7;
   const start = dateMove(first, -offset);
@@ -110,9 +113,9 @@ export function DateTimePicker({
           <CalendarDays size={16} />
           <span>
             {value
-              ? dateLabel(value.split("T")[0])
-                  .replace(/^\d+年/, "")
-                  .replace(" 星期", " 周")
+              ? value.slice(0, 4) === today.slice(0, 4)
+                ? displayDate.replace(/^\d+年/, "")
+                : displayDate
               : "选择日期"}
           </span>
           {!dateOnly && <strong>{value.split("T")[1] || "--:--"}</strong>}
@@ -210,6 +213,9 @@ export function DateTimePicker({
                     maxLength={2}
                     value={hour}
                     aria-invalid={!validHour}
+                    aria-describedby={
+                      !validHour ? `${id}-time-error` : undefined
+                    }
                     onChange={(event) =>
                       setHour(event.target.value.replace(/\D/g, ""))
                     }
@@ -224,6 +230,9 @@ export function DateTimePicker({
                     maxLength={2}
                     value={minute}
                     aria-invalid={!validMinute}
+                    aria-describedby={
+                      !validMinute ? `${id}-time-error` : undefined
+                    }
                     onChange={(event) =>
                       setMinute(event.target.value.replace(/\D/g, ""))
                     }
@@ -233,6 +242,15 @@ export function DateTimePicker({
                   />
                 </div>
               </div>
+              {(!validHour || !validMinute) && (
+                <p
+                  id={`${id}-time-error`}
+                  className="calendar-time-error"
+                  role="alert"
+                >
+                  小时请输入 0–23，分钟请输入 0–59。
+                </p>
+              )}
               <div className="calendar-time-presets">
                 {["09:00", "14:00", "20:00"].map((time) => (
                   <button

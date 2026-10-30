@@ -58,7 +58,6 @@ import {
 } from "@/lib/calendarMonth";
 import { errorMessage } from "@/lib/utils";
 
-
 export function nextPlanEnd(start: string, end: string, allDay: boolean) {
   const startDay = start.slice(0, 10);
   if (allDay) return end.slice(0, 10) < startDay ? startDay : end.slice(0, 10);
@@ -105,10 +104,10 @@ function emptyPlanForm(day: string) {
     reminder_at: "",
     status: "planned" as "planned" | "completed" | "ended" | "deleted",
     recurrence: "none" as "none" | "daily" | "weekly" | "monthly",
-    repeat_interval: 1,
+    repeat_interval: "1",
     repeat_end_mode: "never" as "never" | "until" | "count",
     repeat_until: dateMove(day, 30),
-    repeat_count: 10,
+    repeat_count: "10",
     calendar_display: "summary" as "summary" | "always",
     reminder_values: [`${day}T09:00`],
   };
@@ -135,13 +134,25 @@ export function CalendarPage({
 }) {
   const today = zonedToday(timezone);
   const [savedLocation] = useState(() => readPlanLocation(today));
-  const [todoView, setTodoView] = useState(Boolean(openTodoId) || savedLocation.view === "todo");
-  useEffect(() => { if (openTodoId) setTodoView(true); }, [openTodoId]);
-  useEffect(() => { if (openEventId || requestedAgenda || createRequested) setTodoView(false); }, [openEventId, requestedAgenda, createRequested]);
-  const [anchor, setAnchor] = useState(savedLocation.anchor);
-  const [view, setView] = useState<"month" | "week">(savedLocation.calendarView);
+  const [todoView, setTodoView] = useState(
+    Boolean(openTodoId) || savedLocation.view === "todo",
+  );
   useEffect(() => {
-    storePlanLocation({ view: todoView ? "todo" : view, calendarView: view, anchor });
+    if (openTodoId) setTodoView(true);
+  }, [openTodoId]);
+  useEffect(() => {
+    if (openEventId || requestedAgenda || createRequested) setTodoView(false);
+  }, [openEventId, requestedAgenda, createRequested]);
+  const [anchor, setAnchor] = useState(savedLocation.anchor);
+  const [view, setView] = useState<"month" | "week">(
+    savedLocation.calendarView,
+  );
+  useEffect(() => {
+    storePlanLocation({
+      view: todoView ? "todo" : view,
+      calendarView: view,
+      anchor,
+    });
   }, [todoView, view, anchor]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [dayOrders, setDayOrders] = useState<Record<string, string[]>>({});
@@ -182,6 +193,40 @@ export function CalendarPage({
   const moveLock = useRef(false);
   const [moveNotice, setMoveNotice] = useState("");
   const [form, setForm] = useState(() => emptyPlanForm(today));
+  const saveLock = useRef(false);
+  const repeatSettings =
+    editorMode === "repeat" && (!editing || editScope !== "this");
+  const intervalError =
+    repeatSettings &&
+    (!/^\d+$/.test(form.repeat_interval) ||
+      Number(form.repeat_interval) < 1 ||
+      Number(form.repeat_interval) > 365)
+      ? "请输入 1 至 365 的整数。"
+      : "";
+  const countError =
+    repeatSettings &&
+    form.repeat_end_mode === "count" &&
+    (!/^\d+$/.test(form.repeat_count) ||
+      Number(form.repeat_count) < 1 ||
+      Number(form.repeat_count) > 10000)
+      ? "请输入 1 至 10000 的整数。"
+      : "";
+  const untilError =
+    repeatSettings &&
+    form.repeat_end_mode === "until" &&
+    (!form.repeat_until || form.repeat_until < form.start.slice(0, 10))
+      ? "截止日期不能早于计划开始日期。"
+      : "";
+  const datesError = form.all_day
+    ? form.end < form.start
+      ? "结束日期不能早于开始日期。"
+      : ""
+    : form.end <= form.start
+      ? "结束时间须晚于开始时间。"
+      : "";
+  const formInvalid =
+    !form.title.trim() ||
+    Boolean(intervalError || countError || untilError || datesError);
   const formBaseline = useRef<typeof form | null>(null);
   const first = `${anchor.slice(0, 7)}-01`;
   const offset = (new Date(`${first}T00:00:00Z`).getUTCDay() + 6) % 7;
@@ -294,7 +339,7 @@ export function CalendarPage({
                   ? "planned"
                   : event.status,
             recurrence: event.recurrence || "none",
-            repeat_interval: event.repeat_interval || 1,
+            repeat_interval: String(event.repeat_interval || 1),
             repeat_end_mode: event.repeat_until
               ? "until"
               : event.repeat_count
@@ -302,10 +347,11 @@ export function CalendarPage({
                 : "never",
             repeat_until:
               event.repeat_until || dateMove((first || day).slice(0, 10), 30),
-            repeat_count:
+            repeat_count: String(
               scope === "future" && event.repeat_count
                 ? Math.max(1, event.repeat_count - event.occurrence_index)
                 : event.repeat_count || 10,
+            ),
             calendar_display: event.calendar_display,
             reminder_values: (event.reminder_offsets?.length
               ? event.reminder_offsets
@@ -374,7 +420,7 @@ export function CalendarPage({
       all_day: true,
       start: day,
       end: day,
-      repeat_interval: 1,
+      repeat_interval: "1",
       repeat_end_mode: "never",
     }));
   }
@@ -394,7 +440,11 @@ export function CalendarPage({
     )
       .then((event) => {
         if (!live) return;
-        setAnchor(event.all_day ? event.start : zonedInput(event.start, timezone).slice(0, 10));
+        setAnchor(
+          event.all_day
+            ? event.start
+            : zonedInput(event.start, timezone).slice(0, 10),
+        );
         edit(event.start.slice(0, 10), {
           ...event,
           occurrence_start: openOccurrenceStart || event.start,
@@ -440,6 +490,8 @@ export function CalendarPage({
     );
     return {
       ...form,
+      title: form.title.trim(),
+      repeat_interval: repeatSettings ? Number(form.repeat_interval) : 1,
       recurrence:
         editorMode === "single" || onlyThis ? "none" : form.recurrence,
       repeat_until:
@@ -454,7 +506,7 @@ export function CalendarPage({
         !onlyThis &&
         form.recurrence !== "none" &&
         form.repeat_end_mode === "count"
-          ? form.repeat_count
+          ? Number(form.repeat_count)
           : null,
       calendar_display: form.calendar_display,
       reminder_offsets: form.reminder_values.map((value) =>
@@ -480,15 +532,17 @@ export function CalendarPage({
     };
   }
   async function save() {
-    if (busy || editing?.status === "cancelled") return;
+    if (
+      busy ||
+      saveLock.current ||
+      formInvalid ||
+      editing?.status === "cancelled"
+    )
+      return;
+    saveLock.current = true;
     setBusy(true);
     setError("");
     try {
-      if (
-        (form.end <= form.start && !form.all_day) ||
-        (form.all_day && form.end < form.start)
-      )
-        throw new Error("结束时间不能早于开始时间；定时计划的结束须晚于开始");
       await api(
         editing ? `/plans/${editing.id}` : "/plans",
         editing ? "PUT" : "POST",
@@ -512,6 +566,7 @@ export function CalendarPage({
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      saveLock.current = false;
       setBusy(false);
     }
   }
@@ -820,7 +875,19 @@ export function CalendarPage({
   const hasWeekRepeats = [...weekRepeats.values()].some(
     (values) => values.length,
   );
-  if (todoView) return <TodoPage timezone={timezone} refresh={refresh} openId={openTodoId} onOpened={onOpened} onCalendar={(value) => { setTodoView(false); setView(value); }} />;
+  if (todoView)
+    return (
+      <TodoPage
+        timezone={timezone}
+        refresh={refresh}
+        openId={openTodoId}
+        onOpened={onOpened}
+        onCalendar={(value) => {
+          setTodoView(false);
+          setView(value);
+        }}
+      />
+    );
   return (
     <div className="calendar-page page-content">
       <div className="plan-toolbar">
@@ -1248,7 +1315,9 @@ export function CalendarPage({
                 <div className="plan-occurrence-content">
                   {eventButton(event, dayList)}
                 </div>
-                <Hint label={isRepeating(event) ? "删除单日计划安排" : "删除计划"}>
+                <Hint
+                  label={isRepeating(event) ? "删除单日计划安排" : "删除计划"}
+                >
                   <Button
                     type="button"
                     variant="ghost"
@@ -1335,6 +1404,7 @@ export function CalendarPage({
             </DialogDescription>
           </DialogHeader>
           <form
+            noValidate
             onSubmit={(e) => {
               e.preventDefault();
               void save();
@@ -1388,9 +1458,24 @@ export function CalendarPage({
                   id="plan-title"
                   value={form.title}
                   maxLength={300}
-                  required
+                  aria-required="true"
+                  aria-invalid={Boolean(form.title && !form.title.trim())}
+                  aria-describedby={
+                    form.title && !form.title.trim()
+                      ? "plan-title-error"
+                      : undefined
+                  }
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                 />
+                {form.title && !form.title.trim() && (
+                  <small
+                    id="plan-title-error"
+                    className="plan-field-error"
+                    role="alert"
+                  >
+                    计划名称不能只包含空格。
+                  </small>
+                )}
               </div>
               {editorMode === "repeat" &&
                 (!editing || editScope !== "this") && (
@@ -1427,17 +1512,30 @@ export function CalendarPage({
                         </Label>
                         <Input
                           id="plan-repeat-interval"
-                          type="number"
-                          min={1}
-                          max={365}
+                          inputMode="numeric"
+                          maxLength={3}
+                          aria-invalid={Boolean(intervalError)}
+                          aria-describedby={
+                            intervalError ? "plan-interval-error" : undefined
+                          }
                           value={form.repeat_interval}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            if (!/^\d*$/.test(event.target.value)) return;
                             setForm({
                               ...form,
-                              repeat_interval: Number(event.target.value),
-                            })
-                          }
+                              repeat_interval: event.target.value,
+                            });
+                          }}
                         />
+                        {intervalError && (
+                          <small
+                            id="plan-interval-error"
+                            className="plan-field-error"
+                            role="alert"
+                          >
+                            {intervalError}
+                          </small>
+                        )}
                       </div>
                     </div>
                     <div className="plan-recurrence-options">
@@ -1498,6 +1596,11 @@ export function CalendarPage({
                               }
                               disabled={busy}
                             />
+                            {untilError && (
+                              <small className="plan-field-error" role="alert">
+                                {untilError}
+                              </small>
+                            )}
                           </div>
                         )}
                         {form.repeat_end_mode === "count" && (
@@ -1507,18 +1610,31 @@ export function CalendarPage({
                             </Label>
                             <Input
                               id="plan-repeat-count"
-                              type="number"
-                              min={1}
-                              max={10000}
-                              required
+                              inputMode="numeric"
+                              maxLength={5}
+                              aria-required="true"
+                              aria-invalid={Boolean(countError)}
+                              aria-describedby={
+                                countError ? "plan-count-error" : undefined
+                              }
                               value={form.repeat_count}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                if (!/^\d*$/.test(event.target.value)) return;
                                 setForm({
                                   ...form,
-                                  repeat_count: Number(event.target.value),
-                                })
-                              }
+                                  repeat_count: event.target.value,
+                                });
+                              }}
                             />
+                            {countError && (
+                              <small
+                                id="plan-count-error"
+                                className="plan-field-error"
+                                role="alert"
+                              >
+                                {countError}
+                              </small>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1582,6 +1698,11 @@ export function CalendarPage({
                     disabled={busy}
                     onChange={(end) => setForm({ ...form, end })}
                   />
+                  {datesError && (
+                    <small className="plan-field-error" role="alert">
+                      {datesError}
+                    </small>
+                  )}
                 </div>
               </div>
               <div className="form-field">
@@ -1710,7 +1831,7 @@ export function CalendarPage({
               <Button
                 type="submit"
                 disabled={
-                  busy || editing?.status === "cancelled" || !form.title.trim()
+                  busy || editing?.status === "cancelled" || formInvalid
                 }
               >
                 {busy ? "正在保存…" : "保存计划"}

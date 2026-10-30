@@ -1,5 +1,5 @@
 import { SoftSelect } from "./ui/soft-select";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bookmark,
   ArrowUpRight,
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { dateTime, errorMessage } from "@/lib/utils";
 import { api, type Memory, type Settings } from "@/lib/api";
-import { ConfirmDelete, EmptyState, ErrorNotice } from "./common";
+import { ConfirmDelete, EmptyState, ErrorNotice, Toast } from "./common";
 import { MemoryReview } from "./MemoryFeedback";
 import { RetrievalDebugger } from "./RetrievalDebugger";
 
@@ -44,7 +44,7 @@ export function MemoryPage({
 }) {
   const [open, setOpen] = useState(Boolean(createRequested));
   useEffect(() => {
-    if (createRequested) setOpen(true);
+    if (createRequested) edit();
   }, [createRequested]);
   const [editing, setEditing] = useState<Memory | null>(null);
   const [content, setContent] = useState("");
@@ -52,6 +52,9 @@ export function MemoryPage({
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const mutationLock = useRef(false);
+  const [notice, setNotice] = useState("");
+  const [syncWarning, setSyncWarning] = useState("");
   const [deleting, setDeleting] = useState<Memory | null>(null);
   const [changingMode, setChangingMode] = useState(false);
   const [detailId, setDetailId] = useState("");
@@ -62,7 +65,7 @@ export function MemoryPage({
     setError("");
     try {
       await api("/settings/memory", "PATCH", { memory_mode: mode });
-      await refresh();
+      await refreshAfterChange("记忆保存方式已更新");
     } catch (error) {
       setError(errorMessage(error));
     } finally {
@@ -70,12 +73,24 @@ export function MemoryPage({
     }
   }
   function edit(value?: Memory) {
+    if (mutationLock.current) return;
+    setError("");
     setEditing(value || null);
     setContent(value?.content || "");
     setCategory(value?.category || "fact");
     setOpen(true);
   }
+  async function refreshAfterChange(message: string) {
+    setSyncWarning("");
+    try {
+      await refresh();
+    } catch {
+      setSyncWarning(`${message}，列表暂未刷新，请重试刷新。`);
+    }
+  }
   async function save() {
+    if (mutationLock.current || !content.trim()) return;
+    mutationLock.current = true;
     setBusy(true);
     setError("");
     try {
@@ -90,22 +105,33 @@ export function MemoryPage({
           revision: editing?.revision,
         },
       );
-      await refresh();
       setOpen(false);
+      setEditing(null);
+      setNotice("记忆已保存");
+      await refreshAfterChange("记忆已保存");
     } catch (error) {
       setError(errorMessage(error));
     } finally {
+      mutationLock.current = false;
       setBusy(false);
     }
   }
   async function remove() {
-    if (!deleting) return;
+    if (!deleting || mutationLock.current) return;
+    mutationLock.current = true;
+    setBusy(true);
+    setError("");
     try {
       await api(`/memories/${deleting.id}`, "DELETE");
-      await refresh();
       setDeleting(null);
+      if (detailId === deleting.id) setDetailId("");
+      setNotice("记忆已删除");
+      await refreshAfterChange("记忆已删除");
     } catch (error) {
       setError(errorMessage(error));
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
     }
   }
   const candidates = memories.filter(
@@ -128,12 +154,23 @@ export function MemoryPage({
             查看、修改或删除XiaoXi记住的信息。向量检索只为这里的已生效记忆建立索引，没有额外的隐藏记忆。
           </p>
         </div>
-        <Button onClick={() => edit()}>
+        <Button disabled={busy} onClick={() => edit()}>
           <Plus size={16} />
           添加记忆
         </Button>
       </div>
-      {error && <ErrorNotice message={error} />}
+      {notice && <Toast message={notice} onClose={() => setNotice("")} />}
+      {error && !open && !deleting && (
+        <ErrorNotice message={error} onClose={() => setError("")} />
+      )}
+      {syncWarning && (
+        <ErrorNotice
+          tone="warning"
+          message={syncWarning}
+          retry={() => void refreshAfterChange("修改已保存")}
+          onClose={() => setSyncWarning("")}
+        />
+      )}
       {candidates.length > 0 && (
         <section className="candidate-section">
           <h2>
@@ -187,6 +224,7 @@ export function MemoryPage({
                     variant="ghost"
                     size="icon"
                     aria-label="编辑记忆"
+                    disabled={busy}
                     onClick={() => edit(value)}
                   >
                     <Pencil size={15} />
@@ -195,7 +233,11 @@ export function MemoryPage({
                     variant="ghost"
                     size="icon"
                     aria-label="删除记忆"
-                    onClick={() => setDeleting(value)}
+                    disabled={busy}
+                    onClick={() => {
+                      setError("");
+                      setDeleting(value);
+                    }}
                   >
                     <Trash2 size={15} />
                   </Button>
@@ -206,6 +248,7 @@ export function MemoryPage({
                 <button
                   type="button"
                   className="memory-detail-toggle"
+                  disabled={busy}
                   onClick={() => setDetailId(value.id)}
                 >
                   查看详情
@@ -221,7 +264,7 @@ export function MemoryPage({
           title={query ? "没有匹配的记忆" : "从一件你想让XiaoXi记住的事开始"}
           action={
             !query && (
-              <Button variant="outline" onClick={() => edit()}>
+              <Button variant="outline" disabled={busy} onClick={() => edit()}>
                 <Plus size={15} />
                 记录第一条记忆
               </Button>
@@ -262,7 +305,9 @@ export function MemoryPage({
               <DialogFooter>
                 <Button
                   variant="ghost"
+                  disabled={busy}
                   onClick={() => {
+                    setError("");
                     setDetailId("");
                     setDeleting(detail);
                   }}
@@ -271,6 +316,7 @@ export function MemoryPage({
                   删除
                 </Button>
                 <Button
+                  disabled={busy}
                   onClick={() => {
                     setDetailId("");
                     edit(detail);
@@ -284,7 +330,12 @@ export function MemoryPage({
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(value) => {
+          if (!mutationLock.current) setOpen(value);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editing ? "编辑记忆" : "添加记忆"}</DialogTitle>
@@ -298,6 +349,7 @@ export function MemoryPage({
             <Textarea
               id="memory-content"
               value={content}
+              disabled={busy}
               onChange={(e) => setContent(e.target.value)}
               placeholder="例如：我喜欢先了解总体框架，再通过练习逐步学习。"
               rows={5}
@@ -309,6 +361,7 @@ export function MemoryPage({
               id="memory-category"
               label="类型"
               value={category}
+              disabled={busy}
               onValueChange={setCategory}
               options={Object.entries(categories).map(([value, label]) => ({
                 value,
@@ -317,7 +370,11 @@ export function MemoryPage({
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setOpen(false)}
+            >
               取消
             </Button>
             <Button
@@ -335,7 +392,9 @@ export function MemoryPage({
         description="删除后，记忆记录不会再作为后续交流的个人背景。历史对话仍会保留。"
         label="删除记忆"
         error={error}
-        onClose={() => setDeleting(null)}
+        onClose={() => {
+          if (!mutationLock.current) setDeleting(null);
+        }}
         onConfirm={remove}
       />
     </div>

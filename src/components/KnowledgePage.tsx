@@ -106,26 +106,28 @@ function FileTree({
         .map(([name, rows]) => (
           <li key={name}>
             <div className="knowledge-tree-row">
-              <Hint label={`${prefix}${name}`}><button
-                className="knowledge-file-select"
-                aria-expanded={!closed.has(name)}
-                onClick={() =>
-                  setClosed((previous) => {
-                    const next = new Set(previous);
-                    if (next.has(name)) next.delete(name);
-                    else next.add(name);
-                    return next;
-                  })
-                }
-              >
-                {closed.has(name) ? (
-                  <ChevronRight size={13} />
-                ) : (
-                  <ChevronDown size={13} />
-                )}
-                <Folder size={15} />
-                <span>{name}</span>
-              </button></Hint>
+              <Hint label={`${prefix}${name}`}>
+                <button
+                  className="knowledge-file-select"
+                  aria-expanded={!closed.has(name)}
+                  onClick={() =>
+                    setClosed((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(name)) next.delete(name);
+                      else next.add(name);
+                      return next;
+                    })
+                  }
+                >
+                  {closed.has(name) ? (
+                    <ChevronRight size={13} />
+                  ) : (
+                    <ChevronDown size={13} />
+                  )}
+                  <Folder size={15} />
+                  <span>{name}</span>
+                </button>
+              </Hint>
               <small
                 className="knowledge-folder-count"
                 aria-label={`${rows.length} 个文件`}
@@ -162,28 +164,41 @@ function FileTree({
         .map((doc) => (
           <li key={doc.id}>
             <div className="knowledge-tree-row">
-              <Hint label={<><strong>{doc.relative_path}</strong><span>{statusLabels[doc.status] || doc.status}</span><span>导入于 {new Date(doc.created_at).toLocaleString("zh-CN", { hour12: false })}</span></>}><button
-                className="knowledge-file-select"
-                aria-current={selected === doc.id ? "true" : undefined}
-                onClick={() => onSelect(doc)}
+              <Hint
+                label={
+                  <>
+                    <strong>{doc.relative_path}</strong>
+                    <span>{statusLabels[doc.status] || doc.status}</span>
+                    <span>
+                      导入于 {new Date(doc.created_at).toLocaleString()}
+                    </span>
+                  </>
+                }
               >
-                <FileText size={15} />
-                <span>{doc.relative_path.slice(prefix.length)}</span>
-              </button></Hint>
+                <button
+                  className="knowledge-file-select"
+                  aria-current={selected === doc.id ? "true" : undefined}
+                  onClick={() => onSelect(doc)}
+                >
+                  <FileText size={15} />
+                  <span>{doc.relative_path.slice(prefix.length)}</span>
+                </button>
+              </Hint>
               <Hint label={statusLabels[doc.status] || doc.status}>
-              <span
-                className={`knowledge-file-status is-${doc.status}`}
-                role="img"
-                aria-label={statusLabels[doc.status] || doc.status}
-              >
-                {doc.status === "ready" ? (
-                  <CheckCircle2 size={13} />
-                ) : ["queued", "parsing"].includes(doc.status) ? (
-                  <Clock3 size={13} />
-                ) : (
-                  <CircleAlert size={13} />
-                )}
-              </span>
+                <span
+                  className={`knowledge-file-status is-${doc.status}`}
+                  role="img"
+                  tabIndex={0}
+                  aria-label={statusLabels[doc.status] || doc.status}
+                >
+                  {doc.status === "ready" ? (
+                    <CheckCircle2 size={13} />
+                  ) : ["queued", "parsing"].includes(doc.status) ? (
+                    <Clock3 size={13} />
+                  ) : (
+                    <CircleAlert size={13} />
+                  )}
+                </span>
               </Hint>
               <Hint label="删除知识库副本">
                 <Button
@@ -219,6 +234,8 @@ export function KnowledgePage({
     truncated: boolean;
   }>();
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const [previewRevision, setPreviewRevision] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -236,6 +253,7 @@ export function KnowledgePage({
   const requestVersion = useRef(0);
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
+  const current = documents.find((row) => row.id === selected?.id);
   const load = useCallback(async () => {
     const request = ++requestVersion.current;
     const [docs, info] = await Promise.all([
@@ -265,7 +283,8 @@ export function KnowledgePage({
           }
         })
         .catch((e) => {
-          if (live && request === requestVersion.current) setError(errorMessage(e));
+          if (live && request === requestVersion.current)
+            setError(errorMessage(e));
         });
     };
     refresh();
@@ -287,17 +306,18 @@ export function KnowledgePage({
   useEffect(() => {
     setPreview(undefined);
     setPreviewLoading(false);
-    if (!selected || !/\.(md|markdown)$/i.test(selected.relative_path)) return;
+    setPreviewError("");
+    if (!current || !/\.(md|markdown)$/i.test(current.relative_path)) return;
     let live = true;
     setPreviewLoading(true);
     api<{ content: string; truncated: boolean }>(
-      `/knowledge/documents/${selected.id}/preview`,
+      `/knowledge/documents/${current.id}/preview`,
     )
       .then((value) => {
         if (live) setPreview(value);
       })
       .catch((e) => {
-        if (live) setError(errorMessage(e));
+        if (live) setPreviewError(errorMessage(e));
       })
       .finally(() => {
         if (live) setPreviewLoading(false);
@@ -305,7 +325,7 @@ export function KnowledgePage({
     return () => {
       live = false;
     };
-  }, [selected?.id]);
+  }, [current?.id, current?.status, current?.relative_path, previewRevision]);
   async function perform(work: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true;
@@ -329,7 +349,10 @@ export function KnowledgePage({
       importFiles(
         dropped
           .filter((item) => !item.directory)
-          .map((item) => ({ file: nativeFile(item), path: item.relative_path })),
+          .map((item) => ({
+            file: nativeFile(item),
+            path: item.relative_path,
+          })),
       ),
     setError,
     true,
@@ -361,7 +384,6 @@ export function KnowledgePage({
     if (files.current) files.current.value = "";
     if (folder.current) folder.current.value = "";
   }
-  const current = documents.find((row) => row.id === selected?.id);
   function selectDocument(row: Document) {
     setSelected(row);
     setRelated(undefined);
@@ -660,6 +682,12 @@ export function KnowledgePage({
                 </div>
               )}
               {previewLoading && <p role="status">正在读取 Markdown…</p>}
+              {previewError && (
+                <ErrorNotice
+                  message={previewError}
+                  retry={() => setPreviewRevision((value) => value + 1)}
+                />
+              )}
               {preview ? (
                 <>
                   {preview.truncated && (

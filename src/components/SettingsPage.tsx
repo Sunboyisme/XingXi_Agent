@@ -138,6 +138,9 @@ const persistentTabs: SettingsTab[] = [
   "wechat",
   "tools",
   "memories",
+  "runtimes",
+  "costs",
+  "data",
 ];
 
 export function SettingsPage({
