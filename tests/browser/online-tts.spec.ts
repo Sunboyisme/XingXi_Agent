@@ -36,7 +36,10 @@ test("online TTS presets, voice selection and failed saves work in a short windo
       url: "https://example.com/v1/t2a_v2",
       model: "speech-2.8-turbo",
       voice: "male-qn-qingse",
-      voices: [],
+      voices: [
+        { value: "male-qn-qingse", label: "青涩青年 · 男声（默认）" },
+        { value: "female-tianmei", label: "甜美 · 女声" },
+      ],
     },
     {
       provider: "custom",
@@ -113,13 +116,27 @@ test("online TTS presets, voice selection and failed saves work in a short windo
   await expect(dialog.getByLabel("语音模型", { exact: true })).toHaveValue(
     "FunAudioLLM/CosyVoice2-0.5B",
   );
-  await dialog.getByRole("combobox", { name: "常用音色", exact: true }).click();
+  await expect(dialog.getByLabel("音色 ID", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("combobox", { name: "音色", exact: true }).click();
   await page
     .getByRole("option", { name: "Claire · 温柔女声", exact: true })
     .click();
-  await expect(dialog.getByLabel("音色 ID", { exact: true })).toHaveValue(
-    "FunAudioLLM/CosyVoice2-0.5B:claire",
-  );
+  await expect(
+    dialog.getByRole("combobox", { name: "音色", exact: true }),
+  ).toHaveText("Claire · 温柔女声");
+  await dialog.getByRole("combobox", { name: "朗读服务", exact: true }).click();
+  await page.getByRole("option", { name: "MiniMax", exact: true }).click();
+  await expect(dialog.getByLabel("音色 ID", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("combobox", { name: "音色", exact: true }).click();
+  await page.getByRole("option", { name: "甜美 · 女声", exact: true }).click();
+  await expect(
+    dialog.getByRole("combobox", { name: "音色", exact: true }),
+  ).toHaveText("甜美 · 女声");
+  await dialog.getByRole("combobox", { name: "朗读服务", exact: true }).click();
+  await page.getByRole("option", { name: "硅基流动", exact: true }).click();
+  await expect(
+    dialog.getByRole("combobox", { name: "音色", exact: true }),
+  ).toHaveText("Claire · 温柔女声");
   await dialog
     .getByLabel("API 密钥", { exact: true })
     .fill("synthetic-tts-key");

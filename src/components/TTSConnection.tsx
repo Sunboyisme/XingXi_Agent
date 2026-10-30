@@ -56,7 +56,7 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
   const preset = form?.presets.find(
     (value) => value.provider === form.selected,
   );
-  const bailianVoiceOptions = preset
+  const voiceOptions = preset
     ? profile?.voice &&
       !preset.voices.some((voice) => voice.value === profile.voice)
       ? [
@@ -180,7 +180,7 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
     if (!profile.model.trim()) issues.model = "请填写语音模型";
     if (!profile.voice.trim())
       issues.voice =
-        profile.provider === "bailian" ? "请选择音色" : "请选择或填写音色 ID";
+        profile.provider === "custom" ? "请填写音色 ID" : "请选择音色";
     setFields(issues);
     return !Object.keys(issues).length;
   }
@@ -278,7 +278,7 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
                 savedPreset?.voices.find(
                   (voice) => voice.value === saved!.voice,
                 )?.label ||
-                (saved!.provider === "bailian" ? "已保存音色" : saved!.voice)
+                (saved!.provider === "custom" ? saved!.voice : "已保存音色")
               }`
             : "预置百炼、硅基流动和 MiniMax"
       }
@@ -385,48 +385,28 @@ export function TTSConnection({ active = true }: { active?: boolean }) {
               </div>
               <div className="form-field">
                 <Label htmlFor="tts-voice">
-                  {profile.provider === "bailian" ? "音色" : "音色 ID"}
+                  {profile.provider === "custom" ? "音色 ID" : "音色"}
                 </Label>
-                {profile.provider === "bailian" ? (
+                {profile.provider !== "custom" ? (
                   <SoftSelect
                     id="tts-voice"
                     label="音色"
                     value={profile.voice}
-                    placeholder="选择百炼音色"
+                    placeholder="选择音色"
                     disabled={saving}
-                    options={bailianVoiceOptions}
+                    options={voiceOptions}
                     onValueChange={(voice) => change({ voice })}
                   />
                 ) : (
-                  <div className="tts-voice-row">
-                    <Input
-                      id="tts-voice"
-                      value={profile.voice}
-                      disabled={saving}
-                      maxLength={300}
-                      aria-invalid={Boolean(fields.voice)}
-                      placeholder="输入服务商提供的音色 ID"
-                      onChange={(event) =>
-                        change({ voice: event.target.value })
-                      }
-                    />
-                    {preset.voices.length > 0 && (
-                      <SoftSelect
-                        label="常用音色"
-                        value={
-                          preset.voices.some(
-                            (voice) => voice.value === profile.voice,
-                          )
-                            ? profile.voice
-                            : ""
-                        }
-                        placeholder="选择常用音色"
-                        disabled={saving}
-                        options={preset.voices}
-                        onValueChange={(voice) => change({ voice })}
-                      />
-                    )}
-                  </div>
+                  <Input
+                    id="tts-voice"
+                    value={profile.voice}
+                    disabled={saving}
+                    maxLength={300}
+                    aria-invalid={Boolean(fields.voice)}
+                    placeholder="输入自定义接口提供的音色 ID"
+                    onChange={(event) => change({ voice: event.target.value })}
+                  />
                 )}
                 {fields.voice && <p className="field-error">{fields.voice}</p>}
               </div>
