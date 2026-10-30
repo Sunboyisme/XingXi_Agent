@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type Dispatch, type SetStateAction } from "react";
 import {
   AudioLines,
   Code2,
@@ -28,6 +28,7 @@ import { ImageGenerationConnection } from "./ImageGenerationConnection";
 import { SkillsSettings } from "./SkillsSettings";
 import { DataSettings } from "./DataSettings";
 import { ScriptRuntimeSettings } from "./ScriptRuntimeSettings";
+import type { RuntimeEditorState } from "@/lib/runtimeEditor";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { UsageCosts } from "./UsageCosts";
 import { errorMessage } from "@/lib/utils";
@@ -146,6 +147,8 @@ const persistentTabs: SettingsTab[] = [
 export function SettingsPage({
   settings,
   onSaved,
+  runtimeEditor,
+  onRuntimeEditorChange,
   memories,
   refresh,
   tab,
@@ -158,6 +161,8 @@ export function SettingsPage({
 }: {
   settings: Settings;
   onSaved: (value: Settings) => void;
+  runtimeEditor?: RuntimeEditorState;
+  onRuntimeEditorChange?: Dispatch<SetStateAction<RuntimeEditorState>>;
   memories: Memory[];
   refresh: () => Promise<void>;
   tab: SettingsTab;
@@ -273,7 +278,7 @@ export function SettingsPage({
       case "skills":
         return <SkillsSettings onRuntimes={() => onTab("runtimes")} />;
       case "runtimes":
-        return <ScriptRuntimeSettings />;
+        return <ScriptRuntimeSettings editor={runtimeEditor} onEditorChange={onRuntimeEditorChange} />;
       case "costs":
         return <UsageCosts />;
       case "data":

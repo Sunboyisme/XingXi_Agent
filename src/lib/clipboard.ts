@@ -31,16 +31,31 @@ export function useCopyFeedback(text: string) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const currentText = useRef(text);
+  currentText.current = text;
+  const revision = useRef(0);
+  useEffect(() => {
+    revision.current++;
+    setCopied(false);
+    setError("");
+    clearTimeout(timer.current);
+    return () => {
+      revision.current++;
+      clearTimeout(timer.current);
+    };
+  }, [text]);
   async function copy() {
+    const own = revision.current;
     setError("");
     try {
       await copyText(text);
+      if (own !== revision.current || currentText.current !== text) return;
       setCopied(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1800);
     } catch {
-      setError("复制失败，请选择文字后复制。");
+      if (own === revision.current && currentText.current === text)
+        setError("复制失败，请选择文字后复制。");
     }
   }
   return { copied, error, copy };

@@ -30,6 +30,14 @@
   background: var(--ui-color-bg);
   font-size: 12px;
 }
+.tool-return-details pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.detail-view-body pre:focus-visible {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: -2px;
+}
 .detail-view-body > .complex-task-operation {
   margin-bottom: 16px;
   padding: 16px;

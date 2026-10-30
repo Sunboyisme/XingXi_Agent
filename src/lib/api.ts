@@ -73,7 +73,9 @@ async function connect() {
 }
 
 export async function fetchApi(path: string, options: RequestInit = {}) {
+  options.signal?.throwIfAborted();
   const { url, token } = await connect();
+  options.signal?.throwIfAborted();
   const headers = new Headers(options.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (options.body && !(options.body instanceof FormData))
@@ -94,13 +96,43 @@ export async function api<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<T> {
-  return (
-    await fetchApi(path, {
+  const controller = options.timeoutMs ? new AbortController() : undefined;
+  const abort = () => controller?.abort(options.signal?.reason);
+  if (options.signal?.aborted) abort();
+  else options.signal?.addEventListener("abort", abort, { once: true });
+  let timedOut = false;
+  const timer = controller
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, options.timeoutMs)
+    : undefined;
+  const signal = controller?.signal || options.signal;
+  let onAbort: (() => void) | undefined;
+  try {
+    signal?.throwIfAborted();
+    const cancelled =
+      signal &&
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+    const request = fetchApi(path, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
-    })
-  ).json();
+      signal,
+    }).then((response) => response.json() as Promise<T>);
+    return await (cancelled ? Promise.race([request, cancelled]) : request);
+  } catch (cause) {
+    if (timedOut) throw new Error("请求本机服务超时，请稍后重试。");
+    throw cause;
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+    options.signal?.removeEventListener("abort", abort);
+  }
 }
 
 async function upload(path: string, file: File): Promise<Attachment> {

@@ -98,6 +98,8 @@ function DataCounts({ counts }: { counts: Record<string, number> }) {
 
 export function DataSettings() {
   const [data, setData] = useState<Data>();
+  const [reading, setReading] = useState(true);
+  const [revision, setRevision] = useState(0);
   const [preview, setPreview] = useState<Preview>();
   const [fileName, setFileName] = useState("");
   const [exported, setExported] = useState("");
@@ -106,17 +108,24 @@ export function DataSettings() {
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => {
     let live = true;
-    api<Data>("/settings/data")
+    const controller = new AbortController();
+    setReading(true);
+    setError("");
+    api<Data>("/settings/data", "GET", undefined, { signal: controller.signal, timeoutMs: 10_000 })
       .then((value) => {
         if (live) setData(value);
       })
       .catch((e) => {
         if (live) setError(errorMessage(e));
+      })
+      .finally(() => {
+        if (live) setReading(false);
       });
     return () => {
       live = false;
+      controller.abort();
     };
-  }, []);
+  }, [revision]);
   async function perform(action: () => Promise<void>) {
     setError("");
     setBusy(true);
@@ -159,7 +168,7 @@ export function DataSettings() {
   }
   return (
     <div className="data-settings">
-      {error && <ErrorNotice message={error} />}
+      {error && <ErrorNotice message={error} retry={!data && !reading ? () => setRevision((value) => value + 1) : undefined} />}
       <section className="data-card">
         <div className="data-card-heading">
           <span>
@@ -171,7 +180,7 @@ export function DataSettings() {
           </div>
         </div>
         {!data ? (
-          <p className="retrieval-empty">正在读取数据位置…</p>
+          <p className="retrieval-empty" role="status">{reading ? "正在读取数据位置…" : "数据位置暂不可用，请重新读取。"}</p>
         ) : (
           <>
             <DataCounts counts={data.counts} />

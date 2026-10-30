@@ -6,6 +6,8 @@ import {
   Square,
   X,
   Copy,
+  Check,
+  Loader2,
   ExternalLink,
   PanelTop,
   ChevronDown,
@@ -14,7 +16,7 @@ import {
 import { BaiAvatar } from "./BaiAvatar";
 import { useAvatarActivity } from "@/lib/useAvatarActivity";
 import { useDesktopTaskRead } from "@/lib/useDesktopTaskRead";
-import { copyText } from "@/lib/clipboard";
+import { useCopyFeedback } from "@/lib/clipboard";
 import { isActiveRun } from "@/lib/avatarActivity";
 import { Hint, Markdown } from "./common";
 import { Picture } from "./ImageAttachments";
@@ -64,6 +66,7 @@ export function DesktopQuickAsk() {
   const commandsPending = useRef(false);
   const [settings, setSettings] = useState<Settings>();
   const [answer, setAnswer] = useState("");
+  const { copied, error: copyError, copy } = useCopyFeedback(answer);
   const [reasoning, setReasoning] = useState("");
   const [reasoningActive, setReasoningActive] = useState(false);
   const [reasoningIncomplete, setReasoningIncomplete] = useState(false);
@@ -72,6 +75,9 @@ export function DesktopQuickAsk() {
   const [error, setError] = useState("");
   const [answerCollapsed, setAnswerCollapsed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const stopRequest = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [hiddenEpoch, setHiddenEpoch] = useState(0);
@@ -344,6 +350,9 @@ export function DesktopQuickAsk() {
     imageWorking.current = false;
     setPendingCount(0);
     setRunBusy(false);
+    setSubmitting(false);
+    setStopping(false);
+    stopRequest.current = false;
     setFileBusy(false);
     updateDraft(emptyQuickDraft());
     setAnswer("");
@@ -496,6 +505,7 @@ export function DesktopQuickAsk() {
     )
       return;
     startRequest.current = true;
+    setSubmitting(true);
     const epoch = ++generation.current;
     setError("");
     setAnswerCollapsed(false);
@@ -545,6 +555,7 @@ export function DesktopQuickAsk() {
         runId: run.id,
       }));
       setQuestion(text);
+      setSubmitting(false);
       await track(run, epoch);
     } catch (e) {
       if (mounted.current && epoch === generation.current) {
@@ -552,19 +563,29 @@ export function DesktopQuickAsk() {
         setError(desktopError(e));
       }
     } finally {
-      if (epoch === generation.current) startRequest.current = false;
+      if (epoch === generation.current) {
+        startRequest.current = false;
+        setSubmitting(false);
+      }
     }
   }
   async function stop() {
     const id = current.current.runId;
     const epoch = generation.current;
-    if (id)
-      try {
-        await api(`/runs/${id}/cancel`, "POST");
-      } catch (e) {
-        if (mounted.current && epoch === generation.current)
-          setError(desktopError(e));
+    if (!id || stopRequest.current) return;
+    stopRequest.current = true;
+    setStopping(true);
+    try {
+      await api(`/runs/${id}/cancel`, "POST");
+    } catch (e) {
+      if (mounted.current && epoch === generation.current)
+        setError(desktopError(e));
+    } finally {
+      if (mounted.current && epoch === generation.current) {
+        stopRequest.current = false;
+        setStopping(false);
       }
+    }
   }
   async function pickFiles() {
     if (work.current.uploading || work.current.locked || work.current.busy)
@@ -702,19 +723,16 @@ export function DesktopQuickAsk() {
           <header>
             <strong>{question || "XiaoXi"}</strong>
             <div>
-              <Hint label="复制回答">
+              <Hint label={copied ? "已复制" : "复制回答"}>
                 <button
-                  aria-label="复制回答"
+                  aria-label={copied ? "已复制回答" : "复制回答"}
                   disabled={!answer}
-                  onClick={() =>
-                    void copyText(answer).catch((e) =>
-                      setError(desktopError(e)),
-                    )
-                  }
+                  onClick={() => void copy()}
                 >
-                  <Copy size={15} />
+                  {copied ? <Check size={15} /> : <Copy size={15} />}
                 </button>
               </Hint>
+              <span className="sr-only" role="status">{copied ? "回答已复制" : ""}</span>
               <Hint
                 label={draft.conversationId
                   ? "在主窗口打开这段对话，继续提问或查看完整内容"
@@ -767,9 +785,10 @@ export function DesktopQuickAsk() {
             <Markdown>{answer}</Markdown>
             {busy && (
               <p className="quick-answer-status" role="status">
-                {reasoningActive ? "正在思考…" : "正在回答…"}
+                {submitting ? "正在提交…" : stopping ? "正在停止…" : reasoningActive ? "正在思考…" : "正在回答…"}
               </p>
             )}
+            {copyError && <p className="desktop-error" role="alert">{copyError}</p>}
             {error && (
               <div className="quick-error" role="alert">
                 <p className="desktop-error">{error}</p>
@@ -860,19 +879,22 @@ export function DesktopQuickAsk() {
             disabled={busy || uploading}
             desktopShortcut={!floating}
           />}
-          <Hint label={busy ? "停止回答" : "发送"}>
+          <Hint label={submitting ? "正在提交，任务创建后可停止回答" : stopping ? "正在停止回答" : busy ? "停止回答" : "发送"}>
             <button
               className="quick-send"
-              aria-label={busy ? "停止回答" : "发送"}
+              aria-label={submitting ? "正在提交" : stopping ? "正在停止回答" : busy ? "停止回答" : "发送"}
+              aria-disabled={submitting || stopping || undefined}
               disabled={
                 !busy &&
                 (uploading ||
                   Boolean(voiceBusy) ||
                   (!draft.text.trim() && !draft.attachments.length))
               }
-              onClick={() => void (busy ? stop() : send())}
+              onClick={() => {
+                if (!submitting && !stopping) void (busy ? stop() : send());
+              }}
             >
-              {busy ? <Square size={17} /> : <ArrowUp size={21} />}
+              {submitting || stopping ? <Loader2 size={17} className="spin" /> : busy ? <Square size={17} /> : <ArrowUp size={21} />}
             </button>
           </Hint>
           {!floating && <Hint label="关闭问答">

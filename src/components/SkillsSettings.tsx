@@ -1,4 +1,5 @@
 import { Hint } from "./common";
+import { ASSISTANT_NAME } from "@/lib/brand";
 import "@/styles/detail-view.css";
 import { useNativeDrop, nativeFile } from "@/lib/nativeDrop";
 import { isTauri } from "@tauri-apps/api/core";
@@ -198,7 +199,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
         <div>
           <h2>
             <Puzzle size={21} />
-            让小汐多一点本领
+            让 {ASSISTANT_NAME} 多一点本领
           </h2>
           <p>导入你信任的技能，按需要启用。</p>
         </div>
@@ -443,7 +444,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                         })
                       }
                     />
-                    允许小汐自动运行此技能的脚本
+                    允许 {ASSISTANT_NAME} 自动运行此技能的脚本
                   </label>
                   <p>
                     脚本以你的 Windows

@@ -45,6 +45,7 @@ const LearningPage = lazy(() =>
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import type { SettingsTab } from "./components/SettingsPage";
 import type { ModelContextTarget } from "./components/ModelConnections";
+import { emptyRuntimeEditor } from "./lib/runtimeEditor";
 const SettingsPage = lazy(() =>
   import("./components/SettingsPage").then((module) => ({
     default: module.SettingsPage,
@@ -150,6 +151,7 @@ export function App() {
   const [speechConfigureRequested, setSpeechConfigureRequested] = useState(false);
   const [contextSettingsTarget, setContextSettingsTarget] = useState<ModelContextTarget>();
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [runtimeEditor, setRuntimeEditor] = useState(emptyRuntimeEditor);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
@@ -240,38 +242,69 @@ export function App() {
   const [info, setInfo] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const refreshVersion = useRef(0);
+  const bootController = useRef<AbortController | null>(null);
+  const [refreshError, setRefreshError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const conversationDeletions = useRef(new Set<string>());
   const isReminderWindow =
     new URLSearchParams(location.search).get("view") === "reminder";
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
-    const values = await Promise.all([
-      api<Settings>("/settings"),
-      api<Conversation[]>("/conversations"),
-      api<Goal[]>("/learning/goals"),
-      api<Memory[]>("/memories"),
-      api<Notification[]>("/notifications?unread_only=true"),
-      api<Project[]>("/projects"),
+    setRefreshing(true);
+    const options = { timeoutMs: 10_000 };
+    const values = await Promise.allSettled([
+      api<Settings>("/settings", "GET", undefined, options),
+      api<Conversation[]>("/conversations", "GET", undefined, options),
+      api<Goal[]>("/learning/goals", "GET", undefined, options),
+      api<Memory[]>("/memories", "GET", undefined, options),
+      api<Notification[]>("/notifications?unread_only=true", "GET", undefined, options),
+      api<Project[]>("/projects", "GET", undefined, options),
     ]);
     // Slow earlier snapshots must not overwrite a newer tool/memory update.
     if (version !== refreshVersion.current) return;
-    setSettings(keepIfSame(values[0]));
-    setConversations(keepIfSame(values[1]));
-    setGoals(keepIfSame(values[2]));
-    setMemories(keepIfSame(values[3]));
-    setNotifications(keepIfSame(values[4]));
-    setProjects(keepIfSame(values[5]));
+    if (values[0].status === "fulfilled") setSettings(keepIfSame(values[0].value));
+    if (values[1].status === "fulfilled") setConversations(keepIfSame(values[1].value));
+    if (values[2].status === "fulfilled") setGoals(keepIfSame(values[2].value));
+    if (values[3].status === "fulfilled") setMemories(keepIfSame(values[3].value));
+    if (values[4].status === "fulfilled") setNotifications(keepIfSame(values[4].value));
+    if (values[5].status === "fulfilled") setProjects(keepIfSame(values[5].value));
+    const labels = ["连接配置", "对话", "学习", "记忆", "通知", "项目"];
+    const failures = values.flatMap((result, index) =>
+      result.status === "rejected" ? [`${labels[index]}：${errorMessage(result.reason)}`] : [],
+    );
+    const message = failures.length ? `部分内容暂未刷新，已保留可用内容。${failures.join("；")}` : "";
+    setRefreshError(message);
+    setRefreshing(false);
+    if (message) throw new Error(message);
   }, []);
   const boot = useCallback(async () => {
+    bootController.current?.abort();
+    const controller = new AbortController();
+    bootController.current = controller;
     setLoading(true);
     setError("");
-    for (let i = 0; i < 30; i++) {
+    const deadline = Date.now() + 15_000;
+    while (!controller.signal.aborted) {
       try {
-        await refresh();
+        const value = await api<Settings>("/settings", "GET", undefined, {
+          signal: controller.signal,
+          timeoutMs: Math.min(3_000, Math.max(1, deadline - Date.now())),
+        });
+        if (isReminderWindow) {
+          const notes = await api<Notification[]>("/notifications?unread_only=true", "GET", undefined, {
+            signal: controller.signal,
+            timeoutMs: Math.min(3_000, Math.max(1, deadline - Date.now())),
+          });
+          if (!controller.signal.aborted) setNotifications(notes);
+        }
+        if (controller.signal.aborted) return;
+        setSettings(value);
         setLoading(false);
+        void refresh().catch(() => { /* Per-module errors are shown above the page. */ });
         return;
       } catch (error) {
-        if (i === 29) {
+        if (controller.signal.aborted) return;
+        if (Date.now() >= deadline) {
           setError(errorMessage(error));
           setLoading(false);
           return;
@@ -279,9 +312,13 @@ export function App() {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
-  }, [refresh]);
+  }, [refresh, isReminderWindow]);
   useEffect(() => {
     void boot();
+    return () => {
+      bootController.current?.abort();
+      refreshVersion.current++;
+    };
   }, [boot]);
   useEffect(() => {
     if (!settings) return;
@@ -454,6 +491,11 @@ export function App() {
             <Loader2 size={16} className="spin" />
             正在打开你的个人空间…
           </p>
+          <Button variant="outline" onClick={() => {
+            bootController.current?.abort();
+            setError("已取消连接，可以重新连接本机服务。");
+            setLoading(false);
+          }}>取消连接</Button>
         </div>
       </WindowFrame>
     );
@@ -664,6 +706,11 @@ export function App() {
           )}
         </aside>
         <main className="main-panel">
+          {refreshError && <ErrorNotice
+            tone="warning"
+            message={refreshing ? `正在重新读取… ${refreshError}` : refreshError}
+            retry={refreshing ? undefined : () => void refresh().catch(() => {})}
+          />}
           <div className="page-body" hidden={projectEditorOpen}>
             <Suspense
               fallback={
@@ -775,6 +822,8 @@ export function App() {
                 <SettingsPage
                   settings={settings}
                   onSaved={setSettings}
+                  runtimeEditor={runtimeEditor}
+                  onRuntimeEditorChange={setRuntimeEditor}
                   memories={memories}
                   refresh={refresh}
                   tab={settingsTab}

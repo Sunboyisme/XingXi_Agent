@@ -1,6 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { CheckCircle2, CircleDashed, Loader2, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
+import {
+  emptyRuntimeEditor,
+  type Runtime,
+  type RuntimeEditorState,
+} from "@/lib/runtimeEditor";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -8,10 +20,6 @@ import { ErrorNotice, Hint } from "./common";
 import { errorMessage } from "@/lib/utils";
 import "../styles/script-runtime-settings.css";
 
-type Runtime = Record<
-  string,
-  { path: string; resolved: string; available: boolean }
->;
 const names: Record<string, [string, string]> = {
   python: ["Python", ".py"],
   node: ["Node.js", ".js / .mjs / .cjs"],
@@ -19,46 +27,61 @@ const names: Record<string, [string, string]> = {
   bash: ["Bash", ".sh"],
 };
 
-export function ScriptRuntimeSettings() {
-  const [runtimes, setRuntimes] = useState<Runtime>({});
-  const [paths, setPaths] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+export function ScriptRuntimeSettings({
+  editor,
+  onEditorChange,
+}: {
+  editor?: RuntimeEditorState;
+  onEditorChange?: Dispatch<SetStateAction<RuntimeEditorState>>;
+}) {
+  const [localEditor, setLocalEditor] = useState(emptyRuntimeEditor);
+  const { runtimes, paths, busy, dirty, error, notice, loaded } =
+    editor || localEditor;
+  const update = onEditorChange || setLocalEditor;
+  const operation = useRef(false);
   const load = useCallback(async () => {
-    setBusy(true);
-    setError("");
+    if (operation.current) return;
+    operation.current = true;
+    update((state) => ({ ...state, busy: true, error: "" }));
     try {
       const result = await api<Runtime>("/skill-runtimes");
-      setRuntimes(result);
-      setPaths(
-        Object.fromEntries(
-          Object.entries(result).map(([key, item]) => [key, item.path]),
-        ),
-      );
-      setDirty(false);
+      update((state) => ({
+        ...state,
+        runtimes: result,
+        loaded: true,
+        paths: state.dirty
+          ? state.paths
+          : Object.fromEntries(
+              Object.entries(result).map(([key, item]) => [key, item.path]),
+            ),
+      }));
     } catch (e) {
-      setError(errorMessage(e));
+      update((state) => ({ ...state, error: errorMessage(e) }));
     } finally {
-      setBusy(false);
+      operation.current = false;
+      update((state) => ({ ...state, busy: false }));
     }
-  }, []);
+  }, [update]);
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!loaded && !busy && !error) void load();
+  }, [load, loaded, busy, error]);
   async function save() {
-    setBusy(true);
-    setError("");
-    setNotice("");
+    if (busy || !dirty || operation.current) return;
+    operation.current = true;
+    update((state) => ({ ...state, busy: true, error: "", notice: "" }));
     try {
-      setRuntimes(await api<Runtime>("/skill-runtimes", "PUT", paths));
-      setDirty(false);
-      setNotice("运行环境已保存");
+      const result = await api<Runtime>("/skill-runtimes", "PUT", paths);
+      update((state) => ({
+        ...state,
+        runtimes: result,
+        dirty: false,
+        notice: "运行环境已保存",
+      }));
     } catch (e) {
-      setError(errorMessage(e));
+      update((state) => ({ ...state, error: errorMessage(e) }));
     } finally {
-      setBusy(false);
+      operation.current = false;
+      update((state) => ({ ...state, busy: false }));
     }
   }
   return (
@@ -107,12 +130,13 @@ export function ScriptRuntimeSettings() {
                 disabled={busy}
                 placeholder="自动检测，或填写程序的绝对路径"
                 onChange={(event) => {
-                  setPaths((current) => ({
-                    ...current,
-                    [key]: event.target.value,
+                  const value = event.target.value;
+                  update((state) => ({
+                    ...state,
+                    paths: { ...state.paths, [key]: value },
+                    dirty: true,
+                    notice: "",
                   }));
-                  setDirty(true);
-                  setNotice("");
                 }}
               />
               {info.resolved ? (

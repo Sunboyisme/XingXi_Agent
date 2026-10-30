@@ -20,11 +20,11 @@ function toolSummary(event: RunEvent): string {
   if (!result) return "操作已完成";
   if (result.error) return String(result.error);
   if (result.exit_code !== undefined)
-    return `脚本退出码：${result.exit_code}${result.stdout ? ` · ${String(result.stdout).slice(0, 180)}` : ""}`;
-  if (result.summary) return String(result.summary).slice(0, 220);
-  if (result.text) return String(result.text).slice(0, 220);
+    return `脚本退出码：${result.exit_code}${result.stdout ? ` · ${String(result.stdout)}` : ""}`;
+  if (result.summary) return String(result.summary);
+  if (result.text) return String(result.text);
   if (result.structured_content)
-    return JSON.stringify(result.structured_content).slice(0, 220);
+    return JSON.stringify(result.structured_content);
   if (result.skipped) return String(result.skipped);
   if (result.needs_clarification) return "找到多个同名地点，等待确认";
   if (result.status === "needs_confirmation" || result.status === "needs_details") return String(result.message || "等待补充或确认");
@@ -166,6 +166,8 @@ export function AnswerActions({
                   const failed =
                     event.data.status === "error" || Boolean(result?.error);
                   const clarify = Boolean(result?.needs_clarification || result?.status === "needs_confirmation" || result?.status === "needs_details");
+                  const summary = toolSummary(event);
+                  const scriptResult = Boolean(result && (result.exit_code !== undefined || result.stdout || result.stderr));
                   return (
                     <div
                       className={`tool-result ${failed ? "tool-result-failed" : ""}`}
@@ -201,13 +203,9 @@ export function AnswerActions({
                             </span>
                           </span>
                         </div>
-                        <p>{toolSummary(event)}</p>
+                        <p>{summary.length > 220 ? `${summary.slice(0, 220)}…` : summary}</p>
                         {result &&
-                          Boolean(
-                            result.exit_code !== undefined ||
-                            result.stdout ||
-                            result.stderr,
-                          ) && (
+                          scriptResult && (
                             <DetailDialog
                               title="脚本执行详情"
                               className="script-execution-details"
@@ -216,7 +214,7 @@ export function AnswerActions({
                               <p>
                                 退出码：{String(result.exit_code ?? "未知")}
                               </p>
-                              <pre>
+                              <pre tabIndex={0} aria-label="完整脚本输出">
                                 {String(result.stdout || "")}
                                 {result.stderr
                                   ? `\n错误输出：\n${String(result.stderr)}`
@@ -224,6 +222,11 @@ export function AnswerActions({
                               </pre>
                             </DetailDialog>
                           )}
+                        {result && !scriptResult && (
+                          <DetailDialog title="完整工具结果" label="查看完整结果" description={String(event.data.name || "工具调用")} className="tool-return-details">
+                            <pre tabIndex={0} aria-label="完整工具返回结果">{JSON.stringify(result, null, 2)}</pre>
+                          </DetailDialog>
+                        )}
                       </div>
                     </div>
                   );

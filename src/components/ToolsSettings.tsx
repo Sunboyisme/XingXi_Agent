@@ -1,4 +1,5 @@
 import { Hint } from "./common";
+import { HintText } from "./ui/hint";
 import { SoftSelect } from "./ui/soft-select";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -210,6 +211,7 @@ function ServerEditor({
     secretRows(server?.env || {}, server?.env_templates),
   );
   const [busy, setBusy] = useState(false);
+  const saveLock = useRef(false);
   const [error, setError] = useState("");
   const quickSearch =
     transport === "streamable_http" &&
@@ -247,6 +249,8 @@ function ServerEditor({
     ]);
   }
   async function save() {
+    if (saveLock.current) return;
+    saveLock.current = true;
     setBusy(true);
     setError("");
     try {
@@ -302,11 +306,12 @@ function ServerEditor({
         server ? "PUT" : "POST",
         value,
       );
-      await onSaved();
       onClose();
+      void onSaved();
     } catch (error) {
       setError(errorMessage(error));
     } finally {
+      saveLock.current = false;
       setBusy(false);
     }
   }
@@ -339,6 +344,7 @@ function ServerEditor({
               size="sm"
               variant="outline"
               aria-pressed={quickSearch}
+              disabled={busy}
               onClick={searchPreset}
             >
               <Search size={14} />
@@ -346,7 +352,7 @@ function ServerEditor({
             </Button>
           </div>
         )}
-        <div className="mcp-editor-fields">
+        <fieldset className="mcp-editor-fields" disabled={busy} aria-busy={busy}>
           <div className="form-field">
             <Label htmlFor="mcp-name">名称</Label>
             <Input
@@ -360,6 +366,7 @@ function ServerEditor({
             <SoftSelect
               id="mcp-transport"
               label="连接方式"
+              disabled={busy}
               value={transport}
               onValueChange={(v) => setTransport(v as MCPServer["transport"])}
               options={[
@@ -440,7 +447,7 @@ function ServerEditor({
               <SecretFields label="环境变量" rows={env} setRows={setEnv} />
             </>
           )}
-        </div>
+        </fieldset>
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={onClose}>
             取消
@@ -467,6 +474,7 @@ function ImportDialog({
   const [preview, setPreview] = useState<MCPServerWrite[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const saveLock = useRef(false);
   function inspect() {
     setError("");
     setPreview(null);
@@ -480,18 +488,20 @@ function ImportDialog({
     }
   }
   async function save() {
-    if (!preview) return;
+    if (!preview || saveLock.current) return;
+    saveLock.current = true;
     setBusy(true);
     setError("");
     try {
       await api("/mcp/servers/import", "POST", JSON.parse(text));
       setText("");
       setPreview(null);
-      await onSaved();
       onClose();
+      void onSaved();
     } catch (error) {
       setError(errorMessage(error));
     } finally {
+      saveLock.current = false;
       setBusy(false);
     }
   }
@@ -514,6 +524,7 @@ function ImportDialog({
           <Textarea
             id="mcp-json"
             className="mcp-json"
+            disabled={busy}
             spellCheck={false}
             value={text}
             onChange={(event) => {
@@ -579,9 +590,7 @@ function ToolRow({
     <div className="managed-tool-row">
       <div className="managed-tool-copy">
         <strong>{tool.name}</strong>
-        <Hint label={tool.description}>
-          <p>{tool.description}</p>
-        </Hint>
+        <HintText as="p" label={tool.description}>{tool.description}</HintText>
         {!tool.available && (
           <small className="tool-unavailable">{tool.note}</small>
         )}
@@ -618,8 +627,8 @@ export function ToolsSettings({ active }: { active: boolean }) {
   const load = useCallback(async () => {
     const own = ++loadSequence.current;
     const [nextTools, nextServers] = await Promise.all([
-      api<Tool[]>("/tools"),
-      api<MCPServer[]>("/mcp/servers"),
+      api<Tool[]>("/tools", "GET", undefined, { timeoutMs: 10_000 }),
+      api<MCPServer[]>("/mcp/servers", "GET", undefined, { timeoutMs: 10_000 }),
     ]);
     // 较早发出的请求晚返回时，不能覆盖更新后的结果。
     if (own !== loadSequence.current) return;
@@ -657,6 +666,23 @@ export function ToolsSettings({ active }: { active: boolean }) {
       setError(errorMessage(error));
     } finally {
       setBusy(false);
+    }
+  }
+  async function reloadLists() {
+    setError("");
+    try {
+      await load();
+    } catch (cause) {
+      setError(`列表暂未刷新：${errorMessage(cause)}`);
+    }
+  }
+  async function afterSaved() {
+    setNotice("MCP 配置已保存");
+    setError("");
+    try {
+      await load();
+    } catch (cause) {
+      setError(`配置已保存，列表暂未刷新，请重试读取。${errorMessage(cause)}`);
     }
   }
   const match = (tool: Tool) =>
@@ -701,7 +727,7 @@ export function ToolsSettings({ active }: { active: boolean }) {
           </Button>
         </div>
       </div>
-      {error && <ErrorNotice message={error} />}
+      {error && <ErrorNotice message={error} retry={() => void reloadLists()} />}
       {notice && (
         <p role="status" className="success-notice">
           {notice}
@@ -903,14 +929,14 @@ export function ToolsSettings({ active }: { active: boolean }) {
           key={editing?.id || "new"}
           server={editing}
           onClose={() => setEditing(undefined)}
-          onSaved={load}
+          onSaved={afterSaved}
         />
       )}
       {importing && (
         <ImportDialog
           names={servers.map((x) => x.name)}
           onClose={() => setImporting(false)}
-          onSaved={load}
+          onSaved={afterSaved}
         />
       )}
       <ConfirmDelete

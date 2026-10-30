@@ -1,4 +1,5 @@
 import { DetailDialog } from "./ui/detail-dialog";
+import { ASSISTANT_NAME } from "@/lib/brand";
 import { useEffect, useState } from "react";
 import {
   Check,
@@ -109,7 +110,7 @@ export function RetrievalDebugger({
             <DialogDescription>
               {runId
                 ? "仅展示这次回答保存下来的查找记录，以及真正被采用的记忆。"
-                : "输入一个可能的问题，看看小汐会从已保存的记忆中找到哪些内容。"}
+                : `输入一个可能的问题，看看 ${ASSISTANT_NAME} 会从已保存的记忆中找到哪些内容。`}
             </DialogDescription>
           </DialogHeader>
           {!runId && (
@@ -184,7 +185,7 @@ export function RetrievalDebugger({
                   </h3>
                   <p>
                     {trace.selected_ids.length
-                      ? "下面这些内容会被加入回答背景，帮助小汐更贴近你的习惯和情况。"
+                      ? `下面这些内容会被加入回答背景，帮助 ${ASSISTANT_NAME} 更贴近你的习惯和情况。`
                       : "本次不会向回答中加入记忆背景，也不会凭空补写内容。"}
                   </p>
                 </div>
