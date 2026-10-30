@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { readEvents } from "@/lib/api";
-import { ChatPage, clearChatPreferences, hasNewChatDraft } from "./ChatPage";
+import { ChatPage } from "./ChatPage";
 import type { Settings } from "@/lib/api";
 
 const settings: Settings = {
@@ -381,42 +381,6 @@ test("restores draft text and attached images after leaving the chat page", asyn
       document.querySelector(".composer-attachments .attachment-draft"),
     ).not.toBeNull(),
   );
-});
-
-test("a confirmed new chat stays empty after the previous composer unmounts", () => {
-  apiMock.mockResolvedValue([]);
-  const props = {
-    conversationId: null,
-    onConversation: vi.fn(),
-    settings,
-    refresh: vi.fn().mockResolvedValue(undefined),
-    onAction: vi.fn(),
-  };
-  const view = render(<ChatPage key="first" {...props} />);
-  fireEvent.change(screen.getByLabelText("发送给XiaoXi的消息"), {
-    target: { value: "确认放弃的草稿" },
-  });
-  expect(hasNewChatDraft()).toBe(true);
-
-  // Match App: clear the draft before React replaces the keyed composer.
-  clearChatPreferences(null);
-  view.rerender(<ChatPage key="second" {...props} />);
-  expect(screen.getByLabelText("发送给XiaoXi的消息")).toHaveValue("");
-  expect(hasNewChatDraft()).toBe(false);
-  view.unmount();
-
-  render(<ChatPage {...props} />);
-  expect(screen.getByLabelText("发送给XiaoXi的消息")).toHaveValue("");
-});
-
-test("an attachment without text also protects the new chat draft", () => {
-  localStorage.setItem("bai-chat-draft:new", JSON.stringify({
-    text: "",
-    images: [{ id: "unsent-file", name: "notes.txt" }],
-  }));
-  expect(hasNewChatDraft()).toBe(true);
-  clearChatPreferences(null);
-  expect(hasNewChatDraft()).toBe(false);
 });
 
 test("a late accepted send cannot clear a newer draft after leaving and returning", async () => {

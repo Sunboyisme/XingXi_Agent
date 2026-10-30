@@ -40,11 +40,7 @@ const CalendarPage = lazy(() =>
     default: module.CalendarPage,
   })),
 );
-import {
-  ChatPage,
-  clearChatPreferences,
-  hasNewChatDraft,
-} from "./components/ChatPage";
+import { ChatPage, clearChatPreferences } from "./components/ChatPage";
 const LearningPage = lazy(() =>
   import("./components/LearningPage").then((module) => ({
     default: module.LearningPage,
@@ -114,11 +110,6 @@ type PendingAgenda = {
   tab: "todo" | "repeat";
 };
 
-type NewChatRequest = {
-  projectId: string | null;
-  pinned: boolean;
-};
-
 export function App() {
   const navigationEpoch = useRef(0);
   const { hiddenNavigation } = useGeneralPreferences();
@@ -178,8 +169,6 @@ export function App() {
   const [runtimeEditor, setRuntimeEditor] = useState(emptyRuntimeEditor);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [chatKey, setChatKey] = useState(0);
-  const [newChatRequest, setNewChatRequest] = useState<NewChatRequest | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectOverviewId, setProjectOverviewId] = useState<string | null>(
@@ -461,30 +450,13 @@ export function App() {
     }
   }
   function startNewChat() {
-    requestNewChat();
+    openNewChat();
   }
-  function requestNewChat(projectId = activeProjectId, pinned = false) {
-    const request = { projectId, pinned };
-    if (hasNewChatDraft()) {
-      setNewChatRequest(request);
-      return;
-    }
-    createNewChat(request);
-  }
-  function createNewChat(request: NewChatRequest) {
-    setNewChatRequest(null);
+  function openNewChat(projectId = activeProjectId, pinned = false) {
     setSidebarCollapsed(true);
     setProjectOverviewId(null);
-    setActiveProjectId(request.projectId);
-    setNewChatPinned(request.pinned);
-    setFocusMessageId(null);
-    clearChatPreferences(null);
-    setConversationId(null);
-    setChatKey((value) => value + 1);
-    navigate("chat");
-  }
-  function continueNewChatDraft() {
-    setNewChatRequest(null);
+    setActiveProjectId(projectId);
+    setNewChatPinned(pinned);
     setFocusMessageId(null);
     setConversationId(null);
     navigate("chat");
@@ -729,7 +701,7 @@ export function App() {
               currentId={conversationId}
               projectId={resolvedProjectId}
               onNew={(id, pinned) => {
-                requestNewChat(id, Boolean(pinned));
+                openNewChat(id, Boolean(pinned));
               }}
               onProject={openProject}
               onOpen={openConversation}
@@ -767,7 +739,7 @@ export function App() {
                   revision={projectRevision}
                   onBack={() => { setProjectOverviewId(null); navigate("projects"); }}
                   onNew={() => {
-                    requestNewChat(overviewProject.id);
+                    openNewChat(overviewProject.id);
                   }}
                   onOpen={openConversation}
                   onLibrary={() =>
@@ -780,7 +752,6 @@ export function App() {
               )}
               {page === "chat" && (
                 <ChatPage
-                  key={chatKey}
                   conversationId={conversationId}
                   projectId={resolvedProjectId}
                   projects={projects}
@@ -899,31 +870,6 @@ export function App() {
             openPlan(id, occurrence);
           }}
         />
-        <Dialog
-          open={newChatRequest !== null}
-          onOpenChange={(open) => {
-            if (!open) setNewChatRequest(null);
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>新建对话？</DialogTitle>
-              <DialogDescription>
-                你还有未发送的文字或附件。新建对话会清空这份草稿。
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={continueNewChatDraft}>
-                继续编辑
-              </Button>
-              <Button onClick={() => {
-                if (newChatRequest) createNewChat(newChatRequest);
-              }}>
-                清空并新建
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
         <Dialog open={info} onOpenChange={setInfo}>
           <DialogContent className="about-dialog">
             <DialogHeader>

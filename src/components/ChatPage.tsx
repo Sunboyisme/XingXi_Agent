@@ -168,15 +168,15 @@ function storeChatOptions(value: ChatOptions) {
   }
 }
 
-/** 删除对话或开始新对话时，清掉该对话保存的草稿与模型偏好；全局回答选项保持不变。 */
-export function clearChatPreferences(conversationId: string | null) {
+/** 删除对话时清理对应草稿与模型偏好；新建入口保留已有输入。 */
+export function clearChatPreferences(conversationId: string) {
   try {
     localStorage.removeItem(chatDraftKey(conversationId));
     localStorage.removeItem(chatModelKey(conversationId));
     // 清理旧版按对话保存的回答选项。
     localStorage.removeItem(`bai-chat-options:${conversationId || "new"}`);
   } catch {
-    /* Storage restrictions must not block deleting or starting a chat. */
+    /* Storage restrictions must not block deleting a chat. */
   }
 }
 
@@ -303,11 +303,6 @@ function storeChatDraft(conversationId: string | null, value: StoredChatDraft) {
   } catch {
     /* Draft persistence should never make the composer unusable. */
   }
-}
-
-export function hasNewChatDraft() {
-  const draft = readChatDraft(null);
-  return Boolean(draft && (draft.text || draft.images.length));
 }
 
 function clearChatDraft(
