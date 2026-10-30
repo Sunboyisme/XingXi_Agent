@@ -10,11 +10,12 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("MCP and skills panels never stay open together", async ({ page }) => {
-  const mcp = page.getByRole("button", { name: "MCP 工具", exact: true });
-  const skills = page.getByRole("button", { name: "技能", exact: true });
-  await mcp.click();
+  await page.locator('.composer button[aria-label="更多功能"]').click();
+  const mcp = page.getByRole("menuitem", { name: "MCP 工具", exact: true });
+  const skills = page.getByRole("menuitem", { name: "技能", exact: true });
+  await mcp.hover();
   await expect(page.getByRole("menuitem", { name: "配置 MCP" })).toBeVisible();
-  await skills.click();
+  await skills.hover();
   await expect(page.getByRole("menuitem", { name: "管理技能" })).toBeVisible();
   await expect(page.locator(".toolbox-menu")).toHaveCount(1);
 });
@@ -53,7 +54,7 @@ test("authentication errors keep the message aligned and offer interface setting
   ).toBe("left");
   await notice.getByRole("button", { name: "配置接口", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "设置", exact: true }),
+    page.getByRole("heading", { name: "编辑模型连接", exact: true }),
   ).toBeVisible();
 });
 

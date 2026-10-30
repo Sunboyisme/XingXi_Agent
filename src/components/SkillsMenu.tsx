@@ -5,7 +5,7 @@ import { api, type Skill } from "@/lib/api";
 import { ToolMenuFrame } from "./ToolMenuFrame";
 import { errorMessage } from "@/lib/utils";
 
-export function SkillsMenu({ onSettings }: { onSettings: () => void }) {
+export function SkillsMenu({ onSettings, open, onOpenChange }: { onSettings: () => void; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState("");
@@ -50,8 +50,10 @@ export function SkillsMenu({ onSettings }: { onSettings: () => void }) {
     <ToolMenuFrame
       label="技能"
       icon={<Puzzle size={15} />}
+      open={open}
       contentClassName="skill-menu"
       onOpenChange={(value) => {
+        onOpenChange?.(value);
         if (value) void load();
       }}
     >

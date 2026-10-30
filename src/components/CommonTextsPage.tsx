@@ -23,6 +23,14 @@ import { ConfirmDelete, EmptyState, ErrorNotice, Hint, Toast } from "./common";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { SoftSelect } from "./ui/soft-select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog";
 import "../styles/common-texts.css";
 
 function TextCard({
@@ -36,10 +44,20 @@ function TextCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [viewing, setViewing] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const body = useRef<HTMLDivElement>(null);
   const copy = useCopyFeedback(value.content);
-  const long =
-    value.content.length > 240 || value.content.split("\n").length > 4;
+  useEffect(() => {
+    const node = body.current;
+    if (!node) return;
+    const measure = () =>
+      setOverflowing(node.scrollHeight > node.clientHeight + 1);
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    measure();
+    return () => observer.disconnect();
+  }, [value.content]);
   return (
     <article className="common-text-card">
       <div className="common-text-card-meta">
@@ -58,21 +76,13 @@ function TextCard({
           </time>
         </Hint>
       </div>
-      <div
-        className={`common-text-body${long && !expanded ? " is-collapsed" : ""}`}
-        tabIndex={0}
-      >
+      <div className="common-text-body is-collapsed" ref={body} tabIndex={0}>
         {value.content}
       </div>
       <div className="common-text-card-actions">
-        {long && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={expanded}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? "收起" : "展开全文"}
+        {overflowing && (
+          <Button variant="ghost" size="sm" onClick={() => setViewing(true)}>
+            查看全文
           </Button>
         )}
         <span className="common-text-action-spacer" />
@@ -113,6 +123,33 @@ function TextCard({
         </span>
       )}
       {copy.error && <ErrorNotice message={copy.error} />}
+      <Dialog open={viewing} onOpenChange={setViewing}>
+        <DialogContent className="common-text-reader">
+          <DialogHeader>
+            <DialogTitle>查看全文</DialogTitle>
+            <DialogDescription>
+              {category} · {new Date(value.updated_at).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="common-text-full" tabIndex={0}>
+            {value.content}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => void copy.copy()}>
+              {copy.copied ? "已复制" : "复制全文"}
+            </Button>
+            <Button
+              onClick={() => {
+                setViewing(false);
+                onEdit();
+              }}
+            >
+              编辑文本
+            </Button>
+          </DialogFooter>
+          {copy.error && <ErrorNotice message={copy.error} />}
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }
@@ -226,7 +263,7 @@ export function CommonTextsPage() {
             onValueChange={setCategory}
             options={[
               { value: "all", label: "全部分类" },
-              { value: "uncategorized", label: "未分类" },
+              { value: "uncategorized", label: "默认分类" },
               ...categories.map((row) => ({ value: row.id, label: row.name })),
             ]}
           />
@@ -250,12 +287,14 @@ export function CommonTextsPage() {
           <EmptyState
             icon={FileText}
             title={
-              query || category !== "all"
+              query.trim()
                 ? "没有找到匹配文本"
-                : "保存常用的文字"
+                : category !== "all"
+                  ? "这个分类还没有文本"
+                  : "保存常用的文字"
             }
             action={
-              query || category !== "all" ? (
+              query.trim() ? (
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -267,12 +306,12 @@ export function CommonTextsPage() {
                 </Button>
               ) : (
                 <Button onClick={() => setEditor({ key: Date.now() })}>
-                  新增常用文本
+                  新增文本
                 </Button>
               )
             }
           >
-            {query || category !== "all"
+            {query.trim()
               ? "试试其他关键词或分类。"
               : "可在这里新增，也可选中文字后通过划词助手收藏。"}
           </EmptyState>
@@ -283,12 +322,12 @@ export function CommonTextsPage() {
               className="common-text-group"
               key={key}
               aria-label={
-                key === "recent" ? "最近更新" : names.get(key) || "未分类"
+                key === "recent" ? "最近更新" : names.get(key) || "默认分类"
               }
             >
               {sort === "category" && (
                 <h2>
-                  {names.get(key) || "未分类"}
+                  {names.get(key) || "默认分类"}
                   <span>{texts.length}</span>
                 </h2>
               )}
@@ -297,7 +336,7 @@ export function CommonTextsPage() {
                   <TextCard
                     key={row.id}
                     value={row}
-                    category={names.get(row.category_id || "") || "未分类"}
+                    category={names.get(row.category_id || "") || "默认分类"}
                     onEdit={() => setEditor({ value: row, key: Date.now() })}
                     onDelete={() => {
                       setDeleting(row);

@@ -76,9 +76,7 @@ pub struct Desktop {
     pub pet_exiting: AtomicBool,
     pub quick_text: Mutex<String>,
     pub quick_busy: AtomicBool,
-    pub quick_floating: AtomicBool,
     pub quick_epoch: AtomicU64,
-    pub floating_below: AtomicBool,
     pub dialog_active: AtomicBool,
     pub hit_regions: Mutex<std::collections::HashMap<String, Vec<HitRegion>>>,
     pub capture: Mutex<Option<Capture>>,
@@ -169,7 +167,7 @@ pub fn desktop_preferences(app: tauri::AppHandle) -> serde_json::Value {
     let d = app.state::<Desktop>();
     let quick_epoch = d.quick_epoch.load(Ordering::SeqCst);
     let quick_shown = app.get_webview_window("quick").is_some_and(|w| w.is_visible().unwrap_or(false));
-    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"selectionShortcutError":app.state::<crate::selection::Selection>().shortcut_error.lock().unwrap().clone(),"floatingChat":d.quick_floating.load(Ordering::Relaxed),"floatingBelow":d.floating_below.load(Ordering::Relaxed),"quickShown":quick_shown,"quickEpoch":quick_epoch})
+    serde_json::json!({"preferences":d.prefs.lock().unwrap().clone(),"ownsShortcuts":d.owned.load(Ordering::Relaxed),"selectionShortcutError":app.state::<crate::selection::Selection>().shortcut_error.lock().unwrap().clone(),"quickShown":quick_shown,"quickEpoch":quick_epoch})
 }
 #[tauri::command]
 pub async fn desktop_preferences_save(
@@ -362,11 +360,6 @@ fn position_pet(
         "desktop-pet-layout",
         serde_json::json!({"x":offset_x,"y":offset_y,"size":p.pet_size}),
     );
-    if app.state::<Desktop>().quick_floating.load(Ordering::SeqCst)
-        && app.get_webview_window("quick").is_some_and(|quick| quick.is_visible().unwrap_or(false))
-    {
-        layout_floating_quick(app, false)?;
-    }
     Ok(())
 }
 pub fn finish_pet_drag(app: &tauri::AppHandle) {
@@ -409,9 +402,6 @@ pub fn set_pet_visible(app: &tauri::AppHandle, shown: bool) {
             serde_json::json!({"shown":true,"epoch":epoch}),
         );
     } else {
-        if state.quick_floating.load(Ordering::SeqCst) {
-            desktop_dismiss_label(app, "quick");
-        }
         let _ = w.emit(
             "desktop-pet-presence",
             serde_json::json!({"shown":false,"epoch":epoch}),
@@ -521,23 +511,6 @@ pub fn desktop_dismiss(app: tauri::AppHandle, window: tauri::WebviewWindow) {
     desktop_dismiss_label(&app, window.label());
 }
 #[tauri::command]
-pub fn desktop_floating_blur(app: tauri::AppHandle, session_id: String) -> Result<(), String> {
-    let state = app.state::<Desktop>();
-    if !state.quick_floating.load(Ordering::SeqCst)
-        || state.dialog_active.load(Ordering::SeqCst)
-        || *state.ask_session.lock().unwrap() != session_id
-        || state.capture.lock().unwrap().is_some()
-    {
-        return Ok(());
-    }
-    let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
-    // A delayed blur must not hide a window that has already regained focus.
-    if w.is_visible().map_err(|e| e.to_string())? && !w.is_focused().map_err(|e| e.to_string())? {
-        desktop_dismiss_label(&app, "quick");
-    }
-    Ok(())
-}
-#[tauri::command]
 pub fn desktop_toggle(app: tauri::AppHandle) -> Result<(), String> {
     if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
         return Ok(());
@@ -621,7 +594,6 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
         return Ok(());
     }
     if capture {
-        set_quick_mode(&app, false);
         begin_ask_session(&app)?;
         return begin_capture(&app);
     }
@@ -636,9 +608,6 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
         let _ = app.emit_to("capture", "capture-reset", id);
         return show_capture_composer(&app);
     }
-    if app.state::<Desktop>().quick_floating.load(Ordering::Relaxed) {
-        return show_floating_quick(&app);
-    }
     if begin_capture(&app).is_ok() {
         return Ok(());
     }
@@ -646,73 +615,30 @@ pub fn desktop_open(app: tauri::AppHandle, capture: bool) -> Result<(), String> 
     show_quick_window(&app)
 }
 pub fn desktop_record(app: tauri::AppHandle) -> Result<(), String> {
-    set_quick_mode(&app, false);
     desktop_open(app, false)
 }
 #[tauri::command]
 pub fn desktop_resume(app: tauri::AppHandle, run_id: Option<String>) -> Result<(), String> {
-    desktop_chat(app.clone(), Some(false), Some(false))?;
+    desktop_start(app.clone(), Some(false), Some(false))?;
     if let Some(id) = run_id {
         app.emit_to("quick", "desktop-resume-task", serde_json::json!({"runId":id}))
             .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
-fn set_quick_mode(app: &tauri::AppHandle, floating: bool) {
-    app.state::<Desktop>().quick_floating.store(floating, Ordering::SeqCst);
-    let _ = app.emit_to("quick", "desktop-chat-mode", serde_json::json!({"floating":floating}));
-}
 #[tauri::command]
-pub fn desktop_chat(app: tauri::AppHandle, new_chat: Option<bool>, voice: Option<bool>) -> Result<(), String> {
+pub fn desktop_start(app: tauri::AppHandle, new_chat: Option<bool>, voice: Option<bool>) -> Result<(), String> {
     if app.state::<Desktop>().dialog_active.load(Ordering::SeqCst) {
         return Ok(());
     }
-    finish_capture(&app, None);
     if new_chat.unwrap_or(false) || app.state::<Desktop>().ask_session.lock().unwrap().is_empty() {
         begin_ask_session(&app)?;
     }
-    set_quick_mode(&app, true);
-    show_floating_quick(&app)?;
+    desktop_open(app.clone(), false)?;
     if voice.unwrap_or(false) {
         // Open the editor first. Its current run/upload/recording state decides
         // whether to start recording; a cached busy flag must not block reopening.
         enqueue_quick(&app, "voice", None, None, None, None);
-    }
-    Ok(())
-}
-fn show_floating_quick(app: &tauri::AppHandle) -> Result<(), String> {
-    layout_floating_quick(app, true)
-}
-fn layout_floating_quick(app: &tauri::AppHandle, reveal: bool) -> Result<(), String> {
-    let w = app.get_webview_window("quick").ok_or("问答窗口不可用")?;
-    let pet = app.get_webview_window("pet").ok_or("桌宠窗口不可用")?;
-    let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
-    let at = pet.outer_position().map_err(|e| e.to_string())?;
-    let scale = pet.scale_factor().map_err(|e| e.to_string())?;
-    let x = at.x + (p.pet_offset_x.unwrap_or(250.0) * scale).round() as i32;
-    let y = at.y + (p.pet_offset_y.unwrap_or(132.0) * scale).round() as i32;
-    let diameter = (82.0 * p.pet_size as f64 / 100.0 * scale).round() as i32;
-    let monitor = pet.monitor_from_point((x + diameter / 2) as f64, (y + diameter / 2) as f64)
-        .map_err(|e| e.to_string())?.ok_or("显示器不可用")?;
-    let a = monitor.work_area();
-    let width = ((436.0 * scale).round() as u32).min(a.size.width);
-    let gap = (12.0 * scale).round() as i32;
-    let left = (x + diameter - width as i32).clamp(a.position.x, a.position.x + a.size.width as i32 - width as i32);
-    let above = (y - gap - a.position.y).max(0);
-    let below = above < (80.0 * scale) as i32;
-    let available = if below { a.position.y + a.size.height as i32 - y - diameter - gap } else { above };
-    let height = ((440.0 * scale).round() as u32).min(available.max((76.0 * scale) as i32) as u32).min(a.size.height);
-    let top = (if below { y + diameter + gap } else { y - gap - height as i32 })
-        .clamp(a.position.y, a.position.y + a.size.height as i32 - height as i32);
-    app.state::<Desktop>().floating_below.store(below, Ordering::SeqCst);
-    let _ = w.emit("desktop-chat-placement", serde_json::json!({"below":below}));
-    w.set_position(PhysicalPosition::new(left, top)).map_err(|e| e.to_string())?;
-    w.set_size(PhysicalSize::new(width, height)).map_err(|e| e.to_string())?;
-    if reveal {
-        w.show().map_err(|e| e.to_string())?;
-        quick_presence(app, true);
-        w.set_focus().map_err(|e| e.to_string())?;
-        let _ = w.emit("desktop-shown", ());
     }
     Ok(())
 }

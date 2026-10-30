@@ -17,6 +17,9 @@ import {
   Trash2,
   Upload,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
 } from "lucide-react";
 import { api, downloadApiFile, fetchApi } from "@/lib/api";
 import { nativeFile, useNativeDrop } from "@/lib/nativeDrop";
@@ -26,6 +29,7 @@ import { ConfirmDelete, ErrorNotice, Hint, Markdown, Toast } from "./common";
 import { DownloadResultDialog, type DownloadedFile } from "./OfficeFiles";
 import { TrashIcon } from "./SoftIcons";
 import type { KnowledgeSource } from "./KnowledgeSources";
+import "../styles/knowledge-layout.css";
 import { errorMessage } from "@/lib/utils";
 
 type Document = {
@@ -249,11 +253,18 @@ export function KnowledgePage({
   const [results, setResults] = useState<KnowledgeSource[]>([]);
   const [related, setRelated] = useState<KnowledgeSource>();
   const [searched, setSearched] = useState(false);
+  const [directoryHidden, setDirectoryHidden] = useState(false);
   const lock = useRef(false);
   const requestVersion = useRef(0);
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const current = documents.find((row) => row.id === selected?.id);
+  useEffect(() => {
+    if (!current && documents.length && !openSource)
+      setSelected(
+        documents.find((row) => row.status === "ready") || documents[0],
+      );
+  }, [documents, current?.id, openSource]);
   const load = useCallback(async () => {
     const request = ++requestVersion.current;
     const [docs, info] = await Promise.all([
@@ -457,6 +468,8 @@ export function KnowledgePage({
               onChange={(e) => {
                 const enabled = e.target.checked;
                 void perform(async () => {
+                  const previous = status;
+                  setStatus(value => value ? { ...value, enabled } : value);
                   setUpdatingConfig(true);
                   try {
                     setStatus(
@@ -466,6 +479,9 @@ export function KnowledgePage({
                     );
                     setResults([]);
                     setSearched(false);
+                  } catch (cause) {
+                    setStatus(previous);
+                    throw cause;
                   } finally {
                     setUpdatingConfig(false);
                   }
@@ -529,190 +545,245 @@ export function KnowledgePage({
               <X size={16} />
             </Button>
           )}
+          {documents.length > 0 && (
+            <Hint
+              label={
+                directoryHidden ? "展开资料目录" : "收起资料目录，放大正文"
+              }
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={directoryHidden ? "展开资料目录" : "收起资料目录"}
+                aria-expanded={!directoryHidden}
+                aria-controls="knowledge-directory"
+                onClick={() => setDirectoryHidden((value) => !value)}
+              >
+                {directoryHidden ? (
+                  <PanelLeftOpen size={17} />
+                ) : (
+                  <PanelLeftClose size={17} />
+                )}
+              </Button>
+            </Hint>
+          )}
         </form>
       </div>
       {status?.error && <ErrorNotice tone="warning" message={status.error} />}
-      <div className="knowledge-workspace">
-        <aside aria-label="知识库文件">
-          <h2>
-            <BookOpen size={17} />
-            {searched
-              ? `搜索结果 · ${results.length}`
-              : `资料目录 · ${documents.length}`}
-          </h2>
-          <div
-            className="knowledge-directory-scroll"
-            tabIndex={0}
-            aria-label={searched ? "搜索结果列表" : "资料目录列表"}
-          >
-            {searched ? (
-              <>
-                {!results.length && (
-                  <p className="module-empty">
-                    没有找到相关片段，可换个关键词。
-                  </p>
-                )}
-                {results.map((source) => (
-                  <button
-                    key={source.chunk_id}
-                    className="knowledge-search-result"
-                    aria-current={
-                      related?.chunk_id === source.chunk_id ? "true" : undefined
-                    }
-                    onClick={() => {
-                      const row = documents.find(
-                        (doc) => doc.id === source.document_id,
-                      );
-                      if (row) {
-                        selectDocument(row);
-                        setRelated(source);
-                      } else setError("这份知识库文件已移除。");
-                    }}
-                  >
-                    <strong>{source.relative_path}</strong>
-                    <small>{source.locator}</small>
-                    <p>{source.excerpt.slice(0, 180)}</p>
-                  </button>
-                ))}
-              </>
-            ) : (
-              <>
-                {!documents.length && (
-                  <p className="module-empty">
-                    导入或直接拖入文件、文件夹，从第一份资料开始。
-                  </p>
-                )}
-                <FileTree
-                  documents={documents}
-                  selected={selected?.id}
-                  onSelect={selectDocument}
-                  onDelete={requestDelete}
-                  busy={busy}
-                />
-              </>
-            )}
+      {!documents.length && status && !searched ? (
+        <section className="knowledge-welcome">
+          <div className="knowledge-welcome-icon">
+            <BookOpen size={28} />
           </div>
-        </aside>
-        <section className="knowledge-preview" aria-label="文件预览">
-          {current ? (
-            <>
-              <header>
-                <div>
-                  <h2>{current.relative_path}</h2>
-                  <small>
-                    {statusLabels[current.status]} ·{" "}
-                    {(current.size / 1024).toFixed(1)} KB
-                  </small>
-                </div>
-                <div className="module-actions">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="下载原文件"
-                    disabled={busy}
-                    onClick={() =>
-                      void perform(async () => {
-                        const name =
-                          current.relative_path.split("/").at(-1) || "文件";
-                        if (isTauri()) {
-                          const path = await invoke<string>(
-                            "download_knowledge_file",
-                            { fileId: current.id, name },
-                          );
-                          setDownloaded({ name, path });
-                        } else {
-                          await downloadApiFile(
-                            `/knowledge/documents/${current.id}/download`,
-                            name,
-                          );
-                        }
-                      })
-                    }
-                  >
-                    <Download size={16} />
-                  </Button>
-                  {["failed", "empty", "partial"].includes(current.status) && (
+          <h2>从第一份资料开始</h2>
+          <p>导入文档或整个文件夹，也可以将文件直接拖到这里。</p>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => files.current?.click()}
+          >
+            <Plus size={16} />
+            选择资料
+          </Button>
+        </section>
+      ) : (
+        <div
+          className={`knowledge-workspace${directoryHidden ? " directory-hidden" : ""}`}
+        >
+          <aside
+            id="knowledge-directory"
+            aria-label="知识库文件"
+            hidden={directoryHidden}
+          >
+            <h2>
+              <BookOpen size={17} />
+              {searched
+                ? `搜索结果 · ${results.length}`
+                : `资料目录 · ${documents.length}`}
+            </h2>
+            <div
+              className="knowledge-directory-scroll"
+              tabIndex={0}
+              aria-label={searched ? "搜索结果列表" : "资料目录列表"}
+            >
+              {searched ? (
+                <>
+                  {!results.length && (
+                    <p className="module-empty">
+                      没有找到相关片段，可换个关键词。
+                    </p>
+                  )}
+                  {results.map((source) => (
+                    <button
+                      key={source.chunk_id}
+                      className="knowledge-search-result"
+                      aria-current={
+                        related?.chunk_id === source.chunk_id
+                          ? "true"
+                          : undefined
+                      }
+                      onClick={() => {
+                        const row = documents.find(
+                          (doc) => doc.id === source.document_id,
+                        );
+                        if (row) {
+                          selectDocument(row);
+                          setRelated(source);
+                        } else setError("这份知识库文件已移除。");
+                      }}
+                    >
+                      <strong>{source.relative_path}</strong>
+                      <small>{source.locator}</small>
+                      <p>{source.excerpt.slice(0, 180)}</p>
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {!documents.length && (
+                    <p className="module-empty">
+                      导入或直接拖入文件、文件夹，从第一份资料开始。
+                    </p>
+                  )}
+                  <FileTree
+                    documents={documents}
+                    selected={selected?.id}
+                    onSelect={selectDocument}
+                    onDelete={requestDelete}
+                    busy={busy}
+                  />
+                </>
+              )}
+            </div>
+          </aside>
+          <section className="knowledge-preview" aria-label="文件预览">
+            {current ? (
+              <>
+                <header>
+                  <div>
+                    <h2>{current.relative_path}</h2>
+                    <small>
+                      {statusLabels[current.status]} ·{" "}
+                      {(current.size / 1024).toFixed(1)} KB
+                    </small>
+                  </div>
+                  <div className="module-actions">
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="下载原文件"
                       disabled={busy}
-                      aria-label="重试解析"
                       onClick={() =>
                         void perform(async () => {
-                          await api(
-                            `/knowledge/documents/${current.id}/retry`,
-                            "POST",
-                          );
-                          await load();
-                          setNotice("已重新加入解析队列");
+                          const name =
+                            current.relative_path.split("/").at(-1) || "文件";
+                          if (isTauri()) {
+                            const path = await invoke<string>(
+                              "download_knowledge_file",
+                              { fileId: current.id, name },
+                            );
+                            setDownloaded({ name, path });
+                          } else {
+                            await downloadApiFile(
+                              `/knowledge/documents/${current.id}/download`,
+                              name,
+                            );
+                          }
                         })
                       }
                     >
-                      <RotateCcw size={16} />
+                      <Download size={16} />
                     </Button>
-                  )}
-                  <Hint label="删除知识库副本">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="删除知识库文件"
-                      disabled={busy}
-                      onClick={() =>
-                        requestDelete(current.relative_path, [current])
-                      }
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </Hint>
-                </div>
-              </header>
-              {current.error && (
-                <ErrorNotice
-                  tone={current.status === "failed" ? "error" : "info"}
-                  message={current.error}
-                />
-              )}
-              {current.warnings.map((warning) => (
-                <ErrorNotice key={warning} tone="warning" message={warning} />
-              ))}
-              {related?.document_id === current.id && (
-                <div className="knowledge-related">
-                  <strong>{related.locator} · 引用片段</strong>
-                  <Markdown>{related.excerpt}</Markdown>
-                </div>
-              )}
-              {previewLoading && <p role="status">正在读取 Markdown…</p>}
-              {previewError && (
-                <ErrorNotice
-                  message={previewError}
-                  retry={() => setPreviewRevision((value) => value + 1)}
-                />
-              )}
-              {preview ? (
-                <>
-                  {preview.truncated && (
-                    <ErrorNotice
-                      tone="warning"
-                      message="正文预览已截断，下载可获取完整原文件。"
-                    />
-                  )}
-                  <Markdown>{preview.content}</Markdown>
-                </>
-              ) : (
-                !previewLoading &&
-                !/\.(md|markdown)$/i.test(current.relative_path) && (
-                  <p className="module-empty">
-                    此类型显示文件信息，支持解析的正文可用于检索。正文预览目前支持
-                    Markdown。
-                  </p>
-                )
-              )}
-            </>
-          ) : (
-            <p className="module-empty">从左侧选择一份资料查看。</p>
-          )}
-        </section>
-      </div>
+                    {["failed", "empty", "partial"].includes(
+                      current.status,
+                    ) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={busy}
+                        aria-label="重试解析"
+                        onClick={() =>
+                          void perform(async () => {
+                            await api(
+                              `/knowledge/documents/${current.id}/retry`,
+                              "POST",
+                            );
+                            await load();
+                            setNotice("已重新加入解析队列");
+                          })
+                        }
+                      >
+                        <RotateCcw size={16} />
+                      </Button>
+                    )}
+                    <Hint label="删除知识库副本">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="删除知识库文件"
+                        disabled={busy}
+                        onClick={() =>
+                          requestDelete(current.relative_path, [current])
+                        }
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </Hint>
+                  </div>
+                </header>
+                {current.error && (
+                  <ErrorNotice
+                    tone={current.status === "failed" ? "error" : "info"}
+                    message={current.error}
+                  />
+                )}
+                {current.warnings.map((warning) => (
+                  <ErrorNotice key={warning} tone="warning" message={warning} />
+                ))}
+                {related?.document_id === current.id && (
+                  <div className="knowledge-related">
+                    <strong>{related.locator} · 引用片段</strong>
+                    <Markdown>{related.excerpt}</Markdown>
+                  </div>
+                )}
+                {previewLoading && <p role="status">正在读取 Markdown…</p>}
+                {previewError && (
+                  <ErrorNotice
+                    message={previewError}
+                    retry={() => setPreviewRevision((value) => value + 1)}
+                  />
+                )}
+                {preview ? (
+                  <>
+                    {preview.truncated && (
+                      <ErrorNotice
+                        tone="warning"
+                        message="正文预览已截断，下载可获取完整原文件。"
+                      />
+                    )}
+                    <Markdown>{preview.content}</Markdown>
+                  </>
+                ) : (
+                  !previewLoading &&
+                  !/\.(md|markdown)$/i.test(current.relative_path) && (
+                    <p className="module-empty">
+                      此类型显示文件信息，支持解析的正文可用于检索。正文预览目前支持
+                      Markdown。
+                    </p>
+                  )
+                )}
+              </>
+            ) : (
+              <div className="knowledge-preview-empty">
+                <FileText size={28} />
+                <h2>{status ? "选择一份资料" : "正在读取知识库…"}</h2>
+                <p>在资料目录中选择文件，查看内容与来源。</p>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
       <ConfirmDelete
         open={Boolean(deleting)}
         title={

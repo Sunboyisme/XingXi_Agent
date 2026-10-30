@@ -6,7 +6,6 @@
 }
 .common-texts-header {
   padding: 24px 30px;
-  border-bottom: 1px solid var(--ui-color-border);
   flex-shrink: 0;
 }
 .common-texts-header h1 {
@@ -64,6 +63,8 @@
   gap: 14px;
 }
 .common-text-card {
+  display: flex;
+  flex-direction: column;
   background: var(--ui-color-surface);
   border: 1px solid var(--ui-color-border);
   border-radius: 13px;
@@ -91,6 +92,8 @@
   line-height: 1.7;
 }
 .common-text-body.is-collapsed {
+  min-height: 6.8em;
+  max-height: 6.8em;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
@@ -100,10 +103,22 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  margin-top: 12px;
+  padding-top: 12px;
+  margin-top: auto;
 }
 .common-text-action-spacer {
   flex: 1;
+}
+.common-text-full {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 60vh;
+  overflow: auto;
+  line-height: 1.8;
+  padding: 4px 3px;
+}
+.common-text-reader {
+  max-height: calc(100vh - 32px);
 }
 .common-text-editor form,
 .common-text-editor fieldset {

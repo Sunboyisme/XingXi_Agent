@@ -538,6 +538,7 @@ export function ChatPage({
   const [uploading, setUploading] = useState(false);
   const [buddyNote, setBuddyNote] = useState("");
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [composerSubmenu, setComposerSubmenu] = useState<"mcp" | "skills" | null>(null);
   const [movingProject, setMovingProject] = useState(false);
   const moveProjectLock = useRef(false);
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
@@ -1960,6 +1961,7 @@ export function ChatPage({
                   open={composerMenuOpen}
                   onOpenChange={(open) => {
                     setComposerMenuOpen(open);
+                    if (!open) setComposerSubmenu(null);
                     if (open)
                       void api<{ enabled: boolean }>("/knowledge/config")
                         .then((value) => setKnowledgeEnabled(value.enabled))
@@ -2038,14 +2040,20 @@ export function ChatPage({
                         添加文件或图片
                       </DropdownMenu.Item>
                       <ToolboxMenu
+                        open={composerSubmenu === "mcp"}
+                        onOpenChange={open => setComposerSubmenu(current => open ? "mcp" : current === "mcp" ? null : current)}
                         onSettings={() => {
                           setComposerMenuOpen(false);
+                          setComposerSubmenu(null);
                           onAction("tools");
                         }}
                       />
                       <SkillsMenu
+                        open={composerSubmenu === "skills"}
+                        onOpenChange={open => setComposerSubmenu(current => open ? "skills" : current === "skills" ? null : current)}
                         onSettings={() => {
                           setComposerMenuOpen(false);
+                          setComposerSubmenu(null);
                           onAction("skills");
                         }}
                       />

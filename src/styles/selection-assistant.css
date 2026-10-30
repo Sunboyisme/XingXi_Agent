@@ -1,4 +1,6 @@
 html[data-desktop="selection"] .selection-window {
+  width: fit-content;
+  max-width: calc(100vw - 16px);
   margin: 8px;
   padding: 8px;
   border: 1px solid var(--ui-color-border);
@@ -9,10 +11,21 @@ html[data-desktop="selection"] .selection-window {
   max-height: calc(100vh - 16px);
   overflow: auto;
 }
+html[data-desktop="selection"] .selection-window.has-result {
+  width: calc(100% - 16px);
+}
 .selection-toolbar {
+  width: max-content;
+  max-width: 100%;
   display: flex;
   gap: 2px;
+  align-items: flex-start;
+}
+.selection-actions {
+  min-width: 0;
+  display: flex;
   align-items: center;
+  gap: 2px;
   flex-wrap: wrap;
 }
 .selection-avatar {
@@ -31,7 +44,8 @@ html[data-desktop="selection"] button[aria-pressed="true"] {
   background: var(--ui-color-surface-deep);
 }
 .selection-toolbar .selection-close {
-  margin-left: auto;
+  margin-left: 4px;
+  flex-shrink: 0;
 }
 .selection-result {
   border-top: 1px solid var(--ui-color-border);
@@ -97,16 +111,6 @@ html[data-desktop="selection"] .selection-result-options .soft-select {
   font-size: 12px;
   color: var(--ui-color-text-muted);
   margin: 10px 8px 2px;
-}
-html[data-desktop="selection"] [data-slot="dialog-content"] {
-  background: var(--ui-color-surface);
-  color: var(--ui-color-text);
-}
-html[data-desktop="selection"]
-  [data-slot="dialog-content"]
-  [data-slot="button"][data-variant="default"] {
-  background: var(--ui-color-action);
-  color: var(--ui-color-on-action);
 }
 html[data-desktop="selection"] .error-notice {
   margin: 8px 3px;

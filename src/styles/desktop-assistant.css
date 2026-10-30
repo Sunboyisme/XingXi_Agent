@@ -127,30 +127,7 @@ html[data-desktop] .quick-bar textarea:is(:focus, :focus-visible) {
   position: relative;
   flex-shrink: 0;
 }
-.quick-window.is-floating {
-  --quick-detail-color: var(--ui-color-text-muted);
-  --quick-detail-icon: var(--ui-color-action);
-  --quick-detail-bg: var(--ui-color-surface-deep);
-  --quick-detail-line: var(--ui-color-line);
-  inset: 12px 8px 8px;
-  gap: 10px;
-  color: var(--ui-color-text);
-}
-.quick-window.is-floating.is-below { flex-direction: column-reverse; }
-.quick-window.is-floating .quick-bar { min-height: 50px; padding: 7px 9px; gap: 9px; border: 1px solid var(--ui-color-border); border-radius: 30px; background: var(--ui-color-surface); }
-html[data-desktop] .quick-window.is-floating .quick-bar textarea { height: 32px; max-height: 70px; padding: 4px 0; font-size: 15px; line-height: 24px; color: var(--ui-color-text); }
-.quick-window.is-floating .quick-bar textarea::placeholder { color: var(--ui-color-text-muted); }
-html[data-desktop] .quick-window.is-floating .quick-add-file { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: var(--ui-color-surface-deep); color: var(--ui-color-text-muted); }
-html[data-desktop] .quick-window.is-floating .quick-add-file:hover { background: var(--surface-hover); color: var(--ui-color-text); }
-html[data-desktop] .quick-window.is-floating .quick-send { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: var(--ui-color-action); color: var(--ui-color-on-action); }
-html[data-desktop] .quick-window.is-floating .quick-send:hover { background: var(--ui-color-action-hover); }
 html[data-desktop] .quick-send[aria-disabled="true"] { opacity: 0.7; cursor: progress; }
-html[data-desktop] .quick-floating-close { position: absolute; right: -2px; top: -9px; z-index: 1; width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 2px; border: 1px solid var(--ui-color-border); border-radius: 50%; background: var(--ui-color-surface-deep); color: var(--ui-color-text-muted); }
-html[data-desktop] .quick-floating-close:hover { background: var(--surface-hover); color: var(--ui-color-text); }
-.quick-window.is-floating .quick-answer { max-height: none; flex-shrink: 1; background: var(--ui-color-surface); border-color: var(--ui-color-border); }
-.quick-window.is-floating .quick-answer header { border-color: var(--ui-color-line); }
-.quick-window.is-floating .quick-attachments { background: var(--ui-color-surface-deep); }
-.quick-window.is-floating .quick-answer-scroll { min-height: 0; }
 .quick-answer {
   min-height: 0;
   display: flex;

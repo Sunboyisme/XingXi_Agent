@@ -314,25 +314,6 @@ pub fn selection_resize(
     w.set_position(PhysicalPosition::new(x, y))
         .map_err(|e| e.to_string())
 }
-#[tauri::command]
-pub fn selection_ask(app: tauri::AppHandle, id: u64) -> Result<(), String> {
-    let snapshot = app.state::<Selection>().snapshot.lock().unwrap().clone();
-    if snapshot.id != id || snapshot.text.is_empty() {
-        return Err("选区已改变，请重新取词".into());
-    }
-    crate::desktop::desktop_chat(app.clone(), Some(false), Some(false))?;
-    crate::desktop::enqueue_quick(
-        &app,
-        "append-selection",
-        Some(snapshot.text),
-        None,
-        None,
-        None,
-    );
-    dismiss(&app);
-    Ok(())
-}
-
 pub fn trigger(app: &tauri::AppHandle) {
     let foreground = unsafe { GetForegroundWindow() }.0 as usize;
     if app

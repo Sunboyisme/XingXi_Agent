@@ -6,9 +6,8 @@ import {
   Check,
   Copy,
   Languages,
-  ListCollapse,
+  FileText,
   Loader2,
-  MessageSquare,
   RotateCcw,
   Square,
   X,
@@ -23,12 +22,11 @@ import {
   selectedModel,
   type Settings,
 } from "@/lib/desktopAssistant";
-import { useCopyFeedback } from "@/lib/clipboard";
+import { copyText } from "@/lib/clipboard";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import { BaiAvatar } from "./BaiAvatar";
-import { CommonTextEditor } from "./CommonTextEditor";
+import { notifyCommonTextsChanged } from "@/lib/commonTexts";
 import { ErrorNotice, Hint, Markdown } from "./common";
-import { Reasoning } from "./Reasoning";
 import { SoftSelect } from "./ui/soft-select";
 import "../styles/selection-assistant.css";
 
@@ -53,19 +51,22 @@ export function SelectionAssistant() {
   const [language, setLanguage] = useState("auto");
   const [action, setAction] = useState<Action>();
   const [answer, setAnswer] = useState("");
-  const [reasoning, setReasoning] = useState("");
-  const [reasoningActive, setReasoningActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [incomplete, setIncomplete] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [editor, setEditor] = useState(false);
-  const [asking, setAsking] = useState(false);
+  const [savingText, setSavingText] = useState(false);
+  const [savedText, setSavedText] = useState(false);
+  const saveRequest = useRef<number | null>(null);
   const [configError, setConfigError] = useState("");
   const [reloadSettings, setReloadSettings] = useState(0);
-  const sourceCopy = useCopyFeedback(snapshot?.text || "");
-  const resultCopy = useCopyFeedback(answer);
+  const [copied, setCopied] = useState<"source" | "result" | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const feedbackEpoch = useRef(0);
+  const copyRequest = useRef<object | null>(null);
   const current = useRef<Snapshot | undefined>(undefined);
   const latestSnapshot = useRef(0);
   const mounted = useRef(false);
@@ -74,7 +75,6 @@ export function SelectionAssistant() {
   const tracker = useRef<AbortController | null>(null);
   const stopRequested = useRef(false);
   const stoppingLock = useRef(false);
-  const askingLock = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const root = useRef<HTMLElement>(null);
@@ -84,7 +84,59 @@ export function SelectionAssistant() {
     ".selection-window,.ui-hint,[role=dialog],[role=listbox],[data-slot=dialog-overlay]",
   );
 
+  function clearFeedback() {
+    feedbackEpoch.current++;
+    clearTimeout(feedbackTimer.current);
+  }
+  function success(message: string, id: number) {
+    clearFeedback();
+    const own = feedbackEpoch.current;
+    setNotice(message);
+    feedbackTimer.current = setTimeout(() => {
+      if (
+        mounted.current &&
+        own === feedbackEpoch.current &&
+        current.current?.id === id
+      )
+        commands.current.dismiss();
+    }, 1200);
+  }
+  async function copy(value: string, kind: "source" | "result") {
+    const material = current.current;
+    if (!material || !value || copyRequest.current) return;
+    const request = {};
+    copyRequest.current = request;
+    const own = operation.current;
+    clearFeedback();
+    setError("");
+    setNotice("");
+    try {
+      await copyText(value);
+      if (
+        mounted.current &&
+        own === operation.current &&
+        current.current?.id === material.id
+      ) {
+        setCopied(kind);
+        success(
+          kind === "source" ? "已复制选中文字" : "已复制结果",
+          material.id,
+        );
+      }
+    } catch {
+      if (
+        mounted.current &&
+        own === operation.current &&
+        current.current?.id === material.id
+      )
+        setError("复制失败，请重试或选择文字后复制。");
+    } finally {
+      if (copyRequest.current === request) copyRequest.current = null;
+    }
+  }
   function invalidate() {
+    clearFeedback();
+    copyRequest.current = null;
     operation.current++;
     tracker.current?.abort();
     tracker.current = null;
@@ -101,11 +153,12 @@ export function SelectionAssistant() {
     current.current = undefined;
     setSnapshot(undefined);
     setAction(undefined);
-    setEditor(false);
+    setSavingText(false);
+    setSavedText(false);
+    saveRequest.current = null;
     setBusy(false);
     setStopping(false);
-    setAsking(false);
-    askingLock.current = false;
+    setCopied(null);
   }
   function accept(value: Snapshot) {
     if (!value.id || value.id <= latestSnapshot.current) return;
@@ -115,26 +168,39 @@ export function SelectionAssistant() {
     setSnapshot(value);
     setAction(undefined);
     setAnswer("");
-    setReasoning("");
-    setReasoningActive(false);
     setBusy(false);
     setStopping(false);
     setIncomplete(false);
     setError("");
     setNotice("");
-    setEditor(false);
-    setAsking(false);
-    askingLock.current = false;
+    setSavingText(false);
+    setSavedText(false);
+    saveRequest.current = null;
+    setCopied(null);
   }
   function dismiss() {
     const id = current.current?.id;
     if (id)
       void invoke("selection_dismiss", { id }).catch((cause) => {
-        if (mounted.current) setError(desktopError(cause));
+        if (mounted.current && current.current?.id === id)
+          setError(desktopError(cause));
       });
   }
   useEffect(() => {
     mounted.current = true;
+    const escape = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        !document.querySelector(
+          '[role="listbox"],[role="dialog"],[role="menu"]',
+        )
+      ) {
+        event.preventDefault();
+        commands.current.dismiss();
+      }
+    };
+    window.addEventListener("keydown", escape);
     const stops = [
       desktopListen<Snapshot>("selection-snapshot", (value) => {
         if (mounted.current) commands.current.accept(value);
@@ -165,6 +231,7 @@ export function SelectionAssistant() {
       });
     return () => {
       mounted.current = false;
+      window.removeEventListener("keydown", escape);
       invalidate();
       for (const stop of stops)
         void stop.then((unlisten) => unlisten()).catch(() => {});
@@ -188,12 +255,16 @@ export function SelectionAssistant() {
   useLayoutEffect(() => {
     if (!snapshot) return;
     let active = true;
-    const expandedHeight = editor ? 650 : action ? 590 : 96;
+    const expandedHeight = action ? 590 : 76;
     const resize = () => {
       if (active)
         void invoke("selection_resize", {
           id: snapshot.id,
-          width: 720,
+          width: action
+            ? 720
+            : Math.ceil(
+                (root.current?.getBoundingClientRect().width || 640) + 16,
+              ),
           height: Math.max(
             expandedHeight,
             (root.current?.scrollHeight || 64) + 20,
@@ -209,11 +280,11 @@ export function SelectionAssistant() {
       active = false;
       observer.disconnect();
     };
-  }, [snapshot?.id, action, editor]);
+  }, [snapshot?.id, action]);
   useEffect(() => {
     const element = scroll.current;
     if (element && following.current) element.scrollTop = element.scrollHeight;
-  }, [answer, reasoning]);
+  }, [answer]);
 
   async function cancel(id: string, own: number) {
     if (stoppingLock.current) return;
@@ -226,7 +297,6 @@ export function SelectionAssistant() {
         runId.current = null;
         setBusy(false);
         setIncomplete(true);
-        setReasoningActive(false);
       }
     } catch (cause) {
       if (mounted.current && own === operation.current) {
@@ -247,13 +317,12 @@ export function SelectionAssistant() {
   }
   async function process(next: Action) {
     const material = current.current;
-    if (!material?.text || askingLock.current) return;
+    if (!material?.text) return;
     invalidate();
     const own = operation.current;
     setAction(next);
     setAnswer("");
-    setReasoning("");
-    setReasoningActive(false);
+    setCopied(null);
     setError("");
     setNotice("");
     setBusy(true);
@@ -266,7 +335,11 @@ export function SelectionAssistant() {
         action: next,
         text: material.text,
         target_language: language,
-        model_selection: selected,
+        model_selection: {
+          ...selected,
+          thinking_enabled: false,
+          reasoning_effort: null,
+        },
       });
       if (
         !mounted.current ||
@@ -288,12 +361,7 @@ export function SelectionAssistant() {
         (event) => {
           if (!mounted.current || own !== operation.current) return;
           if (event.kind === "delta") {
-            setReasoningActive(false);
             setAnswer((value) => value + String(event.data.text || ""));
-          }
-          if (event.kind === "reasoning") {
-            setReasoningActive(true);
-            setReasoning((value) => value + String(event.data.text || ""));
           }
           if (event.kind === "error")
             setError(String(event.data.message || "处理未完成，请重试"));
@@ -319,7 +387,6 @@ export function SelectionAssistant() {
       }
     } finally {
       if (mounted.current && own === operation.current) {
-        setReasoningActive(false);
         if (!runId.current) {
           setBusy(false);
           setStopping(false);
@@ -336,92 +403,106 @@ export function SelectionAssistant() {
           model.selection.provider_id === settings?.default_provider &&
           model.selection.model_name === settings?.model_name,
       )?.key || "";
-  const toolDisabled = !snapshot.text || asking || editor;
+  const toolDisabled = !snapshot.text;
   return (
     <main
-      className="selection-window"
+      className={`selection-window${action ? " has-result" : ""}`}
       ref={root}
       aria-label="划词助手"
-      onKeyDown={(event) => {
-        if (
-          event.key === "Escape" &&
-          !event.defaultPrevented &&
-          !editor &&
-          !document.querySelector("[role=listbox]")
-        ) {
-          event.preventDefault();
-          dismiss();
-        }
-      }}
     >
       <div className="selection-toolbar">
-        <span className="selection-avatar">
-          <BaiAvatar />
-        </span>
-        <button
-          disabled={toolDisabled}
-          onClick={async () => {
-            if (askingLock.current) return;
-            askingLock.current = true;
-            setAsking(true);
-            setError("");
-            const id = snapshot.id;
-            try {
-              await invoke("selection_ask", { id });
-            } catch (cause) {
-              if (current.current?.id === id) setError(desktopError(cause));
-            } finally {
-              if (current.current?.id === id) {
-                askingLock.current = false;
-                setAsking(false);
-              }
-            }
-          }}
-        >
-          {asking ? (
-            <Loader2 size={16} className="spin" />
-          ) : (
-            <MessageSquare size={16} />
-          )}
-          问 AI
-        </button>
-        <button
-          disabled={toolDisabled}
-          aria-pressed={action === "explain"}
-          onClick={() => void process("explain")}
-        >
-          <BookOpen size={16} />
-          解释
-        </button>
-        <button
-          disabled={toolDisabled}
-          aria-pressed={action === "translate"}
-          onClick={() => void process("translate")}
-        >
-          <Languages size={16} />
-          翻译
-        </button>
-        <button
-          disabled={toolDisabled}
-          aria-pressed={action === "summarize"}
-          onClick={() => void process("summarize")}
-        >
-          <ListCollapse size={16} />
-          总结
-        </button>
-        <button disabled={toolDisabled} onClick={() => setEditor(true)}>
-          <BookmarkPlus size={16} />
-          添加到常用文本
-        </button>
-        <Hint label={sourceCopy.copied ? "已复制选中文字" : "复制选中文字"}>
+        <div className="selection-actions">
+          <span className="selection-avatar">
+            <BaiAvatar motion="still" />
+          </span>
           <button
             disabled={toolDisabled}
-            onClick={() => void sourceCopy.copy()}
+            aria-pressed={action === "explain"}
+            onClick={() => void process("explain")}
           >
-            {sourceCopy.copied ? <Check size={16} /> : <Copy size={16} />}
-            {sourceCopy.copied ? "已复制" : "复制"}
+            <BookOpen size={16} />
+            解释
           </button>
-        </Hint>
+          <button
+            disabled={toolDisabled}
+            aria-pressed={action === "translate"}
+            onClick={() => void process("translate")}
+          >
+            <Languages size={16} />
+            翻译
+          </button>
+          <button
+            disabled={toolDisabled}
+            aria-pressed={action === "summarize"}
+            onClick={() => void process("summarize")}
+          >
+            <FileText size={16} />
+            总结
+          </button>
+          <button
+            disabled={toolDisabled || savingText || savedText}
+            onClick={async () => {
+              const material = current.current;
+              if (
+                !material?.text ||
+                saveRequest.current === material.id ||
+                savedText
+              )
+                return;
+              saveRequest.current = material.id;
+              const own = operation.current;
+              clearFeedback();
+              setSavingText(true);
+              setError("");
+              setNotice("");
+              try {
+                await api("/common-texts", "POST", {
+                  content: material.text,
+                  category_id: null,
+                });
+                notifyCommonTextsChanged();
+                if (
+                  mounted.current &&
+                  current.current?.id === material.id &&
+                  own === operation.current
+                ) {
+                  setSavedText(true);
+                  success("已添加到默认分类", material.id);
+                }
+              } catch (cause) {
+                if (
+                  mounted.current &&
+                  current.current?.id === material.id &&
+                  own === operation.current
+                )
+                  setError(desktopError(cause));
+              } finally {
+                if (saveRequest.current === material.id) {
+                  saveRequest.current = null;
+                  if (mounted.current) setSavingText(false);
+                }
+              }
+            }}
+          >
+            {savingText ? (
+              <Loader2 size={16} className="spin" />
+            ) : savedText ? (
+              <Check size={16} />
+            ) : (
+              <BookmarkPlus size={16} />
+            )}
+            添加到常用文本
+          </button>
+          <Hint label={copied === "source" ? "已复制选中文字" : "复制选中文字"}>
+            <button
+              disabled={toolDisabled}
+              onClick={() => void copy(snapshot.text, "source")}
+            >
+              {copied === "source" ? <Check size={16} /> : <Copy size={16} />}
+              复制
+            </button>
+          </Hint>
+        </div>
         <Hint label="关闭划词助手（Esc）">
           <button
             className="selection-close"
@@ -432,22 +513,13 @@ export function SelectionAssistant() {
           </button>
         </Hint>
       </div>
-      {(snapshot.error || error || sourceCopy.error || resultCopy.error) && (
-        <ErrorNotice
-          message={
-            snapshot.error || error || sourceCopy.error || resultCopy.error
-          }
-        />
+      {(snapshot.error || error) && (
+        <ErrorNotice message={snapshot.error || error} />
       )}
       {notice && (
         <p className="selection-notice" role="status">
           {notice}
         </p>
-      )}
-      {sourceCopy.copied && (
-        <span className="sr-only" role="status">
-          已复制选中文字
-        </span>
       )}
       {action && (
         <section
@@ -503,23 +575,14 @@ export function SelectionAssistant() {
                 node.scrollHeight - node.scrollTop - node.clientHeight < 24;
             }}
           >
-            <Reasoning
-              text={reasoning}
-              active={reasoningActive}
-              incomplete={incomplete}
-            />
             {answer && <Markdown>{answer}</Markdown>}
             {busy && (
               <p className="selection-progress" role="status">
                 <Loader2 size={14} className="spin" />
-                {stopping
-                  ? "正在停止…"
-                  : reasoningActive
-                    ? "正在思考…"
-                    : "正在处理…"}
+                {stopping ? "正在停止…" : "正在处理…"}
               </p>
             )}
-            {!busy && !answer && !reasoning && !error && (
+            {!busy && !answer && !error && (
               <p className="common-text-muted">点击重试开始处理。</p>
             )}
             {!busy && incomplete && (
@@ -538,23 +601,15 @@ export function SelectionAssistant() {
                 重试
               </button>
             )}
-            <button disabled={!answer} onClick={() => void resultCopy.copy()}>
-              {resultCopy.copied ? <Check size={14} /> : <Copy size={14} />}
-              {resultCopy.copied ? "已复制" : "复制结果"}
+            <button
+              disabled={!answer}
+              onClick={() => void copy(answer, "result")}
+            >
+              {copied === "result" ? <Check size={14} /> : <Copy size={14} />}
+              复制结果
             </button>
           </div>
         </section>
-      )}
-      {editor && (
-        <CommonTextEditor
-          key={snapshot.id}
-          initialContent={snapshot.text}
-          onClose={() => setEditor(false)}
-          onSaved={() => {
-            setEditor(false);
-            setNotice("已添加到常用文本");
-          }}
-        />
       )}
     </main>
   );

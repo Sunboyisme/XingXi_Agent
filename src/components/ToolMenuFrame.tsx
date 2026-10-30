@@ -7,20 +7,24 @@ export function ToolMenuFrame({
   icon,
   children,
   onOpenChange,
+  open,
   contentClassName = "",
 }: {
   label: string;
   icon: ReactNode;
   children: ReactNode;
   onOpenChange: (open: boolean) => void;
+  open?: boolean;
   contentClassName?: string;
 }) {
   const menuClassName = `model-menu toolbox-menu ${contentClassName}`;
   return (
-    <DropdownMenu.Sub onOpenChange={onOpenChange}>
+    <DropdownMenu.Sub open={open} onOpenChange={onOpenChange}>
       <DropdownMenu.SubTrigger
         className="model-menu-item composer-add-menu-item"
         aria-label={label}
+        onPointerMove={() => { if (open === false) onOpenChange(true); }}
+        onFocus={() => { if (open === false) onOpenChange(true); }}
       >
         {icon}
         <span>{label}</span>

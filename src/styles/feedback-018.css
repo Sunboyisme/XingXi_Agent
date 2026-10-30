@@ -1172,3 +1172,21 @@
 .navigation-rail .sidebar-footer > button.active {
   box-shadow: 0 1px 3px rgb(120 80 50 / 9%);
 }
+
+.navigation-overflow-row,
+.main-navigation > [data-navigation-feature] {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.navigation-overflow-row:active,
+.main-navigation > [data-navigation-feature]:active {
+  cursor: grabbing;
+}
+.navigation-overflow-row[data-reorder-dragging="true"],
+.main-navigation > [data-reorder-dragging="true"] {
+  box-shadow: inset 0 0 0 1px var(--ui-color-action);
+  background: var(--ui-color-surface-deep);
+}
+.navigation-overflow-row svg,
+.main-navigation > [data-navigation-feature] svg { pointer-events: none; }

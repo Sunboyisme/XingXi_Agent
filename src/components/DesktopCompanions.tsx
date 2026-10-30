@@ -343,12 +343,12 @@ export function DesktopPet() {
     } catch (error) { setError(desktopError(error)); }
     finally { setStopping(""); }
   }
-  function startChat(voice = false) {
+  function startDesktopAsk(voice = false) {
     setError("");
     quickVisible.current = true;
     setQuickShown(true);
     setCollapsed(true);
-    void invoke("desktop_chat", { newChat: !voice, voice }).catch(error => { quickVisible.current = false; setQuickShown(false); setError(desktopError(error)); });
+    void invoke("desktop_start", { newChat: !voice, voice }).catch(error => { quickVisible.current = false; setQuickShown(false); setError(desktopError(error)); });
   }
   function startMainChat() {
     setError("");
@@ -514,9 +514,9 @@ export function DesktopPet() {
         </span>
         {(hovered || focused) && presence.phase === "idle" && gesture?.kind !== "drag" && !menu && (
           <div ref={hoverTools} className="pet-hover-tools" role="toolbar" aria-label="桌宠快捷操作" onPointerDown={event => event.stopPropagation()} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
-            <Hint label="开始新聊天"><button aria-label="开始新聊天" onClick={() => startChat()}><SquarePen size={16} /></button></Hint>
+            <Hint label="开始新聊天"><button aria-label="开始新聊天" onClick={() => startDesktopAsk()}><SquarePen size={16} /></button></Hint>
             <span className="pet-toolbar-divider" />
-            <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startChat(true)}><AudioLines size={16} /></button></Hint>
+            <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startDesktopAsk(true)}><AudioLines size={16} /></button></Hint>
             <span className="pet-toolbar-divider" />
             <Hint label={updates ? `未读任务和提醒 · ${updates} 条` : "暂无未读任务和提醒"}><button aria-label="提醒和任务" aria-expanded={!collapsed && !quickShown && updates > 0} onClick={() => void toggleInbox().catch(error => setError(desktopError(error)))}><Bell size={16} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
           </div>

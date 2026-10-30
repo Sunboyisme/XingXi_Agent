@@ -19,8 +19,8 @@ class CategoryWrite(BaseModel):
     @classmethod
     def name_not_blank(cls, value):
         value = value.strip()
-        if not value or value == "未分类":
-            raise ValueError("请输入分类名称，不使用保留名称“未分类”")
+        if not value or value == "默认分类":
+            raise ValueError("请输入分类名称，不使用保留名称“默认分类”")
         return value
 
 
@@ -107,7 +107,8 @@ def texts(q: str = Query(default="", max_length=500), category_id: str | None = 
         if q.strip():
             query = q.strip()
             statement = statement.where(or_(store.CommonText.content.icontains(query, autoescape=True),
-                                            store.CommonTextCategory.name.icontains(query, autoescape=True)))
+                                            store.CommonTextCategory.name.icontains(query, autoescape=True),
+                                            store.CommonText.category_id.is_(None) if query.casefold() in "默认分类" else False))
         if category_id == "uncategorized":
             statement = statement.where(store.CommonText.category_id.is_(None))
         elif category_id:

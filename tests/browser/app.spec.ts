@@ -11,6 +11,9 @@ test.beforeEach(async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "连接与设置", exact: true }),
   ).toBeVisible({ timeout: 20000 });
+  await page
+    .getByRole("button", { name: "点击头像新建对话", exact: true })
+    .click();
 });
 test.afterEach(async ({ page }) =>
   expect((page as any).testErrors).toEqual([]),
@@ -20,7 +23,10 @@ test("small window keeps Chinese title and main actions accessible", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1262, height: 624 });
-  const box = await page.locator(".welcome h1").boundingBox();
+  const box = await page
+    .getByRole("region", { name: "新对话欢迎" })
+    .getByRole("heading")
+    .boundingBox();
   expect(box?.y).toBeGreaterThanOrEqual(56);
   const composer = page.getByLabel("发送给XiaoXi的消息");
   await composer.fill("检查换行");
@@ -32,11 +38,14 @@ test("small window keeps Chinese title and main actions accessible", async ({
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(model).toBeFocused();
-  const mcp = page.getByRole("button", { name: "MCP 工具", exact: true });
-  await mcp.click();
+  const add = page.locator('.composer button[aria-label="更多功能"]');
+  await add.click();
+  const mcp = page.getByRole("menuitem", { name: "MCP 工具", exact: true });
+  await mcp.hover();
   await expect(page.getByRole("menuitem", { name: /查询天气/ })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(mcp).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(add).toBeFocused();
   await expect(composer).toHaveValue("检查换行\n");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
@@ -46,8 +55,9 @@ test("separate sidebar toggle preserves draft, navigation and saved preference",
 }) => {
   const draft = page.getByLabel("发送给XiaoXi的消息");
   await draft.fill("先留在这里，等我想清楚再发送");
+  await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
   const collapse = page.getByRole("button", { name: "收起侧栏", exact: true });
-  await expect(page.locator(".chat-main .bai-avatar")).toHaveCount(0);
+  await expect(page.locator(".chat-main .bai-avatar")).toHaveCount(1);
   await expect(page.locator(".navigation-rail .bai-avatar")).toBeVisible();
   await expect(collapse).toBeVisible();
   await expect(page.locator(".chat-sidebar .new-chat-button")).toBeVisible();
@@ -62,7 +72,7 @@ test("separate sidebar toggle preserves draft, navigation and saved preference",
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
   await page.getByRole("tab", { name: "记忆", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "记忆", exact: true }),
+    page.getByRole("heading", { name: "记忆", exact: true, level: 1 }),
   ).toBeVisible();
   await page.reload();
   await expect(
@@ -75,9 +85,7 @@ test("separate sidebar toggle preserves draft, navigation and saved preference",
   expect((await page.locator(".sidebar").boundingBox())?.width).toBeGreaterThan(
     170,
   );
-  await expect(
-    page.locator(".welcome-actions,.profile,.local-indicator"),
-  ).toHaveCount(0);
+  await expect(page.locator(".profile,.local-indicator")).toHaveCount(0);
   await expect(page.getByText("随时接着往前走", { exact: true })).toHaveCount(
     0,
   );
@@ -101,8 +109,9 @@ test("MCP toolbox hides built-ins and opens configuration", async ({
       .then((response) => response.json()))
       await request.delete(`/api/v1/mcp/servers/${server.id}`);
   }
-  const toolbox = page.getByRole("button", { name: "MCP 工具", exact: true });
+  const toolbox = page.locator('.composer button[aria-label="更多功能"]');
   await toolbox.click();
+  await page.getByRole("menuitem", { name: "MCP 工具", exact: true }).hover();
   await expect(
     page.getByRole("menuitem", { name: /计算器|查询天气/ }),
   ).toHaveCount(0);
@@ -110,11 +119,13 @@ test("MCP toolbox hides built-ins and opens configuration", async ({
     page.getByText("还没有配置 MCP 工具", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
   await expect(toolbox).toBeFocused();
 });
 
 test("configure own compatible API and test connection", async ({ page }) => {
   await page.getByRole("button", { name: "连接与设置", exact: true }).click();
+  await page.getByRole("tab", { name: "模型连接", exact: true }).click();
   await page
     .getByRole("button", { name: /^编辑连接 / })
     .first()
@@ -155,6 +166,7 @@ test("new conversation stream saves final answer and tool memory", async ({
 test("agent calls multiple utility tools and restores results after reload", async ({
   page,
 }) => {
+  await page.getByRole("radio", { name: "智能体", exact: true }).click();
   await page
     .getByLabel("发送给XiaoXi的消息")
     .fill("帮我计算并换算单位，再查一下日期。");
@@ -168,9 +180,11 @@ test("agent calls multiple utility tools and restores results after reload", asy
     page.getByText("结果：8.04672 km", { exact: true }),
   ).toBeVisible();
   await page.reload();
+  await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
   await page
     .locator(".conversation-link > button:first-child")
     .filter({ hasText: "帮我计算并换算单位" })
+    .first()
     .click();
   await expect(
     page.getByRole("button", { name: "工具调用结果" }),
@@ -188,10 +202,14 @@ test("course, teaching, feedback, next node and reload progress", async ({
   const intake = page.getByRole("textbox", { name: "学习目标对话" });
   await intake.fill("我想学HTML，能够理解页面结构");
   await page.getByRole("button", { name: "发送回答", exact: true }).click();
-  await expect(page.getByText("你目前有什么基础？", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("你目前有什么基础？", { exact: true }),
+  ).toBeVisible();
   await intake.fill("零基础，尚未学习编程");
   await page.getByRole("button", { name: "发送回答", exact: true }).click();
-  await expect(page.getByRole("region", { name: "学习目标摘要" })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "学习目标摘要" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "确认并生成学习路线" }).click();
   await expect(
     page.getByRole("heading", { name: "HTML隔离验收 · 认识基础", exact: true }),
@@ -250,6 +268,9 @@ test("manual plan with reminder can be saved, edited and completed", async ({
   page,
   request,
 }) => {
+  const stamp = Date.now();
+  const initialTitle = `浏览器测试：明天学习-${stamp}`;
+  const editedTitle = `浏览器测试：已调整学习时间-${stamp}`;
   if (process.env.BAI_QA_DATA_MARKER === "qa-017a") {
     const data = await request
       .get("/api/v1/settings/data")
@@ -265,7 +286,7 @@ test("manual plan with reminder can be saved, edited and completed", async ({
   await page.getByRole("button", { name: "计划", exact: true }).click();
   await page.getByRole("button", { name: "添加计划", exact: true }).click();
   await page.getByRole("menuitem", { name: /普通计划/ }).click();
-  await page.getByLabel("计划名称").fill("浏览器测试：明天学习");
+  await page.getByLabel("计划名称").fill(initialTitle);
   const tomorrow = new Date(Date.now() + 32 * 3600000)
     .toISOString()
     .slice(0, 10);
@@ -279,30 +300,34 @@ test("manual plan with reminder can be saved, edited and completed", async ({
   const day = page.locator(
     `.plan-day:has([aria-label="${tomorrow} 添加计划"])`,
   );
-  await day.getByRole("button", { name: /浏览器测试：明天学习/ }).click();
+  async function openDay(title: string) {
+    const more = day.getByRole("button", {
+      name: `查看 ${tomorrow} 的全部计划`,
+      exact: true,
+    });
+    if (await more.isVisible()) await more.click();
+    else await day.getByRole("button", { name: new RegExp(title) }).click();
+  }
+  await openDay(initialTitle);
   await page
     .getByRole("button", {
-      name: "编辑 浏览器测试：明天学习",
+      name: `编辑 ${initialTitle}`,
       exact: true,
     })
     .click();
-  await page.getByLabel("计划名称").fill("浏览器测试：已调整学习时间");
+  await page.getByLabel("计划名称").fill(editedTitle);
   await page.getByRole("button", { name: "保存计划", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const changedEvent = day.getByRole("button", {
-    name: /浏览器测试：已调整学习时间/,
-  });
-  await expect(changedEvent).toBeVisible();
-  await changedEvent.click();
+  await openDay(editedTitle);
   await page
     .getByRole("button", {
-      name: `完成 浏览器测试：已调整学习时间 ${tomorrow}`,
+      name: `完成 ${editedTitle} ${tomorrow}`,
       exact: true,
     })
     .click();
   expect(
     (await request.get("/api/v1/plans").then((r) => r.json())).find(
-      (plan: any) => plan.title === "浏览器测试：已调整学习时间",
+      (plan: any) => plan.title === editedTitle,
     ).status,
   ).toBe("completed");
 });

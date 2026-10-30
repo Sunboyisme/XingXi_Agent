@@ -164,7 +164,7 @@ export function CommonTextEditor({
               onValueChange={setCategory}
               disabled={loading || Boolean(loadError)}
               options={[
-                { value: "uncategorized", label: "未分类" },
+                { value: "uncategorized", label: "默认分类" },
                 ...(category !== "uncategorized" &&
                 !categories.some((row) => row.id === category)
                   ? [

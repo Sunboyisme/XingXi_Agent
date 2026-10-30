@@ -81,9 +81,6 @@ export function DesktopQuickAsk() {
   const [uploading, setUploading] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [hiddenEpoch, setHiddenEpoch] = useState(0);
-  const [floating, setFloating] = useState(false);
-  const [floatingBelow, setFloatingBelow] = useState(false);
-  const modeVersion = useRef(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const answerScroll = useRef<HTMLDivElement>(null);
   const followingAnswer = useRef(true);
@@ -98,8 +95,6 @@ export function DesktopQuickAsk() {
   const tracker = useRef<AbortController | null>(null);
   const pending = useRef<IncomingImage[]>([]);
   const seen = useRef(new Set<string>());
-  const pendingSelections = useRef<string[]>([]);
-  const seenSelections = useRef(new Set<string>());
   const imageWorking = useRef(false);
   const speech = useSpeechInput({
     scopeKey: sessionId,
@@ -125,7 +120,6 @@ export function DesktopQuickAsk() {
     resetSession,
     drainCommands,
     resumeTask,
-    blur,
   });
   functions.current = {
     send,
@@ -137,10 +131,9 @@ export function DesktopQuickAsk() {
     resetSession,
     drainCommands,
     resumeTask,
-    blur,
   };
   useDesktopHitRegions(
-    ".quick-answer,.quick-composer-group,.quick-floating-close,.ui-hint,[role=dialog],[role=listbox],[role=menu],[data-slot=dialog-overlay]",
+    ".quick-answer,.quick-composer-group,.ui-hint,[role=dialog],[role=listbox],[role=menu],[data-slot=dialog-overlay]",
   );
   function updateDraft(change: QuickDraft | ((d: QuickDraft) => QuickDraft)) {
     const next =
@@ -148,18 +141,6 @@ export function DesktopQuickAsk() {
     current.current = next;
     if (mounted.current) setDraft(next);
   }
-  function appendSelections() {
-    if (work.current.locked || !pendingSelections.current.length) return;
-    const quotes = pendingSelections.current.splice(0).map(text => text.split(/\r?\n/).map(line => `> ${line}`).join("\n")).join("\n\n");
-    updateDraft(d => ({ ...d, text: `${d.text}${d.text ? "\n\n" : ""}${quotes}\n\n` }));
-    const id = session.current;
-    requestAnimationFrame(() => {
-      if (!mounted.current || id !== session.current || !visible.current) return;
-      input.current?.focus({ preventScroll: true });
-      input.current?.setSelectionRange(current.current.text.length, current.current.text.length);
-    });
-  }
-  useEffect(() => { appendSelections(); }, [voice?.phase]);
   function setRunBusy(value: boolean) {
     work.current.busy = value;
     if (mounted.current) setBusy(value);
@@ -190,9 +171,6 @@ export function DesktopQuickAsk() {
   useEffect(() => {
     mounted.current = true;
     const listeners = [
-      getCurrentWindow().onFocusChanged(event => {
-        if (!event.payload) void functions.current.blur();
-      }),
       desktopListen<string>("desktop-error", (v) => {
         if (mounted.current) setError(v);
       }),
@@ -217,8 +195,6 @@ export function DesktopQuickAsk() {
         setError("");
       }),
       desktopListen("desktop-shown", () => void functions.current.shown()),
-      desktopListen<{ floating: boolean }>("desktop-chat-mode", value => { modeVersion.current++; setFloating(value.floating); }),
-      desktopListen<{ below: boolean }>("desktop-chat-placement", value => { modeVersion.current++; setFloatingBelow(value.below); }),
       desktopListen<{ runId: string }>("desktop-resume-task", value => {
         void functions.current.resumeTask(value.runId).catch(error => {
           if (mounted.current) setError(desktopError(error));
@@ -268,7 +244,6 @@ export function DesktopQuickAsk() {
   }
   async function shown() {
     visible.current = true;
-    const mode = modeVersion.current;
     if (
       mounted.current &&
       !work.current.locked &&
@@ -276,12 +251,7 @@ export function DesktopQuickAsk() {
       !document.querySelector('[role="dialog"]')
     )
       input.current?.focus({ preventScroll: true });
-    await Promise.all([
-      refreshSettings(false),
-      invoke<{ floatingChat: boolean; floatingBelow: boolean }>("desktop_preferences")
-        .then(value => { if (mounted.current && modeVersion.current === mode) { setFloating(value.floatingChat); setFloatingBelow(value.floatingBelow); } })
-        .catch(() => {}),
-    ]);
+    await refreshSettings(false);
     if (!mounted.current || !visible.current) return;
     if (
       mounted.current &&
@@ -296,10 +266,6 @@ export function DesktopQuickAsk() {
     avatar.clearCelebration();
     setError("");
     await invoke("desktop_dismiss");
-  }
-  async function blur() {
-    if (!visible.current || work.current.locked || work.current.uploading) return;
-    await invoke("desktop_floating_blur", { sessionId: session.current }).catch(() => {});
   }
   async function resumeTask(id: string) {
     setAnswerCollapsed(false);
@@ -361,8 +327,6 @@ export function DesktopQuickAsk() {
     startRequest.current = false;
     pending.current = [];
     seen.current.clear();
-    pendingSelections.current = [];
-    seenSelections.current.clear();
     imageWorking.current = false;
     setPendingCount(0);
     setRunBusy(false);
@@ -402,14 +366,6 @@ export function DesktopQuickAsk() {
         // Native keeps them until the listener is ready, including the final draft text.
         for (const item of items) {
           if (item.sessionId !== session.current) continue;
-          if (item.action === "append-selection") {
-            if (item.text && !seenSelections.current.has(item.id)) {
-              seenSelections.current.add(item.id);
-              pendingSelections.current.push(item.text);
-              appendSelections();
-            }
-            continue;
-          }
           const text = item.text;
           if (typeof text === "string") updateDraft((d) => ({ ...d, text }));
           if (item.action === "send") void functions.current.send();
@@ -741,7 +697,7 @@ export function DesktopQuickAsk() {
     </Hint>
   );
   return (
-    <main className={`quick-window ${floating ? "is-floating" : ""} ${floating && floatingBelow ? "is-below" : ""}`}>
+    <main className="quick-window">
       {hasAnswer && !answerCollapsed && (
         <section className="quick-answer" id="desktop-quick-answer">
           <header>
@@ -835,13 +791,6 @@ export function DesktopQuickAsk() {
         </section>
       )}
       <div className="quick-composer-group">
-        {floating && (
-          <Hint label="收起桌面聊天">
-            <button className="quick-floating-close" aria-label="收起桌面聊天" onClick={() => void dismiss()}>
-              <X size={13} />
-            </button>
-          </Hint>
-        )}
         {draft.attachments.length > 0 && (
           <div className="quick-attachments">
             {draft.attachments.map((a) => (
@@ -874,12 +823,11 @@ export function DesktopQuickAsk() {
           </div>
         )}
         <div className="quick-bar">
-          {!floating && <BaiAvatar interactive activity={avatar.activity} motion={busy ? "thinking" : "idle"} />}
-          {floating && fileButton}
+          <BaiAvatar interactive activity={avatar.activity} motion={busy ? "thinking" : "idle"} />
           <textarea
             ref={input}
-            aria-label={floating ? "开始新聊天" : "随心输入"}
-            placeholder={floating ? "开始新聊天" : "随心输入"}
+            aria-label="随心输入"
+            placeholder="随心输入"
             value={draft.text}
             readOnly={Boolean(voiceBusy)}
             onChange={(e) =>
@@ -897,12 +845,12 @@ export function DesktopQuickAsk() {
               }
             }}
           />
-          {!floating && fileButton}
-          {(!floating || voiceBusy || voice?.retryable) && <SpeechInputButton
+          {fileButton}
+          <SpeechInputButton
             speech={speech}
             disabled={busy || uploading}
-            desktopShortcut={!floating}
-          />}
+            desktopShortcut
+          />
           <Hint label={submitting ? "正在提交，任务创建后可停止回答" : stopping ? "正在停止回答" : busy ? "停止回答" : "发送"}>
             <button
               className="quick-send"
@@ -921,11 +869,11 @@ export function DesktopQuickAsk() {
               {submitting || stopping ? <Loader2 size={17} className="spin" /> : busy ? <Square size={17} /> : <ArrowUp size={21} />}
             </button>
           </Hint>
-          {!floating && <Hint label="关闭问答">
+          <Hint label="关闭问答">
             <button aria-label="关闭问答" onClick={() => void dismiss()}>
               <X size={19} />
             </button>
-          </Hint>}
+          </Hint>
           {hasAnswer && answerCollapsed && (
             <Hint label="展开回答">
               <button

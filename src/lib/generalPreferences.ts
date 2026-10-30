@@ -12,18 +12,43 @@ export type NavigationFeature = (typeof navigationFeatures)[number];
 type GeneralPreferences = {
   inputSuggestions: boolean;
   hiddenNavigation: NavigationFeature[];
+  navigationOrder: NavigationFeature[];
 };
 const storageKey = "xiaoxi-general-preferences-v1";
 const changedEvent = "xiaoxi-general-preferences-changed";
 const defaults: GeneralPreferences = {
   inputSuggestions: true,
   hiddenNavigation: [],
+  navigationOrder: [...navigationFeatures],
 };
+export function normalizeNavigationOrder(value: unknown): NavigationFeature[] {
+  const saved = Array.isArray(value)
+    ? value.filter((id): id is NavigationFeature =>
+        navigationFeatures.includes(id),
+      )
+    : [];
+  return [...new Set([...saved, ...navigationFeatures])];
+}
+export function moveNavigationFeature(
+  order: NavigationFeature[],
+  from: NavigationFeature,
+  to: NavigationFeature,
+) {
+  const next = normalizeNavigationOrder(order);
+  const start = next.indexOf(from),
+    end = next.indexOf(to);
+  if (start !== end) {
+    next.splice(start, 1);
+    next.splice(end, 0, from);
+  }
+  return next;
+}
 function readPreferences(): GeneralPreferences {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
     return {
       inputSuggestions: saved?.inputSuggestions !== false,
+      navigationOrder: normalizeNavigationOrder(saved?.navigationOrder),
       hiddenNavigation: Array.isArray(saved?.hiddenNavigation)
         ? navigationFeatures.filter((id) => saved.hiddenNavigation.includes(id))
         : saved?.navigationCollapsed === true

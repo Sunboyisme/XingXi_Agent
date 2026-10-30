@@ -179,7 +179,7 @@ export function DesktopSettings() {
           {featureRow(
             "pet",
             "显示桌宠",
-            "拖动调整位置，点击开始桌面聊天；悬停显示新聊天、语音和提醒。",
+            "拖动调整位置，点击打开主窗口；悬停的新聊天和语音入口打开截图问答。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">
@@ -292,6 +292,7 @@ export function SpeechConnection({
     mounted.current = true;
     void api<SpeechSettings>("/settings/speech")
       .then((value) => {
+        if (!value || !Array.isArray(value.profiles)) throw new Error("语音配置返回异常，请重新打开配置。");
         if (mounted.current) setStatus(value);
       })
       .catch((e) => {
@@ -301,8 +302,8 @@ export function SpeechConnection({
       mounted.current = false;
     };
   }, []);
-  const saved = status?.profiles.find((p) => p.provider === status.selected);
-  const profile = form?.profiles.find((p) => p.provider === form.selected);
+  const saved = status?.profiles?.find((p) => p.provider === status.selected);
+  const profile = form?.profiles?.find((p) => p.provider === form.selected);
   const ready = Boolean(saved?.key_configured && saved.url && saved.model);
   const configure = useCallback(async () => {
     setOpen(true);
@@ -315,6 +316,7 @@ export function SpeechConnection({
         api<SpeechSettings>("/settings/speech"),
         api<SpeechCall[]>("/speech/calls"),
       ]);
+      if (!value || !Array.isArray(value.profiles) || !Array.isArray(activity)) throw new Error("语音配置返回异常，请稍后重试。");
       if (mounted.current) {
         setStatus(value);
         setForm(value);

@@ -59,8 +59,8 @@ export function TextCategoryManager({ onClose }: { onClose: () => void }) {
   }, [revision, reload]);
   async function save() {
     if (lock.current) return;
-    if (!name.trim() || name.trim() === "未分类" || name.trim().length > 80) {
-      setError("请输入 1–80 字符的分类名，不使用保留名称“未分类”。");
+    if (!name.trim() || name.trim() === "默认分类" || name.trim().length > 80) {
+      setError("请输入 1–80 字符的分类名，不使用保留名称“默认分类”。");
       return;
     }
     lock.current = true;
@@ -98,7 +98,7 @@ export function TextCategoryManager({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>管理分类</DialogTitle>
           <DialogDescription>
-            删除分类后，已有文本会移入“未分类”。
+            删除分类后，已有文本会移入“默认分类”。
           </DialogDescription>
         </DialogHeader>
         <form
@@ -193,13 +193,13 @@ export function TextCategoryManager({ onClose }: { onClose: () => void }) {
         </ul>
         {!loading && !loadError && !rows.length && (
           <p className="common-text-muted">
-            暂无分类，未分类文本仍可正常保存。
+            暂无分类，默认分类文本仍可正常保存。
           </p>
         )}
         <ConfirmDelete
           open={Boolean(deleting)}
           title="删除分类？"
-          description={`“${deleting?.name || ""}”中的文本将移入“未分类”，正文会保留。`}
+          description={`“${deleting?.name || ""}”中的文本将移入“默认分类”，正文会保留。`}
           label="删除分类"
           error={deleteError}
           onClose={() => setDeleting(undefined)}

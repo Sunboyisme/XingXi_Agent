@@ -5,7 +5,7 @@ import { api, type Tool } from "@/lib/api";
 import { ToolMenuFrame } from "./ToolMenuFrame";
 import { errorMessage } from "@/lib/utils";
 
-export function ToolboxMenu({ onSettings }: { onSettings: () => void }) {
+export function ToolboxMenu({ onSettings, open, onOpenChange }: { onSettings: () => void; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState("");
@@ -39,7 +39,9 @@ export function ToolboxMenu({ onSettings }: { onSettings: () => void }) {
     <ToolMenuFrame
       label="MCP 工具"
       icon={<Layers2 size={15} />}
+      open={open}
       onOpenChange={(value) => {
+        onOpenChange?.(value);
         if (value) void load();
       }}
     >

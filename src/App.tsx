@@ -10,6 +10,7 @@ import {
 import { Bell, Loader2, X } from "lucide-react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useGeneralPreferences } from "@/lib/generalPreferences";
+import { useNavigationReorder } from "@/lib/useNavigationReorder";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Tooltip } from "radix-ui";
@@ -97,7 +98,6 @@ const featurePages: NavigationFeatureItem[] = [
   { id: "knowledge", label: "知识库", icon: KnowledgeIcon },
   { id: "common-texts", label: "常用文本", icon: CommonTextsIcon },
 ];
-const pages = [{ id: "chat" as const, label: "对话", icon: ChatIcon }, ...featurePages];
 
 type PendingAgenda = {
   day: string;
@@ -107,6 +107,9 @@ type PendingAgenda = {
 
 export function App() {
   const { hiddenNavigation } = useGeneralPreferences();
+  const navigationReorder = useNavigationReorder();
+  const orderedFeaturePages = navigationReorder.order.flatMap(id => featurePages.filter(item => item.id === id));
+  const pages = [{ id: "chat" as const, label: "对话", icon: ChatIcon }, ...orderedFeaturePages];
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("bai-sidebar-width"));
     return Number.isFinite(saved) && saved >= 180 ? Math.min(saved, 420) : 224;
@@ -494,11 +497,6 @@ export function App() {
             <Loader2 size={16} className="spin" />
             正在打开你的个人空间…
           </p>
-          <Button variant="outline" onClick={() => {
-            bootController.current?.abort();
-            setError("已取消连接，可以重新连接本机服务。");
-            setLoading(false);
-          }}>取消连接</Button>
         </div>
       </WindowFrame>
     );
@@ -639,20 +637,23 @@ export function App() {
                 label="点击头像新建对话"
                 onClick={startNewChat}
               />
-              <nav className="main-navigation" aria-label="主导航">
+              <nav className="main-navigation" aria-label="主导航" {...navigationReorder.handlers}>
                 {pages.filter((value) => value.id === "chat" || !hiddenNavigation.includes(value.id)).map((value) => (
                   <NavigationTooltip key={value.id} label={value.label}>
                     <button
                       className={page === value.id ? "active" : ""}
                       aria-current={page === value.id ? "page" : undefined}
                       aria-label={value.label}
+                      data-navigation-feature={value.id === "chat" ? undefined : value.id}
+                      data-reorder-dragging={navigationReorder.dragging === value.id || undefined}
+                      aria-description={value.id === "chat" ? undefined : "按住上下拖动排序，或使用 Alt 加上下方向键"}
                       onClick={() => navigate(value.id)}
                     >
                       <value.icon size={20} />
                     </button>
                   </NavigationTooltip>
                 ))}
-                <NavigationOverflowMenu items={featurePages} currentPage={page} onNavigate={navigate} />
+                <NavigationOverflowMenu items={orderedFeaturePages} currentPage={page} onNavigate={navigate} />
               </nav>
               <div className="sidebar-footer">
                 <NavigationTooltip label="连接与设置">
