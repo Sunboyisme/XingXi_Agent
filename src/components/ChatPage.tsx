@@ -305,8 +305,21 @@ function storeChatDraft(conversationId: string | null, value: StoredChatDraft) {
   }
 }
 
-function clearChatDraft(conversationId: string | null) {
+export function hasNewChatDraft() {
+  const draft = readChatDraft(null);
+  return Boolean(draft && (draft.text || draft.images.length));
+}
+
+function clearChatDraft(
+  conversationId: string | null,
+  expected?: StoredChatDraft | null,
+) {
   try {
+    // A send accepted after navigation must not erase a newer unsent message.
+    if (
+      expected !== undefined &&
+      JSON.stringify(readChatDraft(conversationId)) !== JSON.stringify(expected)
+    ) return;
     localStorage.removeItem(chatDraftKey(conversationId));
   } catch {
     /* Ignore storage failures in restricted windows. */
@@ -641,17 +654,14 @@ export function ChatPage({
     },
     [conversationId],
   );
-  useEffect(
-    () => () => {
-      // Navigating to another page must not discard a half-written message.
-      if (draftRef.current || imagesRef.current.length)
-        storeChatDraft(conversationId, {
-          text: draftRef.current,
-          images: imagesRef.current,
-        });
-    },
-    [conversationId],
-  );
+  // Every edit is saved immediately. Unmount must never restore a cleared draft.
+  useLayoutEffect(() => {
+    const saved = readChatDraft(conversationId);
+    draftRef.current = saved?.text || "";
+    imagesRef.current = saved?.images || [];
+    setDraft(draftRef.current);
+    setImages(imagesRef.current);
+  }, [conversationId]);
   function changeDraft(value: string) {
     draftRef.current = value;
     setDraft(value);
@@ -884,11 +894,6 @@ export function ChatPage({
   trackNext.current = track;
   useEffect(() => {
     let live = true;
-    const saved = readChatDraft(conversationId);
-    draftRef.current = saved?.text || "";
-    imagesRef.current = saved?.images || [];
-    setDraft(saved?.text || "");
-    setImages(saved?.images || []);
     setMessages([]);
     setStream("");
     setReasoning("");
@@ -1092,6 +1097,7 @@ export function ChatPage({
       return false;
     actionLock.current = true;
     const sendingTo = conversationId;
+    const submittedDraft = readChatDraft(sendingTo);
     const sequence = actionSequence.current;
     const isCurrent = () =>
       mounted.current &&
@@ -1131,7 +1137,7 @@ export function ChatPage({
         storeModelPreference(id, { ...modelPreference, key: selected?.key || "" });
       }
       if (!isCurrent()) {
-        if (!edited) clearChatDraft(sendingTo);
+        if (!edited) clearChatDraft(sendingTo, submittedDraft);
         void refresh().catch(() => {});
         return true;
       }

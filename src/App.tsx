@@ -40,7 +40,11 @@ const CalendarPage = lazy(() =>
     default: module.CalendarPage,
   })),
 );
-import { ChatPage, clearChatPreferences } from "./components/ChatPage";
+import {
+  ChatPage,
+  clearChatPreferences,
+  hasNewChatDraft,
+} from "./components/ChatPage";
 const LearningPage = lazy(() =>
   import("./components/LearningPage").then((module) => ({
     default: module.LearningPage,
@@ -110,6 +114,10 @@ type PendingAgenda = {
   tab: "todo" | "repeat";
 };
 
+type NewChatRequest = {
+  projectId: string | null;
+  pinned: boolean;
+};
 
 export function App() {
   const navigationEpoch = useRef(0);
@@ -171,6 +179,7 @@ export function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
+  const [newChatRequest, setNewChatRequest] = useState<NewChatRequest | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectOverviewId, setProjectOverviewId] = useState<string | null>(
@@ -452,12 +461,32 @@ export function App() {
     }
   }
   function startNewChat() {
+    requestNewChat();
+  }
+  function requestNewChat(projectId = activeProjectId, pinned = false) {
+    const request = { projectId, pinned };
+    if (hasNewChatDraft()) {
+      setNewChatRequest(request);
+      return;
+    }
+    createNewChat(request);
+  }
+  function createNewChat(request: NewChatRequest) {
+    setNewChatRequest(null);
     setSidebarCollapsed(true);
     setProjectOverviewId(null);
-    setNewChatPinned(false);
+    setActiveProjectId(request.projectId);
+    setNewChatPinned(request.pinned);
+    setFocusMessageId(null);
     clearChatPreferences(null);
     setConversationId(null);
     setChatKey((value) => value + 1);
+    navigate("chat");
+  }
+  function continueNewChatDraft() {
+    setNewChatRequest(null);
+    setFocusMessageId(null);
+    setConversationId(null);
     navigate("chat");
   }
   function openPlan(planId: string, occurrence?: string | null) {
@@ -466,28 +495,29 @@ export function App() {
     setPlanOccurrence(occurrence);
     navigate("plans");
   }
-  useEffect(() => {
-    function shortcut(event: KeyboardEvent) {
-      if (document.querySelector('[role="dialog"]')) return;
-      const key = event.key.toLowerCase();
-      if (event.key === "F1") {
-        event.preventDefault();
-        setShortcuts(true);
-        return;
-      }
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey)
-        return;
-      if (key === "n") {
-        event.preventDefault();
-        startNewChat();
-      } else if (key === ",") {
-        event.preventDefault();
-        navigate("settings");
-      } else if (["1", "2", "3"].includes(key)) {
-        event.preventDefault();
-        navigate(["chat", "learning", "plans"][Number(key) - 1]);
-      }
+  const handleShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (document.querySelector('[role="dialog"]')) return;
+    const key = event.key.toLowerCase();
+    if (event.key === "F1") {
+      event.preventDefault();
+      setShortcuts(true);
+      return;
     }
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey)
+      return;
+    if (key === "n") {
+      event.preventDefault();
+      startNewChat();
+    } else if (key === ",") {
+      event.preventDefault();
+      navigate("settings");
+    } else if (["1", "2", "3"].includes(key)) {
+      event.preventDefault();
+      navigate(["chat", "learning", "plans"][Number(key) - 1]);
+    }
+  });
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => handleShortcut(event);
     document.addEventListener("keydown", shortcut);
     return () => document.removeEventListener("keydown", shortcut);
   }, []);
@@ -699,10 +729,7 @@ export function App() {
               currentId={conversationId}
               projectId={resolvedProjectId}
               onNew={(id, pinned) => {
-                setActiveProjectId(id);
-                setFocusMessageId(null);
-                startNewChat();
-                setNewChatPinned(Boolean(pinned));
+                requestNewChat(id, Boolean(pinned));
               }}
               onProject={openProject}
               onOpen={openConversation}
@@ -740,8 +767,7 @@ export function App() {
                   revision={projectRevision}
                   onBack={() => { setProjectOverviewId(null); navigate("projects"); }}
                   onNew={() => {
-                    setActiveProjectId(overviewProject.id);
-                    startNewChat();
+                    requestNewChat(overviewProject.id);
                   }}
                   onOpen={openConversation}
                   onLibrary={() =>
@@ -873,6 +899,31 @@ export function App() {
             openPlan(id, occurrence);
           }}
         />
+        <Dialog
+          open={newChatRequest !== null}
+          onOpenChange={(open) => {
+            if (!open) setNewChatRequest(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>新建对话？</DialogTitle>
+              <DialogDescription>
+                你还有未发送的文字或附件。新建对话会清空这份草稿。
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={continueNewChatDraft}>
+                继续编辑
+              </Button>
+              <Button onClick={() => {
+                if (newChatRequest) createNewChat(newChatRequest);
+              }}>
+                清空并新建
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Dialog open={info} onOpenChange={setInfo}>
           <DialogContent className="about-dialog">
             <DialogHeader>

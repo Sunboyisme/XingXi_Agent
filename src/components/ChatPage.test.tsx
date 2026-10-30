@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { readEvents } from "@/lib/api";
-import { ChatPage } from "./ChatPage";
+import { ChatPage, clearChatPreferences, hasNewChatDraft } from "./ChatPage";
 import type { Settings } from "@/lib/api";
 
 const settings: Settings = {
@@ -381,6 +381,77 @@ test("restores draft text and attached images after leaving the chat page", asyn
       document.querySelector(".composer-attachments .attachment-draft"),
     ).not.toBeNull(),
   );
+});
+
+test("a confirmed new chat stays empty after the previous composer unmounts", () => {
+  apiMock.mockResolvedValue([]);
+  const props = {
+    conversationId: null,
+    onConversation: vi.fn(),
+    settings,
+    refresh: vi.fn().mockResolvedValue(undefined),
+    onAction: vi.fn(),
+  };
+  const view = render(<ChatPage key="first" {...props} />);
+  fireEvent.change(screen.getByLabelText("发送给XiaoXi的消息"), {
+    target: { value: "确认放弃的草稿" },
+  });
+  expect(hasNewChatDraft()).toBe(true);
+
+  // Match App: clear the draft before React replaces the keyed composer.
+  clearChatPreferences(null);
+  view.rerender(<ChatPage key="second" {...props} />);
+  expect(screen.getByLabelText("发送给XiaoXi的消息")).toHaveValue("");
+  expect(hasNewChatDraft()).toBe(false);
+  view.unmount();
+
+  render(<ChatPage {...props} />);
+  expect(screen.getByLabelText("发送给XiaoXi的消息")).toHaveValue("");
+});
+
+test("an attachment without text also protects the new chat draft", () => {
+  localStorage.setItem("bai-chat-draft:new", JSON.stringify({
+    text: "",
+    images: [{ id: "unsent-file", name: "notes.txt" }],
+  }));
+  expect(hasNewChatDraft()).toBe(true);
+  clearChatPreferences(null);
+  expect(hasNewChatDraft()).toBe(false);
+});
+
+test("a late accepted send cannot clear a newer draft after leaving and returning", async () => {
+  let accept!: (value: unknown) => void;
+  apiMock.mockImplementation(async (path: string, method?: string) => {
+    if (path === "/conversations" && method === "POST") return { id: "delayed" };
+    if (path === "/conversations/delayed/messages" && method === "POST")
+      return new Promise((resolve) => { accept = resolve; });
+    return [];
+  });
+  const props = {
+    conversationId: null,
+    onConversation: vi.fn(),
+    settings,
+    refresh: vi.fn().mockResolvedValue(undefined),
+    onAction: vi.fn(),
+  };
+  const first = render(<ChatPage {...props} />);
+  fireEvent.change(screen.getByLabelText("发送给XiaoXi的消息"), {
+    target: { value: "正在发送的旧消息" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+  await waitFor(() => expect(accept).toBeDefined());
+  first.unmount();
+
+  const second = render(<ChatPage {...props} />);
+  fireEvent.change(screen.getByLabelText("发送给XiaoXi的消息"), {
+    target: { value: "返回后重新写的消息" },
+  });
+  await act(async () => accept({ id: "delayed-run", status: "queued" }));
+  second.unmount();
+
+  render(<ChatPage {...props} />);
+  expect(screen.getByLabelText("发送给XiaoXi的消息")).toHaveValue("返回后重新写的消息");
+  expect(props.onConversation).not.toHaveBeenCalled();
 });
 
 test("keeps an animated status line while a reply is still streaming", async () => {
