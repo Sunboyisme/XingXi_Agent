@@ -727,43 +727,6 @@ html[data-desktop] .pet-card-close { position: absolute; left: 0; top: -9px; wid
   align-items: stretch;
   pointer-events: auto;
 }
-.pinned-window {
-  width: 100%;
-  height: 100%;
-  border: 1px solid #ffffff75;
-  box-sizing: border-box;
-  overflow: hidden;
-  position: relative;
-}
-.pinned-window > img {
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  cursor: move;
-}
-.pinned-controls {
-  position: absolute;
-  right: 0;
-  top: 0;
-  display: none;
-  align-items: center;
-  background: #28221ee6;
-  color: #eee;
-  font-size: 12px;
-  padding: 4px;
-}
-.pinned-window:hover .pinned-controls,
-.pinned-window:focus-within .pinned-controls {
-  display: flex;
-}
-.pinned-controls label {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.pinned-controls input {
-  width: 65px;
-}
 /* Desktop settings follow the shared setting rows and connection-card system. */
 .desktop-preferences {
   margin: 0;

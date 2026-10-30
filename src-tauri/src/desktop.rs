@@ -910,29 +910,7 @@ pub async fn capture_export(
                 .map_err(|e| e.to_string())?;
         }
         "pin" => {
-            let img = image::load_from_memory(&bytes).map_err(|_| "无效图片")?;
-            let label = format!("pin-{}", uuid::Uuid::new_v4());
-            PIN_IMAGES
-                .lock()
-                .unwrap()
-                .insert(label.clone(), data_url.clone());
-            let w = window(&app, &label, img.width() as f64, img.height() as f64)?;
-            // Data is passed as an event after the new webview has mounted, via native state.
-            w.set_position(PhysicalPosition::new(x.unwrap_or(0), y.unwrap_or(0)))
-                .map_err(|e| e.to_string())?;
-            let mut factor = 1.0f64;
-            if let Ok(Some(m)) = w.current_monitor() {
-                factor = factor
-                    .min(m.work_area().size.width as f64 * 0.9 / img.width() as f64)
-                    .min(m.work_area().size.height as f64 * 0.9 / img.height() as f64);
-            }
-            w.set_size(PhysicalSize::new(
-                (img.width() as f64 * factor) as u32,
-                (img.height() as f64 * factor) as u32,
-            ))
-            .map_err(|e| e.to_string())?;
-            let _ = w.set_focusable(false);
-            w.show().map_err(|e| e.to_string())?;
+            crate::pinned::create(&app, data_url.clone(), x.unwrap_or(0), y.unwrap_or(0))?;
         }
         "attach" | "ocr" | "translate" => {
             if !app
@@ -963,14 +941,8 @@ pub async fn capture_export(
     }
     Ok(true)
 }
-static PIN_IMAGES: std::sync::LazyLock<Mutex<std::collections::HashMap<String, String>>> =
-    std::sync::LazyLock::new(|| Mutex::new(Default::default()));
-#[tauri::command]
-pub fn pinned_image(window: tauri::WebviewWindow) -> Option<String> {
-    PIN_IMAGES.lock().unwrap().get(window.label()).cloned()
-}
 pub fn forget_pin(label: &str) {
-    PIN_IMAGES.lock().unwrap().remove(label);
+    crate::pinned::forget(label);
 }
 #[tauri::command]
 pub fn desktop_main(
@@ -1030,9 +1002,9 @@ pub async fn desktop_pick_files(
         .extend(files.iter().map(|f| f.path().to_path_buf()));
     crate::drop_files::read_dropped_files(app.state(), paths, false, Some(false)).await
 }
-struct NativeDialog(tauri::AppHandle);
+pub(crate) struct NativeDialog(tauri::AppHandle);
 impl NativeDialog {
-    fn new(app: &tauri::AppHandle) -> Self {
+    pub(crate) fn new(app: &tauri::AppHandle) -> Self {
         app.state::<Desktop>()
             .dialog_active
             .store(true, Ordering::SeqCst);

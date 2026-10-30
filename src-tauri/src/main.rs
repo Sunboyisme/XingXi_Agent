@@ -4,6 +4,7 @@ mod backend_port;
 mod window_layout;
 mod drop_files;
 mod desktop;
+mod pinned;
 mod desktop_input;
 mod selection;
 mod voice;
@@ -543,7 +544,11 @@ fn main() {
             desktop::capture_pixels,
             desktop::capture_cancel,
             desktop::capture_export,
-            desktop::pinned_image,
+            pinned::pinned_info,
+            pinned::pinned_resize,
+            pinned::pinned_update,
+            pinned::pinned_replace,
+            pinned::pinned_export,
             voice::voice_start,
             voice::voice_stop,
             voice::voice_cancel,
@@ -669,6 +674,7 @@ fn main() {
             let new_chat = MenuItem::with_id(app, "new_chat", "新建对话", true, None::<&str>)?;
             let plans = MenuItem::with_id(app, "plans", "打开今日安排", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "连接与设置", true, None::<&str>)?;
+            let pins = MenuItem::with_id(app, "show_pins", "显示贴图", true, None::<&str>)?;
             let exit = MenuItem::with_id(
                 app,
                 "quit",
@@ -676,7 +682,7 @@ fn main() {
                 true,
                 None::<&str>,
             )?;
-            let menu = Menu::with_items(app, &[&show, &new_chat, &plans, &settings, &exit])?;
+            let menu = Menu::with_items(app, &[&show, &new_chat, &plans, &settings, &pins, &exit])?;
             let icon = app.default_window_icon().cloned().ok_or("应用图标缺失")?;
             TrayIconBuilder::new()
                 .icon(icon)
@@ -685,6 +691,7 @@ fn main() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => open_main(app),
+                    "show_pins" => pinned::show_all(app),
                     "new_chat" | "plans" | "settings" => {
                         open_main(app);
                         let _ = app.emit("bai-tray-action", event.id.as_ref());

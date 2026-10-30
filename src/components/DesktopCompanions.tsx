@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AudioLines, Bell, Square, SquarePen, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 import { Hint } from "./common";
@@ -554,64 +554,6 @@ export function DesktopPet() {
           </div>
         )}
       </div>
-    </main>
-  );
-}
-
-export function DesktopPinned() {
-  const [image, setImage] = useState("");
-  const [error, setError] = useState("");
-  const [opacity, setOpacity] = useState(1);
-  useEffect(() => {
-    void invoke<string>("pinned_image")
-      .then(setImage)
-      .catch((e) => setError(desktopError(e)));
-  }, []);
-  return (
-    <main className="pinned-window" style={{ opacity }}>
-      <img
-        src={image}
-        draggable={false}
-        alt="钉住的截图"
-        onPointerDown={(e) => {
-          if (e.button === 0) void getCurrentWindow().startDragging();
-        }}
-        onWheel={(e) => {
-          void getCurrentWindow()
-            .outerSize()
-            .then((size) =>
-              getCurrentWindow().setSize(
-                new PhysicalSize(
-                  Math.max(40, size.width * (e.deltaY < 0 ? 1.1 : 0.9)),
-                  Math.max(40, size.height * (e.deltaY < 0 ? 1.1 : 0.9)),
-                ),
-              ),
-            );
-        }}
-      />
-      <div className="pinned-controls">
-        <label>
-          透明度
-          <input
-            type="range"
-            aria-label="贴图透明度"
-            min="0.15"
-            max="1"
-            step="0.05"
-            value={opacity}
-            onChange={(e) => setOpacity(Number(e.target.value))}
-          />
-        </label>
-        <Hint label="关闭贴图">
-          <button
-            aria-label="关闭贴图"
-            onClick={() => void getCurrentWindow().close()}
-          >
-            <X size={17} />
-          </button>
-        </Hint>
-      </div>
-      {error && <p role="alert">{error}</p>}
     </main>
   );
 }

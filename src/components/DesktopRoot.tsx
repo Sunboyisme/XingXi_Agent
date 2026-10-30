@@ -1,6 +1,7 @@
 import { DesktopQuickAsk } from "./DesktopQuickAsk";
 import { DesktopCapture } from "./DesktopCapture";
-import { DesktopPet, DesktopPinned } from "./DesktopCompanions";
+import { DesktopPet } from "./DesktopCompanions";
+import { DesktopPinned } from "./DesktopPinned";
 import { SelectionAssistant } from "./SelectionAssistant";
 import "../styles/desktop-assistant.css";
 export function DesktopRoot({ view }: { view: string }) {
