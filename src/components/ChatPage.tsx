@@ -2086,19 +2086,21 @@ export function ChatPage({
                     </Hint>
                   ))}
                 </div>
-                <ContextMeter
-                  usage={
-                    contextUsage?.model_name === selected?.model.name &&
-                    contextUsage?.provider_id === selected?.profile.id
-                      ? contextUsage
-                      : null
-                  }
-                  compacting={contextStatus === "正在整理上下文…"}
-                  limit={contextTokens}
-                />
               </div>
               <div className="composer-submit">
                 <ComposerModelPicker
+                  contextMeter={
+                    <ContextMeter
+                      usage={
+                        contextUsage?.model_name === selected?.model.name &&
+                        contextUsage?.provider_id === selected?.profile.id
+                          ? contextUsage
+                          : null
+                      }
+                      compacting={contextStatus === "正在整理上下文…"}
+                      limit={contextTokens}
+                    />
+                  }
                   choices={choices}
                   selected={selected}
                   options={modelOptions}

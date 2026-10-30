@@ -11,7 +11,6 @@ type SpeechState = {
   seconds: number;
   level: number;
   error?: string;
-  retryable?: boolean;
 };
 type Options = {
   scopeKey: string;
@@ -115,10 +114,13 @@ export function useSpeechInput(options: Options) {
       cancel(false);
       return;
     }
+    if (value.phase === "error") {
+      cancel();
+      callbacks.current.onError(value.error || "录音失败");
+      return;
+    }
     publish(value);
     if (value.phase === "ready") void transcribe(value.id);
-    if (value.phase === "error")
-      callbacks.current.onError(value.error || "录音失败");
   }
   async function start(gesture?: number) {
     if (isLocked() || callbacks.current.isBlocked?.()) return;
@@ -221,10 +223,10 @@ export function useSpeechInput(options: Options) {
         result.request_id !== recording ||
         typeof result.text !== "string"
       )
-        throw new Error("语音识别返回无效，录音已保留，请重试");
+        throw new Error("语音识别返回无效，请重新录音");
       if (!result.text.trim()) throw new Error("没有识别到文字，请重新录音");
       if (callbacks.current.readText() !== insertion.text)
-        throw new Error("输入内容已变化，录音已保留，请重试识别");
+        throw new Error("输入内容已变化，请重新录音");
       const text =
         insertion.text.slice(0, insertion.start) +
         result.text +
@@ -255,12 +257,11 @@ export function useSpeechInput(options: Options) {
         sequence === epoch.current &&
         id.current === recording
       ) {
-        publish({ ...current.current!, phase: "error", retryable: true });
-        callbacks.current.onError(
-          controller.signal.aborted
-            ? "识别超时，录音已保留，可重试或取消。"
-            : message(e),
-        );
+        const error = controller.signal.aborted
+          ? "识别超时，请重新录音。"
+          : message(e);
+        cancel();
+        callbacks.current.onError(error);
       }
     } finally {
       clearTimeout(timeout);
@@ -268,10 +269,21 @@ export function useSpeechInput(options: Options) {
     }
   }
   async function stop() {
-    if (id.current)
-      await invoke("voice_stop", { id: id.current }).catch((e) =>
-        callbacks.current.onError(message(e)),
-      );
+    const recording = id.current;
+    const sequence = epoch.current;
+    if (!recording) return;
+    try {
+      await invoke("voice_stop", { id: recording });
+    } catch (e) {
+      if (
+        !mounted.current ||
+        sequence !== epoch.current ||
+        id.current !== recording
+      )
+        return;
+      cancel();
+      callbacks.current.onError(message(e));
+    }
   }
   function release(gesture: number) {
     if (held.current === gesture) {
@@ -286,7 +298,6 @@ export function useSpeechInput(options: Options) {
       current.current?.phase === "starting"
     )
       cancel();
-    else if (current.current?.retryable) void transcribe(id.current);
     else void start();
   }
   return {

@@ -1,16 +1,9 @@
-import { useRef, type KeyboardEvent } from "react";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Settings2,
-  Sparkles,
-} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Check, ChevronDown, ChevronRight, Settings2 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import type { Settings } from "@/lib/api";
 import type { ModelOptions } from "@/lib/chatModelPreferences";
 import { effortLabel, effortOptions } from "@/lib/reasoningEffort";
-import { useHoverPopover } from "@/lib/useHoverPopover";
 
 type ModelChoice = {
   key: string;
@@ -24,6 +17,7 @@ const capacityLabel = (tokens: number) =>
 const keepMenuOpen = (event: Event) => event.preventDefault();
 
 export function ComposerModelPicker({
+  contextMeter,
   choices,
   selected,
   options,
@@ -35,6 +29,7 @@ export function ComposerModelPicker({
   onOptions,
   onSettings,
 }: {
+  contextMeter?: ReactNode;
   choices: ModelChoice[];
   selected?: ModelChoice;
   options: ModelOptions;
@@ -46,10 +41,10 @@ export function ComposerModelPicker({
   onOptions: (patch: Partial<ModelOptions>) => void;
   onSettings: () => void;
 }) {
-  const thinkingContent = useRef<HTMLDivElement>(null);
-  const contextContent = useRef<HTMLDivElement>(null);
-  const previousFocus = useRef<HTMLElement | null>(null);
-  const menu = useHoverPopover(disabled, [thinkingContent, contextContent]);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
   const control = selected?.model.thinking_control || "none";
   const levels = effortOptions.filter((option) =>
     selected?.model.reasoning_efforts?.includes(option.value),
@@ -84,12 +79,6 @@ export function ComposerModelPicker({
   const capacities = contextPresets.includes(contextTokens)
     ? contextPresets
     : [...contextPresets, contextTokens].sort((a, b) => a - b);
-  function showOnPointer() {
-    if (!menu.open && document.activeElement instanceof HTMLElement) {
-      previousFocus.current = document.activeElement;
-    }
-    menu.showOnPointer();
-  }
   function changeThinking(value: string) {
     onOptions({
       thinkingOverride: value === "default" ? undefined : value !== "off",
@@ -97,84 +86,56 @@ export function ComposerModelPicker({
         ? undefined
         : value,
     });
-    menu.closeAndFocus();
-  }
-  function enterMenu(event: KeyboardEvent<HTMLButtonElement>) {
-    if (!["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) return;
-    event.preventDefault();
-    menu.onKeyboardInteraction();
-    menu.show();
-    const last = event.key === "ArrowUp";
-    requestAnimationFrame(() => {
-      const items = menu.content.current?.querySelectorAll<HTMLElement>(
-        '[role="menuitem"]:not([data-disabled]), [role="menuitemradio"]:not([data-disabled])',
-      );
-      if (items?.length) items[last ? items.length - 1 : 0].focus();
-    });
+    setOpen(false);
   }
   return (
     <div className="composer-model-controls">
+      {contextMeter}
       <DropdownMenu.Root
-        open={menu.open}
-        onOpenChange={menu.onOpenChange}
+        open={open && !disabled}
+        onOpenChange={setOpen}
         modal={false}
       >
         <DropdownMenu.Trigger asChild>
           <button
-            ref={menu.trigger}
             type="button"
             className="composer-model"
             aria-label="选择模型"
+            aria-description={
+              selected
+                ? `${selected.model.name}，思考强度：${thinkingSummary}`
+                : undefined
+            }
             disabled={disabled}
-            onPointerEnter={showOnPointer}
-            onPointerLeave={menu.scheduleClose}
-            onFocus={menu.onFocus}
-            onBlur={menu.onBlur}
-            onKeyDown={enterMenu}
-            onPointerDown={(event) => {
-              if (event.button === 0) {
-                event.preventDefault();
-                showOnPointer();
-              }
-            }}
-            onClick={(event) => {
-              event.preventDefault();
-              showOnPointer();
-            }}
           >
-            {thinkingEnabled && <Sparkles size={13} aria-hidden="true" />}
-            <span>{selected?.model.name || "选择模型"}</span>
-            <ChevronDown size={13} aria-hidden="true" />
+            <span className="composer-model-name">
+              {selected?.model.name || "选择模型"}
+            </span>
+            {selected && (
+              <span className="composer-model-effort">
+                {control === "none"
+                  ? "无思考"
+                  : thinkingEnabled
+                    ? thinkingSummary
+                    : "关闭思考"}
+              </span>
+            )}
+            <ChevronDown
+              size={12}
+              strokeWidth={1.6}
+              className="composer-model-chevron"
+              aria-hidden="true"
+            />
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
-            ref={menu.content}
             className="composer-model-menu"
             side="top"
             align="end"
             sideOffset={8}
             collisionPadding={12}
             aria-label="模型与对话选项"
-            onPointerEnter={menu.cancelClose}
-            onPointerLeave={menu.scheduleClose}
-            onFocusCapture={menu.cancelClose}
-            onBlurCapture={menu.onBlur}
-            onKeyDownCapture={menu.onKeyboardInteraction}
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              if (
-                document.activeElement === document.body &&
-                previousFocus.current?.isConnected
-              ) {
-                previousFocus.current.focus({ preventScroll: true });
-              }
-              previousFocus.current = null;
-            }}
-            onEscapeKeyDown={(event) => {
-              event.preventDefault();
-              menu.closeAndFocus();
-            }}
           >
             <DropdownMenu.Label className="composer-model-menu-heading">
               选择模型
@@ -232,20 +193,10 @@ export function ComposerModelPicker({
                     </DropdownMenu.SubTrigger>
                     <DropdownMenu.Portal>
                       <DropdownMenu.SubContent
-                        ref={thinkingContent}
                         className="composer-model-submenu"
                         sideOffset={6}
                         collisionPadding={12}
                         aria-label="思考强度"
-                        onPointerEnter={menu.cancelClose}
-                        onPointerLeave={menu.scheduleClose}
-                        onFocusCapture={menu.cancelClose}
-                        onBlurCapture={menu.onBlur}
-                        onKeyDownCapture={menu.onKeyboardInteraction}
-                        onEscapeKeyDown={(event) => {
-                          event.preventDefault();
-                          menu.closeAndFocus();
-                        }}
                       >
                         <DropdownMenu.Label className="composer-model-menu-heading">
                           思考强度
@@ -330,20 +281,10 @@ export function ComposerModelPicker({
                   </DropdownMenu.SubTrigger>
                   <DropdownMenu.Portal>
                     <DropdownMenu.SubContent
-                      ref={contextContent}
                       className="composer-model-submenu"
                       sideOffset={6}
                       collisionPadding={12}
                       aria-label="上下文窗口"
-                      onPointerEnter={menu.cancelClose}
-                      onPointerLeave={menu.scheduleClose}
-                      onFocusCapture={menu.cancelClose}
-                      onBlurCapture={menu.onBlur}
-                      onKeyDownCapture={menu.onKeyboardInteraction}
-                      onEscapeKeyDown={(event) => {
-                        event.preventDefault();
-                        menu.closeAndFocus();
-                      }}
                     >
                       <DropdownMenu.Label className="composer-model-menu-heading">
                         上下文窗口
@@ -352,7 +293,7 @@ export function ComposerModelPicker({
                         value={String(contextTokens)}
                         onValueChange={(value) => {
                           onOptions({ contextTokens: Number(value) });
-                          menu.closeAndFocus();
+                          setOpen(false);
                         }}
                       >
                         {capacities.map((tokens) => (
@@ -377,7 +318,7 @@ export function ComposerModelPicker({
             <DropdownMenu.Item
               className="composer-model-settings"
               onSelect={() => {
-                menu.onOpenChange(false);
+                setOpen(false);
                 onSettings();
               }}
             >

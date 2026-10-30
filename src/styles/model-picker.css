@@ -19,10 +19,41 @@
   align-items: center;
   gap: 5px;
 }
+.composer-model-controls .context-meter {
+  width: 22px;
+  min-width: 22px;
+}
+.composer-model-controls .context-meter-track {
+  opacity: 0.4;
+}
 .composer-model-controls .composer-model {
   min-width: 0;
   max-width: min(220px, 34cqi);
-  background: var(--ui-color-bg);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 5px 4px;
+  gap: 8px;
+  color: var(--ui-color-text);
+}
+.composer-model-controls .composer-model:hover,
+.composer-model-controls .composer-model[data-state="open"] {
+  background: transparent;
+  color: var(--ui-color-heading);
+}
+.composer-model .composer-model-name {
+  flex: 1;
+  color: var(--ui-color-heading);
+  font-weight: 500;
+}
+.composer-model .composer-model-effort {
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 11px;
+}
+.composer-model .composer-model-chevron {
+  flex-shrink: 0;
+  color: var(--ui-color-text-muted);
 }
 .composer-model-controls .composer-model:focus-visible {
   outline: 2px solid var(--ui-color-focus);

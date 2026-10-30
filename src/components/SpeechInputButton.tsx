@@ -1,4 +1,4 @@
-import { LoaderCircle, RotateCw } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { Hint } from "./common";
 import { MicrophoneIcon } from "./SoftIcons";
 import type { SpeechInputController } from "@/lib/useSpeechInput";
@@ -27,9 +27,7 @@ export function SpeechInputButton({
         ? "正在识别，点击取消"
         : v?.phase === "starting"
           ? "正在打开麦克风，点击取消"
-          : v?.retryable
-            ? "识别未完成，点击重试，Esc 取消"
-            : "";
+          : "";
   return (
     <Hint
       label={
@@ -67,8 +65,6 @@ export function SpeechInputButton({
           </span>
         ) : v?.phase === "starting" || v?.phase === "transcribing" ? (
           <LoaderCircle size={19} className="speech-input-spinner" />
-        ) : v?.retryable ? (
-          <RotateCw size={19} />
         ) : (
           <MicrophoneIcon size={20} />
         )}
