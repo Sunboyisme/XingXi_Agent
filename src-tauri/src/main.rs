@@ -6,6 +6,7 @@ mod window_layout;
 mod drop_files;
 mod desktop;
 mod pinned;
+mod pinned_menu;
 mod desktop_input;
 mod selection;
 mod voice;
@@ -554,6 +555,10 @@ fn main() {
             pinned::pinned_update,
             pinned::pinned_replace,
             pinned::pinned_export,
+            pinned_menu::pinned_menu_open,
+            pinned_menu::pinned_menu_get,
+            pinned_menu::pinned_menu_close,
+            pinned_menu::pinned_menu_action,
             voice::voice_start,
             voice::voice_stop,
             voice::voice_cancel,
@@ -813,6 +818,8 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event { pinned_menu::owner_closed(window.app_handle(), window.label()); }
+            if window.label() == "pin-menu" && matches!(event, tauri::WindowEvent::Focused(false)) { pinned_menu::focus_lost(window.app_handle()); }
             if let tauri::WindowEvent::ScaleFactorChanged { .. } = event { desktop::refresh_hit_regions(window.app_handle(),window.label()); }
             if let tauri::WindowEvent::Destroyed = event { desktop::forget_pin(window.label()); }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Focused(false)) {

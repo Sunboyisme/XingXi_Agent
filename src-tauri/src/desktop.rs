@@ -720,6 +720,7 @@ fn show_capture_composer(app: &tauri::AppHandle) -> Result<(), String> {
 }
 pub fn begin_capture(app: &tauri::AppHandle) -> Result<(), String> {
     crate::selection::dismiss(app);
+    crate::pinned_menu::dismiss(app, false);
     if app.state::<Desktop>().capture.lock().unwrap().is_some() {
         return Ok(());
     }
@@ -1057,7 +1058,7 @@ pub fn desktop_hit_regions(
     window: tauri::WebviewWindow,
     regions: Vec<HitRegion>,
 ) -> Result<(), String> {
-    if !["quick", "pet", "selection", "pomodoro-timer"].contains(&window.label()) {
+    if !["quick", "pet", "selection", "pomodoro-timer", "pin-menu"].contains(&window.label()) {
         return Ok(());
     }
     if regions.len() > 32

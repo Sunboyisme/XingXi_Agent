@@ -1,5 +1,3 @@
-import type { MenuOptions } from "@tauri-apps/api/menu";
-
 export type PinInfo = {
   dataUrl: string;
   originalUrl?: string | null;
@@ -69,84 +67,19 @@ export function processPinImage(source: HTMLCanvasElement, action: string) {
   }
   return output.toDataURL("image/png");
 }
-export function pinMenuItems(
-  info: PinInfo,
-  state: { editing: boolean; busy: boolean; shadow: boolean; opacity: number },
-  dispatch: (action: string) => void,
-): MenuOptions["items"] {
-  const prefix = crypto.randomUUID();
-  const item = (id: string, text: string, enabled = !state.busy) => ({
-    id: `${prefix}:${id}`,
-    text,
-    enabled,
-    action: () => dispatch(id),
-  });
-  const zoom = pinZoomLevels.map((value) => ({
-    ...item(
-      `zoom:${value}`,
-      `${Math.round(value * 100)}%`,
-      !state.busy && !state.editing,
-    ),
-    checked: Math.abs(info.scale - value) < 0.005,
-  }));
-  return [
-    item("copy", "复制图像"),
-    item("copy-original", "复制原始大小图像"),
-    item("save", "图像另存为…"),
-    { item: "Separator" },
-    {
-      ...item("annotate", state.editing ? "完成标注" : "标注"),
-      checked: state.editing,
-    },
-    { ...item("shadow", "窗口阴影"), checked: state.shadow },
-    {
-      text: "缩放",
-      items: [
-        ...zoom,
-        { item: "Separator" },
-        item("zoom:0", "适应屏幕", !state.busy && !state.editing),
-      ],
-    },
-    {
-      text: "图像处理",
-      enabled: !state.busy && !state.editing,
-      items: [
-        item("rotate-left", "向左旋转 90°"),
-        item("rotate-right", "向右旋转 90°"),
-        item("flip-x", "水平翻转"),
-        item("flip-y", "垂直翻转"),
-        { item: "Separator" },
-        item("grayscale", "灰度"),
-        item("invert", "反色"),
-        item("reset-image", "还原图像"),
-      ],
-    },
-    {
-      text: "透明度",
-      items: [1, 0.9, 0.75, 0.5, 0.25].map((value) => ({
-        ...item(`opacity:${value}`, `${Math.round(value * 100)}%`),
-        checked: state.opacity === value,
-      })),
-    },
-    { item: "Separator" },
-    item("paste", "粘贴", !state.busy && !state.editing),
-    item("replace", "替换为文件…", !state.busy && !state.editing),
-    { item: "Separator" },
-    item("close", "关闭", true),
-    item("destroy", "销毁", true),
-    { item: "Separator" },
-    {
-      text: `${info.width} × ${info.height}`,
-      items: [
-        item("copy-size", "复制图像尺寸"),
-        {
-          ...item(
-            "dimensions",
-            `宽 ${info.width} 像素 · 高 ${info.height} 像素`,
-          ),
-          enabled: false,
-        },
-      ],
-    },
-  ];
-}
+
+export type PinMenuSession = {
+  requestId: string;
+  owner: string;
+  revision: number;
+  width: number;
+  height: number;
+  scale: number;
+  editing: boolean;
+  busy: boolean;
+  shadow: boolean;
+  opacity: number;
+  zoomOnly: boolean;
+  anchorX: number;
+  anchorY: number;
+};

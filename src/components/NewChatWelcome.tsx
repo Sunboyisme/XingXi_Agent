@@ -1,32 +1,37 @@
 import { useEffect, useState } from "react";
-import { BookOpen, FileText, Languages, ListTree, PenLine, WandSparkles } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  ListTree,
+  PenLine,
+  WandSparkles,
+} from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
 
 const starters = [
   {
     label: "总结内容",
     icon: FileText,
-    prompt: "请帮我总结以下内容，提炼核心结论、关键要点和需要关注的问题，不补充原文没有的信息。内容：",
-  },
-  {
-    label: "翻译文本",
-    icon: Languages,
-    prompt: "请帮我翻译以下文本，保留原意、语气和格式。中文译为英文，其他语言译为中文；术语或表达有歧义时简要说明。文本：",
+    prompt:
+      "请帮我总结以下内容，提炼核心结论、关键要点和需要关注的问题，不补充原文没有的信息。内容：",
   },
   {
     label: "润色改写",
     icon: PenLine,
-    prompt: "请帮我润色以下文字，在保留原意和事实的基础上，让表达更清楚、自然、简洁。文字：",
+    prompt:
+      "请帮我润色以下文字，在保留原意和事实的基础上，让表达更清楚、自然、简洁。文字：",
   },
   {
     label: "优化提示词",
     icon: WandSparkles,
-    prompt: "请帮我优化下面的提示词。先理解我要达成的目标，检查任务、背景、约束和输出格式是否清楚；缺少关键信息时先问我最多三个问题。给出可直接复制使用的完整提示词，并简要说明主要改动，不擅自补充事实。原提示词：",
+    prompt:
+      "请帮我优化下面的提示词。先理解我要达成的目标，检查任务、背景、约束和输出格式是否清楚；缺少关键信息时先问我最多三个问题。给出可直接复制使用的完整提示词，并简要说明主要改动，不擅自补充事实。原提示词：",
   },
   {
     label: "拆解任务",
     icon: ListTree,
-    prompt: "请根据我上传的文件或下面的工作描述，帮我把任务拆成可执行的步骤。先梳理目标、交付物和限制，再给出任务清单、先后顺序、依赖关系、预计投入和第一步建议；信息不足时先问关键问题。先给出安排建议。工作内容：",
+    prompt:
+      "请根据我上传的文件或下面的工作描述，帮我把任务拆成可执行的步骤。先梳理目标、交付物和限制，再给出任务清单、先后顺序、依赖关系、预计投入和第一步建议；信息不足时先问关键问题。先给出安排建议。工作内容：",
   },
 ];
 

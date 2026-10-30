@@ -24,6 +24,22 @@ struct PinnedImage {
 static IMAGES: LazyLock<Mutex<HashMap<String, PinnedImage>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+pub(crate) fn menu_snapshot(window: &tauri::WebviewWindow) -> Result<(u32, u32, f64, u64), String> {
+    IMAGES
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .map(|image| (image.width, image.height, image.scale, image.revision))
+        .ok_or("贴图已结束".into())
+}
+pub(crate) fn is_current(label: &str, revision: u64) -> bool {
+    IMAGES
+        .lock()
+        .unwrap()
+        .get(label)
+        .is_some_and(|image| image.revision == revision)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PinInfo {

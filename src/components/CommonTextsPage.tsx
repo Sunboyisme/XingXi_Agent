@@ -236,45 +236,45 @@ export function CommonTextsPage() {
       <header className="common-texts-header">
         <h1>常用文本</h1>
       </header>
-      <div className="common-texts-content">
-        <div className="common-texts-toolbar">
-          <div className="common-text-search">
-            <Search size={17} />
-            <Input
-              aria-label="搜索正文或分类"
-              placeholder="搜索正文或分类"
-              value={query}
-              maxLength={500}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <SoftSelect
-            label="文本排序"
-            value={sort}
-            onValueChange={setSort}
-            options={[
-              { value: "category", label: "按分类" },
-              { value: "updated", label: "最近更新" },
-            ]}
+      <div className="common-texts-toolbar">
+        <div className="common-text-search">
+          <Search size={17} />
+          <Input
+            aria-label="搜索正文或分类"
+            placeholder="搜索正文或分类"
+            value={query}
+            maxLength={500}
+            onChange={(event) => setQuery(event.target.value)}
           />
-          <SoftSelect
-            label="筛选分类"
-            value={category}
-            onValueChange={setCategory}
-            options={[
-              { value: "all", label: "全部分类" },
-              { value: "uncategorized", label: "默认分类" },
-              ...categories.map((row) => ({ value: row.id, label: row.name })),
-            ]}
-          />
-          <Button variant="outline" onClick={() => setManager(true)}>
-            管理分类
-          </Button>
-          <Button onClick={() => setEditor({ key: Date.now() })}>
-            <Plus size={17} />
-            新增
-          </Button>
         </div>
+        <SoftSelect
+          label="文本排序"
+          value={sort}
+          onValueChange={setSort}
+          options={[
+            { value: "category", label: "按分类" },
+            { value: "updated", label: "最近更新" },
+          ]}
+        />
+        <SoftSelect
+          label="筛选分类"
+          value={category}
+          onValueChange={setCategory}
+          options={[
+            { value: "all", label: "全部分类" },
+            { value: "uncategorized", label: "默认分类" },
+            ...categories.map((row) => ({ value: row.id, label: row.name })),
+          ]}
+        />
+        <Button variant="outline" onClick={() => setManager(true)}>
+          管理分类
+        </Button>
+        <Button onClick={() => setEditor({ key: Date.now() })}>
+          <Plus size={17} />
+          新增
+        </Button>
+      </div>
+      <div className="common-texts-content">
         {loading && (
           <p role="status" className="common-text-muted">
             正在读取常用文本…

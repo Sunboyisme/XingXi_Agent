@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu } from "@tauri-apps/api/menu";
+import { listen } from "@tauri-apps/api/event";
 import {
   ArrowUpRight,
   Check,
@@ -24,7 +23,6 @@ import {
 } from "@/lib/captureDrawing";
 import {
   loadPinCanvas,
-  pinMenuItems,
   type PinGeometry,
   type PinInfo,
 } from "@/lib/pinnedImage";
@@ -64,7 +62,8 @@ export function DesktopPinned() {
   const mounted = useRef(false);
   const locked = useRef(false);
   const drawing = useRef<{ pointer: number; mark: CaptureMark } | null>(null);
-  const menu = useRef<Menu | null>(null);
+  const menuRequest = useRef<string | null>(null);
+  const menuReady = useRef<Promise<() => void>>(Promise.resolve(() => {}));
   const menuOpening = useRef(false);
   const zooming = useRef(false);
   const zoomTarget = useRef({ scale: 1, x: 0.5, y: 0.5 });
@@ -95,6 +94,20 @@ export function DesktopPinned() {
       .catch((e) => {
         if (alive) setError(desktopError(e));
       });
+    const menuListener = listen<{
+      requestId: string;
+      revision: number;
+      action: string;
+    }>("pinned-menu-action", (event) => {
+      if (
+        alive &&
+        event.payload.requestId === menuRequest.current &&
+        event.payload.revision === current.current?.revision
+      ) {
+        actions.current.dispatch(event.payload.action);
+      }
+    });
+    menuReady.current = menuListener;
     const onWheel = (event: WheelEvent) => {
       if (
         !(event.target instanceof Element) ||
@@ -149,7 +162,12 @@ export function DesktopPinned() {
       window.removeEventListener("keydown", onKey);
       clearTimeout(noticeTimer.current);
       void scaleListener.then((unlisten) => unlisten()).catch(() => {});
-      void menu.current?.close().catch(() => {});
+      void menuListener.then((unlisten) => unlisten()).catch(() => {});
+      if (menuRequest.current)
+        void invoke("pinned_menu_close", {
+          requestId: menuRequest.current,
+          restoreFocus: false,
+        }).catch(() => {});
     };
   }, []);
   useEffect(() => {
@@ -405,36 +423,20 @@ export function DesktopPinned() {
       if (mounted.current) accept(next);
     });
   }
-  async function openMenu(x?: number, y?: number, zoomOnly = false) {
-    const value = current.current;
-    if (!value || menuOpening.current) return;
+  async function openMenu(x = 8, y = 8, zoomOnly = false) {
+    if (!current.current || menuOpening.current) return;
     menuOpening.current = true;
     try {
-      await menu.current?.close();
-      const items = pinMenuItems(
-        value,
-        { editing, shadow, opacity, busy: busy || !source },
-        (action) => actions.current.dispatch(action),
-      );
-      const zoom = items?.find(
-        (item) => "text" in item && item.text === "缩放",
-      );
-      const next = await Menu.new({
-        items:
-          zoomOnly && zoom && "items" in zoom && Array.isArray(zoom.items)
-            ? zoom.items
-            : items,
+      await menuReady.current;
+      if (!mounted.current) return;
+      const requestId = crypto.randomUUID();
+      menuRequest.current = requestId;
+      await invoke("pinned_menu_open", {
+        requestId,
+        x,
+        y,
+        view: { editing, shadow, opacity, busy: busy || !source, zoomOnly },
       });
-      if (!mounted.current) {
-        await next.close();
-        return;
-      }
-      menu.current = next;
-      await next.popup(
-        x === undefined || y === undefined
-          ? undefined
-          : new LogicalPosition(x, y),
-      );
     } catch (e) {
       if (mounted.current) setError(desktopError(e));
     } finally {
