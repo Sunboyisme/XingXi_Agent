@@ -8,6 +8,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": resolve(import.meta.dirname, "src") } },
   server: {
+    watch: {
+      // Packaging generates HTML and caches beneath the checkout; these are not app pages.
+      ignored: [/[/\\](?:\.local-data|releases)(?:[/\\]|$)/],
+    },
     host: "127.0.0.1",
     port: 5186,
     strictPort: true,

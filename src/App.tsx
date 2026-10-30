@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
 } from "react";
@@ -11,6 +12,8 @@ import { Bell, Loader2, X } from "lucide-react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useGeneralPreferences } from "@/lib/generalPreferences";
 import { useNavigationReorder } from "@/lib/useNavigationReorder";
+import { subscribeDesktopNavigation, type DesktopNavigation } from "@/lib/desktopNavigation";
+import { isSettingsTab } from "@/lib/navigationTargets";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Tooltip } from "radix-ui";
@@ -109,6 +112,7 @@ type PendingAgenda = {
 
 
 export function App() {
+  const navigationEpoch = useRef(0);
   const { hiddenNavigation } = useGeneralPreferences();
   const navigationReorder = useNavigationReorder();
   const orderedFeaturePages = navigationReorder.order.flatMap(id => featurePages.filter(item => item.id === id));
@@ -154,7 +158,7 @@ export function App() {
   const [openTodoId, setOpenTodoId] = useState<string>();
   const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource>();
   useEffect(() => {
-    const open = (event: Event) => { setKnowledgeSource((event as CustomEvent<KnowledgeSource>).detail); setPage("knowledge"); };
+    const open = (event: Event) => { setKnowledgeSource((event as CustomEvent<KnowledgeSource>).detail); navigate("knowledge"); };
     window.addEventListener("xiaoxi-open-knowledge", open); return () => window.removeEventListener("xiaoxi-open-knowledge", open);
   }, []);
   const [calendarEventId, setCalendarEventId] = useState<string>();
@@ -178,9 +182,8 @@ export function App() {
   const [learningOpenRequest, setLearningOpenRequest] = useState<{ goalId: string; sessionId?: string; key: number }>();
   useEffect(() => {
     const open = (event: Event) => {
-      setProjectPanelRequest(null);
       setLearningOpenRequest((event as CustomEvent).detail);
-      setPage("learning");
+      navigate("learning");
     };
     window.addEventListener("xiaoxi-open-learning", open);
     return () => window.removeEventListener("xiaoxi-open-learning", open);
@@ -225,22 +228,35 @@ export function App() {
     setFocusMessageId(messageId || null);
     navigate("chat");
   }
+  const acceptDesktopNavigation = useEffectEvent((request: DesktopNavigation) => {
+    const epoch = ++navigationEpoch.current;
+    if (request.page === "current") return;
+    if (request.page === "pomodoro") { navigate("pomodoro"); return; }
+    if (request.page === "plans") {
+      setPlanAgenda({ day: zonedToday(settings?.timezone), tab: "todo" });
+      navigate("plans");
+      return;
+    }
+    if (request.page === "notifications") { setNotificationOpen(true); return; }
+    if (request.settings) {
+      navigate("settings");
+      const tab = isSettingsTab(request.settingsTab) ? request.settingsTab : "desktop";
+      setSettingsTab(tab);
+      setSpeechConfigureRequested(tab === "services");
+    } else if (request.conversationId) {
+      void api<Conversation[]>("/conversations").then(values => {
+        if (navigationEpoch.current !== epoch) return;
+        const value = values.find(conversation => conversation.id === request.conversationId);
+        if (value) openConversation(value);
+        else setError("这段对话已不存在");
+        void refresh();
+      }).catch(cause => { if (navigationEpoch.current === epoch) setError(errorMessage(cause)); });
+    } else if (request.newChat) startNewChat();
+    else navigate("chat");
+  });
   useEffect(() => {
-    if (!isTauri()) return;
-    const stop = listen<{ conversationId?: string; settings?: boolean; settingsTab?: string; newChat?: boolean; page?: "pomodoro" | "current" }>("desktop-navigate", event => {
-      if (event.payload.page === "pomodoro") { navigate("pomodoro"); return; }
-      if (event.payload.page === "current") return;
-      if (event.payload.settings) {
-        navigate("settings");
-        setSettingsTab(event.payload.settingsTab === "services" ? "services" : "desktop");
-        setSpeechConfigureRequested(event.payload.settingsTab === "services");
-      }
-      else if (event.payload.conversationId) {
-        void api<Conversation[]>("/conversations").then(values => { const value = values.find(c => c.id === event.payload.conversationId); if (value) openConversation(value); else setError("这段对话已不存在"); void refresh(); }).catch(error => setError(errorMessage(error)));
-      } else if (event.payload.newChat) startNewChat();
-      else navigate("chat");
-    });
-    return () => { void stop.then(f => f()); };
+    if (!isTauri() || new URLSearchParams(location.search).get("view") === "reminder") return;
+    return subscribeDesktopNavigation(acceptDesktopNavigation, cause => setError(errorMessage(cause)));
   }, []);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -364,42 +380,24 @@ export function App() {
       void stop.then((fn) => fn());
     };
   }, [refresh]);
-  useEffect(() => {
-    if (!isTauri()) return;
-    const stop = listen<string>("bai-tray-action", (event) => {
-      if (event.payload === "new_chat") startNewChat();
-      else if (event.payload === "plans") {
-        setPlanAgenda({ day: zonedToday(settings?.timezone), tab: "todo" });
-        navigate("plans");
-      } else if (event.payload === "settings") navigate("settings");
-      else if (event.payload === "skills") {
-        setPage("settings");
-        setSettingsTab("skills");
-      }
-    });
-    return () => {
-      void stop.then((fn) => fn());
-    };
-  }, [settings?.timezone]);
   function navigate(value: string, create = false) {
+    if (value === "reminders" || value === "calendar") value = "plans";
+    const settingsTarget = value === "speech" ? "services" : isSettingsTab(value) ? value : null;
+    if (!settingsTarget && value !== "chat" && value !== "settings" && !featurePages.some(item => item.id === value)) {
+      setError("这个页面入口已不可用，请从主导航重新选择。");
+      return;
+    }
+    navigationEpoch.current++;
     if (value === "learning" && !create) setLearningHomeKey((key) => key + 1);
     setProjectPanelRequest(null);
-    if (value === "reminders" || value === "calendar") value = "plans";
+    setSpeechConfigureRequested(value === "speech");
     // Top-level navigation must never inherit the selected project detail.
     // Project links use openProject explicitly; chat links keep their existing
     // conversation selection while returning to the actual conversation view.
     if (value === "chat" || value === "projects") setProjectOverviewId(null);
-    if (
-      value === "memories" ||
-      value === "tools" ||
-      value === "skills" ||
-      value === "runtimes" ||
-      value === "connections" ||
-      value === "speech"
-    ) {
+    if (settingsTarget) {
       setPage("settings");
-      setSettingsTab(value === "speech" ? "services" : value as SettingsTab);
-      if (value === "speech") setSpeechConfigureRequested(true);
+      setSettingsTab(settingsTarget);
     } else {
       setPage(value as Page);
       if (value === "settings") setSettingsTab("general");
@@ -870,7 +868,7 @@ export function App() {
           onOpenChange={setNotificationOpen}
           notifications={notifications}
           refresh={refresh}
-          onTodo={(id) => { setOpenTodoId(id); setPage("plans"); }}
+          onTodo={(id) => { setOpenTodoId(id); navigate("plans"); }}
           onPlan={(id, occurrence) => {
             openPlan(id, occurrence);
           }}

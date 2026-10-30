@@ -218,7 +218,7 @@ export function DesktopSettings() {
           {featureRow(
             "pet",
             "显示桌面宠物",
-            "拖动调整位置，轻触打开番茄钟，双击打开主窗口。桌面番茄钟可独立使用。",
+            "拖动调整位置，双击打开主窗口。桌面番茄钟从系统托盘或番茄钟页面独立打开。",
           )}
           <div className="desktop-feature-row">
             <div className="desktop-feature-copy">

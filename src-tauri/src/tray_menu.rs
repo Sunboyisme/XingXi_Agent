@@ -177,22 +177,41 @@ pub async fn tray_menu_action(
             dismiss(&app);
         }
         "pomodoro" => {
+            crate::desktop::desktop_main(
+                app.clone(),
+                None,
+                None,
+                None,
+                None,
+                Some("pomodoro".into()),
+            )?;
             dismiss(&app);
-            crate::desktop::desktop_main(app, None, None, None, None, Some("pomodoro".into()))?;
         }
         "show" => {
+            crate::desktop::desktop_main(
+                app.clone(),
+                None,
+                None,
+                None,
+                None,
+                Some("current".into()),
+            )?;
             dismiss(&app);
-            crate::open_main(&app);
         }
         "new_chat" | "plans" | "settings" => {
+            crate::desktop::desktop_main(
+                app.clone(),
+                None,
+                Some(action == "settings"),
+                Some("general".into()),
+                Some(action == "new_chat"),
+                (action == "plans").then(|| "plans".into()),
+            )?;
             dismiss(&app);
-            crate::open_main(&app);
-            app.emit("bai-tray-action", action)
-                .map_err(|error| error.to_string())?;
         }
         "quit" => {
             dismiss(&app);
-            app.emit("xiaoxi-close-learning", true)
+            app.emit_to("main", "xiaoxi-close-learning", true)
                 .map_err(|error| error.to_string())?;
         }
         _ => return Err("未知托盘菜单操作".into()),

@@ -380,7 +380,6 @@ fn position_pet(
         "desktop-pet-layout",
         serde_json::json!({"x":offset_x,"y":offset_y,"size":p.pet_size}),
     );
-    let _ = crate::pomodoro::place_widget(app);
     Ok(())
 }
 pub fn finish_pet_drag(app: &tauri::AppHandle) {
@@ -409,7 +408,6 @@ pub fn set_pet_visible(app: &tauri::AppHandle, shown: bool) {
     }
     let epoch = state.pet_visibility_epoch.fetch_add(1, Ordering::SeqCst) + 1;
     state.pet_exiting.store(!shown, Ordering::SeqCst);
-    if !shown { crate::pomodoro::refresh_visibility(app); }
     if shown {
         if state.capture.lock().unwrap().is_some() {
             let mut hidden = state.hidden.lock().unwrap();
@@ -980,15 +978,16 @@ pub fn desktop_main(
     new_chat: Option<bool>,
     page: Option<String>,
 ) -> Result<(), String> {
+    if page.as_ref().is_some_and(|value| !["pomodoro", "current", "plans", "notifications"].contains(&value.as_str())) {
+        return Err("未知主窗口页面，请从主导航重新选择。".into());
+    }
     let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
     window.show().map_err(|e| e.to_string())?;
     window.unminimize().map_err(|e| e.to_string())?;
     crate::window_layout::ensure_visible(&window).map_err(|e| e.to_string())?;
-    app.emit_to(
-        "main",
-        "desktop-navigate",
-        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false),"page":page.filter(|value| value == "pomodoro" || value == "current")}),
-    ).map_err(|e| e.to_string())?;
+    crate::navigation::send(&app,
+        serde_json::json!({"conversationId":conversation_id,"settings":settings.unwrap_or(false),"settingsTab":settings_tab,"newChat":new_chat.unwrap_or(false),"page":page}),
+    )?;
     // The screenshot and answer surfaces are always on top. End them before
     // focusing main, including when opening an existing conversation.
     desktop_dismiss_label(&app, "quick");

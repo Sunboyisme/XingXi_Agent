@@ -676,9 +676,8 @@ export function DesktopQuickAsk() {
     const epoch = generation.current;
     setOpeningMain(true);
     try {
-      await invoke("desktop_main", {
-        conversationId: current.current.conversationId,
-      });
+      const conversationId = current.current.conversationId;
+      await invoke("desktop_main", conversationId ? { conversationId } : { page: "current" });
     } catch (error) {
       if (mounted.current && epoch === generation.current) setError(desktopError(error));
     } finally {

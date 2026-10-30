@@ -8,6 +8,7 @@ mod desktop;
 mod pinned;
 mod pinned_menu;
 mod tray_menu;
+mod navigation;
 mod desktop_input;
 mod selection;
 mod voice;
@@ -419,12 +420,7 @@ fn place_reminder_window(window: &tauri::WebviewWindow) {
 }
 
 fn open_main(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window_layout::ensure_visible(&window);
-        let _ = window.set_focus();
-    }
+    let _ = desktop::desktop_main(app.clone(), None, None, None, None, Some("current".into()));
 }
 
 // Only the installed release uses this migration; keep it available to its unit tests.
@@ -502,6 +498,7 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(desktop::Desktop::default())
         .manage(pomodoro::Widget::default())
+        .manage(navigation::Navigation::default())
         .manage(selection::Selection::default())
         .manage(voice::Voice::default())
         .manage(backend)
@@ -513,6 +510,8 @@ fn main() {
             tray_menu::tray_menu_state,
             tray_menu::tray_menu_close,
             tray_menu::tray_menu_action,
+            navigation::desktop_navigation_pending,
+            navigation::desktop_navigation_ack,
             download_knowledge_file,
             drop_files::read_dropped_files,
             quit_app,

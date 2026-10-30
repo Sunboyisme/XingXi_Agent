@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { desktopNavigationId } from "@/lib/desktopNavigation";
 import {
   Plus,
   Settings2,
@@ -27,6 +28,13 @@ import "../styles/pomodoro.css";
 const presetsPerPage = 4;
 
 export function PomodoroPage() {
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const { data, error, busy, remaining, refresh } = usePomodoro();
   const [windowError, setWindowError] = useState("");
   const [presetPage, setPresetPage] = useState(0);
@@ -73,6 +81,7 @@ export function PomodoroPage() {
       ? Math.max(0, Math.min(1, 1 - remaining / (minutes * 60)))
       : 0;
   async function act(action: Parameters<typeof pomodoroAction>[0]) {
+    const navigationId = desktopNavigationId();
     setWindowError("");
     try {
       const next = await pomodoroAction(action);
@@ -86,7 +95,12 @@ export function PomodoroPage() {
           const shown = await invoke<boolean>("pomodoro_show_controls", {
             automatic: true,
           });
-          if (shown) await getCurrentWindow().hide();
+          if (
+            shown &&
+            mounted.current &&
+            desktopNavigationId() === navigationId
+          )
+            await getCurrentWindow().hide();
         } catch {
           setWindowError("专注已开始，主窗口暂未收起，可以手动最小化。");
         }

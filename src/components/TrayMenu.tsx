@@ -1,18 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  AppWindow,
-  CalendarDays,
-  Check,
-  LogOut,
-  MessageSquarePlus,
-  Power,
-  Settings,
-  Smile,
-  Timer,
-  type LucideIcon,
-} from "lucide-react";
+import { Check } from "lucide-react";
 import { Hint } from "./ui/hint";
 import "../styles/tray-menu.css";
 
@@ -106,7 +95,6 @@ export function TrayMenu() {
   function item(
     action: Action,
     label: string,
-    Icon: LucideIcon,
     checked?: boolean,
     unavailable?: string,
   ) {
@@ -123,7 +111,6 @@ export function TrayMenu() {
             void act(action, checked === undefined ? undefined : !checked);
         }}
       >
-        <Icon size={16} aria-hidden="true" />
         <span>{label}</span>
         {unavailable ? (
           <small>{state?.preview ? "仅安装版" : "不可用"}</small>
@@ -192,25 +179,24 @@ export function TrayMenu() {
           <strong>XiaoXi</strong>
           {state?.preview && <span>测试版</span>}
         </header>
-        {item("show", "打开主窗口", AppWindow)}
-        {item("new_chat", "新建对话", MessageSquarePlus)}
-        {item("plans", "打开今日安排", CalendarDays)}
+        {item("show", "打开主窗口")}
+        {item("new_chat", "新建对话")}
+        {item("plans", "打开今日安排")}
         <hr />
-        {item("pomodoro", "打开番茄钟", Timer)}
-        {item("pomodoro_widget", "显示桌面番茄钟", Timer)}
-        {item("pet", "显示桌面宠物", Smile, state?.pet || false)}
+        {item("pomodoro", "打开番茄钟")}
+        {item("pomodoro_widget", "显示桌面番茄钟")}
+        {item("pet", "显示桌面宠物", state?.pet || false)}
         {item(
           "autostart",
           "开机自启",
-          Power,
           state?.autostart.enabled || false,
           state && !state.autostart.supported
             ? state.autostart.reason
             : undefined,
         )}
         <hr />
-        {item("settings", "连接与设置", Settings)}
-        {item("quit", "退出XiaoXi", LogOut)}
+        {item("settings", "连接与设置")}
+        {item("quit", "退出XiaoXi")}
         {error && (
           <p className="tray-error" role="alert">
             {error}

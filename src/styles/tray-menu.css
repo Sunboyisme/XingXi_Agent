@@ -48,11 +48,6 @@ html[data-desktop] .tray-row {
   text-align: left;
   color: var(--ui-color-text);
 }
-.tray-row > svg:first-child {
-  flex: 0 0 auto;
-  color: var(--ui-color-text-muted);
-  stroke-width: 1.6;
-}
 .tray-row > span {
   flex: 1;
 }
