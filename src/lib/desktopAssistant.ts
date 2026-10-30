@@ -107,7 +107,10 @@ export async function addDesktopFile(file: File): Promise<Attachment> {
 function decodeImage(dataUrl: string): Blob {
   const match = /^data:image\/png;base64,([A-Za-z0-9+/=\r\n]+)$/.exec(dataUrl);
   if (!match) throw new Error("截图数据无效，请重新截图");
-  const bytes = Uint8Array.from(atob(match[1]), (c) => c.charCodeAt(0));
+  const decoded = atob(match[1]);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index++)
+    bytes[index] = decoded.charCodeAt(index);
   return new Blob([bytes], { type: "image/png" });
 }
 export async function imageFile(dataUrl: string) {

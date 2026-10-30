@@ -44,19 +44,19 @@ import type { RunEvent } from "@/lib/api";
 type IncomingImage = {
   id: string;
   dataUrl: string;
-  action: string;
+  action: "attach" | "ocr" | "translate";
   attachment?: Attachment;
   failed?: boolean;
 };
-type QuickCommand = {
-  id: string;
-  sessionId: string;
-  action: string;
-  text?: string;
-  dataUrl?: string;
-  gesture?: number;
-  imageAction?: string;
-};
+type QuickCommand = { id: string; sessionId: string } & (
+  | { action: "voice"; gesture?: number | null }
+  | {
+      action: "image";
+      dataUrl: string;
+      imageAction: "attach" | "ocr" | "translate";
+    }
+  | { action: "resume"; runId: string }
+);
 export function DesktopQuickAsk() {
   const [draft, setDraft] = useState<QuickDraft>(emptyQuickDraft);
   const [sessionId, setSessionId] = useState("");
@@ -111,10 +111,8 @@ export function DesktopQuickAsk() {
   });
   const { voice } = speech;
   const functions = useRef({
-    send,
     startVoice: speech.start,
     receiveImage,
-    pickFiles,
     shown,
     drainImages,
     resetSession,
@@ -122,10 +120,8 @@ export function DesktopQuickAsk() {
     resumeTask,
   });
   functions.current = {
-    send,
     startVoice: speech.start,
     receiveImage,
-    pickFiles,
     shown,
     drainImages,
     resetSession,
@@ -153,10 +149,9 @@ export function DesktopQuickAsk() {
     if (!sessionId) return;
     void invoke("desktop_quick_state", {
       sessionId,
-      text: draft.text,
       busy: busy || uploading || Boolean(voice && voice.phase !== "error"),
     }).catch(() => {});
-  }, [sessionId, draft.text, busy, uploading, voice?.phase]);
+  }, [sessionId, busy, uploading, voice?.phase]);
   useEffect(() => {
     if (!busy && !uploading && !voice) void functions.current.drainImages();
   }, [busy, uploading, voice, pendingCount]);
@@ -194,12 +189,10 @@ export function DesktopQuickAsk() {
         setHiddenEpoch((value) => value + 1);
         setError("");
       }),
-      desktopListen("desktop-shown", () => void functions.current.shown()),
-      desktopListen<{ runId: string }>("desktop-resume-task", value => {
-        void functions.current.resumeTask(value.runId).catch(error => {
-          if (mounted.current) setError(desktopError(error));
-        });
-      }),
+      desktopListen<{ focus?: boolean } | null>(
+        "desktop-shown",
+        (value) => void functions.current.shown(value?.focus !== false),
+      ),
     ];
     void Promise.all(listeners)
       .then(async () => {
@@ -210,7 +203,7 @@ export function DesktopQuickAsk() {
         if (!session.current) functions.current.resetSession(id);
         await functions.current.drainCommands();
         if (await getCurrentWindow().isVisible())
-          await functions.current.shown();
+          await functions.current.shown(await getCurrentWindow().isFocused());
       })
       .catch(() => {});
     const key = (e: KeyboardEvent) => {
@@ -242,9 +235,11 @@ export function DesktopQuickAsk() {
       if (report && mounted.current) setError(desktopError(e));
     }
   }
-  async function shown() {
+  async function shown(focus = true) {
     visible.current = true;
     if (
+      focus &&
+      document.hasFocus() &&
       mounted.current &&
       !work.current.locked &&
       !work.current.uploading &&
@@ -254,6 +249,8 @@ export function DesktopQuickAsk() {
     await refreshSettings(false);
     if (!mounted.current || !visible.current) return;
     if (
+      focus &&
+      document.hasFocus() &&
       mounted.current &&
       !work.current.locked &&
       !document.querySelector('[role="dialog"]')
@@ -270,14 +267,18 @@ export function DesktopQuickAsk() {
   async function resumeTask(id: string) {
     setAnswerCollapsed(false);
     if (work.current.busy && current.current.runId === id) return;
-    if (work.current.busy) throw new Error("当前问答正在处理另一项任务，请先完成或停止它。");
+    if (work.current.busy)
+      throw new Error("当前问答正在处理另一项任务，请先完成或停止它。");
     const epoch = generation.current;
     const request = ++resumeRequest.current;
     const run = await api<Run>(`/runs/${id}`);
     if (
-      !mounted.current || epoch !== generation.current ||
-      request !== resumeRequest.current || work.current.busy
-    ) return;
+      !mounted.current ||
+      epoch !== generation.current ||
+      request !== resumeRequest.current ||
+      work.current.busy
+    )
+      return;
     avatar.clearCelebration();
     followingAnswer.current = true;
     setReasoning("");
@@ -285,9 +286,12 @@ export function DesktopQuickAsk() {
     setReasoningIncomplete(run.status !== "completed");
     setError(run.error || "");
     setQuestion("桌面任务");
-    updateDraft(value => ({ ...value, conversationId: run.conversation_id || null }));
+    updateDraft((value) => ({
+      ...value,
+      conversationId: run.conversation_id || null,
+    }));
     if (isActiveRun(run.status)) {
-      updateDraft(value => ({ ...value, runId: id }));
+      updateDraft((value) => ({ ...value, runId: id }));
       await track(run, epoch);
     } else {
       const text = run.result?.text;
@@ -296,21 +300,30 @@ export function DesktopQuickAsk() {
       try {
         const history = await api<RunEvent[]>(`/runs/${id}/tools`);
         if (
-          !mounted.current || epoch !== generation.current ||
-          request !== resumeRequest.current || work.current.busy
-        ) return;
+          !mounted.current ||
+          epoch !== generation.current ||
+          request !== resumeRequest.current ||
+          work.current.busy
+        )
+          return;
         const steps = new Map<string, string>();
         history
-          .filter(event => event.kind === "reasoning")
-          .forEach(event => {
+          .filter((event) => event.kind === "reasoning")
+          .forEach((event) => {
             const step = String(event.data.step || "");
-            steps.set(step, (steps.get(step) || "") + String(event.data.text || ""));
+            steps.set(
+              step,
+              (steps.get(step) || "") + String(event.data.text || ""),
+            );
           });
         setReasoning([...steps.values()].join("\n\n"));
       } catch {
         if (
-          mounted.current && epoch === generation.current &&
-          request === resumeRequest.current && !work.current.busy && !run.error
+          mounted.current &&
+          epoch === generation.current &&
+          request === resumeRequest.current &&
+          !work.current.busy &&
+          !run.error
         )
           setError("回答已恢复，思考内容暂未加载，请稍后重新打开。");
       }
@@ -363,21 +376,21 @@ export function DesktopQuickAsk() {
         });
         if (!mounted.current || id !== session.current) continue;
         // Actions may arrive before this hidden WebView has finished mounting.
-        // Native keeps them until the listener is ready, including the final draft text.
+        // Native keeps typed actions until this session is ready. Drafts stay in the AI surface.
         for (const item of items) {
           if (item.sessionId !== session.current) continue;
-          const text = item.text;
-          if (typeof text === "string") updateDraft((d) => ({ ...d, text }));
-          if (item.action === "send") void functions.current.send();
-          if (item.action === "file") void functions.current.pickFiles();
-          if (item.action === "voice" || item.action === "record") {
-            void functions.current.startVoice(item.gesture);
-          }
-          if (item.action === "image" && item.dataUrl)
+          if (item.action === "voice")
+            void functions.current.startVoice(item.gesture ?? undefined);
+          else if (item.action === "image")
             functions.current.receiveImage({
               id: item.id,
               dataUrl: item.dataUrl,
-              action: item.imageAction || "attach",
+              action: item.imageAction,
+            });
+          else if (item.action === "resume")
+            void functions.current.resumeTask(item.runId).catch((cause) => {
+              if (mounted.current && item.sessionId === session.current)
+                setError(desktopError(cause));
             });
         }
       }
@@ -415,9 +428,12 @@ export function DesktopQuickAsk() {
             return;
           if (e.kind === "reasoning") {
             const step = String(e.data.step || "");
-            const separator = reasoningStep && step !== reasoningStep ? "\n\n" : "";
+            const separator =
+              reasoningStep && step !== reasoningStep ? "\n\n" : "";
             reasoningStep = step;
-            setReasoning(text => text + separator + String(e.data.text || ""));
+            setReasoning(
+              (text) => text + separator + String(e.data.text || ""),
+            );
             setReasoningActive(true);
           }
           if (e.kind === "delta") {
@@ -445,8 +461,12 @@ export function DesktopQuickAsk() {
         avatar.finish(result, visible.current);
         if (typeof result.result.next_run_id === "string") {
           const next = await api<Run>(`/runs/${result.result.next_run_id}`);
-          if (mounted.current && epoch === generation.current && sequence === tracking.current) {
-            updateDraft(d => ({ ...d, runId: next.id }));
+          if (
+            mounted.current &&
+            epoch === generation.current &&
+            sequence === tracking.current
+          ) {
+            updateDraft((d) => ({ ...d, runId: next.id }));
             await track(next, epoch);
           }
         }
@@ -595,7 +615,7 @@ export function DesktopQuickAsk() {
     } finally {
       if (mounted.current && epoch === generation.current) {
         setFileBusy(false);
-        if (visible.current && !work.current.locked)
+        if (visible.current && document.hasFocus() && !work.current.locked)
           input.current?.focus({ preventScroll: true });
       }
     }
@@ -627,6 +647,7 @@ export function DesktopQuickAsk() {
         if (current.current.attachments.length >= 4)
           throw new Error("附件已满，请移除一个附件，再添加暂存截图");
         item.attachment = await addDesktopFile(await imageFile(item.dataUrl));
+        item.dataUrl = "";
       }
       if (!mounted.current || epoch !== generation.current) return;
       const attachment = item.attachment;
@@ -678,19 +699,33 @@ export function DesktopQuickAsk() {
     setOpeningMain(true);
     try {
       const conversationId = current.current.conversationId;
-      await invoke("desktop_main", conversationId ? { conversationId } : { page: "current" });
+      await invoke(
+        "desktop_main",
+        conversationId ? { conversationId } : { page: "current" },
+      );
     } catch (error) {
-      if (mounted.current && epoch === generation.current) setError(desktopError(error));
+      if (mounted.current && epoch === generation.current)
+        setError(desktopError(error));
     } finally {
-      if (mounted.current && epoch === generation.current) setOpeningMain(false);
+      if (mounted.current && epoch === generation.current)
+        setOpeningMain(false);
     }
   }
   const voiceBusy = Boolean(voice && voice.phase !== "error");
   const hasAnswer = Boolean(answer || reasoning || busy || error);
-  useDesktopTaskRead(draft.conversationId, Boolean(answer) && !answerCollapsed, input);
+  useDesktopTaskRead(
+    draft.conversationId,
+    Boolean(answer) && !answerCollapsed,
+    input,
+  );
   const fileButton = (
     <Hint label="添加文件">
-      <button className="quick-add-file" aria-label="添加文件" disabled={busy || uploading || Boolean(voiceBusy)} onClick={() => void pickFiles()}>
+      <button
+        className="quick-add-file"
+        aria-label="添加文件"
+        disabled={busy || uploading || Boolean(voiceBusy)}
+        onClick={() => void pickFiles()}
+      >
         <Plus size={21} />
       </button>
     </Hint>
@@ -711,20 +746,25 @@ export function DesktopQuickAsk() {
                   {copied ? <Check size={15} /> : <Copy size={15} />}
                 </button>
               </Hint>
-              <span className="sr-only" role="status">{copied ? "回答已复制" : ""}</span>
+              <span className="sr-only" role="status">
+                {copied ? "回答已复制" : ""}
+              </span>
               <Hint
-                label={draft.conversationId
-                  ? "在主窗口打开这段对话，继续提问或查看完整内容"
-                  : "打开 XiaoXi 主窗口"}
+                label={
+                  draft.conversationId
+                    ? "在主窗口打开这段对话，继续提问或查看完整内容"
+                    : "打开 XiaoXi 主窗口"
+                }
               >
                 <button
                   className="quick-open-main"
-                  aria-label={draft.conversationId ? "在主窗口继续对话" : "打开主窗口"}
+                  aria-label={
+                    draft.conversationId ? "在主窗口继续对话" : "打开主窗口"
+                  }
                   disabled={openingMain}
                   onClick={() => void openMain()}
                 >
                   <ArrowUpRight size={17} aria-hidden="true" />
-
                 </button>
               </Hint>
               <Hint label="收起回答">
@@ -753,7 +793,10 @@ export function DesktopQuickAsk() {
             onScroll={(event) => {
               const element = event.currentTarget;
               followingAnswer.current =
-                element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+                element.scrollHeight -
+                  element.scrollTop -
+                  element.clientHeight <
+                24;
             }}
           >
             <Reasoning
@@ -764,10 +807,20 @@ export function DesktopQuickAsk() {
             <Markdown>{answer}</Markdown>
             {busy && (
               <p className="quick-answer-status" role="status">
-                {submitting ? "正在提交…" : stopping ? "正在停止…" : reasoningActive ? "正在思考…" : "正在回答…"}
+                {submitting
+                  ? "正在提交…"
+                  : stopping
+                    ? "正在停止…"
+                    : reasoningActive
+                      ? "正在思考…"
+                      : "正在回答…"}
               </p>
             )}
-            {copyError && <p className="desktop-error" role="alert">{copyError}</p>}
+            {copyError && (
+              <p className="desktop-error" role="alert">
+                {copyError}
+              </p>
+            )}
             {error && (
               <div className="quick-error" role="alert">
                 <p className="desktop-error">{error}</p>
@@ -822,7 +875,11 @@ export function DesktopQuickAsk() {
           </div>
         )}
         <div className="quick-bar">
-          <BaiAvatar interactive activity={avatar.activity} motion={busy ? "thinking" : "idle"} />
+          <BaiAvatar
+            interactive
+            activity={avatar.activity}
+            motion={busy ? "thinking" : "idle"}
+          />
           <textarea
             ref={input}
             aria-label="随心输入"
@@ -844,18 +901,47 @@ export function DesktopQuickAsk() {
               }
             }}
           />
-          <button className="quick-add-file" aria-label="截图" disabled={uploading} onClick={() => void invoke("desktop_capture_begin").catch(e => setError(desktopError(e)))}><ScanLine size={19} /></button>
-      {fileButton}
+          <button
+            className="quick-add-file"
+            aria-label="截图"
+            disabled={uploading}
+            onClick={() =>
+              void invoke("desktop_capture_begin").catch((e) =>
+                setError(desktopError(e)),
+              )
+            }
+          >
+            <ScanLine size={19} />
+          </button>
+          {fileButton}
           <SpeechInputButton
             speech={speech}
             disabled={busy || uploading}
             desktopShortcut
           />
-          <Hint label={submitting ? "正在提交，任务创建后可停止回答" : stopping ? "正在停止回答" : busy ? "停止回答" : "发送"}>
+          <Hint
+            label={
+              submitting
+                ? "正在提交，任务创建后可停止回答"
+                : stopping
+                  ? "正在停止回答"
+                  : busy
+                    ? "停止回答"
+                    : "发送"
+            }
+          >
             <button
               className="quick-send composer-action"
               data-action={busy ? "stop" : "send"}
-              aria-label={submitting ? "正在提交" : stopping ? "正在停止回答" : busy ? "停止回答" : "发送"}
+              aria-label={
+                submitting
+                  ? "正在提交"
+                  : stopping
+                    ? "正在停止回答"
+                    : busy
+                      ? "停止回答"
+                      : "发送"
+              }
               aria-disabled={submitting || stopping || undefined}
               aria-busy={submitting || stopping}
               disabled={

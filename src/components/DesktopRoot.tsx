@@ -1,7 +1,7 @@
+import { lazy } from "react";
 const PomodoroNotice = lazy(() =>
   import("./PomodoroNotice").then((m) => ({ default: m.PomodoroNotice })),
 );
-import { lazy } from "react";
 const DesktopQuickAsk = lazy(() =>
   import("./DesktopQuickAsk").then((m) => ({ default: m.DesktopQuickAsk })),
 );

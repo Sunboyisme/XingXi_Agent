@@ -58,7 +58,14 @@ unsafe fn owner_is(foreground: usize) -> bool {
         source != 0 && source == actual
     }
 }
-pub fn copy_selected(foreground: usize, owner: usize) -> Result<String, String> {
+pub fn copy_selected(
+    foreground: usize,
+    owner: usize,
+    valid: impl Fn() -> bool,
+) -> Result<String, String> {
+    if !valid() {
+        return Err("选区已变化，请重新选择文字".into());
+    }
     let _copy = COPY_LOCK
         .try_lock()
         .map_err(|_| "上次取词尚未完成".to_string())?;
@@ -67,6 +74,9 @@ pub fn copy_selected(foreground: usize, owner: usize) -> Result<String, String> 
         .iter()
         .any(|key| held(*key))
     {
+        if !valid() {
+            return Err("选区已变化，请重新选择文字".into());
+        }
         if Instant::now() >= deadline {
             return Err("请松开快捷键后重新取词".into());
         }
@@ -136,7 +146,8 @@ pub fn copy_selected(foreground: usize, owner: usize) -> Result<String, String> 
                 },
             })
             .collect();
-        if GetClipboardSequenceNumber() != before
+        if !valid()
+            || GetClipboardSequenceNumber() != before
             || GetForegroundWindow().0 as usize != foreground
             || [VK_MENU, VK_CONTROL, VK_SHIFT, VK_LBUTTON]
                 .iter()
@@ -198,6 +209,10 @@ pub fn copy_selected(foreground: usize, owner: usize) -> Result<String, String> 
                 return Err("恢复剪贴板格式失败".into());
             }
         }
-        text
+        if valid() {
+            text
+        } else {
+            Err("选区已变化，请重新选择文字".into())
+        }
     }
 }

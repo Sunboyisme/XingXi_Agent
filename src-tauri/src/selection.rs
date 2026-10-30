@@ -5,7 +5,7 @@ use std::sync::{
     mpsc, Mutex,
 };
 use std::time::{Duration, Instant};
-use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{Emitter, Manager};
 use windows::{
     core::Interface,
     Win32::{
@@ -41,6 +41,7 @@ struct Change {
 pub struct Selection {
     pub generation: AtomicU64,
     pub recording: AtomicBool,
+    automatic: AtomicBool,
     uia_busy: AtomicBool,
     snapshot: Mutex<Snapshot>,
     dom: Mutex<Option<DomReply>>,
@@ -238,6 +239,7 @@ pub fn selection_shortcut_recording(
 
 pub fn dismiss(app: &tauri::AppHandle) {
     let state = app.state::<Selection>();
+    state.automatic.store(false, Ordering::SeqCst);
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     *state.dom.lock().unwrap() = None;
     *state.snapshot.lock().unwrap() = Snapshot::default();
@@ -301,8 +303,6 @@ pub fn selection_resize(
     let scale = monitor.scale_factor();
     let width = (width.clamp(280.0, 900.0) * scale).min(area.size.width as f64);
     let height = (height.clamp(64.0, 850.0) * scale).min(area.size.height as f64);
-    w.set_size(PhysicalSize::new(width as u32, height as u32))
-        .map_err(|e| e.to_string())?;
     let x = (snapshot.x + 12).clamp(
         area.position.x,
         area.position.x + area.size.width as i32 - width as i32,
@@ -311,8 +311,9 @@ pub fn selection_resize(
         area.position.y,
         area.position.y + area.size.height as i32 - height as i32,
     );
-    w.set_position(PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())
+    let hwnd = w.hwnd().map_err(|error| error.to_string())?;
+    unsafe { SetWindowPos(windows::Win32::Foundation::HWND(hwnd.0), None, x, y, width as i32, height as i32,
+        SWP_NOACTIVATE | SWP_NOZORDER).map_err(|error| error.to_string()) }
 }
 pub fn trigger(app: &tauri::AppHandle) { trigger_selection(app, false); }
 fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
@@ -335,6 +336,8 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
         return;
     }
     if !automatic { dismiss(app); }
+    app.state::<Selection>().automatic.store(automatic, Ordering::SeqCst);
+    let input_generation = crate::desktop_input::keyboard_input_generation();
     let id = app
         .state::<Selection>()
         .generation
@@ -377,14 +380,17 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
             result
         } else {
             match read_external(&app, foreground) {
-                Ok(text) if text.trim().is_empty() => {
+                Ok(text) if !automatic && text.trim().is_empty() => {
                     let owner = app.get_webview_window("selection").and_then(|w| w.hwnd().ok()).map(|h| h.0 as usize).unwrap_or(0);
-                    crate::selection_clipboard::copy_selected(foreground, owner)
+                    crate::selection_clipboard::copy_selected(foreground, owner, ||
+                        app.state::<Selection>().generation.load(Ordering::SeqCst) == id
+                        && crate::desktop_input::keyboard_input_generation() == input_generation)
                 }
                 result => result,
             }
         };
         if app.state::<Selection>().generation.load(Ordering::SeqCst) != id
+            || crate::desktop_input::keyboard_input_generation() != input_generation
             || unsafe { GetForegroundWindow() }.0 as usize != foreground
         {
             return;
@@ -409,6 +415,7 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
         let a = app.clone();
         let _ = app.run_on_main_thread(move || {
             if a.state::<Selection>().generation.load(Ordering::SeqCst) != id
+                || crate::desktop_input::keyboard_input_generation() != input_generation
                 || unsafe { GetForegroundWindow() }.0 as usize != foreground
             {
                 return;
@@ -530,57 +537,102 @@ unsafe fn read_uia(foreground: usize) -> windows::core::Result<String> {
 
 #[derive(Default)]
 pub struct AutoSelection {
-    down: Option<(i32, i32)>,
-    last_click: Option<((i32, i32), Instant)>,
-    scheduled: Option<Instant>,
+    down: Option<((i32, i32), usize)>,
+    last_click: Option<((i32, i32), usize, Instant)>,
+    scheduled: Option<(Instant, usize)>,
     shift_selecting: bool,
+    keyboard_generation: u64,
+}
+fn is_auxiliary_window(app: &tauri::AppHandle, foreground: usize) -> bool {
+    let mut process = 0;
+    unsafe {
+        GetWindowThreadProcessId(windows::Win32::Foundation::HWND(foreground as *mut _), Some(&mut process));
+        if process != windows::Win32::System::Threading::GetCurrentProcessId() { return false; }
+    }
+    app.get_webview_window("main").and_then(|window| window.hwnd().ok())
+        .is_none_or(|hwnd| hwnd.0 as usize != foreground)
+}
+fn cancel_automatic(app: &tauri::AppHandle) {
+    let state = app.state::<Selection>();
+    if !state.automatic.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let a = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if a.state::<Selection>().generation.load(Ordering::SeqCst) == generation {
+            dismiss(&a);
+        }
+    });
 }
 impl AutoSelection {
     pub fn poll(&mut self, app: &tauri::AppHandle, enabled: bool) {
+        let keyboard = crate::desktop_input::keyboard_input_generation();
+        let held = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(key.0 as i32) < 0 };
+        let foreground = unsafe { GetForegroundWindow() }.0 as usize;
         if !enabled {
             self.down = None;
+            self.last_click = None;
             self.scheduled = None;
             self.shift_selecting = false;
+            self.keyboard_generation = keyboard;
+            cancel_automatic(app);
             return;
         }
-        let held = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(key.0 as i32) < 0 };
+        if keyboard != self.keyboard_generation {
+            self.keyboard_generation = keyboard;
+            self.scheduled = None;
+            if app.state::<Selection>().automatic.load(Ordering::SeqCst)
+                && !is_auxiliary_window(app, foreground)
+            {
+                cancel_automatic(app);
+            }
+        }
         let point = crate::desktop_input::cursor();
         if held(VK_LBUTTON) {
-            self.down.get_or_insert(point);
+            if self.down.is_none() {
+                if app.state::<Selection>().automatic.load(Ordering::SeqCst)
+                    && !is_auxiliary_window(app, foreground)
+                {
+                    cancel_automatic(app);
+                }
+                self.down = Some((point, foreground));
+            }
             self.scheduled = None;
-        } else if let Some(start) = self.down.take() {
+        } else if let Some((start, owner)) = self.down.take() {
             let moved = (point.0 - start.0).abs() + (point.1 - start.1).abs() > 5;
-            let double = self.last_click.is_some_and(|(old, at)| {
-                at.elapsed() < Duration::from_millis(unsafe { GetDoubleClickTime() } as u64)
+            let double = self.last_click.is_some_and(|(old, old_owner, at)| {
+                old_owner == foreground
+                    && at.elapsed() < Duration::from_millis(unsafe { GetDoubleClickTime() } as u64)
                     && (point.0 - old.0).abs() + (point.1 - old.1).abs() < 8
             });
-            if moved || double {
-                self.scheduled = Some(Instant::now() + Duration::from_millis(200));
+            if owner == foreground && (moved || double) {
+                self.scheduled = Some((Instant::now() + Duration::from_millis(300), foreground));
             }
-            self.last_click = Some((point, Instant::now()));
+            self.last_click = if moved {
+                None
+            } else {
+                Some((point, foreground, Instant::now()))
+            };
         }
         let selecting = held(VK_SHIFT)
             && [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END]
                 .iter()
                 .any(|key| held(*key));
         if self.shift_selecting && !selecting {
-            self.scheduled = Some(Instant::now() + Duration::from_millis(200));
+            self.scheduled = Some((Instant::now() + Duration::from_millis(300), foreground));
         }
         self.shift_selecting = selecting;
-        if self.scheduled.is_some_and(|at| Instant::now() >= at)
-            && !held(VK_LBUTTON)
-            && !held(VK_SHIFT)
-        {
+        if let Some((at, owner)) = self.scheduled {
+            if foreground != owner {
+                self.scheduled = None;
+                return;
+            }
+            if Instant::now() < at || held(VK_LBUTTON) || held(VK_SHIFT) {
+                return;
+            }
             self.scheduled = None;
-            let foreground = unsafe { GetForegroundWindow() }.0 as usize;
-            let excluded = app.webview_windows().into_iter().any(|(label, window)| {
-                label != "main"
-                    && window
-                        .hwnd()
-                        .ok()
-                        .is_some_and(|hwnd| hwnd.0 as usize == foreground)
-            });
-            if excluded
+            if is_auxiliary_window(app, foreground)
                 || app
                     .state::<crate::desktop::Desktop>()
                     .capture
@@ -588,10 +640,10 @@ impl AutoSelection {
                     .unwrap()
                     .is_some()
             {
-                self.down = None;
-                self.scheduled = None;
                 return;
             }
+            // Automatic selection is read-only. A caret or a failed text pattern
+            // is never permission to copy an editor's current line.
             trigger_selection(app, true);
         }
     }

@@ -32,12 +32,7 @@ import {
   CaseSensitive,
 } from "lucide-react";
 import { Hint } from "./common";
-import {
-  invoke,
-  emitTo,
-  desktopListen,
-  desktopError,
-} from "@/lib/desktopAssistant";
+import { invoke, desktopListen, desktopError } from "@/lib/desktopAssistant";
 
 type Point = { x: number; y: number };
 type Rect = Point & { w: number; h: number };
@@ -71,7 +66,6 @@ type Session = {
   monitorY: number;
   monitorWidth: number;
   monitorHeight: number;
-  draftText: string;
 };
 type Gesture = {
   pointerId: number;
@@ -283,7 +277,6 @@ export function DesktopCapture() {
     finish,
     commitText,
     cancelCapture,
-    resetSelection,
   });
   commands.current = {
     undo,
@@ -291,7 +284,6 @@ export function DesktopCapture() {
     finish,
     commitText,
     cancelCapture,
-    resetSelection,
   };
   const sx = session ? viewport.w / session.width : 1,
     sy = session ? viewport.h / session.height : 1;
@@ -350,8 +342,10 @@ export function DesktopCapture() {
       } catch (e) {
         if (alive && current === epoch.current && active) {
           setError(desktopError(e));
-          await emitTo("quick", "desktop-error", desktopError(e));
-          await invoke("capture_cancel", { id: loadingId });
+          await invoke("capture_failed", {
+            id: loadingId,
+            message: desktopError(e),
+          });
         }
       }
     }
@@ -387,10 +381,7 @@ export function DesktopCapture() {
       setDragging(false);
       exportLock.current = false;
     });
-    const resetListener = desktopListen<string>("capture-reset", (id) => {
-      if (id === currentSession.current?.id) commands.current.resetSelection();
-    });
-    void Promise.all([unlisten, dismissListener, resetListener]).then(() => {
+    void Promise.all([unlisten, dismissListener]).then(() => {
       if (alive) void load();
     });
     const resize = () => setViewport({ w: innerWidth, h: innerHeight });
@@ -439,7 +430,6 @@ export function DesktopCapture() {
       epoch.current++;
       void unlisten.then((f) => f());
       void dismissListener.then((f) => f());
-      void resetListener.then((f) => f());
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", key);
     };
@@ -768,9 +758,7 @@ export function DesktopCapture() {
     e.preventDefault();
     e.stopPropagation();
     const p = point(e);
-    if (!selection)
-
-    setError("");
+    if (!selection) setError("");
     if (text) {
       commitText();
       return;
@@ -895,7 +883,6 @@ export function DesktopCapture() {
       const box = rect(g.start, point(e));
       if (box.w < 2 || box.h < 2) {
         setSelection(null);
-
       }
     }
     gesture.current = null;
@@ -945,8 +932,11 @@ export function DesktopCapture() {
       ctx.drawImage(source.current, 0, 0);
       outputMarks.forEach((m) => paint(ctx, m, source.current!));
       const dataUrl = await new Promise<string>((resolve, reject) => {
-        output.toBlob(blob => {
-          if (!blob) { reject(new Error("截图编码失败，请重试")); return; }
+        output.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error("截图编码失败，请重试"));
+            return;
+          }
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
           reader.onerror = () => reject(new Error("截图读取失败，请重试"));
@@ -1308,7 +1298,6 @@ export function DesktopCapture() {
                 Crop,
                 () => {
                   resetSelection();
-
                 },
                 false,
               ],

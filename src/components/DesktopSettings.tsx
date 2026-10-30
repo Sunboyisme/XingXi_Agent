@@ -159,6 +159,16 @@ export function DesktopSettings() {
     return <p>AI 对话、截图、划词助手、桌宠和桌面番茄钟仅在桌面版中可用。</p>;
   return (
     <section className="desktop-preferences" aria-label="桌面助手设置">
+      {status &&
+        !status.ownsShortcuts &&
+        (status.preferences.enabled ||
+          status.preferences.screenshotEnabled ||
+          status.preferences.selectionEnabled) && (
+          <p className="field-error" role="status">
+            桌面快捷键尚未接管。请退出另一个 XiaoXi 实例；退出后会自动重试接管右
+            Alt、截图与划词快捷键。
+          </p>
+        )}
       <section className="settings-group">
         <h2>桌面功能</h2>
         <div className="desktop-preference-card">
@@ -167,7 +177,11 @@ export function DesktopSettings() {
             "AI 对话",
             "短按右 Alt 唤出问答，按住右 Alt 语音输入。",
           )}
-          {featureRow("screenshotEnabled", "截图", "左 Alt+E 截图，可标注、复制、保存、贴图或发送给 AI。")}
+          {featureRow(
+            "screenshotEnabled",
+            "截图",
+            "左 Alt+E 截图，可标注、复制、保存、贴图或发送给 AI。",
+          )}
         </div>
       </section>
       {status && (
@@ -201,7 +215,9 @@ export function DesktopSettings() {
               value={readPomodoroTheme(status?.preferences.pomodoroTheme)}
               disabled={!status || busy}
               options={[...pomodoroThemes]}
-              onValueChange={(value) => void save({ pomodoroTheme: readPomodoroTheme(value) })}
+              onValueChange={(value) =>
+                void save({ pomodoroTheme: readPomodoroTheme(value) })
+              }
             />
           </div>
         </div>
@@ -334,7 +350,8 @@ export function SpeechConnection({
     mounted.current = true;
     void api<SpeechSettings>("/settings/speech")
       .then((value) => {
-        if (!value || !Array.isArray(value.profiles)) throw new Error("语音配置返回异常，请重新打开配置。");
+        if (!value || !Array.isArray(value.profiles))
+          throw new Error("语音配置返回异常，请重新打开配置。");
         if (mounted.current) setStatus(value);
       })
       .catch((e) => {
@@ -358,7 +375,8 @@ export function SpeechConnection({
         api<SpeechSettings>("/settings/speech"),
         api<SpeechCall[]>("/speech/calls"),
       ]);
-      if (!value || !Array.isArray(value.profiles) || !Array.isArray(activity)) throw new Error("语音配置返回异常，请稍后重试。");
+      if (!value || !Array.isArray(value.profiles) || !Array.isArray(activity))
+        throw new Error("语音配置返回异常，请稍后重试。");
       if (mounted.current) {
         setStatus(value);
         setForm(value);

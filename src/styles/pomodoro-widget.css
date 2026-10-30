@@ -15,7 +15,7 @@
   align-items: center;
   gap: 0;
   width: max-content;
-  max-width: 260px;
+  max-width: none;
   height: 40px;
   padding: 5px 12px;
   border: 0;

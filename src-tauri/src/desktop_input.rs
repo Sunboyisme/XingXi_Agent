@@ -31,6 +31,8 @@ static ALT_ENABLED: AtomicBool = AtomicBool::new(false);
 static ALT_HELD: AtomicBool = AtomicBool::new(false);
 static ALT_SUPPRESSED: AtomicBool = AtomicBool::new(false);
 static GESTURE: AtomicU64 = AtomicU64::new(0);
+static KEYBOARD_INPUT: AtomicU64 = AtomicU64::new(0);
+pub fn keyboard_input_generation() -> u64 { KEYBOARD_INPUT.load(Ordering::SeqCst) }
 pub fn cursor() -> (i32, i32) {
     unsafe {
         let mut p = POINT::default();
@@ -49,6 +51,11 @@ unsafe extern "system" fn hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRE
         let e = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         if e.flags.0 & LLKHF_INJECTED.0 == 0 {
             let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+            if down && ![VK_MENU.0 as u32, VK_LMENU.0 as u32, VK_RMENU.0 as u32,
+                VK_CONTROL.0 as u32, VK_LCONTROL.0 as u32, VK_RCONTROL.0 as u32,
+                VK_SHIFT.0 as u32, VK_LSHIFT.0 as u32, VK_RSHIFT.0 as u32].contains(&e.vkCode) {
+                KEYBOARD_INPUT.fetch_add(1, Ordering::SeqCst);
+            }
             let other_held = if e.vkCode == VK_RMENU.0 as u32 && down {
                 (8..255).any(|k| {
                     k != VK_MENU.0 as i32
@@ -169,9 +176,8 @@ pub fn start(app: tauri::AppHandle) {
     let (tx, rx) = mpsc::sync_channel(256);
     let _ = INPUT.set(tx);
     std::thread::spawn(move || unsafe {
-        let Ok(mutex) = CreateMutexW(None, false, w!("Local\\XiaoXiDesktopAssistant")) else {
-            return;
-        };
+        let mut mutex = None;
+        let mut ownership_retry = Instant::now() - Duration::from_secs(1);
         let mut owned = false;
         let mut keyboard = None;
         let mut alt: Option<(Instant, u64)> = None;
@@ -185,9 +191,11 @@ pub fn start(app: tauri::AppHandle) {
         loop {
             let p = app.state::<Desktop>().prefs.lock().unwrap().clone();
             let active = p.enabled || p.screenshot_enabled || p.pet || p.selection_enabled;
-            if !owned && active {
-                let acquired = WaitForSingleObject(mutex, 0);
-                if acquired == WAIT_OBJECT_0 || acquired == WAIT_ABANDONED {
+            if !owned && active && ownership_retry.elapsed() >= Duration::from_millis(500) {
+                ownership_retry = Instant::now();
+                if mutex.is_none() { mutex = CreateMutexW(None, false, w!(r"Local\XiaoXiDesktopAssistant")).ok(); }
+                let acquired = mutex.map(|handle| WaitForSingleObject(handle, 0));
+                if acquired == Some(WAIT_OBJECT_0) || acquired == Some(WAIT_ABANDONED) {
                     keyboard = SetWindowsHookExW(
                         WH_KEYBOARD_LL,
                         Some(hook),
@@ -197,7 +205,7 @@ pub fn start(app: tauri::AppHandle) {
                     .ok();
                     owned = keyboard.is_some();
                     if !owned {
-                        let _ = ReleaseMutex(mutex);
+                        if let Some(handle) = mutex { let _ = ReleaseMutex(handle); }
                     } else {
                         if p.pet {
                             let a = app.clone();
@@ -215,7 +223,7 @@ pub fn start(app: tauri::AppHandle) {
                 if let Some(h) = keyboard.take() {
                     let _ = UnhookWindowsHookEx(h);
                 }
-                let _ = ReleaseMutex(mutex);
+                if let Some(handle) = mutex { let _ = ReleaseMutex(handle); }
                 owned = false;
                 app.state::<Desktop>().owned.store(false, Ordering::SeqCst);
                 alt = None;
@@ -246,7 +254,7 @@ pub fn start(app: tauri::AppHandle) {
                 if e.capture && owned && !recording_shortcut {
                     let a = app.clone();
                     std::thread::spawn(move || { if let Err(error) = crate::desktop::begin_capture(&a) {
-                        let _ = a.emit_to("quick", "desktop-error", error);
+                        crate::desktop::report_capture_failure(&a, &error);
                     }});
                     continue;
                 }
@@ -277,7 +285,7 @@ pub fn start(app: tauri::AppHandle) {
                             } else if e.at.duration_since(started) < Duration::from_millis(300) {
                                 let a = app.clone();
                                 let _ = app.run_on_main_thread(move || {
-                                    if let Err(error) = crate::desktop::desktop_toggle(a.clone()) {
+                                    if let Err(error) = crate::desktop::toggle_ai(a.clone()) {
                                         let _ = crate::desktop::open_ai(a.clone());
                                         let _ = a.emit_to("quick", "desktop-error", error);
                                     }
@@ -319,16 +327,8 @@ pub fn start(app: tauri::AppHandle) {
                         if needs_session && crate::desktop::begin_ask_session(&a).is_err() {
                             return;
                         }
-                        let text = a.state::<Desktop>().quick_text.lock().unwrap().clone();
-                        if crate::desktop::desktop_record(a.clone()).is_ok() {
-                            crate::desktop::enqueue_quick(
-                                &a,
-                                "record",
-                                Some(text),
-                                None,
-                                Some(gesture),
-                                None,
-                            );
+                        if crate::desktop::open_ai(a.clone()).is_ok() {
+                            crate::desktop::enqueue_quick(&a, crate::desktop::QuickAction::Voice { gesture: Some(gesture) });
                         }
                     });
                 }

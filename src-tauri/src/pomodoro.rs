@@ -268,7 +268,7 @@ pub fn refresh_visibility(app: &tauri::AppHandle) {
     if show {
         let _ = place_widget(app);
         if !window.is_visible().unwrap_or(false) {
-            let _ = window.show();
+            let _ = crate::desktop::show_without_focus(&window);
         }
     } else if window.is_visible().unwrap_or(false) {
         let _ = window.emit("pomodoro-widget-dismissed", ());

@@ -292,21 +292,10 @@ export function PomodoroWidget() {
                 </button>
               </Hint>
             )}
-            <button
-              className="pomodoro-widget-toggle"
-              aria-label={expanded ? "收起计时操作" : "展开计时操作"}
-              aria-expanded={expanded}
-              onClick={() => setControlsOpen((value) => !value)}
-            >
-              {expanded ? (
-                <ChevronLeft size={14} />
-              ) : (
-                <ChevronRight size={14} />
-              )}
-            </button>
             {expanded && (
               <div
                 className="pomodoro-widget-actions"
+                id="pomodoro-widget-actions"
                 role="group"
                 aria-label="计时操作"
               >
@@ -339,6 +328,19 @@ export function PomodoroWidget() {
                 </button>
               </div>
             )}
+            <button
+              className="pomodoro-widget-toggle"
+              aria-label={expanded ? "收起计时操作" : "展开计时操作"}
+              aria-expanded={expanded}
+              aria-controls="pomodoro-widget-actions"
+              onClick={() => setControlsOpen((value) => !value)}
+            >
+              {expanded ? (
+                <ChevronLeft size={14} />
+              ) : (
+                <ChevronRight size={14} />
+              )}
+            </button>
           </section>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>

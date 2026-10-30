@@ -113,7 +113,7 @@ export function SelectionSettings({
             <p>
               {shortcutOnly
                 ? "选中文字后按快捷键唤出。"
-                : "划选文字后自动弹出。"}
+                : `划选文字后只读取选区；软件不支持时可按 ${shortcut} 主动取词。`}
             </p>
           </div>
           <label className="module-toggle">
