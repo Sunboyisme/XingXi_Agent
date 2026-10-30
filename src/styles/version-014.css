@@ -1617,12 +1617,12 @@ body:has(.reminder-popup),
   width: min(640px, calc(100vw - 32px));
   max-width: min(640px, calc(100vw - 32px)) !important;
   max-height: calc(100dvh - 32px);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 22px !important;
   gap: 12px !important;
 }
 
-.image-generation-title-row,
 .image-generation-key-label {
   display: flex;
   align-items: center;
@@ -1630,15 +1630,13 @@ body:has(.reminder-popup),
   gap: 12px;
 }
 
-.image-generation-title-row {
-  padding-right: 26px;
-}
-
 .image-generation-enable {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--ui-color-text-muted);
+  justify-self: start;
+  padding: 4px 0;
+  color: var(--ui-color-heading);
   cursor: pointer;
 }
 

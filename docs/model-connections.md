@@ -35,3 +35,11 @@
 预设依据：[硅基流动快速开始](https://docs.siliconflow.cn/docs/userguide/quickstart)、[Agent 配置示例](https://docs.siliconflow.cn/docs/usercases/use-siliconcloud-in-yan)、[语音合成](https://docs.siliconflow.cn/docs/userguide/capabilities/text-to-speech)，以及[百炼接口地址](https://help.aliyun.com/zh/model-studio/base-url)、[视觉理解模型](https://help.aliyun.com/zh/model-studio/vision-model)、[Embedding 兼容接口](https://help.aliyun.com/zh/model-studio/embedding-interfaces-compatible-with-openai)。
 
 本轮完成接口类型生成、编译和语法／差异检查，没有执行本轮自动化或真实模型验收；不沿用上文历史版本的通过结论。实际效果仍待用户在固定数据目录的独立测试版中确认。
+
+### 同日后续调整：指定型号与空配置修正
+
+按用户指定，硅基流动文本预设改为 `deepseek-ai/DeepSeek-V4.1-Flash` 与 `zai-org/GLM-5.3-Flash`，快速配置会同时添加账户列表返回的两个型号，优先将 DeepSeek 设为全局默认，缺失的指定型号单独显示待配置。手动连接仍可添加更多型号，每个连接上限五十个。向量改用 `BAAI/bge-m3`，图片改用 `Tongyi-MAI/Z-Image-Turbo`；语音预设和百炼入口保持原有型号。
+
+本次修正替代上文按“有保存内容”保留部分配置的规则：能力必须有接口、型号和可解析凭据才算已配置，完整但停用的配置仍保留；空表单、孤立密钥和未配齐的能力在再次快速配置时补齐。不会清除原有独立凭据。此前误显示已保留的空配置需重新执行快速配置应用新预设，不在启动时修改用户配置。
+
+硅基流动 DeepSeek 采用 `enable_thinking` 控制开关，仅在思考开启时发送已配置的强度；避免使用该接口未列出的 `reasoning_effort=none`。依据：[硅基流动 Chat Completions 参数](https://docs.siliconflow.cn/docs/api/chat-completions-post)、[思考模型说明](https://docs.siliconflow.cn/docs/userguide/capabilities/reasoning)和 [GLM-5.3-Flash 官方部署说明](https://github.com/vllm-project/recipes/blob/main/models/zai-org/GLM-5.3-Flash.yaml)。本轮仍只有编译与静态检查，实际调用待用户验证。

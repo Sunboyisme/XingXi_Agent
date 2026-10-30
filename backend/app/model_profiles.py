@@ -27,7 +27,7 @@ PRESETS = [
         "siliconflow",
         "硅基流动",
         "https://api.siliconflow.cn/v1",
-        ["deepseek-ai/DeepSeek-V4-Flash", "Qwen/Qwen3-8B"],
+        ["deepseek-ai/DeepSeek-V4.1-Flash", "zai-org/GLM-5.3-Flash"],
     ),
     ("custom", "自定义兼容接口", "https://api.openai.com/v1", []),
 ]
@@ -55,7 +55,7 @@ def thinking_control(url, model, provider_type=None):
     ):
         return "always"
     if leaf.startswith("deepseek-"):
-        return "thinking"
+        return "enable_thinking" if provider == "siliconflow" or host == "api.siliconflow.cn" else "thinking"
     if provider == "kimi" or host in {"api.moonshot.cn", "api.moonshot.ai"}:
         if leaf.startswith(("kimi-k3", "kimi-k2.7-code")):
             return "always"
@@ -66,6 +66,8 @@ def thinking_control(url, model, provider_type=None):
             return "always"
         if leaf.startswith(("glm-4.5", "glm-4.6", "glm-4.7", "glm-5")):
             return "thinking"
+    if (provider == "siliconflow" or host == "api.siliconflow.cn") and leaf.startswith("glm-5.3"):
+        return "always"
     qwen_endpoint = (
         provider in {"bailian", "siliconflow"}
         or host.endswith("aliyuncs.com")
@@ -88,6 +90,8 @@ def reasoning_capabilities(url, model):
         name = model["name"].lower()
         if host == "api.deepseek.com" and name in {"deepseek-flash", "deepseek-v4-pro"}:
             levels, default = ["low", "high", "max"], default or "high"
+        elif host == "api.siliconflow.cn" and name in {"deepseek-ai/deepseek-v4.1-flash", "deepseek-ai/deepseek-v4-flash"}:
+            levels, default = ["high", "max"], default or "high"
         elif model.get("thinking_mode") == "reasoning_effort":
             levels, default = ["low", "medium", "high"], default or "high"
         else:

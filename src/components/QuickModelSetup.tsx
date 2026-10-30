@@ -96,7 +96,9 @@ export function QuickModelSetup({
     <div className="quick-model-setup">
       <div className="quick-setup-heading">
         <h3>快速配置</h3>
-        <p>填一次密钥，配好对话、语音、语义检索和生图。已有设置会保留。</p>
+        <p>
+          填一次密钥，配好对话、语音、语义检索和生图。已有完整能力配置会保留。
+        </p>
       </div>
       <div className="quick-setup-providers">
         {presets.map((item) => (
@@ -214,7 +216,10 @@ export function QuickModelSetup({
                 />
               </div>
               <p className="quick-setup-account-note">
-                只补齐未配置的能力，保留已有默认模型。联网搜索在能力连接中单独设置。
+                {preset?.provider === "siliconflow"
+                  ? "加入 DeepSeek-V4.1-Flash 和 GLM-5.3-Flash，优先将 DeepSeek 设为默认。向量使用 bge-m3，生图使用 Z-Image-Turbo；已有完整能力配置会保留。"
+                  : "补齐未配置的能力，保留已有完整能力配置和默认模型。"}
+                联网搜索在能力连接中单独设置。
               </p>
             </div>
           )}

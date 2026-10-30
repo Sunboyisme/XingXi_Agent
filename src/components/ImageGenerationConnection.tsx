@@ -141,7 +141,9 @@ export function ImageGenerationConnection() {
   const canSave = Boolean(
     form.url.trim() &&
     form.model.trim() &&
-    (form.credential_connection_id || key.trim() || (status.key_configured && !clearKey)),
+    (form.credential_connection_id ||
+      key.trim() ||
+      (status.key_configured && !clearKey)),
   );
   return (
     <ConnectionCard
@@ -203,24 +205,24 @@ export function ImageGenerationConnection() {
       >
         <DialogContent className="connection-config-dialog image-generation-config-dialog">
           <DialogHeader>
-            <div className="image-generation-title-row">
-              <DialogTitle>图片生成</DialogTitle>
-              <label className="image-generation-enable">
-                <Checkbox
-                  checked={form.enabled}
-                  disabled={busy}
-                  onCheckedChange={(value) =>
-                    change({ enabled: value === true })
-                  }
-                />
-                启用
-              </label>
-            </div>
+            <DialogTitle>图片生成</DialogTitle>
             <DialogDescription>
               独立生图模型，由 Agent 按需调用。
             </DialogDescription>
           </DialogHeader>
           <div className="connection-config-fields">
+            <label
+              className="image-generation-enable image-generation-wide"
+              htmlFor="image-generation-enabled"
+            >
+              <Checkbox
+                id="image-generation-enabled"
+                checked={form.enabled}
+                disabled={busy}
+                onCheckedChange={(value) => change({ enabled: value === true })}
+              />
+              启用图片生成
+            </label>
             <div className="form-field image-generation-wide">
               <Label htmlFor="image-generation-url">接口地址</Label>
               <Input
@@ -243,49 +245,59 @@ export function ImageGenerationConnection() {
                 autoComplete="off"
               />
             </div>
-            <SharedCredentialSource connectionId={form.credential_connection_id} url={form.url} disabled={busy}
-              onChange={(id) => { change({ credential_connection_id: id }); setKey(""); setClearKey(false); }} />
-            {!form.credential_connection_id && <div className="form-field">
-              <div className="image-generation-key-label">
-                <Label htmlFor="image-generation-key">API 密钥</Label>
-                {status.key_configured && (
-                  <button
-                    type="button"
-                    className="text-button danger"
-                    disabled={busy}
-                    aria-label={
-                      clearKey ? "撤销清除图片密钥" : "清除已保存的图片密钥"
-                    }
-                    onClick={() => {
-                      setClearKey(!clearKey);
-                      setKey("");
-                      clearFeedback();
-                    }}
-                  >
-                    {clearKey ? "撤销清除" : "清除"}
-                  </button>
-                )}
+            <SharedCredentialSource
+              connectionId={form.credential_connection_id}
+              url={form.url}
+              disabled={busy}
+              onChange={(id) => {
+                change({ credential_connection_id: id });
+                setKey("");
+                setClearKey(false);
+              }}
+            />
+            {!form.credential_connection_id && (
+              <div className="form-field">
+                <div className="image-generation-key-label">
+                  <Label htmlFor="image-generation-key">API 密钥</Label>
+                  {status.key_configured && (
+                    <button
+                      type="button"
+                      className="text-button danger"
+                      disabled={busy}
+                      aria-label={
+                        clearKey ? "撤销清除图片密钥" : "清除已保存的图片密钥"
+                      }
+                      onClick={() => {
+                        setClearKey(!clearKey);
+                        setKey("");
+                        clearFeedback();
+                      }}
+                    >
+                      {clearKey ? "撤销清除" : "清除"}
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="image-generation-key"
+                  type="password"
+                  value={key}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setKey(event.target.value);
+                    setClearKey(false);
+                    clearFeedback();
+                  }}
+                  placeholder={
+                    clearKey
+                      ? "保存后清除原密钥"
+                      : status.key_configured
+                        ? "已保存，留空保留"
+                        : "填写 API 密钥"
+                  }
+                  autoComplete="new-password"
+                />
               </div>
-              <Input
-                id="image-generation-key"
-                type="password"
-                value={key}
-                disabled={busy}
-                onChange={(event) => {
-                  setKey(event.target.value);
-                  setClearKey(false);
-                  clearFeedback();
-                }}
-                placeholder={
-                  clearKey
-                    ? "保存后清除原密钥"
-                    : status.key_configured
-                      ? "已保存，留空保留"
-                      : "填写 API 密钥"
-                }
-                autoComplete="new-password"
-              />
-            </div>}
+            )}
             <div className="form-field">
               <Label htmlFor="image-generation-size">尺寸（可选）</Label>
               <Input

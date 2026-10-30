@@ -26,6 +26,31 @@
 }
 .chat-sidebar > .new-chat-button[data-slot="button"] {
   width: calc(100% - 14px);
+  height: auto;
+  min-height: 44px;
+  padding: 7px 10px;
+  margin-bottom: 20px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ui-color-heading);
+  text-align: left;
+}
+.chat-sidebar > .new-chat-button[data-slot="button"]:is(:hover, :focus-visible) {
+  background: var(--ui-color-surface-deep);
+}
+.chat-sidebar > .new-chat-button[data-slot="button"]:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
+.chat-sidebar .new-chat-button > svg {
+  width: 19px;
+  height: 19px;
+}
+.chat-sidebar .new-chat-button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .chat-sidebar .project-conversations {
   padding-right: 4px;
@@ -74,6 +99,47 @@
 }
 .conversation-link > button:first-child > svg {
   flex-shrink: 0;
+}
+.chat-sidebar .conversation-link > button:first-child {
+  position: relative;
+  padding-left: 40px;
+}
+.conversation-link .conversation-pin-marker {
+  position: absolute;
+  left: 18px;
+}
+.conversation-link > button > .conversation-title {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+.conversation-title-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.conversation-link:not([data-dragging="true"]) > button:is(:hover, :focus-visible)
+  .conversation-title[data-overflow="true"] > .conversation-title-text {
+  width: max-content;
+  overflow: visible;
+  text-overflow: clip;
+  animation: conversation-title-scroll var(--conversation-title-duration) linear infinite alternate;
+}
+@keyframes conversation-title-scroll {
+  0%, 15% { transform: translateX(0); }
+  85%, 100% { transform: translateX(var(--conversation-title-offset)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation-link:not([data-dragging="true"]) > button:is(:hover, :focus-visible)
+    .conversation-title[data-overflow="true"] {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .conversation-link:not([data-dragging="true"]) > button:is(:hover, :focus-visible)
+    .conversation-title[data-overflow="true"] > .conversation-title-text {
+    animation: none;
+  }
 }
 .conversation-row-actions {
   display: flex;

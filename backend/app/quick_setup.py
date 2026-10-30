@@ -14,18 +14,17 @@ from .db import Session, Settings
 router = APIRouter()
 lock = asyncio.Lock()
 
-# Curated capabilities, intersected with the account's catalog at setup time.
+# Dialogue presets are intersected with the account's catalog at setup time.
 # Conservative context budgets avoid treating a model name as a capacity guarantee.
 PRESETS = {
     "siliconflow": {
         "label": "硅基流动", "url": "https://api.siliconflow.cn/v1",
         "key_url": "https://cloud.siliconflow.cn/account/ak",
         "description": "适合首次配置，多家模型共用一个密钥。",
-        "chat": [("Qwen/Qwen3.8-27B", True), ("Qwen/Qwen3-VL-32B-Instruct", True),
-                 ("deepseek-ai/DeepSeek-V4.1-Flash", True), ("deepseek-ai/DeepSeek-V4-Flash", False),
-                 ("Qwen/Qwen3-8B", False)],
-        "embedding": ["Qwen/Qwen3-Embedding-0.6B", "Qwen/Qwen3-Embedding-4B", "BAAI/bge-m3"],
-        "image": ["Qwen/Qwen-Image", "Tongyi-MAI/Z-Image-Turbo", "Kwai-Kolors/Kolors"],
+        "chat": [("deepseek-ai/DeepSeek-V4.1-Flash", False), ("zai-org/GLM-5.3-Flash", False)],
+        "chat_count": 2,
+        "embedding": ["BAAI/bge-m3"],
+        "image": ["Tongyi-MAI/Z-Image-Turbo"],
         "speech": "FunAudioLLM/SenseVoiceSmall",
         "tts": "FunAudioLLM/CosyVoice2-0.5B",
         "voice": "FunAudioLLM/CosyVoice2-0.5B:claire",
@@ -79,8 +78,10 @@ def pick(names, available):
 
 
 def occupied(value, legacy_ref, settings):
-    # Preserve partial/manual configuration and disabled-but-configured services too.
-    return bool(value or service_credentials.key(value, legacy_ref, settings))
+    # A saved empty form or orphaned key is not a configured capability.
+    # Complete configurations are preserved even when explicitly disabled.
+    return bool(str(value.get("model", "")).strip() and str(value.get("url", "")).strip()
+                and service_credentials.key(value, legacy_ref, settings))
 
 
 @router.post("/settings/quick-setup", response_model=QuickSetupRead)
@@ -101,14 +102,18 @@ async def configure(value: QuickSetupWrite):
     if not preferred:
         raise HTTPException(400, "当前账户未返回推荐对话模型，请确认模型权限，或使用「手动添加连接」选择模型。")
     models = []
-    # Include a visual alternative when the main model is text-only.
-    for name, vision in preferred[:1] + ([] if preferred[0][1] else [p for p in preferred[1:] if p[1]][:1]):
+    selected_models = preferred[:preset.get("chat_count", 1)]
+    if value.provider == "bailian" and not selected_models[0][1]:
+        selected_models += [p for p in preferred[1:] if p[1]][:1]
+    for name, vision in selected_models:
         model = {"name": name, "vision_enabled": vision, "thinking_mode": "auto",
                  "default_thinking_enabled": False,
                  "context_tokens": min(available[name].get("context_tokens", 32768), 65536)}
         if value.provider == "siliconflow" and "deepseek" in name.lower():
-            model.update(thinking_mode="reasoning_effort", reasoning_efforts=["high", "max"],
+            model.update(thinking_mode="enable_thinking", reasoning_efforts=["high", "max"],
                          default_reasoning_effort="high")
+        elif value.provider == "siliconflow" and name == "zai-org/GLM-5.3-Flash":
+            model.update(thinking_mode="always", default_thinking_enabled=True)
         models.append(model)
     async with lock:
         with Session() as db:
@@ -122,32 +127,33 @@ async def configure(value: QuickSetupWrite):
             profiles.append({"id": connection_id, "provider_type": value.provider, "label": label,
                              "model_url": preset["url"], "default_model": models[0]["name"], "models": models})
             previous = next((p for p in profiles[:-1] if p["id"] == settings.default_provider), None)
-            keep_default = bool(previous and previous["default_model"] and
+            keep_default = bool(value.provider != "siliconflow" and previous and previous["default_model"] and
                                 config.secret_get(model_profiles.secret_ref(previous["id"])))
             settings.model_providers = profiles
             if not keep_default:
                 settings.default_provider = connection_id
                 model_profiles.sync_default(settings)
-            items = [SetupItem(capability="对话与图片理解" if models[0]["vision_enabled"] else "对话",
-                               state="configured", model=models[0]["name"],
-                               message="模型列表已读取，实际调用待使用时确认。"),
-                     SetupItem(capability="默认模型", state="preserved" if keep_default else "configured",
-                               model=previous["default_model"] if keep_default else models[0]["name"],
-                               message="保留当前默认模型。" if keep_default else "已设为默认对话模型。")]
+            items = [SetupItem(capability="对话模型 · " + model["name"].rsplit("/", 1)[-1], state="configured", model=model["name"],
+                               message="已加入连接，可在对话中切换。实际调用待使用时确认。")
+                     for model in models]
+            if value.provider == "siliconflow":
+                items.extend(SetupItem(capability="对话模型 · " + name.rsplit("/", 1)[-1], state="unavailable", model=name,
+                                       message="模型列表未返回这个型号，可稍后手动添加。")
+                             for name, _ in preset["chat"] if name not in available)
+            items.append(SetupItem(capability="默认模型", state="preserved" if keep_default else "configured",
+                                   model=previous["default_model"] if keep_default else models[0]["name"],
+                                   message="保留当前默认模型。" if keep_default else "已设为默认对话模型。"))
             binding = {"credential_connection_id": connection_id}
             for field, capability, names, legacy_ref in (
                 ("embedding_config", "语义检索", preset["embedding"], "embedding"),
                 ("image_generation_config", "图片生成", preset["image"], "image_generation"),
             ):
                 saved = dict(getattr(settings, field) or {})
-                # Bailian's compatible catalog may omit its native image and
-                # embedding services; use the documented preset in that case.
-                model = pick(names, available) or (names[0] if value.provider == "bailian" else "")
+                # Catalogs may omit non-chat services; use the explicit preset.
+                model = pick(names, available) or names[0]
                 if occupied(saved, legacy_ref, settings):
                     items.append(SetupItem(capability=capability, state="preserved", model=saved.get("model", ""),
-                                           message="保留已有设置。"))
-                elif not model:
-                    items.append(SetupItem(capability=capability, state="unavailable", message="模型列表未返回推荐型号，可稍后单独配置。"))
+                                           message="保留已配齐的设置。" if saved.get("enabled") else "保留已配齐的设置，当前未启用。"))
                 else:
                     configured = {**binding, "enabled": True, "url": preset["url"], "model": model}
                     if field == "image_generation_config":
@@ -164,10 +170,18 @@ async def configure(value: QuickSetupWrite):
                 selected = saved.get("selected", "siliconflow" if kind == "speech" else "bailian")
                 current = saved.get("profiles", {}).get(selected, {})
                 target = saved.get("profiles", {}).get(value.provider, {})
-                if (occupied(current, ("speech:" if kind == "speech" else "tts:") + selected, settings)
-                        or occupied(target, ("speech:" if kind == "speech" else "tts:") + value.provider, settings)):
-                    items.append(SetupItem(capability=capability, state="preserved", model=current.get("model", ""),
-                                           message="保留已有设置及所选服务商。"))
+                current_ready = occupied(current, ("speech:" if kind == "speech" else "tts:") + selected, settings)
+                target_ready = occupied(target, ("speech:" if kind == "speech" else "tts:") + value.provider, settings)
+                if kind == "tts":
+                    current_ready = current_ready and bool(current.get("voice"))
+                    target_ready = target_ready and bool(target.get("voice"))
+                if current_ready or target_ready:
+                    if not current_ready:
+                        saved["selected"] = value.provider
+                        setattr(settings, field, saved)
+                    retained = current if current_ready else target
+                    items.append(SetupItem(capability=capability, state="preserved", model=retained["model"],
+                                           message="保留已配齐的语音设置。"))
                     continue
                 # Some catalogs omit audio models. These are explicit provider presets,
                 # not a claim that an account has passed an audio generation test.

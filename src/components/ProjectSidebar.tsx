@@ -1,14 +1,20 @@
 import { SoftSelect } from "./ui/soft-select";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   ChevronDown,
   Folder,
-  MessageCircle,
   MoreHorizontal,
   Pin,
   PinOff,
   Plus,
   Search,
+  SquarePen,
 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { api, type Conversation, type Project } from "@/lib/api";
@@ -34,6 +40,43 @@ type SearchHit = {
   snippet: string;
   project_name: string;
 };
+
+function ConversationTitle({ title }: { title: string }) {
+  const viewport = useRef<HTMLSpanElement>(null);
+  const text = useRef<HTMLSpanElement>(null);
+  const [distance, setDistance] = useState(0);
+  useEffect(() => {
+    const container = viewport.current;
+    const content = text.current;
+    if (!container || !content) return;
+    const measure = () => {
+      const next = Math.max(0, content.scrollWidth - container.clientWidth);
+      setDistance((previous) => (previous === next ? previous : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [title]);
+  return (
+    <span
+      ref={viewport}
+      className="conversation-title"
+      data-overflow={distance > 1 || undefined}
+      style={
+        {
+          "--conversation-title-offset": `${-distance}px`,
+          "--conversation-title-duration": `${Math.max(4, distance / 34 + 3)}s`,
+        } as CSSProperties
+      }
+    >
+      <span ref={text} className="conversation-title-text">
+        {title}
+      </span>
+    </span>
+  );
+}
 
 function GroupHeading({
   label,
@@ -306,7 +349,7 @@ export function ProjectSidebar({
         key={value.id}
         data-dragging={draggingId === value.id}
       >
-        <Hint label={`${value.title}（双击重命名）`}><button
+        <button
           type="button"
           aria-label={`打开对话 ${value.title}`}
           aria-current={currentId === value.id ? "page" : undefined}
@@ -351,8 +394,14 @@ export function ProjectSidebar({
             setRenaming(value);
           }}
         >
-          {value.pinned_at ? <Pin size={13} /> : <MessageCircle size={14} />}
-          <span>{value.title}</span>
+          {value.pinned_at && (
+            <Pin
+              className="conversation-pin-marker"
+              size={13}
+              aria-hidden="true"
+            />
+          )}
+          <ConversationTitle title={value.title} />
           {Boolean(activity[value.id]) && (
             <span
               className="sidebar-running is-row"
@@ -362,7 +411,7 @@ export function ProjectSidebar({
               <i aria-hidden="true" />
             </span>
           )}
-        </button></Hint>
+        </button>
         <div className="conversation-row-actions">
           <Hint label={value.pinned_at ? "取消置顶" : "置顶对话"}>
             <button
@@ -382,7 +431,11 @@ export function ProjectSidebar({
               {value.pinned_at ? <PinOff size={14} /> : <Pin size={14} />}
             </button>
           </Hint>
-          <DeleteConversationButton conversation={value} disabled={busy} onDelete={onDelete} />
+          <DeleteConversationButton
+            conversation={value}
+            disabled={busy}
+            onDelete={onDelete}
+          />
         </div>
       </div>
     );
@@ -425,9 +478,14 @@ export function ProjectSidebar({
           <Search size={17} />
         </Button>
       </div>
-      <Button className="new-chat-button" onClick={() => onNew(projectId)}>
-        <Plus size={16} />
-        新聊天
+      <Button
+        variant="ghost"
+        className="new-chat-button"
+        aria-label="新聊天"
+        onClick={() => onNew(projectId)}
+      >
+        <SquarePen size={19} aria-hidden="true" />
+        <span className="new-chat-button-label">新聊天</span>
       </Button>
       <div className="conversation-sidebar project-conversations">
         {error && !searchOpen && !renaming && (
