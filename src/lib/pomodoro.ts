@@ -7,6 +7,20 @@ import { errorMessage } from "./utils";
 
 export type Pomodoro = components["schemas"]["PomodoroRead"];
 export type PomodoroPreferences = components["schemas"]["PomodoroPreferences"];
+export function orderedPomodoroPresets(
+  presets: PomodoroPreferences["presets"],
+) {
+  const builtins = presets
+    .filter((preset) => preset.id.startsWith("builtin-"))
+    .sort(
+      (a, b) =>
+        a.focus_minutes - b.focus_minutes || a.break_minutes - b.break_minutes,
+    );
+  return [
+    ...builtins,
+    ...presets.filter((preset) => !preset.id.startsWith("builtin-")),
+  ];
+}
 type Action = components["schemas"]["PomodoroAction"]["action"];
 type ClockStore = {
   data: Pomodoro | null;

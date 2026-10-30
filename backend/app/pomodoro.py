@@ -23,7 +23,7 @@ class PomodoroPreset(BaseModel):
 
 
 BUILTINS = [PomodoroPreset(id=f"builtin-{f}-{b}", focus_minutes=f, break_minutes=b)
-            for f, b in ((10, 3), (25, 5), (50, 10), (45, 5))]
+            for f, b in ((10, 3), (25, 5), (45, 5), (50, 10))]
 
 
 class PomodoroPreferences(BaseModel):

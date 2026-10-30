@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  Pause,
-  Play,
   Plus,
   Settings2,
   SkipForward,
@@ -17,6 +15,7 @@ import { PomodoroSettings } from "./PomodoroSettings";
 import { ErrorNotice, Hint } from "./common";
 import {
   formatCountdown,
+  orderedPomodoroPresets,
   pomodoroAction,
   pomodoroStatus,
   primaryPomodoroAction,
@@ -32,10 +31,10 @@ export function PomodoroPage() {
   const [windowError, setWindowError] = useState("");
   const [presetPage, setPresetPage] = useState(0);
   const [dialog, setDialog] = useState<"add" | "settings" | null>(null);
-  const selectedPresetIndex =
-    data?.preferences.presets.findIndex(
-      (preset) => preset.id === data.preferences.selected_preset,
-    ) ?? 0;
+  const presets = data ? orderedPomodoroPresets(data.preferences.presets) : [];
+  const selectedPresetIndex = presets.findIndex(
+    (preset) => preset.id === data?.preferences.selected_preset,
+  );
   useEffect(() => {
     setPresetPage(
       Math.max(0, Math.floor(selectedPresetIndex / presetsPerPage)),
@@ -59,7 +58,7 @@ export function PomodoroPage() {
   const readyForFocus = data.phase === "idle" || data.phase === "waiting_focus";
   const pageCount = Math.ceil(data.preferences.presets.length / presetsPerPage);
   const currentPage = Math.min(presetPage, pageCount - 1);
-  const visiblePresets = data.preferences.presets.slice(
+  const visiblePresets = presets.slice(
     currentPage * presetsPerPage,
     (currentPage + 1) * presetsPerPage,
   );
@@ -179,12 +178,7 @@ export function PomodoroPage() {
                 disabled={busy}
                 onClick={() => void act(primary.action)}
               >
-                {primary.action === "pause" ? (
-                  <Pause size={18} />
-                ) : (
-                  <Play size={18} />
-                )}
-                {primary.label}
+                <span>{primary.label}</span>
               </Button>
               {data.phase !== "idle" && (
                 <Button

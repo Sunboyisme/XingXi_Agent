@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { Pencil, Plus, Trash2, Volume2 } from "lucide-react";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
+import { SoftSelect } from "./ui/soft-select";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +16,7 @@ import {
 import { Hint } from "./common";
 import {
   savePomodoroPreferences,
+  orderedPomodoroPresets,
   type Pomodoro,
   type PomodoroPreferences,
 } from "@/lib/pomodoro";
@@ -50,12 +54,15 @@ export function PomodoroSettings({
   });
   const [errors, setErrors] = useState(emptyErrors);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [soundError, setSoundError] = useState("");
   const focusInput = useRef<HTMLInputElement>(null);
   const restInput = useRef<HTMLInputElement>(null);
   const custom = preferences.presets.filter(
     (preset) => !preset.id.startsWith("builtin-"),
   );
   const existing = preferences.presets.find((preset) => preset.id === editing);
+  const presets = orderedPomodoroPresets(preferences.presets);
   useEffect(() => {
     if (editing) focusInput.current?.focus();
   }, [editing]);
@@ -135,6 +142,18 @@ export function PomodoroSettings({
       setSaving(false);
     }
   }
+  async function previewSound() {
+    if (previewing) return;
+    setSoundError("");
+    setPreviewing(true);
+    try {
+      await invoke("pomodoro_preview_sound");
+    } catch {
+      setSoundError("提示音暂时无法播放，请稍后再试。");
+    } finally {
+      setPreviewing(false);
+    }
+  }
   return (
     <Dialog
       open
@@ -160,40 +179,59 @@ export function PomodoroSettings({
         >
           {mode === "settings" && (
             <>
-              <label className="pomodoro-default-duration">
-                <span>默认时长</span>
-                <select
+              <div className="pomodoro-default-duration">
+                <label htmlFor="pomodoro-default-duration">默认时长</label>
+                <SoftSelect
+                  id="pomodoro-default-duration"
+                  label="默认时长"
                   value={preferences.selected_preset}
                   disabled={saving}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setPreferences((old) => ({
                       ...old,
-                      selected_preset: event.target.value,
+                      selected_preset: value,
                     }))
                   }
-                >
-                  {preferences.presets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      专注 {preset.focus_minutes} 分钟 / 休息{" "}
-                      {preset.break_minutes} 分钟
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="pomodoro-sound">
-                <span>到时播放一声短提示音</span>
-                <input
-                  type="checkbox"
-                  checked={preferences.sound_enabled}
-                  disabled={saving}
-                  onChange={(event) =>
-                    setPreferences((old) => ({
-                      ...old,
-                      sound_enabled: event.target.checked,
-                    }))
-                  }
+                  options={presets.map((preset) => ({
+                    value: preset.id,
+                    label: `专注 ${preset.focus_minutes} 分钟 / 休息 ${preset.break_minutes} 分钟`,
+                  }))}
                 />
-              </label>
+              </div>
+              <div>
+                <div className="pomodoro-sound">
+                  <label htmlFor="pomodoro-sound-enabled">完成提示音</label>
+                  <div className="pomodoro-sound-actions">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={saving || previewing}
+                      aria-label="试听完成提示音"
+                      onClick={() => void previewSound()}
+                    >
+                      <Volume2 size={15} />
+                      {previewing ? "播放中" : "试听"}
+                    </Button>
+                    <Checkbox
+                      id="pomodoro-sound-enabled"
+                      checked={preferences.sound_enabled}
+                      disabled={saving}
+                      onCheckedChange={(checked) =>
+                        setPreferences((old) => ({
+                          ...old,
+                          sound_enabled: checked === true,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                {soundError && (
+                  <p className="field-error" role="alert">
+                    {soundError}
+                  </p>
+                )}
+              </div>
               <div className="pomodoro-custom-list">
                 <strong>自定义预设</strong>
                 {!custom.length && <p>还没有自定义预设。</p>}

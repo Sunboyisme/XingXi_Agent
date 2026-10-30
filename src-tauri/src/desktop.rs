@@ -1094,6 +1094,11 @@ pub fn refresh_hit_regions(app: &tauri::AppHandle, label: &str) {
     }
 }
 fn apply_hit_regions(window: &tauri::WebviewWindow, regions: &[HitRegion]) -> Result<(), String> {
+    // A transparent timer must not repeatedly repaint the native non-client
+    // frame. It uses cursor passthrough without changing its paint region.
+    if window.label() == "pomodoro-timer" {
+        return crate::pomodoro::update_hit_test(window, regions).map(|_| ());
+    }
     use windows::Win32::Graphics::Gdi::*;
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let hwnd = window.hwnd().map_err(|e| e.to_string())?;
@@ -1103,29 +1108,13 @@ fn apply_hit_regions(window: &tauri::WebviewWindow, regions: &[HitRegion]) -> Re
             return Err("无法更新窗口交互区域".into());
         }
         for r in regions {
-            // The timer's native paint region follows its visible capsule, rather
-            // than exposing rectangular strips around the transparent corners.
-            let margin = if window.label() == "pomodoro-timer" {
-                1.0
-            } else if window.label() == "pet" {
-                2.0
-            } else {
-                6.0
-            };
-            let left = ((r.x - margin) * scale).floor() as i32;
-            let top = ((r.y - margin) * scale).floor() as i32;
-            let right = ((r.x + r.width + margin) * scale).ceil() as i32;
-            let bottom = ((r.y + r.height + margin) * scale).ceil() as i32;
-            let piece = if r.border_radius > 0.0 {
-                let diameter = ((r.border_radius.min(r.width / 2.0).min(r.height / 2.0)
-                    + margin)
-                    * 2.0
-                    * scale)
-                    .round() as i32;
-                CreateRoundRectRgn(left, top, right, bottom, diameter, diameter)
-            } else {
-                CreateRectRgn(left, top, right, bottom)
-            };
+            let margin = if window.label() == "pet" { 2.0 } else { 6.0 };
+            let piece = CreateRectRgn(
+                ((r.x - margin) * scale).floor() as i32,
+                ((r.y - margin) * scale).floor() as i32,
+                ((r.x + r.width + margin) * scale).ceil() as i32,
+                ((r.y + r.height + margin) * scale).ceil() as i32,
+            );
             if piece.0.is_null() {
                 let _ = DeleteObject(HGDIOBJ(combined.0));
                 return Err("无法更新窗口交互区域".into());

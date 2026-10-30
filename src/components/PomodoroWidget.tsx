@@ -20,8 +20,9 @@ export function PomodoroWidget() {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const drag = useRef<{ x: number; y: number; pointer: number } | null>(null);
-  const expanded = hovered || focused || menuOpen;
+  const expanded = hovered || focused || menuOpen || dragging;
   useDesktopHitRegions(
     ".pomodoro-widget,.pomodoro-widget-menu,.ui-hint,.ui-hint-arrow",
     true,
@@ -35,6 +36,14 @@ export function PomodoroWidget() {
         setHovered(false);
         setFocused(false);
         setMenuOpen(false);
+        setDragging(false);
+      }),
+      listen<boolean>("pomodoro-widget-pointer", (event) =>
+        setHovered(event.payload),
+      ),
+      listen<{ inside: boolean }>("pomodoro-widget-drag-ended", (event) => {
+        setDragging(false);
+        setHovered(event.payload.inside);
       }),
     ];
     return () => {
@@ -92,7 +101,15 @@ export function PomodoroWidget() {
     drag.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
-    void invoke("pomodoro_widget_drag").catch(fail);
+    setDragging(true);
+    void invoke<boolean>("pomodoro_widget_drag")
+      .then((started) => {
+        if (!started) setDragging(false);
+      })
+      .catch((cause) => {
+        setDragging(false);
+        fail(cause);
+      });
   }
   return (
     <main className="pomodoro-widget-frame">
@@ -103,6 +120,7 @@ export function PomodoroWidget() {
             aria-label="桌面番茄钟"
             data-status={data?.status}
             data-expanded={expanded}
+            data-dragging={dragging}
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
             onFocusCapture={(event) =>

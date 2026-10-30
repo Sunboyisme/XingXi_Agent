@@ -524,6 +524,7 @@ fn main() {
             pomodoro::pomodoro_show_controls,
             pomodoro::pomodoro_widget_reset,
             pomodoro::pomodoro_widget_drag,
+            pomodoro::pomodoro_preview_sound,
             selection::selection_snapshot,
             selection::selection_dom_reply,
             selection::selection_dismiss,

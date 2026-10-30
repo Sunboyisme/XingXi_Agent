@@ -16,14 +16,21 @@ struct Position {
     x: i32,
     y: i32,
 }
+#[derive(Clone, Copy)]
+struct DragOrigin {
+    cursor: Position,
+    window: Position,
+}
 #[derive(Default)]
 pub struct Widget {
     position: Mutex<Option<Position>>,
     dragging: AtomicBool,
+    drag_origin: Mutex<Option<DragOrigin>>,
     active: AtomicBool,
     suppressed: AtomicBool,
     previewing: AtomicBool,
     mouse_buttons: AtomicU8,
+    hit_mode: AtomicU8,
     latest_snapshot: Mutex<Option<(u64, f64)>>,
 }
 fn placement_path(app: &tauri::AppHandle) -> PathBuf {
@@ -191,14 +198,44 @@ pub fn hide_widget(app: &tauri::AppHandle) {
     refresh_visibility(app);
 }
 pub fn focus_lost(app: &tauri::AppHandle) {
-    // Running / paused sessions stay visible; only the idle preview is dismissed.
-    app.state::<Widget>()
-        .previewing
-        .store(false, Ordering::SeqCst);
+    // Focus can change during a drag. Only an outside press or explicit close
+    // dismisses the idle preview; activation changes merely close its controls.
+    if app.state::<Widget>().dragging.load(Ordering::SeqCst) {
+        return;
+    }
     if let Some(window) = app.get_webview_window("pomodoro-timer") {
         let _ = window.emit("pomodoro-widget-dismissed", ());
     }
-    refresh_visibility(app);
+}
+pub fn update_hit_test(
+    window: &tauri::WebviewWindow,
+    regions: &[crate::desktop::HitRegion],
+) -> Result<bool, String> {
+    let at = window.outer_position().map_err(|e| e.to_string())?;
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let (x, y) = crate::desktop_input::cursor();
+    let x = f64::from(x - at.x) / scale;
+    let y = f64::from(y - at.y) / scale;
+    let inside = regions.iter().any(|r| {
+        if x < r.x || x > r.x + r.width || y < r.y || y > r.y + r.height {
+            return false;
+        }
+        let radius = r.border_radius.min(r.width / 2.0).min(r.height / 2.0);
+        let dx = x - x.clamp(r.x + radius, r.x + r.width - radius);
+        let dy = y - y.clamp(r.y + radius, r.y + r.height - radius);
+        dx * dx + dy * dy <= radius * radius
+    });
+    let state = window.state::<Widget>();
+    let capture = inside || state.dragging.load(Ordering::SeqCst);
+    let mode = if capture { 2 } else { 1 };
+    if state.hit_mode.load(Ordering::SeqCst) != mode {
+        window
+            .set_ignore_cursor_events(!capture)
+            .map_err(|e| e.to_string())?;
+        state.hit_mode.store(mode, Ordering::SeqCst);
+        let _ = window.emit("pomodoro-widget-pointer", inside);
+    }
+    Ok(inside)
 }
 pub fn pointer_update(app: &tauri::AppHandle) {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -212,12 +249,7 @@ pub fn pointer_update(app: &tauri::AppHandle) {
         }
     }
     let previous = state.mouse_buttons.swap(buttons, Ordering::SeqCst);
-    finish_drag(app);
-    if buttons & !previous == 0
-        || !state.previewing.load(Ordering::SeqCst)
-        || state.active.load(Ordering::SeqCst)
-        || state.dragging.load(Ordering::SeqCst)
-    {
+    if update_drag(app, buttons & 1 != 0) {
         return;
     }
     let Some(window) = app.get_webview_window("pomodoro-timer") else {
@@ -226,28 +258,23 @@ pub fn pointer_update(app: &tauri::AppHandle) {
     if !window.is_visible().unwrap_or(false) {
         return;
     }
-    let (Ok(at), Ok(scale)) = (window.outer_position(), window.scale_factor()) else {
-        return;
-    };
-    let (x, y) = crate::desktop_input::cursor();
-    let x = f64::from(x - at.x) / scale;
-    let y = f64::from(y - at.y) / scale;
-    let inside = app
+    let regions = app
         .state::<crate::desktop::Desktop>()
         .hit_regions
         .lock()
         .unwrap()
         .get("pomodoro-timer")
-        .is_some_and(|regions| {
-            regions.iter().any(|r| {
-                x >= r.x - 1.0
-                    && x <= r.x + r.width + 1.0
-                    && y >= r.y - 1.0
-                    && y <= r.y + r.height + 1.0
-            })
-        });
-    if !inside {
-        focus_lost(app);
+        .cloned()
+        .unwrap_or_default();
+    if let Ok(inside) = update_hit_test(&window, &regions) {
+        if buttons & !previous != 0
+            && !inside
+            && state.previewing.load(Ordering::SeqCst)
+            && !state.active.load(Ordering::SeqCst)
+        {
+            state.previewing.store(false, Ordering::SeqCst);
+            refresh_visibility(app);
+        }
     }
 }
 #[tauri::command]
@@ -277,31 +304,56 @@ pub fn pomodoro_widget_reset(app: tauri::AppHandle) -> Result<(), String> {
 pub fn pomodoro_widget_drag(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if window.label() != "pomodoro-timer" {
         return Err("计时浮窗不可用".into());
     }
-    app.state::<Widget>().dragging.store(true, Ordering::SeqCst);
-    if let Err(error) = window.start_dragging() {
-        app.state::<Widget>()
-            .dragging
-            .store(false, Ordering::SeqCst);
-        return Err(error.to_string());
-    }
-    Ok(())
-}
-fn finish_drag(app: &tauri::AppHandle) {
-    let state = app.state::<Widget>();
-    if !state.dragging.load(Ordering::SeqCst) {
-        return;
-    }
-    #[cfg(windows)]
     if unsafe {
         windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(i32::from(
             windows::Win32::UI::Input::KeyboardAndMouse::VK_LBUTTON.0,
         ))
-    } < 0
+    } >= 0
     {
+        return Ok(false);
+    }
+    let at = window.outer_position().map_err(|e| e.to_string())?;
+    let (x, y) = crate::desktop_input::cursor();
+    let state = app.state::<Widget>();
+    *state.drag_origin.lock().unwrap() = Some(DragOrigin {
+        cursor: Position { x, y },
+        window: Position { x: at.x, y: at.y },
+    });
+    state.dragging.store(true, Ordering::SeqCst);
+    Ok(true)
+}
+fn update_drag(app: &tauri::AppHandle, held: bool) -> bool {
+    let state = app.state::<Widget>();
+    if !state.dragging.load(Ordering::SeqCst) {
+        return false;
+    }
+    if !held {
+        finish_drag(app);
+        return true;
+    }
+    let origin = *state.drag_origin.lock().unwrap();
+    if let (Some(origin), Some(window)) = (origin, app.get_webview_window("pomodoro-timer")) {
+        let (x, y) = crate::desktop_input::cursor();
+        let target = PhysicalPosition::new(
+            origin.window.x + x - origin.cursor.x,
+            origin.window.y + y - origin.cursor.y,
+        );
+        if window.outer_position().ok() != Some(target) {
+            if let Err(error) = window.set_position(target) {
+                let _ = window.emit("pomodoro-widget-error", error.to_string());
+                finish_drag(app);
+            }
+        }
+    }
+    true
+}
+fn finish_drag(app: &tauri::AppHandle) {
+    let state = app.state::<Widget>();
+    if !state.dragging.load(Ordering::SeqCst) {
         return;
     }
     if let Some(window) = app.get_webview_window("pomodoro-timer") {
@@ -314,7 +366,35 @@ fn finish_drag(app: &tauri::AppHandle) {
         }
     }
     state.dragging.store(false, Ordering::SeqCst);
+    state.drag_origin.lock().unwrap().take();
     let _ = place_widget(app);
+    if let Some(window) = app.get_webview_window("pomodoro-timer") {
+        let regions = app
+            .state::<crate::desktop::Desktop>()
+            .hit_regions
+            .lock()
+            .unwrap()
+            .get("pomodoro-timer")
+            .cloned()
+            .unwrap_or_default();
+        let inside = update_hit_test(&window, &regions).unwrap_or(false);
+        let _ = window.emit(
+            "pomodoro-widget-drag-ended",
+            serde_json::json!({ "inside": inside }),
+        );
+    }
+}
+fn play_completion_sound() -> Result<(), String> {
+    unsafe {
+        windows::Win32::System::Diagnostics::Debug::MessageBeep(
+            windows::Win32::UI::WindowsAndMessaging::MB_OK,
+        )
+        .map_err(|e| e.to_string())
+    }
+}
+#[tauri::command]
+pub fn pomodoro_preview_sound() -> Result<(), String> {
+    play_completion_sound()
 }
 fn accept_snapshot(app: &tauri::AppHandle, value: &serde_json::Value) -> bool {
     let (Some(revision), Some(server_now), Some(phase)) = (
@@ -400,10 +480,7 @@ pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
                                         .as_bool()
                                         .unwrap_or(true)
                                     {
-                                        #[cfg(windows)]
-                                        unsafe {
-                                            let _ = windows::Win32::System::Diagnostics::Debug::MessageBeep(windows::Win32::UI::WindowsAndMessaging::MB_OK);
-                                        }
+                                        let _ = play_completion_sound();
                                     }
                                 }
                                 seen = Some(sequence);
