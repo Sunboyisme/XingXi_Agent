@@ -592,23 +592,6 @@ textarea::placeholder {
 .composer-area {
   flex-shrink: 0;
 }
-.setup-nudge {
-  display: flex;
-  align-items: center;
-  gap: var(--ui-space-2);
-  color: var(--ui-color-action);
-  border: 0;
-  background: none;
-  width: 100%;
-  text-align: left;
-}
-.setup-nudge > span {
-  flex: 1;
-}
-.setup-nudge:hover > span {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
 .composer > [data-slot="textarea"] {
   border: 0;
   box-shadow: none;

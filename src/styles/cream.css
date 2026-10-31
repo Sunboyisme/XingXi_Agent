@@ -402,11 +402,6 @@
 .composer-submit > span {
   font-size: 12px;
 }
-.setup-nudge {
-  font-size: 12px;
-  padding: 0 4px 14px;
-}
-
 /* Radix menus preserve the existing keyboard navigation and focus behavior. */
 .model-menu {
   z-index: 50;

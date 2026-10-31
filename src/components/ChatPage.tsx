@@ -24,9 +24,8 @@ import {
 } from "react";
 import {
   AlertCircle,
-  ArrowRight,
   ArrowUp,
-  Cable,
+  ArrowUpRight,
   Check,
   ChevronDown,
   Image as ImageIcon,
@@ -64,6 +63,7 @@ import { AnswerPresentation } from "./AnswerPresentation";
 import { AnswerActions } from "./AnswerActions";
 import { UserMessageActions } from "./UserMessageActions";
 import { BaiAvatar } from "./BaiAvatar";
+import { ConnectionIcon } from "./SoftIcons";
 import { useAvatarActivity } from "@/lib/useAvatarActivity";
 import { NewChatStarters, NewChatWelcome } from "./NewChatWelcome";
 import { ChatScrollNavigation } from "./ChatScrollNavigation";
@@ -1744,14 +1744,20 @@ export function ChatPage({
             </p>
           )}
           {!modelReady && (
-            <button
-              className="setup-nudge"
-              onClick={() => openModelSettings()}
-            >
-              <Cable size={16} />
-              <span>先连接你的模型，就能开始对话和学习。</span>
-              <ArrowRight size={15} />
-            </button>
+            <div className="model-connection-prompt">
+              <span className="model-connection-description">
+                <ConnectionIcon size={17} />
+                <span>连接模型，开始对话和学习。</span>
+              </span>
+              <button
+                type="button"
+                className="model-connection-link"
+                onClick={() => openModelSettings()}
+              >
+                连接模型
+                <ArrowUpRight size={15} aria-hidden="true" />
+              </button>
+            </div>
           )}
           <div className="composer">
             {onProjectChange && (
