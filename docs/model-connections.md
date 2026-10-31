@@ -43,3 +43,15 @@
 本次修正替代上文按“有保存内容”保留部分配置的规则：能力必须有接口、型号和可解析凭据才算已配置，完整但停用的配置仍保留；空表单、孤立密钥和未配齐的能力在再次快速配置时补齐。不会清除原有独立凭据。此前误显示已保留的空配置需重新执行快速配置应用新预设，不在启动时修改用户配置。
 
 硅基流动 DeepSeek 采用 `enable_thinking` 控制开关，仅在思考开启时发送已配置的强度；避免使用该接口未列出的 `reasoning_effort=none`。依据：[硅基流动 Chat Completions 参数](https://docs.siliconflow.cn/docs/api/chat-completions-post)、[思考模型说明](https://docs.siliconflow.cn/docs/userguide/capabilities/reasoning)和 [GLM-5.3-Flash 官方部署说明](https://github.com/vllm-project/recipes/blob/main/models/zai-org/GLM-5.3-Flash.yaml)。本轮仍只有编译与静态检查，实际调用待用户验证。
+
+## 2026-10-31：工作上下文、自动思考与提示缓存
+
+模型窗口继续约束请求的物理容量；日常单轮输入默认使用 32,768 token 的工作预算，复杂任务步骤默认 65,536 token。历史在工作预算内提前整理为摘要和近期消息，原文保留并可检索。当前消息或必要工具资料较大时，工作预算可扩展至模型允许的输入额度。上下文提示分别显示本轮额度和模型窗口，生成空间仍单独保留。
+
+聊天思考菜单默认提供“自动（按任务）”：普通请求关闭可切换思考，复杂任务规划／执行或明确深入推理请求使用支持的适度强度。选择关闭或具体强度后，正式回答沿用手动选择；可随时切回自动。强制思考模型保持开启，有明确强度列表时，小任务采用最低支持强度。分类、摘要和交付核对独立采用节省策略，避免继承正式回答的高强度；旧运行快照保留原选择。
+
+普通请求直接进入智能体工具循环，多阶段或多成果任务以及旧任务补充继续使用任务规划。需要模型分类时，仅发送当前消息一次、最近四条背景摘录和短任务目录；实际执行仍读取原始要求。用量页面分别标注任务分类、任务规划和交付核对，便于查看额外调用的消耗。
+
+提示按固定规则、稳定目录、已加载规则、运行资料、时间的顺序组织，目录及 JSON 排序保持确定。官方 OpenAI 接口使用稳定缓存键，GPT-5.6 及之后已支持的模型另设显式前缀边界；其他兼容接口保留普通请求参数，由服务商自身处理缓存。缓存命中及写入用量以真实响应为准，不承诺固定节省比例，也不缓存业务操作结果。
+
+缓存参数依据：[OpenAI Prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching)、[Chat Completions 参数](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。本轮仅完成编译及静态检查，实际缓存命中、思考行为和费用仍待用户验证。

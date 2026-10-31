@@ -467,8 +467,8 @@ export function ChatPage({
     ? {
         provider_id: selected.profile.id,
         model_name: selected.model.name,
-        thinking_enabled: thinkingEnabled,
-        reasoning_effort: thinkingEnabled ? reasoningEffort : undefined,
+        thinking_enabled: hasThinkingOverride ? thinkingEnabled : undefined,
+        reasoning_effort: hasThinkingOverride && thinkingEnabled ? reasoningEffort : undefined,
         context_tokens: contextTokens,
         mode: chatOptions.mode,
         use_memory: chatOptions.useMemory,

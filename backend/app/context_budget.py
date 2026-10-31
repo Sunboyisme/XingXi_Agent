@@ -15,7 +15,6 @@ class ContextBudget(AgentMiddleware):
         self.compactor = LoopCompactor(run_id, config)
 
     async def awrap_model_call(self, request, handler):
-        total, reserve, hard = context.limits(self.config)
         # Discovery can add schemas between model rounds. Count the exposed
         # request, not the complete registry or a stale initial estimate.
         tool_tokens = schema_tokens(request.tools)
@@ -23,6 +22,9 @@ class ContextBudget(AgentMiddleware):
         # Keep application context in the system role. Appending it to a human
         # message changes the user's utterance and breaks follow-up semantics.
         overhead = tool_tokens + (message_cost(system_message) if system_message else 0)
+        last_user = max((i for i, message in enumerate(request.messages) if message.type == "human"), default=0)
+        active_input = message_cost(request.messages[last_user]) if request.messages else 0
+        total, reserve, hard = context.working_limits(self.config, required=overhead + active_input + context.SUMMARY_TOKENS)
         messages = await self.compactor.prepare(list(request.messages), overhead, hard)
         used = overhead + sum(map(message_cost, messages))
         # Drop only complete old conversation turns. Never split the active
@@ -37,8 +39,13 @@ class ContextBudget(AgentMiddleware):
             while messages and messages[0].type != "human":
                 used -= message_cost(messages.pop(0))
             emit(self.run_id, "context", {"status": "degraded", "text": "本轮历史已按上下文额度缩减，原始消息仍保留。"})
+        if used > hard:
+            # Necessary active tool results can use physical capacity, without
+            # bringing discarded old conversation turns back into the request.
+            total, reserve, hard = context.working_limits(self.config, required=used)
         emit(self.run_id, "context", {"status": "usage", "used_tokens": used,
              "limit_tokens": total, "reserved_tokens": reserve, "estimated": True,
+             "capacity_tokens": context.limits(self.config)[0],
              "tool_tokens": tool_tokens, "loaded_tools": len(request.tools),
              "provider_id": self.config.get("provider_id"), "model_name": self.config.get("model_name")})
         if used > hard:

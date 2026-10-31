@@ -199,6 +199,8 @@ def resolve(settings, selection=None):
         "vision_enabled": model["vision_enabled"],
         "thinking_control": model["thinking_control"],
         "thinking_enabled": enabled,
+        "thinking_explicit": selection is not None and selection.thinking_enabled is not None,
+        "reasoning_efforts": model["reasoning_efforts"],
         "reasoning_effort": (effort or model["default_reasoning_effort"]) if enabled else None,
         "context_tokens": (selection.context_tokens if selection else None) or model.get("context_tokens", 500000),
         **chat_options(selection.model_dump() if selection else None),
@@ -224,8 +226,8 @@ def saved_selection(config):
     return ModelSelection(
         provider_id=config["provider_id"],
         model_name=config["model_name"],
-        thinking_enabled=bool(config.get("thinking_enabled")),
-        reasoning_effort=config.get("reasoning_effort"),
+        thinking_enabled=bool(config.get("thinking_enabled")) if config.get("thinking_explicit", True) else None,
+        reasoning_effort=config.get("reasoning_effort") if config.get("thinking_explicit", True) else None,
         context_tokens=config.get("context_tokens"),
         **chat_options(config),
     )

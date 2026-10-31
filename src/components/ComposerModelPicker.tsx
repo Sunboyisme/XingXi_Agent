@@ -59,21 +59,26 @@ export function ComposerModelPicker({
     hasThinkingOverride && options.thinkingOverride === true
       ? options.reasoningEffort
       : selected?.model.default_reasoning_effort;
-  const thinkingValue = !thinkingEnabled
-    ? "off"
-    : levels.length
-      ? activeEffort || "default"
-      : "on";
+  const automaticThinking = control !== "none" && !hasThinkingOverride;
+  const thinkingValue = automaticThinking
+    ? "auto"
+    : !thinkingEnabled
+      ? "off"
+      : levels.length
+        ? activeEffort || "default"
+        : "on";
   const thinkingSummary =
     control === "none"
       ? "不支持"
-      : !thinkingEnabled
-        ? "关闭"
-        : levels.length
-          ? effortLabel(activeEffort)
-          : control === "always"
-            ? "始终开启"
-            : "开启";
+      : automaticThinking && (control !== "always" || levels.length > 0)
+        ? "自动"
+        : !thinkingEnabled
+          ? "关闭"
+          : levels.length
+            ? effortLabel(activeEffort)
+            : control === "always"
+              ? "始终开启"
+              : "开启";
   const canChooseThinking =
     control !== "none" && (control !== "always" || levels.length > 0);
   const capacities = contextPresets.includes(contextTokens)
@@ -81,8 +86,10 @@ export function ComposerModelPicker({
     : [...contextPresets, contextTokens].sort((a, b) => a - b);
   function changeThinking(value: string) {
     onOptions({
-      thinkingOverride: value === "default" ? undefined : value !== "off",
-      reasoningEffort: ["default", "off", "on"].includes(value)
+      thinkingOverride: ["auto", "default"].includes(value)
+        ? undefined
+        : value !== "off",
+      reasoningEffort: ["auto", "default", "off", "on"].includes(value)
         ? undefined
         : value,
     });
@@ -115,9 +122,11 @@ export function ComposerModelPicker({
               <span className="composer-model-effort">
                 {control === "none"
                   ? "无思考"
-                  : thinkingEnabled
-                    ? thinkingSummary
-                    : "关闭思考"}
+                  : automaticThinking && canChooseThinking
+                    ? "自动思考"
+                    : thinkingEnabled
+                      ? thinkingSummary
+                      : "关闭思考"}
               </span>
             )}
             <ChevronDown
@@ -205,6 +214,16 @@ export function ComposerModelPicker({
                           value={thinkingValue}
                           onValueChange={changeThinking}
                         >
+                          <DropdownMenu.RadioItem
+                            value="auto"
+                            className="composer-model-subitem"
+                            onSelect={keepMenuOpen}
+                          >
+                            自动（按任务）
+                            <DropdownMenu.ItemIndicator>
+                              <Check size={14} aria-hidden="true" />
+                            </DropdownMenu.ItemIndicator>
+                          </DropdownMenu.RadioItem>
                           {control !== "always" && (
                             <DropdownMenu.RadioItem
                               value="off"

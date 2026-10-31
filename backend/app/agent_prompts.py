@@ -88,4 +88,4 @@ completed_steps仅含直接依赖，other_steps是目录；缺失详情用record
 
 
 def dumps(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

@@ -107,7 +107,7 @@ def usage_values(payload, kind):
         outgoing = 0
     details = usage.get("prompt_tokens_details", usage.get("input_tokens_details", {})) or {}
     cached = count(details.get("cached_tokens", usage.get("prompt_cache_hit_tokens")))
-    written = count(usage.get("cache_creation_input_tokens"))
+    written = count(details.get("cache_write_tokens", usage.get("cache_creation_input_tokens")))
     # Some services report non-cached prompt tokens plus hit tokens separately.
     if incoming is None and count(usage.get("prompt_cache_miss_tokens")) is not None and cached is not None:
         incoming = usage["prompt_cache_miss_tokens"] + cached

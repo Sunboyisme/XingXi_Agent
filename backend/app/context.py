@@ -18,6 +18,8 @@ HARD_TOKENS = 24_000
 SUMMARY_TOKENS = 2_000
 MEMORY_TOKENS = 1_500
 RECENT_MESSAGES = 8
+WORKING_TOKENS = 32_768
+TASK_WORKING_TOKENS = 65_536
 locks = WeakValueDictionary()
 
 
@@ -25,6 +27,14 @@ def limits(config):
     total = int(config.get("context_tokens", HARD_TOKENS))
     reserve = min(8192, max(1024, total // 8)) if "context_tokens" in config else 0
     return total, reserve, total - reserve
+
+
+def working_limits(config, *, required=0):
+    """Cap repeated input independently of capacity; preserve active input."""
+    total, reserve, physical = limits(config)
+    target = int(config.get("working_tokens", WORKING_TOKENS))
+    hard = min(physical, max(target, required))
+    return min(total, hard + reserve), reserve, hard
 
 
 def conversation_lock(conversation_id):
@@ -66,10 +76,18 @@ def tokens(text: str) -> int:
     return (ascii_count + 3) // 4 + len(text) - ascii_count
 
 
-def message_tokens(record) -> int:
+def message_tokens(record, model_config=None) -> int:
+    saved = record.provider_context or {}
+    reasoning = saved.get("reasoning_content", "")
+    if model_config is not None and not (
+        model_config.get("thinking_enabled")
+        and saved.get("provider_id") == model_config.get("provider_id")
+        and saved.get("model_name") == model_config.get("model_name")
+    ):
+        reasoning = ""
     return (
         tokens(record.content)
-        + tokens((record.provider_context or {}).get("reasoning_content", ""))
+        + tokens(reasoning)
         + len(record.attachment_ids) * 1024
         + 8
     )
@@ -95,10 +113,10 @@ def reasoning_text(message) -> str:
 
 async def prepare(run_id, conversation_id, model_config, overhead=0):
     total, reserve, hard = limits(model_config)
-    soft = min(SOFT_TOKENS, int(hard * .65)) if "context_tokens" not in model_config else int(hard * .65)
     def usage(used):
         emit(run_id, "context", {"status": "usage", "used_tokens": used,
              "limit_tokens": total, "reserved_tokens": reserve, "estimated": True,
+             "capacity_tokens": limits(model_config)[0],
              "provider_id": model_config.get("provider_id"), "model_name": model_config.get("model_name")})
     if overhead >= hard:
         usage(overhead)
@@ -134,20 +152,21 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
         )
     remaining = [record for record in records[cursor:]
                  if not (record.provider_context or {}).get("incomplete")]
-    estimate = overhead + tokens(summary) + sum(map(message_tokens, remaining))
+    def record_cost(record):
+        return message_tokens(record, model_config)
+    estimate = overhead + tokens(summary) + sum(map(record_cost, remaining))
     latest_user = max((i for i, record in enumerate(remaining) if record.role == "user"), default=0)
+    mandatory = overhead + max(tokens(summary), SUMMARY_TOKENS) + sum(map(record_cost, remaining[latest_user:]))
+    total, reserve, hard = working_limits(model_config, required=mandatory)
+    soft = min(SOFT_TOKENS, int(hard * .65)) if "context_tokens" not in model_config else int(hard * .75)
     split = min(max(0, len(remaining) - RECENT_MESSAGES), latest_user)
-    while split < latest_user and overhead + SUMMARY_TOKENS + sum(map(message_tokens, remaining[split:])) > hard:
+    while split < latest_user and overhead + SUMMARY_TOKENS + sum(map(record_cost, remaining[split:])) > hard:
         split += 1
     if estimate > soft and split:
         older, recent = remaining[:split], remaining[split:]
         emit(run_id, "context", {"status": "compacting"})
         try:
-            config = {**model_config}
-            if config["thinking_control"] != "always":
-                config["thinking_enabled"] = False
-                config["reasoning_effort"] = None
-            llm = provider.model(config)
+            llm = provider.model(model_config, usage_purpose="context_compaction")
             updated = summary
             # Bound each summary call, even when an individual old message is very long.
             batches, batch, size = [], [], 0
@@ -214,7 +233,7 @@ async def prepare(run_id, conversation_id, model_config, overhead=0):
         raise provider.ConfigurationError("系统提示、工具说明与任务资料已占满上下文。请在连接与设置中增大当前模型的上下文大小，或减少启用的工具及项目资料后重试。")
     kept = []
     for record in reversed(remaining):
-        cost = message_tokens(record)
+        cost = record_cost(record)
         if cost > budget:
             if not kept:
                 usage(overhead + tokens(summary) + cost)

@@ -118,7 +118,7 @@ async def test_summary_calls_have_bounded_input_and_mark_unseen_remainder(monkey
             assert sum(map(loop_compaction.message_cost, messages)) <= 3072 - 128
             return AIMessage(content="已读取部分来源，需按编号继续核对。")
 
-    monkeypatch.setattr(loop_compaction.provider, "model", lambda config: Model())
+    monkeypatch.setattr(loop_compaction.provider, "model", lambda config, **kwargs: Model())
     compactor = loop_compaction.LoopCompactor("unused", {"context_tokens": 4096})
     values = exchange(1, "长正文" * 30000)
     entries = [loop_compaction.Entry(value, index, index + 1) for index, value in enumerate(values)]

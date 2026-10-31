@@ -5,6 +5,7 @@ export type ContextUsage = {
   estimated?: boolean;
   limit_tokens?: number;
   reserved_tokens?: number;
+  capacity_tokens?: number;
   provider_id?: string;
   model_name?: string;
 };
@@ -26,9 +27,12 @@ export function ContextMeter({
   const percent = used === undefined ? 0 : Math.round((100 * used) / limit);
   const high = used !== undefined && (used + reserved) / limit >= 0.9;
   const format = (tokens: number) => tokens.toLocaleString("zh-CN");
+  const capacity = usage?.capacity_tokens;
+  const capacityLabel =
+    capacity && capacity > limit ? `模型窗口 ${format(capacity)} token。` : "";
   const label = compacting
     ? "正在整理上下文"
-    : `上下文用量，${used === undefined ? "尚无用量统计，" : `已用 ${format(used)} token，约 ${percent}%，`}总额度 ${format(limit)} token。`;
+    : `上下文用量，${used === undefined ? "尚无用量统计，" : `已用 ${format(used)} token，约 ${percent}%，`}本轮额度 ${format(limit)} token。${capacityLabel}`;
   return (
     <Hint
       label={
@@ -42,7 +46,8 @@ export function ContextMeter({
               {percent}%
             </span>
           )}
-          <span>总额度 {format(limit)} token</span>
+          <span>本轮额度 {format(limit)} token</span>
+          {capacityLabel && <span>{capacityLabel}</span>}
         </>
       }
     >

@@ -43,7 +43,7 @@ async def test_summary_incremental_originals_retained_and_searchable(
             return AIMessage(content="保留用户约定；当前任务尚未验收，不能打包。")
 
     monkeypatch.setattr(context, "SOFT_TOKENS", 500)
-    monkeypatch.setattr(provider, "model", lambda value: Summarizer())
+    monkeypatch.setattr(provider, "model", lambda value, **kwargs: Summarizer())
     summary, records = await context.prepare(run, conversation, config)
     assert "不能打包" in summary and len(records) == 8
     with db.Session() as session:
@@ -89,7 +89,7 @@ async def test_summary_failure_preserves_checkpoint_and_cancels_atomically(
 
     monkeypatch.setattr(context, "SOFT_TOKENS", 10)
     monkeypatch.setattr(context, "HARD_TOKENS", 1000)
-    monkeypatch.setattr(provider, "model", lambda value: Broken())
+    monkeypatch.setattr(provider, "model", lambda value, **kwargs: Broken())
     summary, kept = await context.prepare(run, conversation, config)
     assert summary == "原摘要" and kept[-1].id == records[-1].id
     with db.Session() as session:
@@ -105,7 +105,7 @@ async def test_summary_failure_preserves_checkpoint_and_cancels_atomically(
         async def ainvoke(self, _):
             raise asyncio.CancelledError()
 
-    monkeypatch.setattr(provider, "model", lambda value: Cancelled())
+    monkeypatch.setattr(provider, "model", lambda value, **kwargs: Cancelled())
     with pytest.raises(asyncio.CancelledError):
         await context.prepare(run, conversation, config)
     with db.Session() as session:

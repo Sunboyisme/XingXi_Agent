@@ -6,7 +6,7 @@ import httpx
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.errors import GraphRecursionError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from .db import Session, Settings, Attachment
 from .config import PROFILE_ID, ATTACHMENTS_DIR, secret_get
 from . import model_profiles
@@ -75,6 +75,8 @@ async def discover_models(profile):
 class CompatibleChatModel(ChatOpenAI):
     """Keep reasoning_content intact across streamed Agent tool rounds."""
 
+    cache_scope: str = Field(default="chat", exclude=True)
+
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
         from .model_budget import reserve
         reserve(messages, kwargs)
@@ -108,7 +110,8 @@ class CompatibleChatModel(ChatOpenAI):
         for raw, message in zip(value.get("messages", []), self._convert_input(input_).to_messages()):
             if message.type == "ai" and "reasoning_content" in message.additional_kwargs:
                 raw["reasoning_content"] = message.additional_kwargs["reasoning_content"]
-        return value
+        from .prompt_cache import prepare
+        return prepare(value, self.openai_api_base or "", scope=self.cache_scope)
 
 
 def model(config=None, *, usage_purpose=None) -> ChatOpenAI:
@@ -123,6 +126,9 @@ def model(config=None, *, usage_purpose=None) -> ChatOpenAI:
             config = config or model_profiles.resolve(settings)
         except ValueError as error:
             raise ConfigurationError(str(error)) from None
+        if usage_purpose:
+            from .request_policy import thinking_config
+            config = thinking_config(config, purpose=usage_purpose)
         key = secret_get(model_profiles.secret_ref(config["provider_id"]))
         if not key:
             raise ConfigurationError("请先在「连接与设置」中填写模型名称与 API 密钥。")
@@ -141,7 +147,12 @@ def model(config=None, *, usage_purpose=None) -> ChatOpenAI:
             options["reasoning_effort"] = (config.get("reasoning_effort") or "high") if enabled else "none"
         if enabled and config.get("reasoning_effort"):
             options["reasoning_effort"] = config["reasoning_effort"]
+        if usage_purpose == "task_routing":
+            options["max_tokens"] = min(options.get("max_tokens", 8192), 4096 if enabled else 512)
+        elif usage_purpose == "context_compaction" and not enabled:
+            options["max_tokens"] = min(options.get("max_tokens", 8192), 3072)
         return CompatibleChatModel(
+            cache_scope=usage_purpose or "chat",
             model=config["model_name"],
             api_key=key,
             base_url=config["model_url"].rstrip("/"),
@@ -226,8 +237,9 @@ def message_text(content):
 async def ask_json(
     schema: type[BaseModel], instructions: str, text: str, attachment_ids=None,
     *, model_config=None, on_partial=None, on_usage=None, image_data=None, run_id=None,
+    usage_purpose=None,
 ) -> BaseModel:
-    llm = model(model_config, usage_purpose="image_reading" if image_data else None)
+    llm = model(model_config, usage_purpose="image_reading" if image_data else usage_purpose)
     messages = [
         SystemMessage(
             content=instructions
