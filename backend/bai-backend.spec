@@ -3,7 +3,14 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 backend = Path(SPECPATH)
-datas = [(str(backend / "migrations"), "migrations"), (str(backend / "alembic.ini"), "."), (str(backend / "app/builtin_skills"), "app/builtin_skills")]
+# Bundle migration sources explicitly so local bytecode (including deleted
+# migrations) never becomes an installer resource.
+datas = [
+    (str(source), str(source.parent.relative_to(backend)))
+    for source in sorted((backend / "migrations").rglob("*.py"))
+    if "__pycache__" not in source.parts
+]
+datas += [(str(backend / "alembic.ini"), "."), (str(backend / "app/builtin_skills"), "app/builtin_skills")]
 hiddenimports = []
 hiddenimports += ["app.office_worker", "app.office_formats"]
 for package in ("docx", "reportlab", "openpyxl", "xlsxwriter", "pypdf", "pymupdf", "defusedxml"):
