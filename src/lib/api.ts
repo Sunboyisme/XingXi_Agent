@@ -15,6 +15,8 @@ export type MCPServerWrite = Schemas["MCPServerWrite"];
 export type Conversation = Schemas["ConversationRead"];
 export type Project = Schemas["ProjectRead"];
 export type Message = Schemas["MessageRead"];
+export type Clarification = Schemas["ClarificationRead"];
+export type ClarificationResponse = Schemas["ClarificationResponse"];
 export type Run = Schemas["RunRead"];
 export type ComplexTask = {
   resume_run_id?: string | null;

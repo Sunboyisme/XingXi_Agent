@@ -17,6 +17,8 @@ from . import artifacts, office, provider, task_context, followups, task_results
 from .config import PROFILE_ID
 from .db import ComplexTask, Message, Run, RunEvent, Session, TaskOperation, TaskStep, now, uid
 from .runs import emit
+from . import clarifications
+from .clarification_models import QuestionInput
 
 READ_TOOLS = {
     "list_todos",
@@ -158,6 +160,7 @@ class Plan(BaseModel):
     expected_outputs: list[OutputFormat] = Field(default_factory=list, max_length=30)
     completion_criteria: list[str] = Field(default_factory=list, max_length=30)
     question: str = ""
+    questions: list[QuestionInput] = Field(default_factory=list, max_length=3)
     steps: list[PlannedStep] = Field(default_factory=list, max_length=20)
 
     @field_validator("expected_outputs", mode="before")
@@ -167,6 +170,10 @@ class Plan(BaseModel):
 
     @model_validator(mode="after")
     def ordered(self):
+        if self.questions and not self.question:
+            self.question = "\n".join(question.question for question in self.questions)
+        if self.question and not self.questions:
+            raise ValueError("需要澄清时请同时提供questions及具体选项")
         if not self.question and not self.steps:
             raise ValueError("任务必须包含步骤或待澄清问题")
         for index, step in enumerate(self.steps):
@@ -398,7 +405,7 @@ def add_usage(run_id, usage):
              "provider_id": config.get("provider_id"), "model_name": config.get("model_name")})
 
 
-def save_reply(run_id, conversation_id, text):
+def save_reply(run_id, conversation_id, text, *, clarification=None):
     with Session() as db:
         reasoning = {}
         for event in db.scalars(select(RunEvent).where(RunEvent.run_id == run_id,
@@ -411,15 +418,20 @@ def save_reply(run_id, conversation_id, text):
             message.content = text
             message.reasoning = "\n\n".join(reasoning.values())
         else:
-            db.add(Message(conversation_id=conversation_id, role="assistant", run_id=run_id,
-                           content=text, reasoning="\n\n".join(reasoning.values())))
+            message = Message(conversation_id=conversation_id, role="assistant", run_id=run_id,
+                              content=text, reasoning="\n\n".join(reasoning.values()))
+            db.add(message)
+        if clarification:
+            db.flush()
+            clarification = {**clarification, "source_message_id": message.id}
+            message.provider_context = {**(message.provider_context or {}), "clarification": clarification}
         from .db import Conversation
         db.get(Conversation, conversation_id).updated_at = now()
         db.commit()
-    emit(run_id, "answer", {"text": text})
+    emit(run_id, "answer", {"text": text, **({"clarification": clarification} if clarification else {})})
     from .agent import _remember_clear_preference
     _remember_clear_preference(run_id, conversation_id)
-    return {"content": text, "conversation_id": conversation_id}
+    return {"content": text, "conversation_id": conversation_id, **({"clarification": clarification} if clarification else {})}
 
 
 def recover():
@@ -687,6 +699,7 @@ async def make_plan(run_id, task_id, *, repair=False):
                       for value in tool_catalog() if value["enabled"] and value["available"]],
         }
         facts["tools"].append({"id": "read_task_result", "description": "按编号读取当前任务原始步骤、操作和用户消息", "available": True})
+        facts["tools"].append({"id": "ask_user_question", "description": "缺少关键信息时向用户提出选项并等待补充", "available": True})
         from . import skills
         facts["skills"] = skills.catalog()
         config, revision = task.model_config, task.revision
@@ -707,6 +720,8 @@ async def make_plan(run_id, task_id, *, repair=False):
         "输入文件清单区分图片和文档；当前图片可由视觉模型直接读取，不需要强制read_file。只在需要读取历史或项目图片时使用read_file。"
         "用户提供本机绝对路径时可用read_local_file读取、scan_local_folder扫描目录，无需要求上传。只在用户提供的路径范围内只读访问，不安排本地路径写入。"
         "保留用户约束和来源要求；只有所有工作都被必要缺项阻塞才填写question。部分事项缺信息时，先规划其余独立可执行步骤，末步汇总缺项询问；不要要求逐步批准已有授权。"
+        "需要用户补充时同时填写questions：集中1–3题，每题2–5个具体选项，multiple表示是否可多选；其他回答由界面自动添加，不要自己列其他选项。不要只写question文字而遗漏questions。"
+        "部分步骤的歧义在执行到该步骤时使用ask_user_question提出选项并等待，其他已明确的独立工作不因小偏好反复提问。"
         "长文按章节或连续片段分批读取，每批保存覆盖范围和小结，再汇总生成报告；定点问题先全文检索再读命中。文件只在其指定生成步骤制作，分析或核对步骤复用原产物，不重做。"
         "创建学习路线前必须了解学习目标、目前基础和相关背景；从原对话提取，缺什么一次问清，不从主题或岗位推断会编程。未提供基础时用question询问，不先建课；用户明确让直接安排或从零开始时才按保守入门方案。"
         "conversation_context保留确认前的原始对话。简短同意指向前面已展示的具体方案，结合原方案执行，不能把‘确认用户想做什么’设为任务目标。"
@@ -723,7 +738,7 @@ async def make_plan(run_id, task_id, *, repair=False):
     with Session() as db:
         task = require(db, task_id)
         old = {value.id: value for value in db.scalars(select(TaskStep).where(TaskStep.task_id == task_id))}
-        valid_tools = {value["id"] for value in tool_catalog() if value["enabled"] and value["available"]} | {"read_task_result"}
+        valid_tools = {value["id"] for value in tool_catalog() if value["enabled"] and value["available"]} | {"read_task_result", "ask_user_question"}
         if any(name not in valid_tools for step in plan.steps for name in step.tools):
             raise ValueError("任务规划引用了未启用或不存在的工具")
         ids = []
@@ -758,6 +773,8 @@ async def make_plan(run_id, task_id, *, repair=False):
             ids.append(step.id)
         task.goal = plan.goal
         task.result = {"verified_artifacts": task.result.get("verified_artifacts", {})}
+        if plan.questions:
+            task.result = {**task.result, "clarification": clarifications.create(plan.questions)}
         previous_title = task.requirements.get("title", "")
         if previous_title == "正在整理任务":
             previous_title = ""
@@ -857,7 +874,10 @@ def notice(run_id, task_id):
     if value["artifacts"] and value["status"] in TERMINAL:
         text += "\n\n已保存：" + "、".join(item["name"] for item in value["artifacts"])
     publish(run_id, task_id)
-    return save_reply(run_id, value["conversation_id"], text)
+    clarification = value["result"].get("clarification") if value["status"] == "waiting_input" else None
+    if clarification:
+        text = clarifications.text(clarification)
+    return save_reply(run_id, value["conversation_id"], text, clarification=clarification)
 
 
 def reconcile_calendar(db, operation):
@@ -1016,6 +1036,14 @@ async def execute(run_id, task_id, *, repairs=0):
                 db.get(TaskStep, step.id).status = "pending"
                 db.commit()
             continue
+        except clarifications.Requested as question:
+            with Session() as db:
+                db.get(TaskStep, step.id).status = "pending"
+                task = require(db, task_id)
+                task.status, task.reason = "waiting_input", "需要你补充信息后继续。"
+                task.result = {**task.result, "clarification": question.request}
+                db.commit()
+            return notice(run_id, task_id)
         except task_context.TaskControl as error:
             with Session() as db:
                 db.get(TaskStep, step.id).status = "pending"

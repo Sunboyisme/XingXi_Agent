@@ -22,6 +22,7 @@ import { Hint, Markdown } from "./common";
 import { Picture } from "./ImageAttachments";
 import { SpeechInputButton } from "./SpeechInputButton";
 import { Reasoning } from "./Reasoning";
+import { ClarificationCard } from "./ClarificationCard";
 import { useSpeechInput } from "@/lib/useSpeechInput";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import { nativeFile, useNativeDrop } from "@/lib/nativeDrop";
@@ -41,7 +42,7 @@ import {
   type Run,
   type Attachment,
 } from "@/lib/desktopAssistant";
-import type { RunEvent } from "@/lib/api";
+import type { Clarification, ClarificationResponse, Message, RunEvent } from "@/lib/api";
 type IncomingImage = {
   id: string;
   dataUrl: string;
@@ -67,6 +68,7 @@ export function DesktopQuickAsk() {
   const commandsPending = useRef(false);
   const [settings, setSettings] = useState<Settings>();
   const [answer, setAnswer] = useState("");
+  const [clarification, setClarification] = useState<Clarification | null>(null);
   const { copied, error: copyError, copy } = useCopyFeedback(answer);
   const [reasoning, setReasoning] = useState("");
   const [reasoningActive, setReasoningActive] = useState(false);
@@ -320,11 +322,15 @@ export function DesktopQuickAsk() {
       updateDraft((value) => ({ ...value, runId: id }));
       await track(run, epoch);
     } else {
-      const text = run.result?.text;
+      const text = run.result?.content || run.result?.text;
       setAnswer(typeof text === "string" ? text : "");
+      setClarification(null);
       setError(run.error || "");
       try {
-        const history = await api<RunEvent[]>(`/runs/${id}/tools`);
+        const [history, messages] = await Promise.all([
+          api<RunEvent[]>(`/runs/${id}/tools`),
+          api<Message[]>(`/conversations/${run.conversation_id}/messages`),
+        ]);
         if (
           !mounted.current ||
           epoch !== generation.current ||
@@ -333,6 +339,7 @@ export function DesktopQuickAsk() {
         )
           return;
         const steps = new Map<string, string>();
+        setClarification(messages.find((message) => message.role === "assistant" && message.run_id === id)?.clarification || null);
         history
           .filter((event) => event.kind === "reasoning")
           .forEach((event) => {
@@ -378,6 +385,7 @@ export function DesktopQuickAsk() {
     setFileBusy(false);
     updateDraft(emptyQuickDraft());
     setAnswer("");
+    setClarification(null);
     setReasoning("");
     setReasoningActive(false);
     setReasoningIncomplete(false);
@@ -439,6 +447,7 @@ export function DesktopQuickAsk() {
     setRunBusy(true);
     followingAnswer.current = true;
     setAnswer("");
+    setClarification(null);
     setReasoning("");
     setReasoningActive(false);
     setReasoningIncomplete(false);
@@ -472,6 +481,7 @@ export function DesktopQuickAsk() {
           if (e.kind === "answer") {
             setReasoningActive(false);
             setAnswer(String(e.data.text || ""));
+            setClarification((e.data.clarification as Clarification | undefined) || null);
           }
           if (e.kind === "error")
             setError(String(e.data.message || "回答失败"));
@@ -483,9 +493,10 @@ export function DesktopQuickAsk() {
         epoch === generation.current &&
         sequence === tracking.current
       ) {
-        const text = (result.result as { text?: string })?.text;
+        const text = result.result.content || result.result.text;
         setReasoningIncomplete(result.status !== "completed");
-        if (text) setAnswer(text);
+        if (typeof text === "string") setAnswer(text);
+        setClarification((result.result.clarification as Clarification | undefined) || null);
         if (result.error) setError(result.error);
         avatar.finish(result, visible.current);
         if (typeof result.result.next_run_id === "string") {
@@ -523,8 +534,9 @@ export function DesktopQuickAsk() {
       }
     }
   }
-  async function send() {
+  async function send(response?: ClarificationResponse): Promise<boolean> {
     const value = current.current;
+    const attachments = response ? [] : value.attachments;
     if (
       startRequest.current ||
       work.current.busy ||
@@ -532,9 +544,9 @@ export function DesktopQuickAsk() {
       work.current.locked ||
       nativeReading.current ||
       creatingChatLock.current ||
-      (!value.text.trim() && !value.attachments.length)
+      (!response && !value.text.trim() && !value.attachments.length)
     )
-      return;
+      return false;
     startRequest.current = true;
     setSubmitting(true);
     const epoch = ++generation.current;
@@ -552,7 +564,7 @@ export function DesktopQuickAsk() {
             m.selection.model_name === settings?.model_name,
         );
       if (
-        value.attachments.some((a) => a.media_type.startsWith("image/")) &&
+        attachments.some((a) => a.media_type.startsWith("image/")) &&
         choice &&
         !choice.vision
       )
@@ -569,30 +581,33 @@ export function DesktopQuickAsk() {
         if (mounted.current && epoch === generation.current)
           updateDraft((d) => ({ ...d, conversationId: id }));
       }
-      const text = value.text.trim() || "请根据这张截图或附件帮助我分析。";
+      const text = response ? "补充回答" : value.text.trim() || "请根据这张截图或附件帮助我分析。";
       const run = await api<Run>(`/conversations/${id}/messages`, "POST", {
         content: text,
-        attachment_ids: value.attachments.map((a) => a.id),
+        attachment_ids: attachments.map((a) => a.id),
         model_selection: selected,
+        clarification_response: response,
       });
-      if (!mounted.current || epoch !== generation.current) return;
+      if (!mounted.current || epoch !== generation.current) return true;
       updateDraft((d) => ({
         ...d,
         conversationId: id,
-        text: d.text === value.text ? "" : d.text,
+        text: !response && d.text === value.text ? "" : d.text,
         attachments: d.attachments.filter(
-          (a) => !value.attachments.some((sent) => sent.id === a.id),
+          (a) => !attachments.some((sent) => sent.id === a.id),
         ),
         runId: run.id,
       }));
       setQuestion(text);
       setSubmitting(false);
       await track(run, epoch);
+      return true;
     } catch (e) {
       if (mounted.current && epoch === generation.current) {
         setRunBusy(false);
         setError(desktopError(e));
       }
+      return false;
     } finally {
       if (epoch === generation.current) {
         startRequest.current = false;
@@ -790,7 +805,7 @@ export function DesktopQuickAsk() {
       setReadingFiles(value);
     },
   );
-  const hasAnswer = Boolean(answer || reasoning || busy || error);
+  const hasAnswer = Boolean(answer || clarification || reasoning || busy || error);
   useDesktopTaskRead(
     draft.conversationId,
     Boolean(answer) && !answerCollapsed,
@@ -870,7 +885,11 @@ export function DesktopQuickAsk() {
               active={reasoningActive}
               incomplete={!busy && reasoningIncomplete}
             />
-            <Markdown>{answer}</Markdown>
+            {clarification ? (
+              <ClarificationCard key={`${clarification.request_id}:${clarification.state}`}
+                request={clarification} disabled={busy || submitting || uploading || readingFiles || Boolean(voice)}
+                onAnswer={(response) => send(response)} />
+            ) : <Markdown>{answer}</Markdown>}
             {busy && (
               <p className="quick-answer-status" role="status">
                 {submitting

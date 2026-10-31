@@ -199,7 +199,7 @@ def test_duplicate_active_turn_is_rejected(configured, monkeypatch):
     assert wait_run(configured, first)["status"] == "completed"
 
 
-def test_chat_mode_sends_only_the_conversation_without_tools(configured, monkeypatch):
+def test_chat_mode_exposes_only_the_question_interaction(configured, monkeypatch):
     from app import usage_cost
     from .test_app import wait_run
 
@@ -225,7 +225,7 @@ def test_chat_mode_sends_only_the_conversation_without_tools(configured, monkeyp
     ))
     assert run["status"] == "completed", run.get("error")
     chat = [body for body in bodies if body.get("messages")]
-    assert chat and all(not body.get("tools") for body in chat)
+    assert chat and all({tool["function"]["name"] for tool in body.get("tools", [])} == {"ask_user_question"} for body in chat)
     assert "对话模式" in chat[-1]["messages"][0]["content"]
     # A retry keeps the conversation options of the original reply.
     with db.Session() as session:

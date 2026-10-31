@@ -24,6 +24,7 @@ from .db import (
 from .runs import emit
 from .tools import prepare_tools
 from . import task_context
+from . import clarifications
 
 
 async def chat(run_id: str, conversation_id: str) -> dict:
@@ -116,12 +117,13 @@ def _agent_instructions(*, settings, date, memories, knowledge_context, availabl
 
 
 def _chat_instructions(*, settings, date, memories, knowledge_context, conversation_id) -> str:
-    """A short system prompt for chat mode: no tools, only the conversation and context."""
+    """Chat has only the local question interaction, with no business tools."""
     from . import agent_prompts, projects
 
-    instructions = """你是XiaoXi（小汐），用户的个人助手。中文名固定为“小汐”，自我介绍时使用这个名字。当前是对话模式：本轮没有任何工具，只依据对话内容、你的知识和下面提供的资料回答，使用清晰自然的中文。
+    instructions = """你是XiaoXi（小汐），用户的个人助手。中文名固定为“小汐”，自我介绍时使用这个名字。当前是对话模式：只依据对话内容、你的知识和下面提供的资料回答，使用清晰自然的中文；仅可用ask_user_question向用户澄清，没有其他工具。
 不能查询实时信息、读取网页或文件、创建计划、保存记忆或生成图片；用户需要这些操作时，说明可以在输入框下方把「对话」切换为「智能体」。不要声称执行了任何操作。
 用户告知生日、偏好或要求记住时，明确‘本次对话可以参考，尚未保存到长期记忆’，不能说记下了、记住了或承诺以后跨对话记得。历史助手的保存声明也不是实际保存证据。"""
+    instructions += "\n" + agent_prompts.CLARIFICATION
     instructions += agent_prompts.RUNTIME_MARKER + projects.instructions(conversation_id)
     instructions += "\n" + channel_context()
     if memories:
@@ -148,10 +150,11 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
     options = model_profiles.chat_options(model_config)
     # Task steps always need tools; chat mode is for plain conversation.
     chat_only = options["mode"] == "chat" and not task_instructions
-    available_tools = []
+    available_tools = [clarifications.question_tool()]
     discovery = None
     if not chat_only:
         available_tools = await prepare_tools(run_id, conversation_id)
+        available_tools.append(clarifications.question_tool())
         from . import context_archive
         available_tools.append(context_archive.reader(run_id))
         if task_instructions:
@@ -194,7 +197,7 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
         )
     from . import agent_prompts
     from .tool_discovery import schema_tokens
-    tool_budget = schema_tokens(discovery.exposed_tools()) if discovery else 0
+    tool_budget = schema_tokens(discovery.exposed_tools() if discovery else available_tools)
     summary, records = await chat_context.prepare(
         run_id,
         conversation_id,
@@ -242,7 +245,7 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
     from .context_budget import ContextBudget
     agent = create_agent(
         provider.model(model_config) if model_config else provider.model(),
-        tools=discovery.registered_tools if discovery else [],
+        tools=discovery.registered_tools if discovery else available_tools,
         system_prompt=instructions,
         middleware=[*([discovery] if discovery else []), ContextBudget(run_id, model_config)],
     )
@@ -353,6 +356,14 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
                                     }
                                 # Persist the final answer, not pre-tool narration from earlier turns.
                                 text = chat_context.plain_text(message.content)
+    except clarifications.Requested as question:
+        stream_events.flush()
+        from .complex_tasks import add_usage
+        add_usage(run_id, {"total_tokens": total_tokens})
+        if not persist:
+            raise
+        from .complex_tasks import save_reply
+        return save_reply(run_id, conversation_id, clarifications.text(question.request), clarification=question.request)
     except task_context.ModelBudgetExceeded as error:
         receipt = _durable_receipt(run_id) if persist else ""
         if not receipt:

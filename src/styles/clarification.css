@@ -1,0 +1,104 @@
+.clarification-card {
+  width: min(100%, 620px);
+  margin: 10px 0;
+  padding: 18px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  overflow-wrap: anywhere;
+}
+.clarification-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.clarification-heading > span,
+.clarification-card legend small,
+.clarification-option small {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.clarification-card fieldset {
+  min-width: 0;
+  margin: 0 0 18px;
+  padding: 0;
+  border: 0;
+}
+.clarification-card legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.clarification-card legend small {
+  margin-left: 10px;
+  font-weight: 400;
+}
+.clarification-options {
+  display: grid;
+  gap: 8px;
+}
+.clarification-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.clarification-option input {
+  flex-shrink: 0;
+  margin-top: 5px;
+  accent-color: var(--ui-color-action);
+}
+.clarification-option > span {
+  min-width: 0;
+}
+.clarification-option small {
+  display: block;
+  margin-top: 2px;
+}
+.clarification-option:hover,
+.clarification-option[data-selected="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--ui-color-action) 60%,
+    var(--ui-color-line)
+  );
+  background: color-mix(
+    in srgb,
+    var(--ui-color-action) 6%,
+    var(--ui-color-surface)
+  );
+}
+.clarification-option:focus-within {
+  outline: 2px solid var(--ui-color-action);
+  outline-offset: 2px;
+}
+.clarification-card fieldset:disabled .clarification-option {
+  cursor: default;
+}
+.clarification-custom {
+  margin-top: 10px;
+  resize: vertical;
+  max-height: 240px;
+}
+.clarification-error {
+  margin: 8px 0;
+  color: var(--ui-color-danger, #b4463b);
+  font-size: 13px;
+}
+.quick-answer .clarification-card {
+  padding: 12px;
+  border-radius: 12px;
+}
+.quick-answer .clarification-option {
+  padding: 8px 10px;
+}

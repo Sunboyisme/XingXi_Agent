@@ -53,6 +53,7 @@ import {
   type Attachment,
   type Memory,
   type ComplexTask,
+  type ClarificationResponse,
 } from "@/lib/api";
 import { ErrorNotice, Hint, ImagesInput, Markdown } from "./common";
 import { MessageAttachment } from "./OfficeFiles";
@@ -67,6 +68,7 @@ import { useAvatarActivity } from "@/lib/useAvatarActivity";
 import { NewChatStarters, NewChatWelcome } from "./NewChatWelcome";
 import { ChatScrollNavigation } from "./ChatScrollNavigation";
 import { TaskCard } from "./TaskCard";
+import { ClarificationCard } from "./ClarificationCard";
 import { LearningHandoffCards } from "./LearningHandoffCards";
 import { CourseOutline, LearningCourseCards, type CourseReceipt } from "./LearningCourseCards";
 import {
@@ -143,7 +145,7 @@ const chatDraftKey = (conversationId: string | null) =>
 /** 回答方式与检索开关对所有对话生效，不再按对话分别保存。 */
 const chatOptionsKey = "bai-chat-options";
 
-/** agent 可调用工具；chat 只发送系统提示词与对话，更省 token。 */
+/** agent 可调用业务工具；chat 仅保留对话和本地澄清交互。 */
 type ChatOptions = { mode: "agent" | "chat"; useMemory: boolean; useKnowledge: boolean };
 const defaultChatOptions: ChatOptions = { mode: "agent", useMemory: true, useKnowledge: true };
 
@@ -1070,7 +1072,7 @@ export function ChatPage({
     return () => observer.disconnect();
   }, [conversationId, empty, scheduleFollowLatest]);
   async function send(
-    edited?: Pick<Message, "content" | "attachment_ids" | "local_references">,
+    edited?: Pick<Message, "content" | "attachment_ids" | "local_references"> & { clarification_response?: ClarificationResponse },
   ) {
     const text = edited ? edited.content : draft;
     const attachmentIds = edited
@@ -1088,6 +1090,7 @@ export function ChatPage({
       moveProjectLock.current ||
       (busy && !run) ||
       uploading ||
+      (Boolean(edited?.clarification_response) && busy) ||
       (!text.trim() && !attachmentIds.length && !localReferences.length)
     )
       return false;
@@ -1128,6 +1131,7 @@ export function ChatPage({
         attachment_ids: attachmentIds,
         local_references: localReferences,
         model_selection: modelSelection,
+        clarification_response: edited?.clarification_response,
       });
       if (created) {
         storeModelPreference(id, { ...modelPreference, key: selected?.key || "" });
@@ -1457,6 +1461,10 @@ export function ChatPage({
                           </Button>
                         </div>
                       </div>
+                    ) : value.role === "assistant" && value.clarification ? (
+                      <ClarificationCard key={`${value.clarification.request_id}:${value.clarification.state}`}
+                        request={value.clarification} disabled={busy || submitting || uploading || !modelReady}
+                        onAnswer={(response) => send({ content: "回答澄清问题", attachment_ids: [], local_references: [], clarification_response: response })} />
                     ) : (
                       (
                         <Markdown
@@ -1484,7 +1492,7 @@ export function ChatPage({
                     {value.role === "assistant" && (
                       <AnswerActions
                         content={value.content}
-                        onRetry={value === lastAssistant && value.run_id === run?.id &&
+                        onRetry={!value.clarification && value === lastAssistant && value.run_id === run?.id &&
                           run?.status === "completed" && !run.task_id && run.retry_action === "retry"
                           ? () => void retry(value.run_id || undefined) : undefined}
                         retryDisabled={busy || submitting || uploading || !modelReady}

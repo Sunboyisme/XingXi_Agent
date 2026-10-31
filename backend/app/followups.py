@@ -56,6 +56,10 @@ def is_confirmation(text: str) -> bool:
 
 def choice_context(db, message):
     """Resolve a short selection only against the immediately preceding reply."""
+    from . import clarifications
+    structured = clarifications.choice_context(db, message)
+    if structured:
+        return structured
     compact = re.sub(r"[\s。！!，,]", "", message.content or "")
     if not re.fullmatch(r"(?:选|选择|第)?[1-9](?:个|项)?|都要|全部|两个都要|都选", compact):
         return None

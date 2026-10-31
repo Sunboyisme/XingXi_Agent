@@ -11,6 +11,8 @@ from pydantic import (
     model_validator,
 )
 
+from .clarification_models import ClarificationRead, ClarificationResponse
+
 
 class ReadModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -389,6 +391,7 @@ class MessageRead(RecordRead):
     task_id: str | None = None
     has_learning_continuation: bool = False
     has_learning_course: bool = False
+    clarification: ClarificationRead | None = None
 
 
 class CredentialBinding(BaseModel):
@@ -505,6 +508,7 @@ class ChatInput(BaseModel):
     attachment_ids: list[str] = Field(default_factory=list, max_length=4)
     local_references: list[str] = Field(default_factory=list, max_length=4)
     model_selection: ModelSelection | None = None
+    clarification_response: ClarificationResponse | None = None
 
 
 class ChatRetry(BaseModel):

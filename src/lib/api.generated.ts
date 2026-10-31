@@ -131,12 +131,42 @@ export interface components {
             /** Local References */
             local_references?: string[];
             model_selection?: components["schemas"]["ModelSelection"] | null;
+            clarification_response?: components["schemas"]["ClarificationResponse"] | null;
         };
         /** ChatRetry */
         ChatRetry: {
             model_selection?: components["schemas"]["ModelSelection"] | null;
             /** Source Run Id */
             source_run_id?: string | null;
+        };
+        /** ClarificationRead */
+        ClarificationRead: {
+            /** Request Id */
+            request_id: string;
+            /**
+             * Source Message Id
+             * @default
+             */
+            source_message_id: string;
+            /** Questions */
+            questions: components["schemas"]["QuestionRead"][];
+            /**
+             * State
+             * @default pending
+             * @enum {string}
+             */
+            state: "pending" | "answered" | "superseded";
+            /** Answers */
+            answers?: components["schemas"]["QuestionAnswer"][];
+        };
+        /** ClarificationResponse */
+        ClarificationResponse: {
+            /** Request Id */
+            request_id: string;
+            /** Source Message Id */
+            source_message_id: string;
+            /** Answers */
+            answers: components["schemas"]["QuestionAnswer"][];
         };
         /** ComposerHintRead */
         ComposerHintRead: {
@@ -1015,6 +1045,7 @@ export interface components {
              * @default false
              */
             has_learning_course: boolean;
+            clarification?: components["schemas"]["ClarificationRead"] | null;
         };
         /** ModelOption */
         ModelOption: {
@@ -1178,6 +1209,18 @@ export interface components {
              * @default 10
              */
             minutes: number;
+        };
+        /** OptionRead */
+        OptionRead: {
+            /** Label */
+            label: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
         };
         /** PlanAction */
         PlanAction: {
@@ -1705,6 +1748,32 @@ export interface components {
             default_model: string;
             /** Api Key */
             api_key?: string | null;
+        };
+        /** QuestionAnswer */
+        QuestionAnswer: {
+            /** Question Id */
+            question_id: string;
+            /** Option Ids */
+            option_ids: string[];
+            /**
+             * Custom Text
+             * @default
+             */
+            custom_text: string;
+        };
+        /** QuestionRead */
+        QuestionRead: {
+            /** Id */
+            id: string;
+            /** Question */
+            question: string;
+            /** Options */
+            options: components["schemas"]["OptionRead"][];
+            /**
+             * Multiple
+             * @default false
+             */
+            multiple: boolean;
         };
         /** QuickPresetRead */
         QuickPresetRead: {

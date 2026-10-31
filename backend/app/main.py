@@ -611,6 +611,7 @@ def new_conversation(value: s.ConversationCreate, db=Depends(database)):
     "/conversations/{conversation_id}/messages", response_model=list[s.MessageRead]
 )
 def messages(conversation_id: str, db=Depends(database)):
+    from . import clarifications
     item(db, store.Conversation, conversation_id)
     records = db.scalars(
         select(store.Message)
@@ -631,12 +632,18 @@ def messages(conversation_id: str, db=Depends(database)):
         "task_id": run_details[record.run_id].task_id if record.run_id in run_details else None,
         "has_learning_continuation": record.run_id in learning_cards,
         "has_learning_course": record.run_id in course_cards,
+        "clarification": s.ClarificationRead.model_validate(clarification)
+        if (clarification := clarifications.read(record, latest_id=records[-1].id)) else None,
     }) for record in records]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=s.RunRead)
 async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(database)):
+    from . import clarifications
     conversation = item(db, store.Conversation, conversation_id)
+    clarification = clarifications.resolve(db, conversation_id, value.clarification_response) if value.clarification_response else None
+    if clarification:
+        value = value.model_copy(update={"content": clarification[2]})
     try:
         local_references = local_files.validate_references(value.local_references, len(value.attachment_ids))
     except (ValueError, OSError) as error:
@@ -644,6 +651,8 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
     active = db.scalar(select(store.Run).where(store.Run.conversation_id == conversation_id,
         store.Run.status.in_(store.ACTIVE_RUN_STATUSES)))
     if active:
+        if clarification:
+            raise HTTPException(409, "请等待当前回答结束后再提交选项")
         if not active.task_id:
             raise HTTPException(409, "请等待当前回答完成，或先停止生成。")
         task = complex_tasks.require(db, active.task_id)
@@ -673,12 +682,19 @@ async def send_message(conversation_id: str, value: s.ChatInput, db=Depends(data
     db.add(message)
     db.flush()
     run.source_message_id = message.id
+    if clarification:
+        source, request, _, response = clarification
+        clarifications.accept(db, source, request, response, message)
+        if model_profiles.chat_options(config)["mode"] == "agent":
+            run.task_id = response.get("task_id")
+            if run.task_id:
+                complex_tasks.require(db, run.task_id).model_config = config
     if conversation.title == "新对话":
         conversation.title = value.content[:30]
     conversation.updated_at = store.now()
     db.commit()
     async def operation():
-        handoff = None if value.attachment_ids or local_references else await learning_handoff.handle(run.id, conversation_id, value.content)
+        handoff = None if clarification or value.attachment_ids or local_references else await learning_handoff.handle(run.id, conversation_id, value.content)
         return handoff if handoff is not None else await agent.chat(run.id, conversation_id)
     runs.launch(run.id, operation)
     return run

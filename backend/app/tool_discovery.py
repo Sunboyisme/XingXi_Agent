@@ -23,7 +23,7 @@ GROUPS = (
     ("生成文件与图片", {"create_document", "create_spreadsheet", "create_text_file", "generate_image"}),
     ("学习路线", {"learning_goals", "create_learning_goal"}),
     ("技能", {"load_skill", "read_skill_file", "run_skill_script"}),
-    ("任务与原文", {"read_context_record", "read_task_result"}),
+    ("任务与原文", {"read_context_record", "read_task_result", "ask_user_question"}),
 )
 
 # Load prerequisites together, so the model can perform the required read before
@@ -107,7 +107,7 @@ class ToolDiscovery(AgentMiddleware):
         self.available = {tool.name: tool for tool in sorted(tools, key=lambda tool: tool.name)}
         self.loaded = []
         self.advertised = set()
-        self._load({"read_context_record", *required, *initial_tools(initial_text)})
+        self._load({"read_context_record", "ask_user_question", *required, *initial_tools(initial_text)})
         remote = [name for name, tool in self.available.items() if (tool.metadata or {}).get("source") == "mcp"]
         if initial_text:
             if "mcp" in initial_text.casefold() and len(remote) <= 8:
@@ -252,6 +252,15 @@ class ToolDiscovery(AgentMiddleware):
 
     async def awrap_tool_call(self, request, handler):
         name = request.tool_call["name"]
+        state = getattr(request, "state", {})
+        messages = state.get("messages", []) if isinstance(state, dict) else []
+        calls = next((getattr(message, "tool_calls", []) for message in reversed(messages)
+                      if getattr(message, "type", "") == "ai"), [])
+        if len(calls) > 1 and any(call.get("name") == "ask_user_question" for call in calls):
+            # Reject the entire batch before any paid/write operation starts.
+            return ToolMessage(content=json.dumps({"error": "提问必须单独调用；本批工具均未执行。请将问题集中到一次ask_user_question，等待用户回答。",
+                "not_executed": True, "retryable": True}, ensure_ascii=False),
+                tool_call_id=request.tool_call["id"], name=name, status="error")
         if name not in self.advertised:
             # Even a guessed tool name or discover+execute parallel batch must
             # see the schema and capability rules before the operation can run.
