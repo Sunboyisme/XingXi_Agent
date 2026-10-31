@@ -10,7 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AlertCircle, Check, Info, TriangleAlert, X } from "lucide-react";
+import { ArrowUpRight, Check, Info, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -87,32 +87,36 @@ export function ErrorNotice({
 }) {
   return (
     <div className={`error-notice app-feedback is-${tone}`} role={tone === "error" ? "alert" : "status"}>
-      {tone === "info" ? <Info size={17} /> : tone === "success" ? <Check size={17} /> : tone === "warning" ? <TriangleAlert size={17} /> : <AlertCircle size={17} />}
-      <span className="error-notice-text">{message}</span>
-      {(action || retry || onClose) && (
-        <span className="error-notice-actions">
-          {action && (
-            <Button size="sm" variant="ghost" onClick={action.onClick}>
-              {action.label}
-            </Button>
-          )}
-          {retry && (
-            <Button size="sm" variant="ghost" onClick={retry}>
-              重试
-            </Button>
-          )}
-          {onClose && (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label="关闭错误提示"
-              onClick={onClose}
-            >
-              <X size={15} aria-hidden="true" />
-            </Button>
-          )}
-        </span>
+      {tone === "info" ? <Info size={17} aria-hidden="true" /> : tone === "success" ? <Check size={17} aria-hidden="true" /> : tone === "warning" ? <TriangleAlert size={17} aria-hidden="true" /> : null}
+      <div className="error-notice-body">
+        <span className="error-notice-text">{message}</span>
+        {(action || retry) && (
+          <span className="error-notice-actions">
+            {action && (
+              <Button type="button" size="sm" variant={tone === "error" ? "link" : "ghost"} onClick={action.onClick}>
+                {action.label}
+                {tone === "error" && <ArrowUpRight className="size-3.5" aria-hidden="true" />}
+              </Button>
+            )}
+            {retry && (
+              <Button type="button" size="sm" variant={tone === "error" ? "link" : "ghost"} onClick={retry}>
+                重试
+              </Button>
+            )}
+          </span>
+        )}
+      </div>
+      {onClose && (
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className="error-notice-close"
+          aria-label="关闭错误提示"
+          onClick={onClose}
+        >
+          <X size={15} aria-hidden="true" />
+        </Button>
       )}
     </div>
   );
@@ -153,18 +157,22 @@ export function Toast({
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
       }}
     >
-      <span className="app-toast-icon" aria-hidden="true">
-        {tone === "success" ? <Check size={15} /> : <AlertCircle size={15} />}
-      </span>
-      <span className="app-toast-text">{message}</span>
-      {action}
+      {tone === "success" && (
+        <span className="app-toast-icon" aria-hidden="true">
+          <Check size={15} />
+        </span>
+      )}
+      <div className="app-toast-body">
+        <span className="app-toast-text">{message}</span>
+        {action && <span className="app-toast-actions">{action}</span>}
+      </div>
       <button
         type="button"
         className="app-toast-close"
         aria-label="关闭提示"
         onClick={onClose}
       >
-        <X size={14} />
+        <X size={14} aria-hidden="true" />
       </button>
     </div>,
     document.body,
@@ -202,6 +210,7 @@ export function ConfirmDelete({
   cancelLabel = "取消",
   note,
   error,
+  errorAction,
   onClose,
   onConfirm,
 }: {
@@ -212,6 +221,7 @@ export function ConfirmDelete({
   cancelLabel?: string;
   note?: string;
   error?: string;
+  errorAction?: { label: string; onClick: () => void };
   onClose: () => void;
   onConfirm: () => Promise<void>;
 }) {
@@ -230,7 +240,7 @@ export function ConfirmDelete({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         {note && <p className="confirm-dialog-note">{note}</p>}
-        {error && <ErrorNotice message={error} />}
+        {error && <ErrorNotice message={error} action={errorAction} />}
         <AlertDialogFooter className="confirm-dialog-footer">
           <AlertDialogCancel variant="ghost" disabled={busy}>
             {cancelLabel}

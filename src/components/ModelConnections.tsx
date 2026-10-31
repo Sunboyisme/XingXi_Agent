@@ -1,6 +1,7 @@
 import { Hint } from "./common";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowUpRight,
   Download,
   Check,
   KeyRound,
@@ -74,12 +75,14 @@ export function ModelConnections({
   onQuickSaved,
   contextTarget,
   onContextTargetHandled,
+  onOpenServices,
 }: {
   settings: Settings;
   onSaved: (value: Settings) => void;
   onQuickSaved?: (value: Settings) => void;
   contextTarget?: ModelContextTarget;
   onContextTargetHandled?: () => void;
+  onOpenServices?: () => void;
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [contextFocusModel, setContextFocusModel] = useState<string>();
@@ -95,6 +98,17 @@ export function ModelConnections({
   const [modelQuery, setModelQuery] = useState("");
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [catalogError, setCatalogError] = useState("");
+  const errorAction = onOpenServices && error.includes("请先在能力连接中更换密钥来源")
+    ? {
+        label: "前往能力连接",
+        onClick: () => {
+          setDeleting(null);
+          setDraft(null);
+          setError("");
+          onOpenServices();
+        },
+      }
+    : undefined;
   const catalogRequest = useRef<AbortController | null>(null);
   useEffect(() => () => catalogRequest.current?.abort(), []);
   const connections = settings.providers;
@@ -384,7 +398,17 @@ export function ModelConnections({
         <Toast message={notice} onClose={() => setNotice("")} />
       )}
       {!draft && error && (
-        <Toast tone="error" message={error} onClose={() => setError("")} />
+        <Toast
+          tone="error"
+          message={error}
+          onClose={() => setError("")}
+          action={errorAction && (
+            <Button type="button" variant="link" size="sm" onClick={errorAction.onClick}>
+              {errorAction.label}
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </Button>
+          )}
+        />
       )}
       {options.length > 0 && (
         <div className="model-default-panel">
@@ -954,7 +978,7 @@ export function ModelConnections({
                 </section>
               </div>
               <div className="model-dialog-status">
-                {error && <ErrorNotice message={error} />}
+                {error && <ErrorNotice message={error} action={errorAction} />}
                 {notice && (
                   <p className="connection-notice" role="status">
                     <Check size={14} />
@@ -1135,6 +1159,7 @@ export function ModelConnections({
         }}
         label="删除连接"
         error={error}
+        errorAction={errorAction}
         title={`删除 ${deleting?.label || "连接"}？`}
         description="这套连接的接口配置和已保存的密钥将一并移除。"
         onConfirm={remove}

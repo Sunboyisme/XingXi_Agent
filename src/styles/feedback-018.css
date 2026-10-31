@@ -38,6 +38,13 @@
   flex: 1;
   min-width: 0;
 }
+.app-feedback .error-notice-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 .app-feedback .error-notice-actions {
   display: flex;
   flex: 0 0 auto;
@@ -48,6 +55,65 @@
 }
 .app-feedback .error-notice-actions button {
   min-height: 28px;
+}
+.app-feedback .error-notice-close {
+  flex: 0 0 auto;
+}
+.app-feedback.error-notice.is-error {
+  --feedback-accent: var(--ui-color-action);
+  min-height: 0;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--feedback-accent);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.app-feedback.is-error .error-notice-body {
+  display: grid;
+  gap: 4px;
+}
+.app-feedback.is-error .error-notice-text {
+  flex-basis: auto;
+  color: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+}
+.app-feedback.is-error .error-notice-actions {
+  justify-content: flex-start;
+  margin-left: 0;
+  gap: 6px 14px;
+}
+.app-feedback.is-error .error-notice-actions button,
+.app-toast.is-error .app-toast-actions > button {
+  height: auto;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ui-color-action);
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
+  white-space: normal;
+  text-align: left;
+}
+.app-feedback.is-error .error-notice-actions button:hover:not(:disabled),
+.app-toast.is-error .app-toast-actions > button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ui-color-action-hover);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.app-feedback.is-error .error-notice-close {
+  width: 28px;
+  height: 28px;
+  margin-top: -3px;
+  color: var(--ui-color-text-muted);
 }
 .app-toast {
   max-width: min(520px, calc(100vw - 32px));
@@ -60,21 +126,60 @@
   line-height: 1.6;
 }
 .app-toast.is-error {
-  border-color: color-mix(
-    in srgb,
-    var(--ui-color-danger) 30%,
-    var(--ui-color-line)
-  );
+  align-items: flex-start;
+  gap: 12px;
+  max-width: min(540px, calc(100vw - 32px));
+  padding: 13px 14px 13px 18px;
+  border-color: var(--ui-color-line);
+  border-radius: 10px;
   background: var(--ui-color-surface);
-  color: var(--ui-color-text);
+  color: var(--ui-color-action);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 10%);
+  line-height: 1.65;
+}
+.app-toast-body {
+  display: contents;
+}
+.app-toast-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.app-toast.is-error .app-toast-body {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+.app-toast.is-error .app-toast-text {
+  line-height: inherit;
+  white-space: pre-wrap;
+}
+.app-toast.is-error .app-toast-close {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  margin: -3px -4px -3px 0;
+  border-radius: 6px;
 }
 .app-toast .app-toast-icon {
   flex-shrink: 0;
   color: var(--status-success);
   background: transparent;
 }
-.app-toast.is-error .app-toast-icon {
-  color: var(--ui-color-danger);
+@media (pointer: coarse) {
+  .app-feedback.is-error .error-notice-actions button,
+  .app-toast.is-error .app-toast-actions > button {
+    min-height: 44px;
+  }
+  .app-feedback.is-error .error-notice-close,
+  .app-toast.is-error .app-toast-close {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    flex-basis: 44px;
+  }
 }
 .presentation-notice,
 .toolbox-notice,
@@ -905,6 +1010,9 @@
   }
   .app-feedback .error-notice-actions {
     margin-left: 27px;
+  }
+  .app-feedback.is-error .error-notice-actions {
+    margin-left: 0;
   }
   .knowledge-toolbar {
     grid-template-columns: 1fr;

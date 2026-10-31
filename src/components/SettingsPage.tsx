@@ -271,6 +271,10 @@ export function SettingsPage({
             }}
             contextTarget={tab === "connections" ? contextTarget : undefined}
             onContextTargetHandled={onContextTargetHandled}
+            onOpenServices={() => {
+              setQuery("");
+              onTab("services");
+            }}
           />
         );
       case "services":

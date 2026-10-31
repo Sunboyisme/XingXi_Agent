@@ -1342,10 +1342,6 @@ body:has(.reminder-popup),
   background: color-mix(in srgb, #2f8f5b 12%, transparent);
 }
 
-.app-toast.is-error .app-toast-icon {
-  background: color-mix(in srgb, var(--ui-color-danger) 10%, transparent);
-}
-
 .app-toast-text {
   min-width: 0;
   overflow-wrap: anywhere;
