@@ -187,16 +187,34 @@ class MeteredStream(httpx.AsyncByteStream):
     def __init__(self, source, call_id):
         self.source, self.call_id = source, call_id
         self.buffer, self.payload, self.complete = b"", None, False
+        self.finished_choices, self.seen_choices = set(), set()
+        self.failed = False
 
     def observe(self, chunk):
         self.buffer += chunk
         while b"\n" in self.buffer:
             line, self.buffer = self.buffer.split(b"\n", 1)
             if line.startswith(b"data:"):
+                data = line[5:].strip()
+                if data == b"[DONE]":
+                    self.complete = not self.failed
+                    continue
                 try:
-                    value = json.loads(line[5:].strip())
+                    value = json.loads(data)
                     if isinstance(value, dict) and isinstance(value.get("usage"), dict):
                         self.payload = {"usage": value["usage"]}
+                    if isinstance(value, dict):
+                        if value.get("error"):
+                            self.failed, self.complete = True, False
+                        choices = value.get("choices")
+                        for choice in choices if isinstance(choices, list) else []:
+                            if isinstance(choice, dict):
+                                index = choice.get("index", 0)
+                                if not isinstance(index, int):
+                                    continue
+                                self.seen_choices.add(index)
+                                if choice.get("finish_reason"):
+                                    self.finished_choices.add(index)
                 except (ValueError, UnicodeDecodeError):
                     pass
         if len(self.buffer) > 262144:
@@ -209,7 +227,8 @@ class MeteredStream(httpx.AsyncByteStream):
                 yield chunk
             if self.buffer:
                 self.observe(b"\n")
-            self.complete = True
+            self.complete = self.complete or bool(not self.failed and self.seen_choices
+                                                  and self.seen_choices == self.finished_choices)
         finally:
             finish(self.call_id, self.payload, "completed" if self.complete else "interrupted")
 
@@ -217,6 +236,8 @@ class MeteredStream(httpx.AsyncByteStream):
         try:
             await self.source.aclose()
         finally:
+            if self.buffer:
+                self.observe(b"\n")
             finish(self.call_id, self.payload, "completed" if self.complete else "interrupted")
 
 

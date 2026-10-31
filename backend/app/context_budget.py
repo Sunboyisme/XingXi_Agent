@@ -1,10 +1,7 @@
 """Account for every model round, including tool results and reasoning."""
 from langchain.agents.middleware import AgentMiddleware
-from langchain_core.messages import SystemMessage
-from openai import BadRequestError
 
-from . import context, provider, task_context
-from .db import Session, TaskStep
+from . import context, provider
 from .loop_compaction import LoopCompactor, message_cost
 from .runs import emit
 from .tool_discovery import schema_tokens
@@ -15,7 +12,6 @@ class ContextBudget(AgentMiddleware):
         # Accept the old initial estimate for callers using the previous
         # signature; every real request is now measured from its exposed tools.
         self.run_id, self.config = run_id, config
-        self.first = True
         self.compactor = LoopCompactor(run_id, config)
 
     async def awrap_model_call(self, request, handler):
@@ -47,25 +43,6 @@ class ContextBudget(AgentMiddleware):
              "provider_id": self.config.get("provider_id"), "model_name": self.config.get("model_name")})
         if used > hard:
             raise provider.ConfigurationError("自动摘要后，当前步骤必须保留的提示、工具信息与消息仍超过上下文额度。已有操作结果保留；请在连接与设置中调整当前模型的上下文大小，或缩小当前步骤范围。")
-        overrides = {"messages": messages, "system_message": system_message}
-        execution = task_context.current.get()
-        if self.first and execution:
-            with Session() as db:
-                step = db.get(TaskStep, execution.step_id)
-                names = {tool.name for tool in request.tools if hasattr(tool, "name")}
-                required = [name for name in step.tools if name in names] if step else []
-                if step and step.output.get("validation_missing") and required:
-                    # A prose-only attempt failed validation. Require an actual
-                    # tool call on the repair's first round; guards still apply.
-                    overrides["tool_choice"] = required[0] if len(required) == 1 else "required"
-        self.first = False
-        try:
-            return await handler(request.override(**overrides))
-        except BadRequestError as error:
-            # Some reasoning endpoints only accept automatic tool selection.
-            # Retry only an explicit tool_choice rejection, before any tool ran.
-            if "tool_choice" not in overrides or not any(word in str(error).lower() for word in ("tool_choice", "tool choice")):
-                raise
-            guidance = "\n当前步骤必须取得实际工具结果；上次只有文字未通过核对。请先调用当前步骤要求的工具，不能用文字声明代替。"
-            return await handler(request.override(messages=messages, tool_choice="auto",
-                system_message=SystemMessage(content=(system_message.content if system_message else "") + guidance)))
+        # Missing outputs are reconciled by the task planner. Forcing a write
+        # here can duplicate an existing plan, and some providers reject it.
+        return await handler(request.override(messages=messages, system_message=system_message))

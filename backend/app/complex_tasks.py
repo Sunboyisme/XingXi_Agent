@@ -699,6 +699,9 @@ async def make_plan(run_id, task_id, *, repair=False):
         "title是8到24字、最多40字的动作加对象短标题，如‘重建AI Agent面试学习路线’；不要照抄用户原话或把课程全部范围塞进标题，详细目的放goal。"
         "每步明确instruction、需要的真实工具id和应保存的文件formats。支持所有已启用工具，遵守既有权限。"
         "tools只列完成本步骤必须实际调用的工具，不列可能有用的工具；纯分析、编写题目和整理已有成果使用tools=[]。"
+        "日历读图、排期、查询与批量创建合并为一个步骤，不为每次查询、日期计算、草案或总结单列步骤。"
+        "写入只是完成目标的手段：查询证据表明目标已经满足时不重复写入，安排tools=[]的证据核对与说明步骤。"
+        "缺少工具调用可能是原步骤已不再适用，须结合实际查询和输出重新判断；不能为凑工具调用而强制创建重复计划。"
         "删除当天全部计划时优先list_plans后delete_plans；delete_plans同时取消重复事项本次，不额外要求action_plan。只有独立的系列动作才要求action_plan。"
         "expected_outputs与formats只列真实文件格式：md/txt/csv/json/docx/pdf/xlsx/image，一份写一次。纯文字回答与分析步骤formats=[]，不能写text或markdown。"
         "输入文件清单区分图片和文档；当前图片可由视觉模型直接读取，不需要强制read_file。只在需要读取历史或项目图片时使用read_file。"
@@ -984,6 +987,11 @@ async def execute(run_id, task_id, *, repairs=0):
                     db.commit()
                 return notice(run_id, task_id)
             break
+        if step.output.get("validation_missing") and repairs < 1:
+            # A resumed task may still carry an old, forced-write repair. Adjust
+            # that plan before paying for the same blocked step again.
+            await make_plan(run_id, task_id, repair=True)
+            return await execute(run_id, task_id, repairs=repairs + 1)
         with Session() as db:
             reused = reuse_step_files(db, db.get(TaskStep, step.id))
             db.commit()
@@ -1018,6 +1026,7 @@ async def execute(run_id, task_id, *, repairs=0):
             return notice(run_id, task_id)
         finally:
             task_context.current.reset(token)
+        replan = False
         with Session() as db:
             task = require(db, task_id)
             row = db.get(TaskStep, step.id)
@@ -1045,19 +1054,22 @@ async def execute(run_id, task_id, *, repairs=0):
                               "pending_operation_ids": [value.id for value in pending_operations]}
             elif (step.tools and not tool_match and not direct_images and not file_delivery) or missing:
                 row.status = "pending"
-                attempts = row.output.get("repair_attempts", 0) if row.output.get("repair_run_id") == run_id else 0
                 reason = "尚缺文件：" + "、".join(f"{count}份{fmt}" for fmt, count in missing.items()) if missing else "当前步骤尚未实际调用所需工具：" + "、".join(step.tools)
                 row.output = {**row.output, "content": result["content"], "artifacts": outputs,
-                              "repair_attempts": attempts + 1, "repair_run_id": run_id,
-                              "validation_missing": reason + "。上次仅返回文字，不能代替工具结果。本次先实际调用所需工具，再根据返回结果回答。复用已经保存的成果，只补缺失部分；不要重复已完成的写入。"}
-                task.status = "running" if attempts < 2 else "paused"
-                task.reason = "正在补齐当前步骤的缺失成果。" if attempts < 2 else reason + "，已有成果保留，可继续任务。"
+                              "validation_missing": reason + "。请依据实际操作证据重新判断该步骤是否仍需执行；不能用文字代替缺失成果，也不能强制重复写入。"}
+                replan = repairs < 1
+                task.result = {**task.result, "review_missing": [row.output["validation_missing"]]}
+                task.status = "running" if replan else "paused"
+                task.reason = "正在根据已有成果调整剩余步骤。" if replan else reason + "，已停止自动补做，已有成果保留。"
             else:
                 row.status = "completed"
                 row.output = {"content": result["content"], "artifacts": outputs}
             db.commit()
             paused = task.status == "paused"
         publish(run_id, task_id)
+        if replan:
+            await make_plan(run_id, task_id, repair=True)
+            return await execute(run_id, task_id, repairs=repairs + 1)
         if paused:
             return notice(run_id, task_id)
     if not await verify_files(run_id, task_id):
@@ -1182,6 +1194,10 @@ async def dispatch(run_id, conversation_id):
         return save_reply(run_id, conversation_id, choice["error"])
     if choice:
         return await agent._chat(run_id, conversation_id)
+    from . import calendar_policy, model_budget
+    if calendar_policy.direct_request(message.content):
+        model_budget.calendar_limits()
+        return await agent._chat(run_id, conversation_id)
     simple_analysis = re.search(r"算|求和|总时长|提取|识别|读图|汇总", message.content) and not re.search(r"生成.{0,12}(?:文档|文件|报告)|保存|导出|Word|Markdown|\bdocx\b|\bpdf\b|\bxlsx\b", message.content, re.I)
     if simple_analysis and not re.search(r"继续|接着|重做|修改.{0,8}任务", message.content):
         return await agent._chat(run_id, conversation_id)
@@ -1192,6 +1208,7 @@ async def dispatch(run_id, conversation_id):
         route = Route(decision="continue", task_id=confirmation_task_id) if confirmation else await provider.ask_json(Route,
             "识别当前用户请求。普通问答、咨询如何做、单次工具操作用chat；明确委托有多个阶段、"
             "多份文件成果或需要持久进度的实际工作用new。读图、提取、计算、求和及普通问答默认chat；组合几个只读工具不构成复杂任务。无需用户开启模式。"
+            "日历排期、从图片或附件安排日程、批量增删改计划都默认chat；读图→计算日期→查询→写入是同一流程，不能据此拆为复杂任务。"
             "继续已有任务用continue，修改已有成果或要求用amend，明确放弃任务用cancel。"
             "已完成任务未收到新增要求、只是说继续时仍用continue，不能据此选择amend或new。"
             "用户明确要求再生成一份或重新执行整项工作时用new，区分新的委托与恢复原任务。"

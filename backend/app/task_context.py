@@ -39,6 +39,10 @@ class ToolInputLimit(TaskControl):
     """A bounded, actionable failure after rejected ordinary-chat tool inputs."""
 
 
+class ModelBudgetExceeded(TaskControl):
+    """Stop before another paid generation when the current run is over budget."""
+
+
 def user_message(db, run_id, conversation_id):
     execution = current.get()
     run = db.get(Run, run_id)

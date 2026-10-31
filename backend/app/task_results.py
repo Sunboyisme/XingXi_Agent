@@ -15,8 +15,39 @@ EXACT_FIELDS = {
 }
 
 
+def calendar_query(value):
+    """Keep every calendar row, without repeating internal scheduling metadata."""
+    if isinstance(value, dict) and any(key in value for key in ("error", "plans", "conflicts", "status")):
+        return value
+    rows = value.get("value") if isinstance(value, dict) else value
+    if not isinstance(rows, list) or any(not isinstance(item, dict) or not
+            {"id", "title", "start", "end", "all_day"} <= item.keys() for item in rows):
+        return value
+    fields = {"id", "title", "start", "end", "all_day", "timezone", "display_timezone",
+              "local_start", "local_end", "local_weekday", "status", "occurrence_start", "series_revision", "calendar_display"}
+    plans = []
+    for row in rows:
+        item = {key: part for key, part in row.items() if key in fields}
+        if row.get("notes"):
+            item["notes"] = row["notes"]
+        if row.get("recurrence") not in (None, "none"):
+            item.update({key: row[key] for key in ("recurrence", "repeat_interval", "repeat_until", "repeat_count",
+                         "series_start", "series_end", "series_status", "series_all_day", "series_title") if key in row})
+        if row.get("reminder_enabled"):
+            item.update({key: row[key] for key in ("reminder_enabled", "reminder_offsets", "reminder_time", "reminder_at") if key in row})
+        plans.append(item)
+    extra = {key: part for key, part in value.items() if key != "value"} if isinstance(value, dict) else {}
+    return {**extra, "plans": plans, "count": len(plans), "all_rows_included": True,
+            "notice": "包含本次查询全部条目；未列重复规则表示不重复，未列提醒表示未开启提醒。"}
+
+
 def receipt(value, record_id, *, status="completed", limit=4000):
     """Keep short results intact; describe omitted text with retrievable JSON paths."""
+    if status == "completed" and (isinstance(value, list) and value or
+            isinstance(value, dict) and isinstance(value.get("value"), list) and value["value"]):
+        compact = calendar_query(value)
+        if compact is not value:
+            return compact
     raw = json.dumps(value, ensure_ascii=False)
     if len(raw) <= limit:
         return value
@@ -62,6 +93,8 @@ def tool_response(value, record_id, tool_id, *, status="completed"):
     # Never shorten an actionable failure, confirmation, or explicit detail read.
     if status != "completed" or tool_id in DIRECT_READS:
         return json.dumps(value, ensure_ascii=False)
+    if tool_id == "list_plans":
+        return json.dumps(calendar_query(value), ensure_ascii=False)
     return json.dumps(receipt(value, record_id, status=status), ensure_ascii=False)
 
 

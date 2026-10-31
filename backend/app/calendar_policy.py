@@ -10,6 +10,13 @@ def creation_authorized(text):
     return bool(re.search(r"安排|提醒|记得|记一下|记下|放进日历|放入日历|写入日历|加到日历|添加.{0,8}(?:计划|日程)|(?:创建|新建|新增|保存|写入)[^。；;\n]{0,40}(?:计划|日程|日历|事项|会议)(?!书|文档|报告|方案|表)|每.{0,8}(?:天|周|月|年).{0,40}(?:一次|交|跑步|学习|整理)|帮我约", text))
 
 
+def direct_request(text):
+    """A calendar batch, even from an attachment, is one guarded workflow."""
+    if re.search(r"文件|文档|报告|导出|生成|制作|课程|学习路线|搜索|调研|邮件|微信|分阶段|持久进度|继续|接着|任务", text):
+        return False
+    return bool(re.search(r"日历|日程|提醒|预约|(?:安排|创建|新建|添加|修改|调整|删除|取消).{0,15}计划", text))
+
+
 def similar_title(first, second):
     a = set(re.sub(r"[\W\d_]", "", first).casefold())
     b = set(re.sub(r"[\W\d_]", "", second).casefold())

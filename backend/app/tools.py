@@ -605,7 +605,12 @@ def _guard_tool(entry, originals, run_id):
 
     async def guarded_execute(**arguments):
         from .complex_tasks import guarded
-        return await guarded(entry, run_id, arguments, execute)
+        result = await guarded(entry, run_id, arguments, execute)
+        if entry["id"] == "list_plans" and task_context.current.get() is None:
+            from .task_results import calendar_query
+            # The ledger above retains the full query for later write validation.
+            return json.dumps(calendar_query(json.loads(result)), ensure_ascii=False)
+        return result
 
     return guarded_execute
 

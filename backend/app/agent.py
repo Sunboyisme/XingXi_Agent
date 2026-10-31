@@ -163,11 +163,11 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
         with Session() as db:
             step = db.get(TaskStep, execution.step_id) if execution else None
             required = step.tools if step else []
-        initial_text = latest.content if latest else ""
-        if confirmation_context:
+        initial_text = step.instruction if step else latest.content if latest else ""
+        if confirmation_context and not step:
             initial_text += "\n" + json.dumps(confirmation_context, ensure_ascii=False)
         required = set(required)
-        if latest and latest.attachment_ids:
+        if latest and latest.attachment_ids and not step:
             required.update({"list_files", "read_file", "search_file"})
         discovery = ToolDiscovery(available_tools, required=required, initial_text=initial_text)
     # Short answers such as “一只” need the topic from earlier user messages.
@@ -353,6 +353,12 @@ async def _chat(run_id: str, conversation_id: str, *, task_instructions="", pers
                                     }
                                 # Persist the final answer, not pre-tool narration from earlier turns.
                                 text = chat_context.plain_text(message.content)
+    except task_context.ModelBudgetExceeded as error:
+        receipt = _durable_receipt(run_id) if persist else ""
+        if not receipt:
+            raise
+        text = str(error) + "\n\n" + receipt
+        final_context = {}
     except task_context.TaskControl:
         raise
     except Exception:

@@ -75,6 +75,17 @@ async def discover_models(profile):
 class CompatibleChatModel(ChatOpenAI):
     """Keep reasoning_content intact across streamed Agent tool rounds."""
 
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        from .model_budget import reserve
+        reserve(messages, kwargs)
+        return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        from .model_budget import reserve
+        reserve(messages, kwargs)
+        async for chunk in super()._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            yield chunk
+
     def _convert_chunk_to_generation_chunk(self, chunk, *args, **kwargs):
         value = super()._convert_chunk_to_generation_chunk(chunk, *args, **kwargs)
         choices = chunk.get("choices", [])
@@ -330,7 +341,10 @@ def error_details(error: Exception) -> dict:
     code = next((getattr(item, "code", None) for item in chain
                  if isinstance(getattr(item, "code", None), str)
                  and getattr(item, "code") in known_codes), None)
-    if any(isinstance(item, GraphRecursionError) for item in chain):
+    from .task_context import ModelBudgetExceeded
+    if any(isinstance(item, ModelBudgetExceeded) for item in chain):
+        category = "model_budget_limit"
+    elif any(isinstance(item, GraphRecursionError) for item in chain):
         category = "tool_loop_limit"
     elif type(error).__name__ == "ToolInputLimit":
         category = "invalid_arguments"
@@ -363,8 +377,8 @@ def error_details(error: Exception) -> dict:
 
 
 def safe_error(error: Exception, *, model_config=None) -> str:
-    from .task_context import ToolInputLimit
-    if isinstance(error, ToolInputLimit):
+    from .task_context import ModelBudgetExceeded, ToolInputLimit
+    if isinstance(error, (ToolInputLimit, ModelBudgetExceeded)):
         return str(error)[:600]
     if isinstance(error, ConfigurationError):
         return str(error)[:600]

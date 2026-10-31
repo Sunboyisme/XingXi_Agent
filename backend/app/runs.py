@@ -76,11 +76,12 @@ def launch(run_id: str, operation: Callable[[], Awaitable[dict]]):
             # guard; individual providers still enforce their own timeouts.
             async with asyncio.timeout(RUN_TIMEOUT_SECONDS):
                 from .usage_cost import scope
+                from . import model_budget
                 with Session() as db:
                     source = db.get(Run, run_id)
                     from .learning_public import LEARNING_KINDS
                     purpose = "learning" if source.kind in LEARNING_KINDS else "complex_task" if source.task_id else "chat"
-                with scope(run_id=run_id, purpose=purpose):
+                with scope(run_id=run_id, purpose=purpose), model_budget.scope():
                     result = await operation()
             with Session() as db:
                 run = db.get(Run, run_id)
