@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XiaoXi · 极简删除确认 · 陶土棕</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #24211e;
+        --surface: #2d2925;
+        --heading: #f4ebe0;
+        --muted: #bca98f;
+        --line: #494035;
+        --delete: #9c5538;
+        --delete-hover: #ac6142;
+        --on-delete: #fff4e9;
+        font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+        font-synthesis: none;
+        -webkit-font-smoothing: antialiased;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); }
+      .study { position: relative; width: min(100%, 840px); height: 500px; margin: 0 auto; color: var(--heading); }
+      .study-label {
+        position: absolute; top: 30px; left: 36px; right: 36px;
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      }
+      .study-label h1 { margin: 0; font-size: 16px; font-weight: 500; }
+      .study-label span { font-size: 12px; color: var(--muted); }
+      .stage { position: absolute; inset: 86px 0 68px; display: grid; place-items: center; padding: 0 24px; }
+      .dialog {
+        width: 440px; max-width: 100%; padding: 24px;
+        background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+        box-shadow: 0 16px 40px rgb(0 0 0 / 20%);
+      }
+      .dialog h2 { margin: 0; color: var(--heading); font-size: 18px; line-height: 27px; font-weight: 600; }
+      .dialog p { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 22px; }
+      .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 27px; }
+      button {
+        appearance: none; display: inline-flex; justify-content: center; align-items: center;
+        min-height: 36px; padding: 0 17px; border: 1px solid transparent; border-radius: 8px;
+        background: transparent; color: var(--muted); font: inherit; font-size: 13px;
+        font-weight: 500; line-height: 20px; cursor: pointer;
+      }
+      button:focus-visible { outline: 2px solid #cc986e; outline-offset: 3px; }
+      .cancel:hover { color: var(--heading); background: #35302a; }
+      .delete { min-width: 92px; color: var(--on-delete); background: var(--delete); }
+      .delete:hover { background: var(--delete-hover); }
+      .design-note {
+        position: absolute; bottom: 28px; left: 24px; right: 24px; margin: 0;
+        color: var(--muted); text-align: center; font-size: 12px; letter-spacing: .25px;
+      }
+      .screenreader { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      @media (max-width: 560px) {
+        .study-label { left: 24px; right: 24px; }
+        .study-label span { display: none; }
+        .stage { padding-inline: 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="study" aria-label="极简删除确认弹窗配色设计稿">
+      <header class="study-label"><h1>极简确认 · 陶土棕</h1><span>低饱和 · 暖灰底色</span></header>
+      <p class="screenreader" id="static-notice">这是静态设计稿，按钮不执行删除操作。</p>
+      <div class="stage">
+        <div class="dialog" role="group" aria-labelledby="delete-title" aria-describedby="delete-description static-notice">
+          <h2 id="delete-title">删除这段常用文本？</h2>
+          <p id="delete-description">删除后无法恢复。</p>
+          <div class="actions"><button class="cancel" type="button">取消</button><button class="delete" type="button">删除文本</button></div>
+        </div>
+      </div>
+      <p class="design-note">深陶土色按钮，搭配米白文字</p>
+    </main>
+  </body>
+</html>
