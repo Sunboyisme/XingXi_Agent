@@ -57,6 +57,7 @@ type Snapshot = {
   error: string;
   x: number;
   y: number;
+  common_texts?: boolean;
 };
 type Action = "explain" | "translate" | "summarize";
 const actionLabels: Record<Action, string> = {
@@ -236,7 +237,7 @@ export function SelectionAssistant() {
     current.current = value;
     setSnapshot(value);
     setSourceExpanded(false);
-    setPage("assistant");
+    setPage(value.common_texts ? "common-texts" : "assistant");
     setReadingError("");
     setAction(undefined);
     setAnswer("");
@@ -483,12 +484,12 @@ export function SelectionAssistant() {
     <main
       className={`selection-window${action || page === "common-texts" ? " has-result" : ""}`}
       ref={root}
-      aria-label="划词助手"
+      aria-label={page === "common-texts" ? "常用文本" : "划词助手"}
     >
       {page === "common-texts" ? (
         <Suspense fallback={<p role="status">正在打开常用文本…</p>}>
           <SelectionCommonTexts
-            onBack={() => setPage("assistant")}
+            onBack={snapshot.common_texts ? undefined : () => setPage("assistant")}
             onClose={dismiss}
             onManage={() =>
               void invoke("desktop_main", { page: "common-texts" })

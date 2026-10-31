@@ -31,6 +31,7 @@ class PomodoroPreferences(BaseModel):
     presets: list[PomodoroPreset] = Field(min_length=4, max_length=24)
     selected_preset: str
     sound_enabled: bool
+    sound_volume: int = Field(default=100, ge=0, le=100)
 
     @model_validator(mode="after")
     def valid_presets(self):

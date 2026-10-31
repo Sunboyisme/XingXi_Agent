@@ -24,7 +24,7 @@ READ_TOOLS = {
     "list_todos",
     "search_project_history",
     "get_weather", "web_search", "read_url", "calculate", "date_time", "convert_units",
-    "search_memories", "search_conversation_history", "learning_goals", "list_plans",
+    "search_memories", "search_conversation_history", "learning_goals", "list_plans", "check_existing_plans",
     "list_files", "read_file", "search_file", "load_skill", "read_skill_file", "read_task_result",
     "read_local_file", "scan_local_folder", "read_context_record",
 }
@@ -479,8 +479,10 @@ def valid_artifacts(result):
 def calendar_result_current(tool_id, result):
     """A historical success cannot stand in for a subsequently edited plan."""
     from . import plans
-    if tool_id not in {"create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}:
+    if tool_id not in {"create_plans", "check_existing_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}:
         return True
+    if tool_id == "check_existing_plans" and result.get("status") != "verified":
+        return False
     with plans.lock, Session() as db:
         if tool_id == "delete_plans":
             for item in result.get("operations", []):
@@ -502,7 +504,7 @@ def calendar_result_current(tool_id, result):
             key = result.get("plan", {}).get("id")
             row = db.get(plans.CalendarEvent, key) if key else None
             return row is not None and row.status == "deleted"
-        values = result.get("value") if tool_id == "create_plans" else [result]
+        values = result.get("value") if tool_id in {"create_plans", "check_existing_plans"} else [result]
         if not isinstance(values, list) or not values:
             return False
         for value in values:
@@ -713,7 +715,8 @@ async def make_plan(run_id, task_id, *, repair=False):
         "每步明确instruction、需要的真实工具id和应保存的文件formats。支持所有已启用工具，遵守既有权限。"
         "tools只列完成本步骤必须实际调用的工具，不列可能有用的工具；纯分析、编写题目和整理已有成果使用tools=[]。"
         "日历读图、排期、查询与批量创建合并为一个步骤，不为每次查询、日期计算、草案或总结单列步骤。"
-        "写入只是完成目标的手段：查询证据表明目标已经满足时不重复写入，安排tools=[]的证据核对与说明步骤。"
+        "写入只是完成目标的手段：查询证据表明目标已经满足时不重复写入，安排证据核对与说明步骤。"
+        "已有日历安排使用check_existing_plans核验所需字段，tools列该工具；其verified结果是未新增但目标已满足的证据，不再硬性要求create_plans。"
         "缺少工具调用可能是原步骤已不再适用，须结合实际查询和输出重新判断；不能为凑工具调用而强制创建重复计划。"
         "删除当天全部计划时优先list_plans后delete_plans；delete_plans同时取消重复事项本次，不额外要求action_plan。只有独立的系列动作才要求action_plan。"
         "expected_outputs与formats只列真实文件格式：md/txt/csv/json/docx/pdf/xlsx/image，一份写一次。纯文字回答与分析步骤formats=[]，不能写text或markdown。"
@@ -1070,9 +1073,11 @@ async def execute(run_id, task_id, *, repairs=0):
             required_calendar_writes = set(step.tools) & {"create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}
             if required_calendar_writes:
                 allowed = required_calendar_writes | ({"delete_plans"} if "delete_plan" in required_calendar_writes else set())
+                if "create_plans" in required_calendar_writes:
+                    allowed.add("check_existing_plans")
                 tool_match = any(value.tool_id in allowed and calendar_result_current(value.tool_id, value.result) for value in operations)
             else:
-                tool_match = any(value.tool_id in step.tools for value in operations)
+                tool_match = any(value.tool_id in step.tools and calendar_result_current(value.tool_id, value.result) for value in operations)
             file_delivery = step.formats and not missing and set(step.tools) <= FILE_TOOLS
             pending_operations = list(db.scalars(select(TaskOperation).where(TaskOperation.step_id == step.id,
                                       TaskOperation.status == "waiting")))
@@ -1088,7 +1093,8 @@ async def execute(run_id, task_id, *, repairs=0):
                 replan = repairs < 1
                 task.result = {**task.result, "review_missing": [row.output["validation_missing"]]}
                 task.status = "running" if replan else "paused"
-                task.reason = "正在根据已有成果调整剩余步骤。" if replan else reason + "，已停止自动补做，已有成果保留。"
+                public_reason = reason if missing else "这一步还没有核实到实际执行结果"
+                task.reason = "正在根据已有成果调整剩余步骤。" if replan else public_reason + "，已暂停自动补做，已有成果保留。"
             else:
                 row.status = "completed"
                 row.output = {"content": result["content"], "artifacts": outputs}

@@ -126,12 +126,12 @@ export function TaskCard({
       )}
       {open && (
         <div className="complex-task-details" id={`task-details-${task.id}`}>
-          <section className="task-detail-section">
+          <section className="task-detail-section task-goal">
             <h3>任务目标</h3>
             <p>{task.goal}</p>
           </section>
           {task.reason && !["completed", "cancelled"].includes(task.status) && (
-            <p className="complex-task-reason">{task.reason}</p>
+            <p className="complex-task-reason" role="status">{task.reason}</p>
           )}
           {task.operations
             .filter((operation) => operation.status === "unknown")

@@ -102,8 +102,12 @@ test("native downloads go to the Windows Downloads folder", async () => {
       upload: false,
     }),
   );
-  expect(await screen.findByText("文件已下载")).toBeTruthy();
-  expect(screen.getByText("C:/Users/me/Downloads/笔记.md")).toBeTruthy();
+  expect(await screen.findByText("文件已下载：笔记.md")).toBeTruthy();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "打开文件夹" }));
+  await vi.waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith(
+    "open_download_location", { path: "C:/Users/me/Downloads/笔记.md" },
+  ));
   expect(mocks.api).not.toHaveBeenCalledWith(
     "/artifacts/file-1/export",
     "POST",

@@ -1528,6 +1528,11 @@ export interface components {
             selected_preset: string;
             /** Sound Enabled */
             sound_enabled: boolean;
+            /**
+             * Sound Volume
+             * @default 100
+             */
+            sound_volume: number;
         };
         /** PomodoroPreset */
         PomodoroPreset: {
@@ -1583,6 +1588,11 @@ export interface components {
             selected_preset: string;
             /** Sound Enabled */
             sound_enabled: boolean;
+            /**
+             * Sound Volume
+             * @default 100
+             */
+            sound_volume: number;
             /** Expected Revision */
             expected_revision: number;
         };

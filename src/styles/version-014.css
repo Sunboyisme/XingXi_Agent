@@ -1701,39 +1701,6 @@ body:has(.reminder-popup),
   overflow-wrap: anywhere;
 }
 
-[data-slot="dialog-content"].download-result-dialog {
-  width: min(520px, calc(100vw - 32px));
-}
-
-.download-result-path {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 12px 13px;
-  border: 1px solid var(--line-subtle);
-  border-radius: 12px;
-  background: var(--ui-color-bg);
-}
-
-.download-result-path > svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--ui-color-action);
-}
-
-.download-result-path code {
-  min-width: 0;
-  font-family: var(--ui-font-mono);
-  font-size: 11px;
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-
-.download-result-dialog [data-slot="dialog-footer"] {
-  gap: 8px;
-}
-
 .navigation-tooltip {
   z-index: 90;
   padding: 6px 10px;

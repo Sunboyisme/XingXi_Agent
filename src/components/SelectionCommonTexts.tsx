@@ -17,7 +17,7 @@ export function SelectionCommonTexts({
   onManage,
   onClose,
 }: {
-  onBack: () => void;
+  onBack?: () => void;
   onManage: () => void;
   onClose: () => void;
 }) {
@@ -90,16 +90,16 @@ export function SelectionCommonTexts({
   return (
     <section className="selection-texts" aria-label="常用文本">
       <header className="selection-texts-heading">
-        <button onClick={onBack}>
+        {onBack && <button onClick={onBack}>
           <ArrowLeft size={16} />
           返回划词
-        </button>
+        </button>}
         <strong>常用文本</strong>
         <button onClick={onManage}>
           <ExternalLink size={15} />
           管理
         </button>
-        <button aria-label="关闭划词助手" onClick={onClose}>
+        <button aria-label="关闭常用文本" onClick={onClose}>
           <X size={15} />
         </button>
       </header>

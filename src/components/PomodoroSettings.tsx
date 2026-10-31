@@ -147,7 +147,7 @@ export function PomodoroSettings({
     setSoundError("");
     setPreviewing(true);
     try {
-      await invoke("pomodoro_preview_sound");
+      await invoke("pomodoro_preview_sound", { volume: preferences.sound_volume ?? 100 });
     } catch {
       setSoundError("提示音暂时无法播放，请稍后再试。");
     } finally {
@@ -225,6 +225,26 @@ export function PomodoroSettings({
                       }
                     />
                   </div>
+                </div>
+                <div className="pomodoro-sound-volume">
+                  <label htmlFor="pomodoro-sound-volume">提示音音量</label>
+                  <output htmlFor="pomodoro-sound-volume">
+                    {preferences.sound_volume ?? 100}%
+                  </output>
+                  <input
+                    id="pomodoro-sound-volume"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={preferences.sound_volume ?? 100}
+                    disabled={saving || !preferences.sound_enabled}
+                    aria-valuetext={`${preferences.sound_volume ?? 100}%`}
+                    onChange={(event) => setPreferences(old => ({
+                      ...old,
+                      sound_volume: Number(event.target.value),
+                    }))}
+                  />
                 </div>
                 {soundError && (
                   <p className="field-error" role="alert">

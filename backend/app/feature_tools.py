@@ -65,6 +65,12 @@ class RemovalTarget(BaseModel):
     occurrence_start: str = ""
 
 
+class ExistingPlanCheck(BaseModel):
+    plan_id: str
+    expected: calendar.PlanWrite
+    occurrence_start: str = ""
+
+
 def _plan_signature(value: dict) -> tuple:
     return (
         " ".join(str(value.get("title", "")).split()),
@@ -135,6 +141,33 @@ def build(run_id, conversation_id):
     def list_plans(start: date | None = None, end: date | None = None, timezone: str = "", include_deleted: bool = False) -> str:
         """查询实际计划。start/end 为用户本地 YYYY-MM-DD，end 不包含当天；timezone 留空使用用户时区。local_start/local_end 是本地时间，start/end 可能为UTC，不能截取UTC日期。修改前查询目标日，使用真实编号与 occurrence_start；恢复已删除计划时 include_deleted=true。"""
         return safe(lambda: calendar.list_events(start.isoformat() if start else None, end.isoformat() if end else None, timezone or None, include_deleted))
+
+    @tool
+    def check_existing_plans(checks: list[ExistingPlanCheck]) -> str:
+        """核验用户所需安排已经存在，不创建或修改。先list_plans取得真实编号，逐项传plan_id和expected（本次所需的完整计划字段）；重复计划传原样occurrence_start。1–100项。只有全部字段与当前记录一致才返回verified；名称、时间、提醒或重复不一致时先说明差异，不用相似标题代替核验。已存在的安排用本工具提供完成证据，不为满足创建步骤重复写入。"""
+        def verify():
+            if not 1 <= len(checks) <= 100:
+                raise ValueError("请核验1–100项已有安排。")
+            keys = [(item.plan_id, item.occurrence_start) for item in checks]
+            if len(set(keys)) != len(keys):
+                raise ValueError("同一计划实例不能重复计入核验结果。")
+            verified = []
+            with calendar.lock, Session() as db:
+                for item in checks:
+                    row = calendar.find(db, item.plan_id)
+                    actual = (calendar.read_occurrence(db, row, item.occurrence_start)
+                              if item.occurrence_start else calendar.serialize(db, row))
+                    expected = item.expected.model_dump()
+                    differences = [key for key, value in expected.items() if actual.get(key) != value]
+                    if differences or actual.get("status") not in {"planned", "completed"}:
+                        return {"status": "mismatch", "not_executed": True,
+                                "error": "已有安排与所需内容不一致，请核对差异，未写入。",
+                                "plan_id": item.plan_id, "different_fields": differences,
+                                "expected": expected, "actual": actual}
+                    verified.append(actual)
+            return {"status": "verified", "value": verified, "created": 0,
+                    "message": f"已核验{len(verified)}项安排均已存在，未重复创建。"}
+        return safe(verify)
 
     @tool
     def delete_plans(target_date: date, targets: list[RemovalTarget], date_evidence: str = "") -> str:
@@ -404,6 +437,7 @@ def build(run_id, conversation_id):
     return [
         action_plan,
         list_plans,
+        check_existing_plans,
         create_plans,
         update_plan,
         delete_plan,
@@ -418,6 +452,7 @@ INFO = {
     "delete_plans": ("批量移除当天计划", "核对后删除普通计划、取消重复事项本次，保留其他日期", False),
     "action_plan": ("操作计划", "完成、取消或恢复本次，关闭提醒或结束整个系列", False),
     "list_plans": ("查询计划", "查看日期范围内的计划", False),
+    "check_existing_plans": ("核验已有计划", "逐项核对已有安排，避免重复创建", False),
     "create_plans": (
         "安排计划",
         "用户明确要求时直接创建，否则先提出计划摘要并询问确认",

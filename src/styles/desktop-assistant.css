@@ -272,15 +272,6 @@ html[data-desktop] .picture-close {
   width: 100%;
   height: 100%;
 }
-.capture-cursor-hint {
-  position: absolute;
-  pointer-events: none;
-  background: #272320c9;
-  border: 1px solid #ffffff40;
-  border-radius: 7px;
-  padding: 5px 10px;
-  font-size: 13px;
-}
 .capture-selection,
 .capture-auto-selection {
   position: absolute;
@@ -290,6 +281,12 @@ html[data-desktop] .picture-close {
 }
 .capture-auto-selection {
   pointer-events: none;
+}
+.capture-auto-selection .capture-handle {
+  pointer-events: auto;
+}
+.capture-selection[data-moving="true"] {
+  cursor: move;
 }
 .capture-dimensions {
   position: absolute;
@@ -307,51 +304,59 @@ html[data-desktop] .capture-handle {
   padding: 0;
   min-width: 0;
   min-height: 0;
-  width: 9px;
-  height: 9px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  z-index: 2;
+}
+.capture-handle::after {
+  content: "";
+  position: absolute;
+  inset: 7px;
   border: 1px solid white;
   border-radius: 50%;
   background: #368df5;
-  z-index: 2;
 }
 .handle-nw {
-  left: -5px;
-  top: -5px;
+  left: -13px;
+  top: -13px;
   cursor: nw-resize;
 }
 .handle-n {
-  left: calc(50% - 4px);
-  top: -5px;
+  left: calc(50% - 12px);
+  top: -13px;
   cursor: n-resize;
 }
 .handle-ne {
-  right: -5px;
-  top: -5px;
+  right: -13px;
+  top: -13px;
   cursor: ne-resize;
 }
 .handle-e {
-  right: -5px;
-  top: calc(50% - 4px);
+  right: -13px;
+  top: calc(50% - 12px);
   cursor: e-resize;
 }
 .handle-se {
-  right: -5px;
-  bottom: -5px;
+  right: -13px;
+  bottom: -13px;
   cursor: se-resize;
 }
 .handle-s {
-  left: calc(50% - 4px);
-  bottom: -5px;
+  left: calc(50% - 12px);
+  bottom: -13px;
   cursor: s-resize;
 }
 .handle-sw {
-  left: -5px;
-  bottom: -5px;
+  left: -13px;
+  bottom: -13px;
   cursor: sw-resize;
 }
 .handle-w {
-  left: -5px;
-  top: calc(50% - 4px);
+  left: -13px;
+  top: calc(50% - 12px);
   cursor: w-resize;
 }
 .capture-toolbar {
@@ -670,7 +675,7 @@ html[data-desktop] .capture-text {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  width: 146px;
+  width: 178px;
   min-height: 36px;
   padding: 4px 5px;
   border: 1px solid var(--ui-color-border);

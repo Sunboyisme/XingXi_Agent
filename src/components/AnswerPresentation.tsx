@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { ExternalLink } from "./ExternalLink";
 import {
-  DownloadResultDialog,
+  DownloadNotice,
   FileCard,
   type DownloadedFile,
 } from "./OfficeFiles";
@@ -210,7 +210,7 @@ export function ArtifactDownload({ artifact }: { artifact: Artifact }) {
       </button>
       {webSaved && <span role="status">已下载</span>}
       {error && <span role="alert">{error}</span>}
-      <DownloadResultDialog
+      <DownloadNotice
         value={downloaded}
         onClose={() => setDownloaded(null)}
       />

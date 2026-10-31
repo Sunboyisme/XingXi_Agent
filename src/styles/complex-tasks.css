@@ -76,8 +76,37 @@
   font-size: 13px;
 }
 .complex-task-details {
-  margin-top: 12px;
+  margin-top: 20px;
   font-size: 13px;
+  padding-right: 6px;
+}
+.complex-task-details .task-goal {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--ui-color-bg);
+}
+.task-goal h3 {
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.task-goal p {
+  margin: 0;
+  line-height: 1.85;
+  white-space: pre-wrap;
+}
+.complex-task-details .complex-task-reason {
+  margin: 12px 0 0;
+  padding: 0 4px;
+  color: var(--ui-color-text-muted);
+  line-height: 1.75;
+}
+.complex-task-details .complex-task-progress {
+  margin: 20px 0 0;
+  padding: 0 4px;
+}
+.complex-task-details > .task-detail-section:not(.task-goal) {
+  margin-top: 24px;
 }
 .complex-task-steps small {
   color: var(--ui-color-text-muted);

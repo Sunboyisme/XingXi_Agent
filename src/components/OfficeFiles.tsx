@@ -1,5 +1,5 @@
 import { DropdownMenu } from "radix-ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   Download,
@@ -23,10 +23,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "./ui/dialog";
 import { Picture } from "./ImageAttachments";
-import { Markdown } from "./common";
+import { Markdown, Toast } from "./common";
 import { HintText } from "./ui/hint";
 import { errorMessage } from "@/lib/utils";
 
@@ -45,7 +44,7 @@ type Preview = {
 
 export type DownloadedFile = { name: string; path: string };
 
-export function DownloadResultDialog({
+export function DownloadNotice({
   value,
   onClose,
 }: {
@@ -53,46 +52,38 @@ export function DownloadResultDialog({
   onClose: () => void;
 }) {
   const [error, setError] = useState("");
+  const current = useRef(value);
+  current.current = value;
   useEffect(() => {
-    if (!value) setError("");
+    current.current = value;
+    setError("");
+    return () => { current.current = null; };
   }, [value]);
+  if (!value) return null;
   return (
-    <Dialog
-      open={Boolean(value)}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent className="download-result-dialog">
-        <DialogHeader>
-          <DialogTitle>文件已下载</DialogTitle>
-          <DialogDescription>{value?.name}</DialogDescription>
-        </DialogHeader>
-        <div className="download-result-path">
-          <FolderOpen size={18} aria-hidden="true" />
-          <code>{value?.path}</code>
-        </div>
-        {error && <p role="alert">{error}</p>}
-        <DialogFooter>
+    <Toast
+      message={error || `文件已下载：${value.name}`}
+      tone={error ? "error" : "success"}
+      onClose={onClose}
+      action={
           <Button
-            variant="outline"
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={async () => {
-              if (!value) return;
               setError("");
               try {
                 await invoke("open_download_location", { path: value.path });
               } catch (cause) {
-                setError(errorMessage(cause));
+                if (current.current === value) setError(errorMessage(cause));
               }
             }}
           >
             <FolderOpen size={14} />
-            打开所在文件夹
+            打开文件夹
           </Button>
-          <Button onClick={onClose}>知道了</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      }
+    />
   );
 }
 
@@ -368,7 +359,7 @@ export function FileCard({
           </div>
         </DialogContent>
       </Dialog>
-      <DownloadResultDialog
+      <DownloadNotice
         value={downloaded}
         onClose={() => setDownloaded(null)}
       />

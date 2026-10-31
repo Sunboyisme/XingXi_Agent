@@ -120,7 +120,9 @@
   line-height: 1.8;
   padding: 4px 3px;
 }
-.common-text-reader {
+.common-text-reader[data-slot="dialog-content"] {
+  width: min(880px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
   max-height: calc(100vh - 32px);
 }
 .common-text-editor form,

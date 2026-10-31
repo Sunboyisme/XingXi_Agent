@@ -25,6 +25,7 @@ pub struct Snapshot {
     pub error: String,
     pub x: i32,
     pub y: i32,
+    pub common_texts: bool,
 }
 struct DomReply {
     id: u64,
@@ -260,6 +261,21 @@ pub fn selection_snapshot(app: tauri::AppHandle) -> Snapshot {
     app.state::<Selection>().snapshot.lock().unwrap().clone()
 }
 #[tauri::command]
+pub fn selection_common_texts(app: tauri::AppHandle) -> Result<(), String> {
+    if capture_active(&app) { return Ok(()); }
+    dismiss(&app);
+    let state = app.state::<Selection>();
+    let id = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let (x, y) = crate::desktop_input::cursor();
+    let snapshot = Snapshot { id, x, y, common_texts: true, ..Snapshot::default() };
+    *state.snapshot.lock().unwrap() = snapshot.clone();
+    selection_resize(app.clone(), id, 720.0, 590.0)?;
+    let window = app.get_webview_window("selection").ok_or("常用文本窗口不可用")?;
+    window.emit("selection-snapshot", snapshot).map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
+}
+#[tauri::command]
 pub fn selection_dom_reply(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
@@ -407,6 +423,7 @@ fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
             y,
             text: result.as_ref().cloned().unwrap_or_default(),
             error: result.err().unwrap_or_default(),
+            common_texts: false,
         };
         let a = app.clone();
         let _ = app.run_on_main_thread(move || {

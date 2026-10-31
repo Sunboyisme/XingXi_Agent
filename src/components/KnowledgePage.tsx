@@ -26,7 +26,7 @@ import { nativeFile, useNativeDrop } from "@/lib/nativeDrop";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ConfirmDelete, ErrorNotice, Hint, Markdown, Toast } from "./common";
-import { DownloadResultDialog, type DownloadedFile } from "./OfficeFiles";
+import { DownloadNotice, type DownloadedFile } from "./OfficeFiles";
 import { TrashIcon } from "./SoftIcons";
 import type { KnowledgeSource } from "./KnowledgeSources";
 import "../styles/knowledge-layout.css";
@@ -833,7 +833,7 @@ export function KnowledgePage({
           })
         }
       />
-      <DownloadResultDialog
+      <DownloadNotice
         value={downloaded}
         onClose={() => setDownloaded(null)}
       />

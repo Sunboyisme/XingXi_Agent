@@ -24,7 +24,7 @@ import {
   ImagePlus,
   X,
   Check,
-  MousePointer2,
+  Move,
   GripVertical,
   Crop,
   Eraser,
@@ -97,6 +97,17 @@ const rect = (a: Point, b: Point): Rect => ({
 });
 const inside = (r: Rect, p: Point) =>
   p.x >= r.x && p.y >= r.y && p.x <= r.x + r.w && p.y <= r.y + r.h;
+const captureHandles = {
+  nw: "左上", n: "上", ne: "右上", e: "右", se: "右下", s: "下", sw: "左下", w: "左",
+};
+function resizeSelection(r: Rect, handle: string, dx: number, dy: number, bounds: { width: number; height: number }): Rect {
+  let left = r.x, top = r.y, right = r.x + r.w, bottom = r.y + r.h;
+  if (handle.includes("w")) left = Math.max(0, Math.min(right - 2, left + dx));
+  if (handle.includes("e")) right = Math.min(bounds.width, Math.max(left + 2, right + dx));
+  if (handle.includes("n")) top = Math.max(0, Math.min(bottom - 2, top + dy));
+  if (handle.includes("s")) bottom = Math.min(bounds.height, Math.max(top + 2, bottom + dy));
+  return { x: left, y: top, w: right - left, h: bottom - top };
+}
 function wrapAnnotation(
   ctx: CanvasRenderingContext2D,
   value: string,
@@ -191,7 +202,7 @@ function CaptureStylePicker({
   );
 }
 const tools = [
-  ["move", "移动选区", MousePointer2],
+  ["move", "移动选区", Move],
   ["pen", "画笔", Pencil],
   ["line", "直线", LineToolIcon],
   ["arrow", "箭头", ArrowToolIcon],
@@ -255,7 +266,6 @@ export function DesktopCapture() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
   const [toolbar, setToolbar] = useState<Point | null>(null);
   const [viewport, setViewport] = useState({ w: innerWidth, h: innerHeight });
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -340,10 +350,6 @@ export function DesktopCapture() {
           .getContext("2d")!
           .putImageData(new ImageData(pixels, s.width, s.height), 0, 0);
         source.current = bitmap;
-        setCursor({
-          x: (s.cursorX * innerWidth) / s.width,
-          y: (s.cursorY * innerHeight) / s.height,
-        });
         setAutomatic(
           s.windows.find((window) =>
             inside(window, { x: s.cursorX, y: s.cursorY }),
@@ -774,12 +780,14 @@ export function DesktopCapture() {
     e.preventDefault();
     e.stopPropagation();
     const p = point(e);
+    const selected = selection || (handle ? automatic : null);
+    if (!selection && selected) setSelection(selected);
     if (!selection) setError("");
     if (text) {
       commitText();
       return;
     }
-    if (selection && tool === "erase" && !handle && inside(selection, p)) {
+    if (selected && tool === "erase" && !handle && inside(selected, p)) {
       gesture.current = { pointerId: e.pointerId, start: p, erase: true };
       setEraseBox({ ...p, w: 0, h: 0 });
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -787,26 +795,26 @@ export function DesktopCapture() {
       setDragging(true);
       return;
     }
-    if (selection && tool === "text" && !handle && inside(selection, p)) {
+    if (selected && tool === "text" && !handle && inside(selected, p)) {
       setText({ at: p, value: "" });
       return;
     }
     const original =
-      selection &&
+      selected &&
       (handle || tool === "move") &&
       inside(
         {
-          x: selection.x - 15 / sx,
-          y: selection.y - 15 / sy,
-          w: selection.w + 30 / sx,
-          h: selection.h + 30 / sy,
+          x: selected.x - 15 / sx,
+          y: selected.y - 15 / sy,
+          w: selected.w + 30 / sx,
+          h: selected.h + 30 / sy,
         },
         p,
       )
-        ? { ...selection }
+        ? { ...selected }
         : undefined;
     const mark =
-      selection && !original && inside(selection, p)
+      selected && !original && inside(selected, p)
         ? { tool, points: [p], color, width, size: fontSize }
         : undefined;
     gesture.current = {
@@ -835,7 +843,6 @@ export function DesktopCapture() {
       moveText(e);
       return;
     }
-    setCursor({ x: e.clientX, y: e.clientY });
     const g = gesture.current;
     if (!session) return;
     if (!g) {
@@ -858,21 +865,7 @@ export function DesktopCapture() {
           x: Math.max(0, Math.min(session.width - r.w, r.x + dx)),
           y: Math.max(0, Math.min(session.height - r.h, r.y + dy)),
         });
-      else {
-        let left = r.x,
-          top = r.y,
-          right = r.x + r.w,
-          bottom = r.y + r.h;
-        if (g.handle.includes("w"))
-          left = Math.max(0, Math.min(right - 2, left + dx));
-        if (g.handle.includes("e"))
-          right = Math.min(session.width, Math.max(left + 2, right + dx));
-        if (g.handle.includes("n"))
-          top = Math.max(0, Math.min(bottom - 2, top + dy));
-        if (g.handle.includes("s"))
-          bottom = Math.min(session.height, Math.max(top + 2, bottom + dy));
-        setSelection({ x: left, y: top, w: right - left, h: bottom - top });
-      }
+      else setSelection(resizeSelection(r, g.handle, dx, dy, session));
     } else if (g.mark) {
       g.mark.points =
         g.mark.tool === "pen" ? [...g.mark.points, p] : [g.start, p];
@@ -998,6 +991,7 @@ export function DesktopCapture() {
     }
   }
   const box = selection ? styleRect(selection) : null;
+  const frame = selection || automatic;
   const barPosition = box
     ? toolbar || {
         x: Math.max(
@@ -1028,40 +1022,23 @@ export function DesktopCapture() {
         height={session?.height || 1}
         onPointerDown={begin}
       />
-      {!selection && (
-        <>
-          {automatic && (
-            <div
-              className="capture-auto-selection"
-              style={styleRect(automatic)}
-            />
-          )}
-          <span
-            className="capture-cursor-hint"
-            style={{
-              left: Math.max(0, Math.min(viewport.w - 200, cursor.x + 18)),
-              top: Math.min(viewport.h - 45, cursor.y + 22),
-            }}
-          >
-            点击选窗 · 拖动框选
-          </span>
-        </>
-      )}
-      {selection && box && (
+      {frame && (
         <div
-          className="capture-selection"
-          style={box}
-          onPointerDown={(e) => begin(e)}
+          className={selection ? "capture-selection" : "capture-auto-selection"}
+          style={styleRect(frame)}
+          data-moving={tool === "move"}
+          onPointerDown={selection ? (e) => begin(e) : undefined}
         >
-          <span className="capture-dimensions">
+          {selection && <span className="capture-dimensions">
             {Math.round(selection.w)} × {Math.round(selection.h)}
-          </span>
-          {["nw", "n", "ne", "e", "se", "s", "sw", "w"].map((h) => (
+          </span>}
+          {Object.entries(captureHandles).map(([h, label]) => (
             <button
               key={h}
               className={`capture-handle handle-${h}`}
-              aria-label={`调整截图范围 ${h}`}
+              aria-label={`调整截图${label}边缘`}
               onPointerDown={(e) => begin(e, h)}
+              onClick={() => { if (!selection) setSelection(frame); }}
               onKeyDown={(e) => {
                 const delta = e.shiftKey ? 10 : 1;
                 const dx =
@@ -1079,18 +1056,8 @@ export function DesktopCapture() {
                 if (dx || dy) {
                   e.preventDefault();
                   setSelection((r) =>
-                    r && session
-                      ? {
-                          ...r,
-                          x: Math.max(
-                            0,
-                            Math.min(session.width - r.w, r.x + dx),
-                          ),
-                          y: Math.max(
-                            0,
-                            Math.min(session.height - r.h, r.y + dy),
-                          ),
-                        }
+                    session
+                      ? resizeSelection(r || frame, h, dx, dy, session)
                       : r,
                   );
                 }

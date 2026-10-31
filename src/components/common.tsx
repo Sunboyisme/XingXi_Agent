@@ -121,27 +121,43 @@ export function ErrorNotice({
 export function Toast({
   message,
   tone = "success",
+  action,
   onClose,
 }: {
   message: string;
   tone?: "success" | "error";
+  action?: React.ReactNode;
   onClose: () => void;
 }) {
   const close = useRef(onClose);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   close.current = onClose;
   useEffect(() => {
+    if (hovered || focused) return;
     const timer = window.setTimeout(
       () => close.current(),
       tone === "error" ? 7000 : 4200,
     );
     return () => window.clearTimeout(timer);
-  }, [message, tone]);
+  }, [message, tone, hovered, focused]);
   return createPortal(
-    <div className={`app-toast is-${tone}`} role="status" aria-live="polite">
+    <div
+      className={`app-toast is-${tone}`}
+      role="status"
+      aria-live="polite"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
+    >
       <span className="app-toast-icon" aria-hidden="true">
         {tone === "success" ? <Check size={15} /> : <AlertCircle size={15} />}
       </span>
       <span className="app-toast-text">{message}</span>
+      {action}
       <button
         type="button"
         className="app-toast-close"

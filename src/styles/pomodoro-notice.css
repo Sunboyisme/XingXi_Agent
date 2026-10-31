@@ -1,23 +1,51 @@
 .pomodoro-notice {
-  margin: 8px;
-  padding: 20px;
-  border-radius: 18px;
-  max-height: calc(100vh - 16px);
+  margin: 10px;
+  padding: 24px;
+  border-radius: 22px;
+  max-height: calc(100vh - 20px);
   overflow: auto;
   border: 1px solid var(--ui-color-line);
   background: var(--ui-color-surface);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 10%);
   color: var(--ui-color-text);
 }
-.pomodoro-notice strong {
-  color: var(--ui-color-heading);
-  font-size: 16px;
-}
-.pomodoro-notice p {
-  margin: 8px 0 14px;
-  font-size: 13px;
-}
-.pomodoro-notice > div {
+.pomodoro-notice-heading {
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+}
+.pomodoro-notice-symbol {
+  display: grid;
+  place-items: center;
+  flex: 0 0 46px;
+  height: 46px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ui-color-action) 12%, transparent);
+  color: var(--ui-color-action);
+}
+.pomodoro-notice-heading > div > span {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+}
+.pomodoro-notice h1 {
+  margin: 5px 0 0;
+  color: var(--ui-color-heading);
+  font-size: 19px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.pomodoro-notice-description {
+  margin: 20px 0 24px;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.pomodoro-notice-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+html[data-desktop] .pomodoro-notice-actions button {
+  min-height: 38px;
+  border-radius: 12px;
 }

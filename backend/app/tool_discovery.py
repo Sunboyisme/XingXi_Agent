@@ -16,7 +16,7 @@ GROUPS = (
     ("天气", {"get_weather"}),
     ("计算、日期、单位", {"calculate", "date_time", "convert_units"}),
     ("搜索与网页", {"web_search", "read_url"}),
-    ("日历与提醒", {"list_plans", "create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}),
+    ("日历与提醒", {"list_plans", "check_existing_plans", "create_plans", "update_plan", "delete_plan", "delete_plans", "action_plan"}),
     ("独立待办", {"list_todos", "create_todo", "update_todo", "action_todo"}),
     ("记忆与聊天历史", {"remember", "search_memories", "search_conversation_history", "search_project_history"}),
     ("文件读取", {"list_files", "read_file", "search_file", "read_local_file", "scan_local_folder"}),
@@ -30,7 +30,8 @@ GROUPS = (
 # a write without another discovery round. No prerequisite executes here.
 DEPENDENCIES = {
     "list_plans": {"date_time"},
-    "create_plans": {"list_plans", "date_time"},
+    "create_plans": {"list_plans", "date_time", "check_existing_plans"},
+    "check_existing_plans": {"list_plans"},
     "update_plan": {"list_plans", "date_time"},
     "delete_plan": {"list_plans", "date_time"},
     "delete_plans": {"list_plans", "date_time"},

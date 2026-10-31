@@ -82,7 +82,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| e.to_string())?;
     WebviewWindowBuilder::new(app, "pomodoro-notice", WebviewUrl::App("index.html?view=pomodoro-notice".into()))
-        .title("XiaoXi · 专注完成").inner_size(360.0, 190.0).decorations(false)
+        .title("XiaoXi · 专注完成").inner_size(380.0, 250.0).decorations(false)
         .transparent(true).background_color(tauri::window::Color(0, 0, 0, 0)).always_on_top(true)
         .skip_taskbar(true).resizable(false).shadow(false).focused(false).visible(false)
         .build().map_err(|e| e.to_string())?;
@@ -494,15 +494,40 @@ fn finish_drag(app: &tauri::AppHandle) {
         );
     }
 }
-fn play_completion_sound() -> Result<(), String> {
+fn play_completion_sound(volume: u8) -> Result<(), String> {
     use windows::{
         core::PCWSTR,
         Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT},
     };
+    if volume > 100 { return Err("提示音音量应在0到100之间。".into()); }
+    if volume == 0 { return Ok(()); }
+    // Keep requested gains alive for asynchronous playback. Only this PCM sound
+    // is scaled; device/session volume changes would affect other audio.
+    static SCALED: std::sync::LazyLock<Mutex<std::collections::HashMap<u8, Box<[u8]>>>> =
+        std::sync::LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+    let mut sounds = SCALED.lock().unwrap();
+    let sound = sounds.entry(volume).or_insert_with(|| {
+        let mut bytes = COMPLETION_SOUND.to_vec();
+        let mut offset = 12;
+        while offset + 8 <= bytes.len() {
+            let length = u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
+            let start = offset + 8;
+            let end = (start + length).min(bytes.len());
+            if &bytes[offset..offset + 4] == b"data" {
+                for sample in bytes[start..end].chunks_exact_mut(2) {
+                    let value = i32::from(i16::from_le_bytes([sample[0], sample[1]]));
+                    sample.copy_from_slice(&((value * i32::from(volume) / 100) as i16).to_le_bytes());
+                }
+                break;
+            }
+            offset = start + length + (length % 2);
+        }
+        bytes.into_boxed_slice()
+    });
     // With SND_MEMORY, PlaySound interprets this pointer as WAV bytes, not text.
     let started = unsafe {
         PlaySoundW(
-            PCWSTR(COMPLETION_SOUND.as_ptr().cast()),
+            PCWSTR(sound.as_ptr().cast()),
             None,
             SND_MEMORY | SND_ASYNC | SND_NODEFAULT,
         )
@@ -514,8 +539,8 @@ fn play_completion_sound() -> Result<(), String> {
     }
 }
 #[tauri::command]
-pub fn pomodoro_preview_sound() -> Result<(), String> {
-    play_completion_sound()
+pub fn pomodoro_preview_sound(volume: Option<u8>) -> Result<(), String> {
+    play_completion_sound(volume.unwrap_or(100))
 }
 fn accept_snapshot(app: &tauri::AppHandle, value: &serde_json::Value) -> bool {
     let (Some(revision), Some(server_now), Some(phase)) = (
@@ -604,7 +629,8 @@ pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
                                         .as_bool()
                                         .unwrap_or(true)
                                     {
-                                        let _ = play_completion_sound();
+                                        let volume = value["preferences"]["sound_volume"].as_u64().unwrap_or(100).min(100) as u8;
+                                        let _ = play_completion_sound(volume);
                                     }
                                 }
                                 seen = Some(sequence);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AudioLines, Bell, Square, SquarePen, ScanLine, X } from "lucide-react";
 import { BaiAvatar } from "./BaiAvatar";
+import { CommonTextsIcon } from "./SoftIcons";
 import { Hint } from "./common";
 import { useDesktopHitRegions } from "@/lib/desktopHitRegions";
 import type { ComplexTask, Conversation } from "@/lib/api";
@@ -415,7 +416,7 @@ export function DesktopPet() {
           "--pet-top": layout.y == null ? undefined : `${layout.y}px`,
           "--pet-panel-top": `${panelTop}px`,
           "--pet-panel-height": `${Math.max(84, panelHeight)}px`,
-          "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 152 - avatarLeft, avatarSize / 2 - 73))}px`,
+          "--pet-tools-left": `${Math.max(6 - avatarLeft, Math.min(window.innerWidth - 184 - avatarLeft, avatarSize / 2 - 89))}px`,
           "--pet-menu-top": `${avatarTop >= 110 ? avatarTop - 108 : avatarTop + avatarSize + 8}px`,
         } as CSSProperties
       }
@@ -552,6 +553,7 @@ export function DesktopPet() {
             <button aria-label="截图" onClick={() => void invoke("desktop_capture_begin").catch(e => setError(desktopError(e)))}><ScanLine size={16} /></button>
             <span className="pet-toolbar-divider" />
             <Hint label="语音输入"><button aria-label="语音输入" onClick={() => startDesktopAsk(true)}><AudioLines size={16} /></button></Hint>
+            <button aria-label="常用文本" onClick={() => void invoke("selection_common_texts").catch(cause => setError(desktopError(cause)))}><CommonTextsIcon size={16} /></button>
             <span className="pet-toolbar-divider" />
             <Hint label={updates ? `未读任务和提醒 · ${updates} 条` : "暂无未读任务和提醒"}><button aria-label="提醒和任务" aria-expanded={!collapsed && !quickShown && updates > 0} onClick={() => void toggleInbox().catch(error => setError(desktopError(error)))}><Bell size={16} />{updates > 0 && <span className="pet-update-count">{updates > 9 ? "9+" : updates}</span>}</button></Hint>
           </div>

@@ -46,6 +46,20 @@
   padding: 20px 24px;
   min-width: 0;
 }
+.knowledge-page .knowledge-preview > header {
+  position: sticky;
+  top: -20px;
+  z-index: 2;
+  margin: -20px -24px 20px;
+  padding: 20px 24px 16px;
+  background: var(--ui-color-surface);
+}
+.knowledge-preview > header > div:first-child {
+  min-width: 0;
+}
+.knowledge-preview > header .module-actions {
+  flex-shrink: 0;
+}
 .knowledge-preview-empty,
 .knowledge-welcome {
   display: flex;
@@ -95,6 +109,11 @@
     grid-template-columns: minmax(200px, 29%) minmax(0, 1fr);
   }
   .knowledge-page .knowledge-preview {
+    padding: 16px;
+  }
+  .knowledge-page .knowledge-preview > header {
+    top: -16px;
+    margin: -16px -16px 16px;
     padding: 16px;
   }
 }

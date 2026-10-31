@@ -536,6 +536,7 @@ fn main() {
             pomodoro::pomodoro_widget_drag,
             pomodoro::pomodoro_preview_sound,
             selection::selection_snapshot,
+            selection::selection_common_texts,
             selection::selection_dom_reply,
             selection::selection_dismiss,
             selection::selection_resize,
