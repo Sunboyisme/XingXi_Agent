@@ -50,7 +50,6 @@ def thinking_control(url, model, provider_type=None):
     # Model families keep the same switch even when reached through an aggregator.
     if (
         leaf.startswith(("deepseek-r1", "deepseek-reasoner"))
-        or leaf.endswith("-thinking")
         or "thinking" in leaf
     ):
         return "always"

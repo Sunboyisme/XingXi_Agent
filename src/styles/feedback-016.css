@@ -1,7 +1,4 @@
 /* 0.1.6 follow-up: restrained surfaces, fixed agenda controls and project navigation. */
-.plan-week-column {
-  isolation: isolate;
-}
 .answer-tools-dialog[data-slot="dialog-content"] {
   display: flex;
   flex-direction: column;
@@ -71,15 +68,6 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 11px;
-}
-.plan-agenda-dialog[data-slot="dialog-content"] {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  overflow: hidden;
-}
-.plan-agenda-dialog > :not(.plan-agenda-list) {
-  flex-shrink: 0;
 }
 .plan-agenda-list {
   display: block;

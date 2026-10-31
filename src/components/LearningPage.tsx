@@ -411,7 +411,7 @@ export function LearningPage({
       live = false;
     };
   }, [nodeId, pinnedLessonId]);
-  async function ensureSession(targetNode?: string, minutes?: number) {
+  async function ensureSession(targetNode?: string) {
     if (!goal) throw new Error("请先选择学习目标。");
     await flushDraft();
     pinnedSession.current = null;
@@ -421,7 +421,6 @@ export function LearningPage({
       "POST",
       {
         node_id: targetNode || nodeId || undefined,
-        target_minutes: minutes,
       },
     );
     if (selectedGoalId.current !== saved.goal_id)

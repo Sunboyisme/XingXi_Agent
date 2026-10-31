@@ -247,14 +247,6 @@ export function DesktopQuickAsk() {
       window.removeEventListener("keydown", key);
     };
   }, []);
-  async function refreshSettings(report: boolean) {
-    try {
-      const s = await api<Settings>("/settings");
-      if (mounted.current) setSettings(s);
-    } catch (e) {
-      if (report && mounted.current) setError(desktopError(e));
-    }
-  }
   async function shown(focus = true) {
     visible.current = true;
     setSurfaceVisible(true);
@@ -267,12 +259,16 @@ export function DesktopQuickAsk() {
       !document.querySelector('[role="dialog"]')
     )
       input.current?.focus({ preventScroll: true });
-    await refreshSettings(false);
+    try {
+      const s = await api<Settings>("/settings");
+      if (mounted.current) setSettings(s);
+    } catch {
+      // Keep the cached settings when this background refresh fails.
+    }
     if (!mounted.current || !visible.current) return;
     if (
       focus &&
       document.hasFocus() &&
-      mounted.current &&
       !work.current.locked &&
       !document.querySelector('[role="dialog"]')
     )

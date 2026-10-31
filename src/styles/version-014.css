@@ -231,49 +231,6 @@ body:has(.reminder-popup),
   line-height: 1;
 }
 
-.plan-week-repeats {
-  display: grid;
-  grid-template-columns: 44px repeat(7, minmax(0, 1fr));
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--ui-color-line);
-}
-
-.plan-week-repeats > span {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  padding: 5px 5px 5px 0;
-  color: var(--ui-color-text-muted);
-  font-size: 10px;
-}
-
-.plan-week-repeats > div {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  padding: 4px;
-  border-right: 1px solid var(--ui-color-line);
-}
-
-.plan-week-repeats button {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
-  border: 0;
-  border-radius: 999px;
-  color: var(--ui-color-text-muted);
-  background: color-mix(in srgb, var(--ui-color-action) 7%, transparent);
-  font-size: 10px;
-}
-
-.plan-week-repeats button:hover {
-  color: var(--ui-color-action);
-  background: color-mix(in srgb, var(--ui-color-action) 13%, transparent);
-}
-
 /* Model connection hierarchy: default model first, then each provider. */
 .model-hub.settings-section {
   padding: 24px;

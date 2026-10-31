@@ -157,8 +157,7 @@ async def configure(value: QuickSetupWrite):
                 else:
                     configured = {**binding, "enabled": True, "url": preset["url"], "model": model}
                     if field == "image_generation_config":
-                        configured.update(size=("auto" if value.provider == "bailian" else
-                                                "1328x1328" if model == "Qwen/Qwen-Image" else "1024x1024"),
+                        configured.update(size="auto" if value.provider == "bailian" else "1024x1024",
                                           response_format="auto")
                     setattr(settings, field, configured)
                     items.append(SetupItem(capability=capability, state="configured", model=model,
