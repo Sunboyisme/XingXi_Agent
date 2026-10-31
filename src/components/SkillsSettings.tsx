@@ -477,7 +477,7 @@ export function SkillsSettings({ onRuntimes }: { onRuntimes: () => void }) {
                 </ul>
               </SkillSection>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => setDeleting(detail)}>
+                <Button variant="ghost" data-delete-action onClick={() => setDeleting(detail)}>
                   <Trash2 size={15} />
                   删除
                 </Button>

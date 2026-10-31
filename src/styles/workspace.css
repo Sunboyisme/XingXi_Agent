@@ -384,7 +384,7 @@ body,
   color: var(--ui-color-text-muted);
 }
 .wechat-actions .wechat-unbind:hover {
-  color: var(--ui-color-danger);
+  color: var(--ui-color-delete-text);
 }
 .wechat-local-hint {
   margin: -6px 0 0;

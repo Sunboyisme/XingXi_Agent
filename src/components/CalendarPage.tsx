@@ -1114,6 +1114,7 @@ export function CalendarPage({
                         size="icon"
                         disabled={busy}
                         className="plan-agenda-delete"
+                        data-delete-action
                         aria-label={`${isRepeating(event) ? "删除单日计划" : "删除"} ${event.title}`}
                         onClick={() =>
                           isRepeating(event)
@@ -1716,6 +1717,7 @@ export function CalendarPage({
                           type="button"
                           variant="ghost"
                           size="icon"
+                          data-delete-action
                           aria-label={`移除提醒 ${index + 1}`}
                           onClick={() =>
                             setForm({
@@ -1769,6 +1771,7 @@ export function CalendarPage({
                       setError("");
                       setCancelling(editing);
                     }}
+                    data-delete-action
                   >
                     <X size={15} />
                     删除单日计划
@@ -1779,6 +1782,7 @@ export function CalendarPage({
                   type="button"
                   variant="ghost"
                   onClick={() => setDeleting(editing)}
+                  data-delete-action
                   disabled={busy}
                 >
                   <Trash2 size={15} />

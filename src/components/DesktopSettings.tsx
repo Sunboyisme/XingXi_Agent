@@ -560,6 +560,7 @@ export function SpeechConnection({
                       type="button"
                       variant="ghost"
                       size="xs"
+                      data-delete-action={profile.api_key === "" ? undefined : true}
                       disabled={busy}
                       onClick={() =>
                         change(

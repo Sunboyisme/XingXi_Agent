@@ -55,6 +55,7 @@ function Item({
   return (
     <DropdownMenu.Item
       className={`pin-menu-item ${danger ? "is-danger" : ""}`}
+      data-delete-action={danger || undefined}
       disabled={disabled}
       role={checked === undefined ? "menuitem" : "menuitemcheckbox"}
       aria-checked={checked}

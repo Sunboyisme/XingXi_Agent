@@ -263,6 +263,7 @@ export function ImageGenerationConnection() {
                     <button
                       type="button"
                       className="text-button danger"
+                      data-delete-action={clearKey ? undefined : true}
                       disabled={busy}
                       aria-label={
                         clearKey ? "撤销清除图片密钥" : "清除已保存的图片密钥"

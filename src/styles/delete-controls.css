@@ -1,0 +1,107 @@
+/* Minimal destructive confirmations, shared by every delete flow. */
+[data-slot="alert-dialog-content"].confirm-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  gap: 0;
+  padding: 24px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 16px;
+  background: var(--ui-color-surface);
+}
+
+.confirm-dialog .confirm-dialog-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+}
+
+.confirm-dialog-heading [data-slot="alert-dialog-title"] {
+  margin: 0;
+  color: var(--ui-color-heading);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 27px;
+}
+
+.confirm-dialog-heading [data-slot="alert-dialog-description"] {
+  margin: 0;
+  color: var(--ui-color-text-muted);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.confirm-dialog-note {
+  margin: 12px 0 0;
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog > .error-notice {
+  margin: 12px 0 0;
+}
+
+.confirm-dialog .confirm-dialog-footer {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 27px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.confirm-dialog-footer > button {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 36px;
+  padding: 7px 17px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.confirm-dialog-footer [data-slot="alert-dialog-cancel"] {
+  color: var(--ui-color-text-muted);
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.confirm-dialog-footer [data-slot="alert-dialog-cancel"]:hover:not(:disabled) {
+  color: var(--ui-color-text);
+  background: var(--surface-hover);
+}
+
+.confirm-dialog-footer .confirm-dialog-danger {
+  min-width: 92px;
+}
+
+/* Delete/remove entry points keep their existing sizes and reveal behavior. */
+button[data-delete-action],
+[role="menuitem"][data-delete-action] {
+  color: var(--ui-color-delete-text);
+}
+
+button[data-delete-action]:hover:not(:disabled),
+[role="menuitem"][data-delete-action][data-highlighted] {
+  color: var(--ui-color-delete-text);
+  background: var(--ui-color-delete-surface);
+}
+
+[data-delete-action]:focus-visible {
+  outline-color: var(--ui-color-delete-focus);
+}
+
+[data-delete-action] svg {
+  color: inherit;
+}

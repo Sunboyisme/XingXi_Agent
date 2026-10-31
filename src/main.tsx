@@ -26,6 +26,7 @@ import "./styles/model-picker.css";
 import "./styles/composer-action.css";
 import "./styles/calendar-compact.css";
 import "./styles/feature-typography.css";
+import "./styles/delete-controls.css";
 
 const stopAppearance = initializeAppearance();
 const stopSelectionBridge = initializeSelectionBridge();

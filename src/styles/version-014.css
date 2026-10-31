@@ -705,8 +705,8 @@ body:has(.reminder-popup),
 }
 
 .embedding-secret-action:hover {
-  color: var(--ui-color-danger);
-  background: color-mix(in srgb, var(--ui-color-danger) 7%, transparent);
+  color: var(--ui-color-delete-text);
+  background: var(--ui-color-delete-surface);
 }
 
 .embedding-secret-action.is-clearing {
@@ -725,91 +725,6 @@ body:has(.reminder-popup),
   background: var(--ui-color-bg);
 }
 
-/* Destructive confirmations use one clear icon, explanation and balanced actions. */
-[data-slot="alert-dialog-content"].confirm-dialog {
-  width: min(480px, calc(100vw - 32px));
-  gap: 14px;
-  padding: 22px;
-  border-radius: 22px;
-  background: var(--ui-color-surface);
-}
-
-.confirm-dialog-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.confirm-dialog-icon {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  border-radius: 13px;
-  color: var(--ui-color-danger);
-  background: color-mix(in srgb, var(--ui-color-danger) 8%, transparent);
-}
-
-.confirm-dialog-heading [data-slot="alert-dialog-header"] {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-  text-align: left;
-}
-
-.confirm-dialog-heading [data-slot="alert-dialog-title"] {
-  font-size: 17px;
-  font-weight: 650;
-}
-
-.confirm-dialog-heading [data-slot="alert-dialog-description"] {
-  color: var(--ui-color-text-muted);
-  font-size: 11px;
-  line-height: 1.65;
-}
-
-.confirm-dialog-note {
-  margin: 0;
-  padding: 9px 11px;
-  border-radius: 10px;
-  color: var(--ui-color-text-muted);
-  background: var(--ui-color-bg);
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.confirm-dialog-footer {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: stretch;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.confirm-dialog-footer > button {
-  width: 100%;
-  min-width: 0;
-  height: 40px;
-  min-height: 40px;
-  justify-self: stretch;
-  padding: 0 15px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1;
-}
-
-.confirm-dialog-footer .confirm-dialog-danger {
-  color: white;
-  border-color: var(--ui-color-danger);
-  background: var(--ui-color-danger);
-}
-
-.confirm-dialog-footer .confirm-dialog-danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ui-color-danger) 86%, black);
-}
 /* Prompt ideas on the empty conversation page. */
 
 .skill-cards {

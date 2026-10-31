@@ -178,6 +178,7 @@ export function TextCategoryManager({ onClose }: { onClose: () => void }) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
+                  data-delete-action
                   aria-label={`删除${row.name}`}
                   disabled={busy}
                   onClick={() => {

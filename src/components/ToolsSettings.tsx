@@ -149,6 +149,7 @@ function SecretFields({
                 type="button"
                 variant="ghost"
                 size="icon"
+                data-delete-action
                 aria-label={`移除${label} ${row.key || index + 1}`}
                 onClick={() =>
                   setRows(
@@ -862,6 +863,7 @@ export function ToolsSettings({ active }: { active: boolean }) {
                   size="sm"
                   variant="ghost"
                   disabled={busy}
+                  data-delete-action
                   aria-label={`删除服务 ${server.name}`}
                   onClick={() => setDeleting(server)}
                 >

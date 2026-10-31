@@ -37,6 +37,12 @@
   --ui-color-focus: #a95940;
   --ui-color-danger: #9b4137;
   --ui-color-danger-surface: #fae8e2;
+  --ui-color-delete: #9c5538;
+  --ui-color-delete-hover: #88462e;
+  --ui-color-on-delete: #fff4e9;
+  --ui-color-delete-text: #9c5538;
+  --ui-color-delete-surface: #f4e8df;
+  --ui-color-delete-focus: #9c5538;
   --status-success: #526d47;
   --status-success-surface: #eef3e8;
   --line-subtle: #ede5dc;
@@ -692,7 +698,7 @@
 .course-outline .delete-course[data-slot="button"] {
   margin: auto 0 0;
   padding-top: 16px;
-  color: var(--ui-color-text-muted);
+  color: var(--ui-color-delete-text);
   font-size: 11px;
   align-self: flex-start;
 }

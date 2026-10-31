@@ -95,6 +95,7 @@ export function SearchConnection({
               <button
                 type="button"
                 className="text-button danger"
+                data-delete-action={clear ? undefined : true}
                 disabled={busy}
                 onClick={() => {
                   setClear(!clear);

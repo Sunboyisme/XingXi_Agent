@@ -17,6 +17,12 @@
   --ui-color-focus: #e9af8b;
   --ui-color-danger: #eeaa98;
   --ui-color-danger-surface: #49322d;
+  --ui-color-delete: #9c5538;
+  --ui-color-delete-hover: #ac6142;
+  --ui-color-on-delete: #fff4e9;
+  --ui-color-delete-text: #d49a78;
+  --ui-color-delete-surface: #3d2c23;
+  --ui-color-delete-focus: #cc986e;
   --status-success: #bed0a9;
   --status-success-surface: #343d2d;
   --line-subtle: #494035;

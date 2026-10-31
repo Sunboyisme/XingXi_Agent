@@ -351,6 +351,7 @@ export function TodoPage({
                   size="icon"
                   variant="ghost"
                   disabled={busy}
+                  data-delete-action
                   aria-label={`删除${row.title}`}
                   onClick={() => setDeleting(row)}
                 >

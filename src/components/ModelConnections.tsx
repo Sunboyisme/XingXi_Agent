@@ -471,6 +471,7 @@ export function ModelConnections({
                       </DropdownMenu.Item>
                       <DropdownMenu.Item
                         className="model-menu-item danger"
+                        data-delete-action
                         onSelect={() => setDeleting(connection)}
                       >
                         <Trash2 size={14} />
@@ -655,6 +656,7 @@ export function ModelConnections({
                         <button
                           type="button"
                           className={`embedding-secret-action ${draft.api_key === "" ? "is-clearing" : ""}`}
+                          data-delete-action={draft.api_key === "" ? undefined : true}
                           disabled={busy}
                           onClick={() =>
                             setDraft({
@@ -742,6 +744,7 @@ export function ModelConnections({
                           />
                           <button
                             className="icon-button"
+                            data-delete-action
                             aria-label={`移除模型 ${index + 1}`}
                             disabled={busy}
                             onClick={() => {

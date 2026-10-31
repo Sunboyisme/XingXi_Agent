@@ -232,6 +232,7 @@ export function MemoryPage({
                   <Button
                     variant="ghost"
                     size="icon"
+                    data-delete-action
                     aria-label="删除记忆"
                     disabled={busy}
                     onClick={() => {
@@ -311,6 +312,7 @@ export function MemoryPage({
                     setDetailId("");
                     setDeleting(detail);
                   }}
+                  data-delete-action
                 >
                   <Trash2 size={15} />
                   删除

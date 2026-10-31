@@ -320,7 +320,7 @@
   cursor: default;
 }
 .project-menu .danger {
-  color: var(--ui-color-danger);
+  color: var(--ui-color-delete-text);
 }
 .project-library[data-slot="dialog-content"],
 .chat-search-dialog[data-slot="dialog-content"] {

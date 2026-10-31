@@ -1044,7 +1044,7 @@ export function LearningPage({
               <span className="goal-row-icon"><BookOpen size={22} /></span><span className="goal-row-content"><strong>{item.summary.title || item.messages.find((m) => m.role === "user")?.content.slice(0, 70) || "未完成的学习方向"}</strong><span>{item.status === "ready" ? "方向已整理，待确认生成路线" : "继续和 XiaoXi 确定学习方向"}</span><small>访谈草稿 · 已自动保存</small></span>
             </button>
             <Button variant="ghost" onClick={() => openIntake(item.id)}>继续完善<ArrowRight size={15} /></Button>
-            <Button size="icon" variant="ghost" aria-label="删除访谈草稿" onClick={() => setDeletingIntake(item)}><Trash2 size={15} /></Button>
+            <Button size="icon" variant="ghost" data-delete-action aria-label="删除访谈草稿" onClick={() => setDeletingIntake(item)}><Trash2 size={15} /></Button>
           </article>)}
           {availableGoals.length ? (
             <div className="goal-list">
@@ -1133,6 +1133,7 @@ export function LearningPage({
                       <Button
                         size="icon"
                         variant="ghost"
+                        data-delete-action
                         aria-label={`删除学习目标 ${value.title}`}
                         onClick={() => {
                           setError("");
@@ -1245,6 +1246,7 @@ export function LearningPage({
                 size="sm"
                 variant="ghost"
                 className="delete-course"
+                data-delete-action
                 onClick={() => setDeleting(goal)}
               >
                 <Trash2 size={14} />

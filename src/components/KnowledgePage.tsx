@@ -141,6 +141,7 @@ function FileTree({
                   variant="ghost"
                   size="icon"
                   className="knowledge-row-delete"
+                  data-delete-action
                   disabled={busy}
                   aria-label={`删除文件夹 ${prefix}${name}`}
                   onClick={() => onDelete(`${prefix}${name}`, rows)}
@@ -207,6 +208,7 @@ function FileTree({
                   variant="ghost"
                   size="icon"
                   className="knowledge-row-delete"
+                  data-delete-action
                   disabled={busy}
                   aria-label={`删除文件 ${doc.relative_path}`}
                   onClick={() => onDelete(doc.relative_path, [doc])}
@@ -704,6 +706,7 @@ export function KnowledgePage({
                       <Button
                         variant="ghost"
                         size="icon"
+                        data-delete-action
                         aria-label="删除知识库文件"
                         disabled={busy}
                         onClick={() =>

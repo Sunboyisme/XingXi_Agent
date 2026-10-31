@@ -109,45 +109,14 @@
   width: 30px;
   height: 30px;
   border-radius: 11px;
-  color: var(--ui-color-text-muted);
+  color: var(--ui-color-delete-text);
 }
 .conversation-row-actions > .conversation-delete:hover {
-  color: var(--ui-color-danger);
-  background: color-mix(
-    in srgb,
-    var(--ui-color-danger) 8%,
-    var(--ui-color-surface)
-  );
+  color: var(--ui-color-delete-text);
+  background: var(--ui-color-delete-surface);
 }
-.conversation-popconfirm {
-  z-index: 150;
-  width: min(300px, calc(100vw - 24px));
-  padding: 17px;
-  border: 1px solid var(--ui-color-line);
-  border-radius: 16px;
-  background: var(--ui-color-surface);
-  color: var(--ui-color-text);
-  box-shadow: 0 10px 32px rgb(0 0 0 / 12%);
-  font-size: 13px;
-}
-.conversation-popconfirm > strong {
-  font-size: 14px;
-}
-.conversation-popconfirm p {
-  margin: 9px 0 14px;
-  line-height: 1.7;
-  color: var(--ui-color-text-muted);
-}
-.conversation-popconfirm > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 7px;
-}
-.conversation-popconfirm .popconfirm-error {
-  color: var(--ui-color-danger);
-}
-.conversation-popconfirm-arrow {
-  fill: var(--ui-color-surface);
+.conversation-row-actions > .conversation-delete:focus-visible {
+  outline-color: var(--ui-color-delete-focus);
 }
 .markdown-code-block,
 .markdown-table-block {

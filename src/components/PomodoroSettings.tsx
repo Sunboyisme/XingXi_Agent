@@ -279,6 +279,7 @@ export function PomodoroSettings({
                         variant="ghost"
                         size="icon"
                         disabled={saving}
+                        data-delete-action
                         aria-label={`删除 ${preset.focus_minutes}/${preset.break_minutes} 预设`}
                         onClick={() => {
                           setPreferences((old) => ({

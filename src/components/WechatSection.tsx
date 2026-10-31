@@ -383,6 +383,7 @@ export function WechatSection({ compact = false }: { compact?: boolean }) {
               variant="ghost"
               size="sm"
               className="wechat-unbind"
+              data-delete-action
               disabled={busy}
               onClick={() => void change("/wechat/connection", "DELETE")}
             >

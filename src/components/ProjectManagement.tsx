@@ -306,7 +306,7 @@ export function ProjectManagement({
   }
 
   function removeAction(item: ProjectMaterial) {
-    return !batch && <Button size="sm" variant="ghost" disabled={busy}
+    return !batch && <Button size="sm" variant="ghost" data-delete-action disabled={busy}
       aria-label={`移除项目资料 ${item.name}`} onClick={() => void remove([item.id])}>
       <Trash2 size={13} />移除
     </Button>;
@@ -439,6 +439,7 @@ export function ProjectManagement({
                       <button
                         type="button"
                         className="icon-button"
+                        data-delete-action
                         aria-label={`移除文件夹 ${path}`}
                         disabled={busy || picking || droppingFolders}
                         onClick={() =>
@@ -575,6 +576,7 @@ export function ProjectManagement({
               <Button
                 size="sm"
                 variant="outline"
+                data-delete-action
                 disabled={busy || !selected.length}
                 onClick={() => setConfirmBatch(true)}
               >

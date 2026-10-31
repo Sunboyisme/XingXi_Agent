@@ -216,6 +216,7 @@ export function EmbeddingSettings() {
                   <button
                     type="button"
                     className={`embedding-secret-action ${clear ? "is-clearing" : ""}`}
+                    data-delete-action={clear ? undefined : true}
                     disabled={busy}
                     aria-label={
                       clear ? "撤销清除已保存的密钥" : "清除已保存的密钥"

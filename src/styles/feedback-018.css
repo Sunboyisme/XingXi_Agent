@@ -625,7 +625,7 @@
   min-height: 0;
   padding: 0;
   border-radius: 99px;
-  color: var(--ui-color-text-muted);
+  color: var(--ui-color-delete-text);
   opacity: 0;
   outline-offset: -2px;
   transition:
@@ -642,10 +642,10 @@
   }
 }
 .knowledge-tree .knowledge-row-delete:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ui-color-danger) 10%, transparent);
+  background: var(--ui-color-delete-surface);
 }
 .knowledge-tree .knowledge-row-delete:hover:not(:disabled) svg {
-  color: var(--ui-color-danger);
+  color: var(--ui-color-delete-text);
 }
 .knowledge-row-delete .soft-icon-fill {
   opacity: 0;

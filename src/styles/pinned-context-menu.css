@@ -112,17 +112,14 @@ html[data-desktop] .pin-context-anchor {
   pointer-events: none;
 }
 .pin-menu-item.is-danger {
-  color: var(--ui-color-danger);
+  color: var(--ui-color-delete-text);
 }
 .pin-menu-item.is-danger .pin-menu-icon {
   color: inherit;
 }
 .pin-menu-item.is-danger[data-highlighted] {
-  background: color-mix(
-    in srgb,
-    var(--ui-color-danger) 9%,
-    var(--ui-color-surface)
-  );
+  color: var(--ui-color-delete-text);
+  background: var(--ui-color-delete-surface);
 }
 .pin-menu-separator {
   height: 1px;

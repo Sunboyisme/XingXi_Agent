@@ -444,6 +444,7 @@ export function TTSConnection({
                       type="button"
                       variant="ghost"
                       size="xs"
+                      data-delete-action={profile.api_key === "" ? undefined : true}
                       disabled={saving}
                       onClick={() =>
                         change({ api_key: profile.api_key === "" ? null : "" })

@@ -943,6 +943,7 @@ export function DesktopQuickAsk() {
                 )}
                 <Hint label="移除附件">
                   <button
+                    data-delete-action
                     aria-label="移除附件"
                     disabled={busy || filesBusy || creatingChat}
                     onClick={() =>
@@ -1105,6 +1106,7 @@ export function DesktopQuickAsk() {
               继续添加
             </button>
             <button
+              data-delete-action
               onClick={() => {
                 pending.current = [];
                 setPendingCount(0);

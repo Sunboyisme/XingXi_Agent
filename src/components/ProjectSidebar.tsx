@@ -591,6 +591,7 @@ export function ProjectSidebar({
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           className="danger"
+                          data-delete-action
                           onSelect={() => manage("delete", project.id)}
                         >
                           删除项目

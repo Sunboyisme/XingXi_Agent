@@ -424,6 +424,7 @@ export function ImagesInput({
             <button
               type="button"
               className="attachment-remove"
+              data-delete-action
               aria-label={`移除 ${image.name}`}
               disabled={disabled}
               onClick={() => {
@@ -473,6 +474,7 @@ export function ImagesInput({
             <button
               type="button"
               className="attachment-remove"
+              data-delete-action
               aria-label={`移除 ${item.file.name}`}
               disabled={disabled}
               onClick={() => {

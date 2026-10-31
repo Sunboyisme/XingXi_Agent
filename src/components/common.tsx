@@ -199,7 +199,7 @@ export function ConfirmDelete({
   title,
   description,
   label,
-  cancelLabel = "保留",
+  cancelLabel = "取消",
   note,
   error,
   onClose,
@@ -216,36 +216,37 @@ export function ConfirmDelete({
   onConfirm: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const deleteLock = useRef(false);
   return (
     <AlertDialog
       open={open}
       onOpenChange={(value) => {
-        if (!value && !busy) onClose();
+        if (!value && !deleteLock.current) onClose();
       }}
     >
-      <AlertDialogContent className="confirm-dialog">
-        <div className="confirm-dialog-heading">
-          <span className="confirm-dialog-icon" aria-hidden="true">
-            <TriangleAlert size={20} />
-          </span>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{title}</AlertDialogTitle>
-            <AlertDialogDescription>{description}</AlertDialogDescription>
-          </AlertDialogHeader>
-        </div>
+      <AlertDialogContent className="confirm-dialog" aria-busy={busy}>
+        <AlertDialogHeader className="confirm-dialog-heading">
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
         {note && <p className="confirm-dialog-note">{note}</p>}
         {error && <ErrorNotice message={error} />}
         <AlertDialogFooter className="confirm-dialog-footer">
-          <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel variant="ghost" disabled={busy}>
+            {cancelLabel}
+          </AlertDialogCancel>
           <Button
             variant="destructive"
             className="confirm-dialog-danger"
             disabled={busy}
             onClick={async () => {
+              if (deleteLock.current) return;
+              deleteLock.current = true;
               setBusy(true);
               try {
                 await onConfirm();
               } finally {
+                deleteLock.current = false;
                 setBusy(false);
               }
             }}

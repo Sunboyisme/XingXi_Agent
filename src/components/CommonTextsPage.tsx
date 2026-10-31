@@ -110,6 +110,7 @@ function TextCard({
           <Button
             variant="ghost"
             size="icon-sm"
+            data-delete-action
             aria-label="删除文本"
             onClick={onDelete}
           >
@@ -367,8 +368,8 @@ export function CommonTextsPage({ createRequested = 0 }: { createRequested?: num
       {manager && <TextCategoryManager onClose={() => setManager(false)} />}
       <ConfirmDelete
         open={Boolean(deleting)}
-        title="删除常用文本？"
-        description="删除后无法恢复，请确认这段文字不再需要。"
+        title="删除这段常用文本？"
+        description="删除后无法恢复。"
         label="删除文本"
         error={deleteError}
         onClose={() => setDeleting(undefined)}
