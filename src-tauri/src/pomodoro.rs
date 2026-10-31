@@ -589,16 +589,21 @@ pub fn start(app: tauri::AppHandle, backend_url: String, data_dir: PathBuf) {
             return;
         };
         let mut seen: Option<u64> = None;
+        let boot_id = uuid::Uuid::new_v4().to_string();
+        let mut initialized = false;
         loop {
             let start = Instant::now();
             if let Ok(token) = std::fs::read_to_string(data_dir.join("auth-token")) {
-                if let Ok(response) = client
-                    .get(format!("{backend_url}/pomodoro"))
-                    .bearer_auth(token.trim())
-                    .send()
+                let request = if initialized {
+                    client.get(format!("{backend_url}/pomodoro"))
+                } else {
+                    client.post(format!("{backend_url}/pomodoro/restart")).json(&serde_json::json!({"boot_id":boot_id}))
+                };
+                if let Ok(response) = request.bearer_auth(token.trim()).send()
                 {
                     if response.status().is_success() {
                         if let Ok(value) = response.json::<serde_json::Value>() {
+                            initialized = true;
                             if let Some(sequence) = value["notification_seq"].as_u64() {
                                 let accepted = accept_snapshot(&app, &value);
                                 if accepted {

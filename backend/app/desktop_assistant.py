@@ -74,7 +74,8 @@ def save_speech(value: SpeechWrite):
             service_credentials.draft(p.model_dump(), "speech:" + p.provider, row)
         for p in value.profiles:
             profiles[p.provider] = {"url": p.url, "model": p.model.strip(),
-                                    "credential_connection_id": p.credential_connection_id}
+                "credential_connection_id": p.credential_connection_id,
+                **service_credentials.preserve_reset(row, "speech:" + p.provider, p.model_dump())}
             if not p.credential_connection_id:
                 config.secret_set("speech:" + p.provider, p.api_key)
         row.speech_config = {"selected": value.selected, "profiles": profiles}

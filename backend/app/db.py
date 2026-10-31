@@ -71,11 +71,22 @@ class CommonTextCategory(Record, Base):
     __table_args__ = (UniqueConstraint("profile_id", "name_key"),)
     name: Mapped[str] = mapped_column(String(80))
     name_key: Mapped[str] = mapped_column(String(160))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class CommonTextAsset(Record, Base):
+    __tablename__ = "common_text_assets"
+    name: Mapped[str] = mapped_column(String(300))
+    media_type: Mapped[str] = mapped_column(String(80))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    scene: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class CommonText(Record, Base):
     __tablename__ = "common_texts"
     content: Mapped[str] = mapped_column(Text)
+    document: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     category_id: Mapped[str | None] = mapped_column(
         ForeignKey("common_text_categories.id", ondelete="SET NULL"), nullable=True, index=True
     )

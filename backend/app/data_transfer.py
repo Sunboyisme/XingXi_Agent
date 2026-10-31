@@ -21,7 +21,7 @@ LOCAL_TABLES = {"settings", "mcp_servers", "mcp_tools", "builtin_tool_states",
 COUNTS = {"todos": "待办", "knowledge_documents": "知识库文件", "knowledge_chunks": "知识片段", "knowledge_vectors": "知识向量","conversations": "对话", "messages": "消息", "memories": "记忆",
           "learning_sessions": "学习会话", "learning_intakes": "目标访谈", "learning_reviews": "复习记录", "usage_calls": "模型调用", "usage_prices": "计价配置",
           "projects": "项目", "project_materials": "项目资料", "plan_day_orders": "自定义日排序",
-          "common_texts": "常用文本", "common_text_categories": "文本分类",
+          "common_texts": "常用文本", "common_text_categories": "文本分类", "common_text_assets": "常用文本图片",
           "pomodoro_sessions": "番茄钟轮次", "pomodoro_segments": "专注时间段",
           "memory_vectors": "向量", "reminders": "提醒时间", "goals": "学习目标",
           "attachments": "附件", "office_files": "办公资料", "calendar_events": "计划", "plan_occurrences": "单次状态记录", "plan_segments": "重复规则调整", "artifacts": "工具产物", "complex_tasks": "复杂任务"}
@@ -119,10 +119,17 @@ def create_archive():
                 connection.execute(f'DELETE FROM "{table}"')
             connection.execute("UPDATE projects SET workspace_path='', workspace_paths='[]'")
             clear_local_references(connection)
+            # Draft uploads are not saved common texts and must not enter an export.
+            from .common_text_assets import image_ids
+            used_images = set().union(set(), *(image_ids(json.loads(raw)) for (raw,) in connection.execute("SELECT document FROM common_texts WHERE document IS NOT NULL") if raw and raw != "null"))
+            for (identifier,) in connection.execute("SELECT id FROM common_text_assets").fetchall():
+                if identifier not in used_images:
+                    connection.execute("DELETE FROM common_text_assets WHERE id=?", (identifier,))
             connection.commit()
             connection.execute("VACUUM")
             revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
             values = counts(connection)
+            common_images = [row[0] for row in connection.execute("SELECT id FROM common_text_assets")]
             ids = [row[0] for row in connection.execute("SELECT id FROM attachments")]
             documents = {row[0] for row in connection.execute("SELECT id FROM office_files")}
             outputs = [row[0] for row in connection.execute("SELECT storage_name FROM artifacts")]
@@ -136,6 +143,14 @@ def create_archive():
                 archive.write(stage / "bai.sqlite", "bai.sqlite")
                 if (stage / "checkpoints.sqlite").exists():
                     archive.write(stage / "checkpoints.sqlite", "checkpoints.sqlite")
+                for identifier in common_images:
+                    if not re.fullmatch(r"[a-f0-9-]{36}", identifier):
+                        raise HTTPException(409, "常用文本图片记录无效")
+                    for suffix in (".bin", ".png"):
+                        image = config.ATTACHMENTS_DIR / "common-texts" / f"{identifier}{suffix}"
+                        if not image.is_file():
+                            raise HTTPException(409, "常用文本图片缺失，请检查数据目录")
+                        archive.write(image, f"attachments/common-texts/{identifier}{suffix}")
                 for attachment_id in ids:
                     image = config.ATTACHMENTS_DIR / "files" / f"{attachment_id}.bin" if attachment_id in documents else config.ATTACHMENTS_DIR / f"{attachment_id}.jpg"
                     if not image.is_file():
@@ -314,6 +329,8 @@ def validate(stage):
         for (storage_name,) in incoming.execute("SELECT storage_name FROM knowledge_documents"):
             if not re.fullmatch(r"[a-f0-9-]{36}\.bin", storage_name) or not (stage / "attachments" / "knowledge" / storage_name).is_file():
                 raise ValueError("知识库原文件缺失或记录无效")
+        from .common_text_assets import validate_portable
+        validate_portable(incoming, stage)
         ids = [row[0] for row in incoming.execute("SELECT id FROM attachments")]
         documents = {row[0] for row in incoming.execute("SELECT id FROM office_files")}
         for attachment_id in ids:
@@ -361,7 +378,7 @@ def inspect_archive(source):
             for entry in entries:
                 name = entry.filename
                 if name not in {"manifest.json", "bai.sqlite", "checkpoints.sqlite"} and not re.fullmatch(
-                    r"attachments/(?:[a-f0-9-]{36}\.jpg|(?:artifacts|files|knowledge)/[a-f0-9-]{36}\.bin)", name
+                    r"attachments/(?:[a-f0-9-]{36}\.jpg|(?:artifacts|files|knowledge)/[a-f0-9-]{36}\.bin|common-texts/[a-f0-9-]{36}\.(?:bin|png))", name
                 ):
                     raise ValueError("压缩包包含不支持的文件")
                 target = stage / name

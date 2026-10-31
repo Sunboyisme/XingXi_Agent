@@ -3,7 +3,8 @@ import { isTauri } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import type { components } from "./api.generated";
 
-export type CommonText = components["schemas"]["TextRead"];
+import type { CommonTextDocument } from "./commonTextDocument";
+export type CommonText = Omit<components["schemas"]["TextRead"], "document"> & { document?: CommonTextDocument | null };
 export type TextCategory = components["schemas"]["CategoryRead"];
 const event = "xiaoxi-common-texts-changed";
 export function notifyCommonTextsChanged() {

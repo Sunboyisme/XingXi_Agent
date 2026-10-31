@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI):
     store.migrate()
     data_transfer.apply_pending()
     pomodoro.recover()
+    common_texts.assets.recover()
     usage_cost.recover_interrupted()
     desktop_assistant.recover()
     office.recover_uploads()
@@ -92,7 +93,7 @@ async def lifespan(app: FastAPI):
         app.state.wechat = wechat.WechatChannel()
         app.state.wechat.start()
         yield
-        pomodoro.recover()
+        pomodoro.shutdown()
         await composer_suggestions.close()
         await app.state.wechat.close()
         await skills.close()
@@ -323,9 +324,9 @@ def save_image_generation(value: s.ImageGenerationWrite, db=Depends(database)):
         raise HTTPException(400, "请填写图片生成 API 密钥。")
     if not value.credential_connection_id:
         secret_set("image_generation", value.api_key)
-    db.get(store.Settings, PROFILE_ID).image_generation_config = value.model_dump(
-        mode="json", exclude={"api_key"}
-    )
+    row = db.get(store.Settings, PROFILE_ID)
+    reset = service_credentials.preserve_reset(row, "image_generation", value.model_dump())
+    row.image_generation_config = {**value.model_dump(mode="json", exclude={"api_key"}), **reset}
     db.commit()
     return image_generation.settings()
 
@@ -350,8 +351,9 @@ def save_embedding(value: s.EmbeddingWrite, db=Depends(database)):
         raise HTTPException(400, "请填写 Embedding API 密钥。")
     if not value.credential_connection_id:
         secret_set("embedding", value.api_key)
+    reset = service_credentials.preserve_reset(db.get(store.Settings, PROFILE_ID), "embedding", value.model_dump())
     db.get(store.Settings, PROFILE_ID).embedding_config = {
-        "enabled": value.enabled, "url": str(value.url).rstrip("/"), "model": value.model,
+        **reset, "enabled": value.enabled, "url": str(value.url).rstrip("/"), "model": value.model,
         "credential_connection_id": value.credential_connection_id,
     }
     db.commit()
@@ -535,7 +537,7 @@ def update_settings(value: s.SettingsUpdate, db=Depends(database)):
     return settings_read(db)
 
 
-@router.delete("/settings/providers/{provider_id}", response_model=s.SettingsRead)
+@router.delete("/settings/providers/{provider_id}", response_model=s.ProviderDeleteRead)
 def delete_model_provider(provider_id: str, db=Depends(database)):
     settings = db.get(store.Settings, PROFILE_ID)
     profiles = model_profiles.profiles(settings)
@@ -543,12 +545,11 @@ def delete_model_provider(provider_id: str, db=Depends(database)):
         raise HTTPException(404, "模型连接不存在。")
     from . import service_credentials
     references = service_credentials.dependents(settings, provider_id)
-    if references:
-        raise HTTPException(409, "这个连接仍被" + "、".join(references) + "共享密钥，请先在能力连接中更换密钥来源。")
     try:
         secret_set(model_profiles.secret_ref(provider_id), "")
     except Exception:
         raise HTTPException(503, "清除密钥失败，请检查系统凭据存储。") from None
+    service_credentials.detach(settings, provider_id)
     settings.model_providers = [x for x in profiles if x["id"] != provider_id]
     if settings.default_provider == provider_id:
         settings.default_provider = next((x["id"] for x in settings.model_providers if x["models"]), "custom")
@@ -556,7 +557,7 @@ def delete_model_provider(provider_id: str, db=Depends(database)):
         settings.model_name = ""
     model_profiles.sync_default(settings)
     db.commit()
-    return settings_read(db)
+    return s.ProviderDeleteRead(**settings_read(db).model_dump(), affected_capabilities=references)
 
 
 @router.patch("/settings/memory", response_model=s.SettingsRead)
@@ -1483,6 +1484,7 @@ router.include_router(todos.router)
 router.include_router(knowledge.router)
 router.include_router(desktop_assistant.router)
 router.include_router(common_texts.router)
+router.include_router(common_texts.assets.router)
 router.include_router(pomodoro.router)
 router.include_router(tts.router)
 from . import quick_setup

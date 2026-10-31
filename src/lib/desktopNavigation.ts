@@ -12,6 +12,7 @@ export type DesktopNavigation = {
   settings?: boolean;
   settingsTab?: string | null;
   newChat?: boolean;
+  commonTextAssetId?: string;
   page?:
     "pomodoro" | "current" | "plans" | "notifications" | "common-texts" | null;
 };

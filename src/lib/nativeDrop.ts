@@ -4,7 +4,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { errorMessage } from "./utils";
 
 type NativeFile = { path: string; name: string; directory: boolean; relative_path: string; bytes: number[]; last_modified?: number };
-type Target = { element: () => HTMLElement | null; enabled: () => boolean; recursive: boolean; foldersOnly: boolean; receive: (files: NativeFile[]) => void | Promise<void>; error: (text: string) => void; loading: (value: boolean) => void };
+type Target = { element: () => HTMLElement | null; enabled: () => boolean; recursive: boolean; foldersOnly: boolean; receive: (files: NativeFile[], position?: { x: number; y: number }) => void | Promise<void>; error: (text: string) => void; loading: (value: boolean) => void };
 const targets = new Set<Target>();
 const receiving = new WeakSet<Target>();
 let listening: Promise<void> | undefined;
@@ -37,7 +37,7 @@ function listen() {
       // Native reading can outlive a navigation or opening a modal. Never hand
       // an old drop to the callbacks of a different conversation or screen.
       if (!targets.has(target) || !target.enabled() || target.element() !== element) return;
-      await target.receive(files);
+      await target.receive(files, { x, y });
     } catch (error) {
       if (targets.has(target) && target.enabled() && target.element() === element) target.error(errorMessage(error));
     } finally {
@@ -57,7 +57,7 @@ export function useNativeDrop(ref: RefObject<HTMLElement | null>, receive: Targe
   useEffect(() => {
     if (!isTauri()) return;
     const target: Target = { element: () => ref.current, enabled: () => !callbacks.current.disabled && callbacks.current.scopeKey === scopeKey, recursive, foldersOnly,
-      receive: (files) => callbacks.current.receive(files), error: (message) => callbacks.current.error(message),
+      receive: (files, position) => callbacks.current.receive(files, position), error: (message) => callbacks.current.error(message),
       loading: (value) => { if (callbacks.current.scopeKey === scopeKey) callbacks.current.onReading?.(value); } };
     targets.add(target); listen();
     return () => { targets.delete(target); ref.current?.classList.remove("image-drag-over"); };

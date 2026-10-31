@@ -1,4 +1,8 @@
-import { paintCaptureMark as paint } from "@/lib/captureDrawing";
+import { paintCaptureMark as paint, type CaptureMark as Mark, type CaptureTool as Tool } from "@/lib/captureDrawing";
+import { CaptureObjects } from "./CaptureObjects";
+import { constrainedCapturePoint, cropCaptureScene } from "@/lib/captureScene";
+import { canvasBlob, uploadCommonTextImage } from "@/lib/commonTextDocument";
+import { api } from "@/lib/api";
 import {
   useEffect,
   useLayoutEffect,
@@ -11,6 +15,9 @@ import { containCaptureText } from "@/lib/captureTextLayout";
 import { Popover } from "radix-ui";
 import {
   Pencil,
+  MousePointer2,
+  BookmarkPlus,
+  Trash2,
   Square,
   Circle,
   Type,
@@ -36,24 +43,6 @@ import { invoke, desktopListen, desktopError } from "@/lib/desktopAssistant";
 
 type Point = { x: number; y: number };
 type Rect = Point & { w: number; h: number };
-type Tool =
-  | "move"
-  | "pen"
-  | "line"
-  | "arrow"
-  | "rect"
-  | "ellipse"
-  | "text"
-  | "mosaic"
-  | "erase";
-type Mark = {
-  tool: Tool;
-  points: Point[];
-  color: string;
-  width: number;
-  size: number;
-  text?: string;
-};
 type Session = {
   id: string;
   width: number;
@@ -203,6 +192,7 @@ function CaptureStylePicker({
 }
 const tools = [
   ["move", "移动选区", Move],
+  ["select", "选择标注", MousePointer2],
   ["pen", "画笔", Pencil],
   ["line", "直线", LineToolIcon],
   ["arrow", "箭头", ArrowToolIcon],
@@ -247,6 +237,7 @@ export function DesktopCapture() {
   const [selection, setSelection] = useState<Rect | null>(null);
   const [automatic, setAutomatic] = useState<Rect | null>(null);
   const [marks, setMarks] = useState<Mark[]>([]);
+  const [selectedObject, setSelectedObject] = useState<number | null>(null);
   const [redo, setRedo] = useState<Mark[][]>([]);
   const [history, setHistory] = useState<Mark[][]>([]);
   const [live, setLive] = useState<Mark | null>(null);
@@ -455,6 +446,7 @@ export function DesktopCapture() {
     };
   }, []);
   async function cancelCapture() {
+    if (exportLock.current) return;
     const id = currentSession.current?.id;
     if (id)
       await invoke("capture_cancel", { id }).catch((e) => {
@@ -576,12 +568,20 @@ export function DesktopCapture() {
       ctx.restore();
     }
   }, [session, selection, automatic, marks, live, text?.index]);
+  function commitObjects(before: Mark[], after: Mark[]) {
+    setHistory(h => [...h, before]); setMarks(after); setRedo([]);
+  }
+  function patchObject(patch: Partial<Mark>) {
+    if (tool === "select" && selectedObject !== null && marks[selectedObject])
+      commitObjects(marks, marks.map((mark, index) => index === selectedObject ? { ...mark, ...patch } : mark));
+  }
   function addMark(mark: Mark) {
     setHistory((h) => [...h, marks]);
     setMarks((m) => [...m, mark]);
     setRedo([]);
   }
   function undo() {
+    setSelectedObject(null);
     if (text) {
       setText(null);
       return;
@@ -592,6 +592,7 @@ export function DesktopCapture() {
     setHistory((h) => h.slice(0, -1));
   }
   function redoAction() {
+    setSelectedObject(null);
     if (text) {
       setText(null);
       return;
@@ -787,6 +788,7 @@ export function DesktopCapture() {
       commitText();
       return;
     }
+    if (selected && tool === "select" && !handle && inside(selected, p)) { setSelectedObject(null); return; }
     if (selected && tool === "erase" && !handle && inside(selected, p)) {
       gesture.current = { pointerId: e.pointerId, start: p, erase: true };
       setEraseBox({ ...p, w: 0, h: 0 });
@@ -867,8 +869,8 @@ export function DesktopCapture() {
         });
       else setSelection(resizeSelection(r, g.handle, dx, dy, session));
     } else if (g.mark) {
-      g.mark.points =
-        g.mark.tool === "pen" ? [...g.mark.points, p] : [g.start, p];
+      const end = constrainedCapturePoint(g.start, p, g.mark.tool, e.shiftKey);
+      g.mark.points = g.mark.tool === "pen" ? [...g.mark.points, end] : [g.start, end];
       setLive({ ...g.mark });
     } else setSelection(rect(g.start, p));
   }
@@ -961,6 +963,15 @@ export function DesktopCapture() {
       ctx.translate(-selection.x, -selection.y);
       ctx.drawImage(source.current, 0, 0);
       outputMarks.forEach((m) => paint(ctx, m, source.current!));
+      if (action === "common-text") {
+        const original = document.createElement("canvas"); original.width = output.width; original.height = output.height;
+        original.getContext("2d")!.drawImage(source.current, -selection.x, -selection.y);
+        const asset = await uploadCommonTextImage(new File([await canvasBlob(original)], "XiaoXi截图.png", { type: "image/png" }), await canvasBlob(output), cropCaptureScene(outputMarks, selection, source.current.getContext("2d")!));
+        if (currentSession.current?.id !== id) { void api(`/common-text-assets/${asset.id}`, "DELETE").catch(() => {}); return; }
+        try { await invoke("capture_common_text", { id, assetId: asset.id }); }
+        catch (cause) { void api(`/common-text-assets/${asset.id}`, "DELETE").catch(() => {}); throw cause; }
+        return;
+      }
       const dataUrl = await new Promise<string>((resolve, reject) => {
         output.toBlob((blob) => {
           if (!blob) {
@@ -1104,6 +1115,9 @@ export function DesktopCapture() {
             </div>
           );
         })}
+      {selection && tool === "select" && !busy && source.current && <CaptureObjects marks={marks} selected={selectedObject} onSelect={index => {
+        setSelectedObject(index); if (index !== null && marks[index]) { setColor(marks[index].color); setWidth(marks[index].width); setFontSize(marks[index].size); }
+      }} onPreview={setMarks} onCommit={commitObjects} point={point} styleRect={styleRect} context={source.current.getContext("2d")!} onEditText={editText} />}
       {text && !dragging && (
         <div
           className="capture-text-editor"
@@ -1202,6 +1216,7 @@ export function DesktopCapture() {
                 onClick={() => {
                   commitText();
                   setTool(id);
+                  setSelectedObject(null);
                 }}
               >
                 <Icon />
@@ -1225,7 +1240,7 @@ export function DesktopCapture() {
                   className="capture-width-option"
                   aria-label={`${n} 像素`}
                   aria-pressed={width === n}
-                  onClick={() => setWidth(n)}
+                  onClick={() => { setWidth(n); patchObject({ width: n }); }}
                 >
                   <span style={{ height: n }} />
                   {n} px
@@ -1249,7 +1264,7 @@ export function DesktopCapture() {
                   <button
                     aria-label={`字号 ${n}`}
                     aria-pressed={fontSize === n}
-                    onClick={() => setFontSize(n)}
+                    onClick={() => { setFontSize(n); patchObject({ size: n }); }}
                   >
                     {n}
                   </button>
@@ -1280,7 +1295,7 @@ export function DesktopCapture() {
                     }
                     aria-pressed={color === c}
                     style={{ background: c }}
-                    onClick={() => setColor(c)}
+                    onClick={() => { setColor(c); patchObject({ color: c }); }}
                   >
                     {color === c && (
                       <Check
@@ -1325,6 +1340,7 @@ export function DesktopCapture() {
           ))}
           {(
             [
+              ["common-text", "添加到常用文本", BookmarkPlus],
               ["pin", "钉住截图", Pin],
               ["ocr", "提取文字", ScanText],
               ["translate", "翻译截图", Languages],
@@ -1342,6 +1358,7 @@ export function DesktopCapture() {
               </button>
             </Hint>
           ))}
+          {tool === "select" && selectedObject !== null && marks[selectedObject] && <button aria-label="删除选中标注" disabled={busy} onClick={() => { commitObjects(marks, marks.filter((_, index) => index !== selectedObject)); setSelectedObject(null); }}><Trash2 size={18} /></button>}
           <Hint label="取消截图">
             <button
               className="capture-cancel"

@@ -17,6 +17,8 @@ import {
 } from "@/lib/commonTexts";
 import { useCopyFeedback } from "@/lib/clipboard";
 import { errorMessage } from "@/lib/utils";
+import { CommonTextContent } from "./CommonTextContent";
+import { documentFor, documentImages, type CommonTextDocument } from "@/lib/commonTextDocument";
 import { CommonTextEditor } from "./CommonTextEditor";
 import { TextCategoryManager } from "./TextCategoryManager";
 import { ConfirmDelete, EmptyState, ErrorNotice, Hint, Toast } from "./common";
@@ -48,6 +50,7 @@ function TextCard({
   const [overflowing, setOverflowing] = useState(false);
   const body = useRef<HTMLDivElement>(null);
   const copy = useCopyFeedback(value.content);
+  const hasImages = documentImages(documentFor(value)).length > 0;
   useEffect(() => {
     const node = body.current;
     if (!node) return;
@@ -55,9 +58,10 @@ function TextCard({
       setOverflowing(node.scrollHeight > node.clientHeight + 1);
     const observer = new ResizeObserver(measure);
     observer.observe(node);
+    if (node.firstElementChild) observer.observe(node.firstElementChild);
     measure();
     return () => observer.disconnect();
-  }, [value.content]);
+  }, [value.content, value.document]);
   return (
     <article className="common-text-card">
       <div className="common-text-card-meta">
@@ -76,13 +80,13 @@ function TextCard({
           </time>
         </Hint>
       </div>
-      <div className="common-text-body is-collapsed" ref={body} tabIndex={0}>
-        {value.content}
+      <div className={`common-text-body is-collapsed${hasImages ? " has-images" : ""}`} ref={body} tabIndex={0}>
+        <CommonTextContent value={value} />
       </div>
       <div className="common-text-card-actions">
-        {overflowing && (
+        {(overflowing || hasImages) && (
           <Button variant="ghost" size="sm" onClick={() => setViewing(true)}>
-            查看全文
+            {hasImages ? "查看图文" : "查看全文"}
           </Button>
         )}
         <span className="common-text-action-spacer" />
@@ -91,6 +95,7 @@ function TextCard({
             variant="ghost"
             size="icon-sm"
             aria-label={copy.copied ? "已复制" : "复制全文"}
+            disabled={!value.content}
             onClick={() => void copy.copy()}
           >
             {copy.copied ? <Check size={16} /> : <Copy size={16} />}
@@ -133,10 +138,10 @@ function TextCard({
             </DialogDescription>
           </DialogHeader>
           <div className="common-text-full" tabIndex={0}>
-            {value.content}
+            <CommonTextContent value={value} />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => void copy.copy()}>
+            <Button variant="outline" disabled={!value.content} onClick={() => void copy.copy()}>
               {copy.copied ? "已复制" : "复制全文"}
             </Button>
             <Button
@@ -155,7 +160,7 @@ function TextCard({
   );
 }
 
-export function CommonTextsPage({ createRequested = 0 }: { createRequested?: number }) {
+export function CommonTextsPage({ createRequested = 0, imageDraft, onDraftHandled }: { createRequested?: number; imageDraft?: { id: number; assetId: string }; onDraftHandled?: () => void }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("category");
@@ -164,10 +169,17 @@ export function CommonTextsPage({ createRequested = 0 }: { createRequested?: num
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
-  const [editor, setEditor] = useState<{ value?: CommonText; key: number }>();
+  const [editor, setEditor] = useState<{ value?: CommonText; key: number; document?: CommonTextDocument; assets?: string[] }>();
   useEffect(() => {
     if (createRequested) setEditor({ key: createRequested });
   }, [createRequested]);
+  const acceptedDraft = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!imageDraft || editor || acceptedDraft.current === imageDraft.id) return;
+    acceptedDraft.current = imageDraft.id;
+    setEditor({ key: imageDraft.id, document: { version: 1, blocks: [{ type: "image", asset_id: imageDraft.assetId }, { type: "text", text: "" }] }, assets: [imageDraft.assetId] });
+    onDraftHandled?.();
+  }, [imageDraft, onDraftHandled, editor]);
   const [manager, setManager] = useState(false);
   const [deleting, setDeleting] = useState<CommonText>();
   const [deleteError, setDeleteError] = useState("");
@@ -352,10 +364,13 @@ export function CommonTextsPage({ createRequested = 0 }: { createRequested?: num
             </section>
           ))}
       </div>
+      {imageDraft && editor && <p role="status" className="common-text-muted">新截图已准备，将在关闭当前编辑后打开。</p>}
       {editor && (
         <CommonTextEditor
           key={editor.key}
           value={editor.value}
+          initialDocument={editor.document}
+          initialAssets={editor.assets}
           initialCategory={category !== "all" ? category : undefined}
           onClose={() => setEditor(undefined)}
           onSaved={() => {

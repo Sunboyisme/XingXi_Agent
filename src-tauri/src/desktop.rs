@@ -837,6 +837,23 @@ pub fn capture_cancel(app: tauri::AppHandle, id: Option<String>) -> Result<bool,
     Ok(finish_capture(&app, id.as_deref()))
 }
 #[tauri::command]
+pub fn capture_common_text(app: tauri::AppHandle, id: String, asset_id: String) -> Result<(), String> {
+    if uuid::Uuid::parse_str(&asset_id).is_err() { return Err("图片编号无效".into()); }
+    if !app.state::<Desktop>().capture.lock().unwrap().as_ref().is_some_and(|capture| capture.id == id) {
+        return Err("截图会话已结束".into());
+    }
+    let main = app.get_webview_window("main").ok_or("主窗口不可用")?;
+    // Queue first; the webview keeps the draft until it acknowledges navigation.
+    main.show().map_err(|error| error.to_string())?;
+    main.unminimize().map_err(|error| error.to_string())?;
+    crate::window_layout::ensure_visible(&main).map_err(|error| error.to_string())?;
+    crate::navigation::send(&app, serde_json::json!({"page":"common-texts","commonTextAssetId":asset_id}))?;
+    finish_capture(&app, Some(&id));
+    let _ = main.set_focus();
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn capture_export(
     app: tauri::AppHandle,
     id: String,

@@ -7,6 +7,7 @@ mod window_layout;
 mod drop_files;
 mod desktop;
 mod capture_windows;
+mod common_texts;
 mod pinned;
 mod pinned_menu;
 mod tray_menu;
@@ -561,6 +562,9 @@ fn main() {
             desktop::capture_cancel,
             desktop::capture_failed,
             desktop::capture_export,
+            desktop::capture_common_text,
+            common_texts::common_text_copy_image,
+            selection::selection_editing,
             pinned::pinned_info,
             pinned::pinned_resize,
             pinned::pinned_update,

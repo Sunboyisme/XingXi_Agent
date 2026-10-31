@@ -155,6 +155,7 @@ export function App() {
     return () => { void unlisten.then((stop) => stop()); };
   }, []);
   const [page, setPage] = useState<Page>("chat");
+  const [commonTextDrafts, setCommonTextDrafts] = useState<{ id: number; assetId: string }[]>([]);
   const [learningHomeKey, setLearningHomeKey] = useState(0);
   const [openTodoId, setOpenTodoId] = useState<string>();
   const [knowledgeSource, setKnowledgeSource] = useState<KnowledgeSource>();
@@ -232,7 +233,7 @@ export function App() {
   const acceptDesktopNavigation = useEffectEvent((request: DesktopNavigation) => {
     const epoch = ++navigationEpoch.current;
     if (request.page === "current") return;
-    if (request.page === "common-texts") { navigate("common-texts"); return; }
+    if (request.page === "common-texts") { if (request.commonTextAssetId) setCommonTextDrafts(queue => [...queue, { id: request.id, assetId: request.commonTextAssetId! }]); navigate("common-texts"); return; }
     if (request.page === "pomodoro") { navigate("pomodoro"); return; }
     if (request.page === "plans") {
       setPlanAgenda({ day: zonedToday(settings?.timezone), tab: "todo" });
@@ -384,7 +385,11 @@ export function App() {
       void stop.then((fn) => fn());
     };
   }, [refresh]);
-  function navigate(value: string, create = false) {
+  function navigate(value: string, create = false, draftClosed = false) {
+    if (!draftClosed && document.querySelector(".common-text-editor") && (value !== "common-texts" || create)) {
+      window.dispatchEvent(new CustomEvent("xiaoxi-common-text-request-close", { detail: () => navigate(value, create, true) }));
+      return;
+    }
     if (value === "reminders" || value === "calendar") value = "plans";
     const settingsTarget = value === "speech" ? "services" : isSettingsTab(value) ? value : null;
     if (!settingsTarget && value !== "chat" && value !== "settings" && !featurePages.some(item => item.id === value)) {
@@ -839,7 +844,7 @@ export function App() {
                 </Suspense>
               )}
               {page === "knowledge" && <KnowledgePage openSource={knowledgeSource} onOpened={() => setKnowledgeSource(undefined)} directoryOpen={knowledgeDirectoryOpen} onDirectoryAvailableChange={setKnowledgeDirectoryAvailable} />}
-              {page === "common-texts" && <CommonTextsPage createRequested={createKey} />}
+              {page === "common-texts" && <CommonTextsPage createRequested={createKey} imageDraft={commonTextDrafts[0]} onDraftHandled={() => setCommonTextDrafts(queue => queue.slice(1))} />}
               {page === "pomodoro" && <PomodoroPage />}
               {page === "settings" && (
                 <SettingsPage

@@ -748,7 +748,7 @@ export function CalendarPage({
     return (
       <Hint
         key={`${event.id}:${event.occurrence_start || event.start}`}
-        label={`${event.title}\n${day}${isRepeating(event) ? " · 重复计划请从编辑页调整" : " · 可拖动改期"}`}
+        label={event.title}
       >
         <button
           type="button"

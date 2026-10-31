@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { usePointerReorder } from "@/lib/usePointerReorder";
 import {
   notifyCommonTextsChanged,
   useCommonTextsRevision,
@@ -57,6 +58,17 @@ export function TextCategoryManager({ onClose }: { onClose: () => void }) {
       });
     return () => controller.abort();
   }, [revision, reload]);
+  const order = usePointerReorder(rows.map(row => row.id), async ids => {
+    if (lock.current) return;
+    lock.current = true; setBusy(true); setError("");
+    const previous = rows;
+    setRows(ids.map(id => rows.find(row => row.id === id)!));
+    try {
+      const saved = await api<TextCategory[]>("/common-text-categories/order", "PATCH", { category_ids: ids });
+      notifyCommonTextsChanged(); if (mounted.current) setRows(saved);
+    } catch (cause) { if (mounted.current) { setRows(previous); setError(errorMessage(cause)); setReload(n => n + 1); } }
+    finally { lock.current = false; if (mounted.current) setBusy(false); }
+  }, busy || loading || Boolean(loadError));
   async function save() {
     if (lock.current) return;
     if (!name.trim() || name.trim() === "默认分类" || name.trim().length > 80) {
@@ -155,9 +167,10 @@ export function TextCategoryManager({ onClose }: { onClose: () => void }) {
             retry={() => setReload((n) => n + 1)}
           />
         )}
-        <ul className="text-category-list">
-          {rows.map((row) => (
-            <li key={row.id}>
+        <ul className="text-category-list" data-reorder-list>
+          {order.order.map(id => rows.find(row => row.id === id)!).map((row) => (
+            <li key={row.id} data-sort-id={row.id} data-dragging={order.dragging === row.id || undefined}>
+              <button type="button" className="common-block-grip" aria-label={`调整${row.name}分类顺序`} disabled={busy || loading} {...order.handle(row.id)}><GripVertical size={15} /></button>
               <span>{row.name}</span>
               <Hint label="重命名分类">
                 <Button

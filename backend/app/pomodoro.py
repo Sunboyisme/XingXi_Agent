@@ -13,6 +13,7 @@ from .config import PROFILE_ID
 
 router = APIRouter()
 lock = RLock()
+desktop_boot_id: str | None = None
 
 
 class PomodoroPreset(BaseModel):
@@ -152,6 +153,25 @@ def recover():
     # Persisted segment ends are the last confirmed checkpoint, never the restart time.
     with lock, store.Session() as db:
         state = state_for(db)
+        if state.session_id:
+            session = db.get(store.PomodoroSession, state.session_id)
+            if session and session.ended_at is None:
+                confirmed = db.scalar(select(func.max(store.PomodoroSegment.ended_at)).where(
+                    store.PomodoroSegment.session_id == session.id))
+                session.ended_at = state.checkpoint_at or session.completed_at or confirmed or datetime.fromisoformat(session.created_at).timestamp()
+        state.session_id = None
+        state.phase = state.status = "idle"
+        state.remaining_seconds = selected(state).focus_minutes * 60
+        state.checkpoint_at = state.deadline_at = state.segment_id = None
+        state.notification_kind = None
+        state.revision += 1
+        db.commit()
+
+
+def shutdown():
+    with lock, store.Session() as db:
+        state = state_for(db)
+        advance(db, state, datetime.now(UTC).timestamp())
         pause(state)
         db.commit()
 
@@ -195,6 +215,20 @@ def snapshot(db, state, current):
         session=PomodoroSessionRead.model_validate(session) if session else None,
         preferences=PomodoroPreferences.model_validate(state.preferences), statistics=statistics(db, current),
         notification_seq=state.notification_seq, notification_kind=state.notification_kind)
+
+
+class DesktopRestart(BaseModel):
+    boot_id: str = Field(pattern=r"^[a-f0-9-]{36}$")
+
+
+@router.post("/pomodoro/restart", response_model=PomodoroRead)
+def restart(value: DesktopRestart):
+    global desktop_boot_id
+    with lock:
+        if desktop_boot_id != value.boot_id:
+            recover()
+            desktop_boot_id = value.boot_id
+        return read()
 
 
 @router.get("/pomodoro", response_model=PomodoroRead)

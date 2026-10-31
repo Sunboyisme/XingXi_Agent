@@ -1,4 +1,5 @@
 export type CaptureTool =
+  | "select"
   | "move"
   | "pen"
   | "line"
@@ -45,6 +46,9 @@ export function paintCaptureMark(
       .split("\n")
       .forEach((line, i) => ctx.fillText(line, a.x, a.y + i * mark.size * 1.4));
   } else if (mark.tool === "mosaic" && r.w > 0 && r.h > 0) {
+    const right = Math.min(source.width, r.x + r.w), bottom = Math.min(source.height, r.y + r.h);
+    r.x = Math.max(0, r.x); r.y = Math.max(0, r.y); r.w = right - r.x; r.h = bottom - r.y;
+    if (r.w <= 0 || r.h <= 0) { ctx.restore(); return; }
     const small = document.createElement("canvas");
     small.width = Math.max(1, Math.ceil(r.w / 12));
     small.height = Math.max(1, Math.ceil(r.h / 12));

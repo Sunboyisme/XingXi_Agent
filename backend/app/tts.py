@@ -161,7 +161,8 @@ def save_settings(value: TTSSettingsWrite):
         for profile in value.profiles:
             service_credentials.draft(profile.model_dump(), "tts:" + profile.provider, row)
         for profile in value.profiles:
-            profiles[profile.provider] = profile.model_dump(exclude={"provider", "api_key"})
+            profiles[profile.provider] = {**profile.model_dump(exclude={"provider", "api_key"}),
+                **service_credentials.preserve_reset(row, "tts:" + profile.provider, profile.model_dump())}
             if not profile.credential_connection_id:
                 config.secret_set("tts:" + profile.provider, profile.api_key)
         row.tts_config = {"selected": value.selected, "profiles": profiles}

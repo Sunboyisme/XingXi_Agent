@@ -10,7 +10,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   BookOpen,
   BookmarkPlus,
-  FolderOpen,
   Check,
   Copy,
   Languages,
@@ -282,7 +281,7 @@ export function SelectionAssistant() {
         if (mounted.current) commands.current.hide(id);
       }),
       getCurrentWindow().onFocusChanged((event) => {
-        if (!event.payload && mounted.current) {
+        if (!event.payload && mounted.current && !(currentPage.current === "common-texts" && document.querySelector(".common-text-editor"))) {
           const id = current.current?.id;
           void getCurrentWindow()
             .isFocused()
@@ -489,7 +488,6 @@ export function SelectionAssistant() {
       {page === "common-texts" ? (
         <Suspense fallback={<p role="status">正在打开常用文本…</p>}>
           <SelectionCommonTexts
-            onBack={snapshot.common_texts ? undefined : () => setPage("assistant")}
             onClose={dismiss}
             onManage={() =>
               void invoke("desktop_main", { page: "common-texts" })
@@ -618,18 +616,6 @@ export function SelectionAssistant() {
                   <BookmarkPlus size={16} />
                 )}
                 添加到常用文本
-              </button>
-              <button
-                onClick={() => {
-                  clearFeedback();
-                  reading.stop();
-                  setReadingError("");
-                  setError("");
-                  setPage("common-texts");
-                }}
-              >
-                <FolderOpen size={16} />
-                打开常用文本
               </button>
               <Hint
                 side="bottom"

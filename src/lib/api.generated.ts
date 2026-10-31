@@ -28,6 +28,24 @@ export interface components {
              */
             revision: number;
         };
+        /** AssetRead */
+        AssetRead: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Name */
+            name: string;
+            /** Media Type */
+            media_type: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            scene: components["schemas"]["Scene"] | null;
+        };
         /** AttachmentRead */
         AttachmentRead: {
             /** Id */
@@ -96,6 +114,15 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_api_v1_common_text_assets_post */
+        Body_upload_api_v1_common_text_assets_post: {
+            /** File */
+            file: string;
+            /** Rendered */
+            rendered?: string | null;
+            /** Scene */
+            scene?: string | null;
+        };
         /** Body_upload_material_api_v1_projects__project_id__materials_upload_post */
         Body_upload_material_api_v1_projects__project_id__materials_upload_post: {
             /** File */
@@ -105,6 +132,11 @@ export interface components {
         Body_upload_office_file_api_v1_files_post: {
             /** File */
             file: string;
+        };
+        /** CategoryOrder */
+        CategoryOrder: {
+            /** Category Ids */
+            category_ids: string[];
         };
         /** CategoryRead */
         CategoryRead: {
@@ -291,6 +323,22 @@ export interface components {
             target_language: "auto" | "简体中文" | "繁體中文" | "English" | "日本語" | "한국어" | "Français" | "Deutsch" | "Español" | "Português" | "Italiano" | "Русский" | "العربية" | "ไทย" | "Tiếng Việt" | "Bahasa Indonesia" | "हिन्दी";
             model_selection?: components["schemas"]["ModelSelection"] | null;
         };
+        /** DesktopRestart */
+        DesktopRestart: {
+            /** Boot Id */
+            boot_id: string;
+        };
+        /** Document */
+        Document: {
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /** Blocks */
+            blocks: (components["schemas"]["TextBlock"] | components["schemas"]["ImageBlock"])[];
+        };
         /** DocumentRead */
         DocumentRead: {
             /** Id */
@@ -476,6 +524,16 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** ImageBlock */
+        ImageBlock: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "image";
+            /** Asset Id */
+            asset_id: string;
         };
         /** ImageGenerationRead */
         ImageGenerationRead: {
@@ -930,6 +988,24 @@ export interface components {
              * @default false
              */
             enabled: boolean;
+        };
+        /** Mark */
+        Mark: {
+            /**
+             * Tool
+             * @enum {string}
+             */
+            tool: "pen" | "line" | "arrow" | "rect" | "ellipse" | "text" | "mosaic";
+            /** Points */
+            points: components["schemas"]["Point"][];
+            /** Color */
+            color: string;
+            /** Width */
+            width: number;
+            /** Size */
+            size: number;
+            /** Text */
+            text?: string | null;
         };
         /** MaterialBatchRemove */
         MaterialBatchRemove: {
@@ -1510,6 +1586,13 @@ export interface components {
             /** Reminder At */
             reminder_at?: string | null;
         };
+        /** Point */
+        Point: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** PomodoroAction */
         PomodoroAction: {
             /**
@@ -1694,6 +1777,34 @@ export interface components {
             workspace_path: string;
             /** Workspace Paths */
             workspace_paths?: string[];
+        };
+        /** ProviderDeleteRead */
+        ProviderDeleteRead: {
+            /** Model Url */
+            model_url: string;
+            /** Model Name */
+            model_name: string;
+            /** Vision Enabled */
+            vision_enabled: boolean;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Memory Mode
+             * @enum {string}
+             */
+            memory_mode: "auto" | "confirm";
+            /** Model Configured */
+            model_configured: boolean;
+            /** Search Configured */
+            search_configured: boolean;
+            /** Providers */
+            providers: components["schemas"]["ProviderRead"][];
+            /** Default Provider */
+            default_provider: string;
+            /** Provider Presets */
+            provider_presets: components["schemas"]["ProviderPresetRead"][];
+            /** Affected Capabilities */
+            affected_capabilities?: string[];
         };
         /** ProviderPresetRead */
         ProviderPresetRead: {
@@ -2041,6 +2152,21 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** Scene */
+        Scene: {
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Marks */
+            marks: components["schemas"]["Mark"][];
+        };
         /** SettingsRead */
         SettingsRead: {
             /** Model Url */
@@ -2368,6 +2494,16 @@ export interface components {
              */
             resolution: "retry" | "skip" | "completed";
         };
+        /** TextBlock */
+        TextBlock: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "text";
+            /** Text */
+            text: string;
+        };
         /** TextRead */
         TextRead: {
             /** Id */
@@ -2380,13 +2516,20 @@ export interface components {
             content: string;
             /** Category Id */
             category_id: string | null;
+            document?: components["schemas"]["Document"] | null;
         };
         /** TextWrite */
         TextWrite: {
-            /** Content */
+            /**
+             * Content
+             * @default
+             */
             content: string;
+            document?: components["schemas"]["Document"] | null;
             /** Category Id */
             category_id?: string | null;
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
         };
         /** TodoAction */
         TodoAction: {

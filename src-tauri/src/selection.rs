@@ -42,6 +42,8 @@ struct Change {
 pub struct Selection {
     pub generation: AtomicU64,
     pub recording: AtomicBool,
+    editing: AtomicBool,
+    editor_owner: Mutex<Option<String>>,
     automatic: AtomicBool,
     uia_busy: AtomicBool,
     snapshot: Mutex<Snapshot>,
@@ -240,6 +242,10 @@ pub fn selection_shortcut_recording(
 
 pub fn dismiss(app: &tauri::AppHandle) {
     let state = app.state::<Selection>();
+    if state.editing.load(Ordering::SeqCst) {
+        if let Some(window) = app.get_webview_window("selection") { let _ = crate::desktop_window::hide(&window); }
+        return;
+    }
     state.automatic.store(false, Ordering::SeqCst);
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     *state.dom.lock().unwrap() = None;
@@ -248,6 +254,21 @@ pub fn dismiss(app: &tauri::AppHandle) {
         let _ = w.emit("selection-hidden", generation);
         let _ = crate::desktop_window::hide(&w);
     }
+}
+#[tauri::command]
+pub fn selection_editing(app: tauri::AppHandle, window: tauri::WebviewWindow, editing: bool, owner: String) -> Result<(), String> {
+    if window.label() != "selection" { return Err("仅常用文本窗口可锁定草稿".into()); }
+    let state = app.state::<Selection>();
+    let mut current = state.editor_owner.lock().map_err(|_| "草稿状态不可用")?;
+    if editing {
+        *current = Some(owner);
+        state.editing.store(true, Ordering::SeqCst);
+        state.automatic.store(false, Ordering::SeqCst);
+    } else if current.as_deref() == Some(owner.as_str()) {
+        *current = None;
+        state.editing.store(false, Ordering::SeqCst);
+    }
+    Ok(())
 }
 #[tauri::command]
 pub fn selection_dismiss(app: tauri::AppHandle, id: u64) {
@@ -263,6 +284,11 @@ pub fn selection_snapshot(app: tauri::AppHandle) -> Snapshot {
 #[tauri::command]
 pub fn selection_common_texts(app: tauri::AppHandle) -> Result<(), String> {
     if capture_active(&app) { return Ok(()); }
+    if app.state::<Selection>().editing.load(Ordering::SeqCst) {
+        let window = app.get_webview_window("selection").ok_or("常用文本窗口不可用")?;
+        window.show().map_err(|error| error.to_string())?;
+        return window.set_focus().map_err(|error| error.to_string());
+    }
     dismiss(&app);
     let state = app.state::<Selection>();
     let id = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -337,6 +363,7 @@ fn capture_active(app: &tauri::AppHandle) -> bool {
     desktop.capture_starting.load(Ordering::SeqCst) || desktop.capture.lock().unwrap().is_some()
 }
 fn trigger_selection(app: &tauri::AppHandle, automatic: bool) {
+    if app.state::<Selection>().editing.load(Ordering::SeqCst) { return; }
     if capture_active(app) { return; }
     let foreground = unsafe { GetForegroundWindow() }.0 as usize;
     if app

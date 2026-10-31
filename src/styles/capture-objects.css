@@ -1,0 +1,50 @@
+.capture-object-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.capture-object {
+  position: absolute;
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  outline: none;
+  border: 1px solid transparent;
+}
+.capture-object:hover,
+.capture-object:focus-visible {
+  border-color: #e9c5a4;
+}
+.capture-object[data-selected] {
+  border-color: #e5a77d;
+  outline: 1px solid #29231e;
+}
+.capture-object-corner {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 1px solid #29231e;
+  background: #f6e4ce;
+  touch-action: none;
+}
+.capture-object-corner.corner-nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+.capture-object-corner.corner-ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+.capture-object-corner.corner-sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+.capture-object-corner.corner-se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}

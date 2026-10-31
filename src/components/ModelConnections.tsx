@@ -368,9 +368,11 @@ export function ModelConnections({
     setBusy(true);
     setError("");
     try {
-      onSaved(
-        await api<Settings>(`/settings/providers/${deleting.id}`, "DELETE"),
-      );
+      const saved = await api<Settings & { affected_capabilities: string[] }>(`/settings/providers/${deleting.id}`, "DELETE");
+      onSaved(saved);
+      setNotice(saved.affected_capabilities.length
+        ? `连接已删除，${saved.affected_capabilities.join("、")}的共享密钥来源已移除，请重新配置。`
+        : "连接已删除");
       setDeleting(null);
     } catch (error) {
       setError(errorMessage(error));

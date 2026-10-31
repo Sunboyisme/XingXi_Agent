@@ -157,6 +157,10 @@ class SettingsRead(BaseModel):
     provider_presets: list[ProviderPresetRead]
 
 
+class ProviderDeleteRead(SettingsRead):
+    affected_capabilities: list[str] = Field(default_factory=list)
+
+
 class ToolRead(BaseModel):
     id: str
     name: str
