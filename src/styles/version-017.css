@@ -33,7 +33,7 @@
   min-height: 36px;
   padding: 6px 8px;
   margin-bottom: 24px;
-  gap: 8px;
+  gap: 11px;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -43,6 +43,9 @@
   font-weight: 400;
   line-height: 20px;
   text-align: left;
+}
+.chat-sidebar > .new-chat-button > svg {
+  transform: translateY(1px);
 }
 .chat-sidebar > .new-chat-button[data-slot="button"]:is(:hover, :focus-visible) {
   background: var(--ui-color-surface-deep);
