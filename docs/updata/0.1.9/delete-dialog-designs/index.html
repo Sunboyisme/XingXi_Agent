@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XiaoXi · 删除确认弹窗三版方案</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #24211e;
+        --surface: #2d2925;
+        --inset: #25221f;
+        --text: #e5d9c9;
+        --heading: #f4ebe0;
+        --muted: #bca98f;
+        --line: #494035;
+        --danger: #eeaa98;
+        --danger-soft: #49322d;
+        --on-danger: #33221c;
+        font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+        font-synthesis: none;
+        -webkit-font-smoothing: antialiased;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #191715; color: var(--text); }
+      main { width: min(100%, 840px); margin: 0 auto; }
+      .intro { padding: 36px 36px 24px; }
+      .intro h1 { margin: 0 0 10px; font-size: 23px; font-weight: 600; }
+      .intro p { margin: 0; color: var(--muted); font-size: 13px; }
+      .study {
+        width: 100%; height: 500px; position: relative; overflow: hidden;
+        background: var(--bg); border-bottom: 1px solid #39322c;
+      }
+      .study-label {
+        position: absolute; top: 30px; left: 36px; right: 36px;
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      }
+      .study-name { display: flex; align-items: center; gap: 12px; }
+      .letter { color: var(--danger); font-size: 12px; letter-spacing: 1px; }
+      .study-name h2 { margin: 0; font-size: 16px; font-weight: 500; }
+      .study-label small { color: var(--muted); font-size: 12px; }
+      .stage {
+        position: absolute; inset: 86px 0 68px;
+        display: flex; align-items: center; justify-content: center; padding: 0 24px;
+      }
+      .design-note {
+        position: absolute; bottom: 28px; left: 36px; right: 36px;
+        margin: 0; text-align: center; color: var(--muted); font-size: 12px;
+        letter-spacing: .25px;
+      }
+      .dialog {
+        width: 440px; max-width: 100%; border: 1px solid var(--line);
+        background: var(--surface); border-radius: 16px;
+        box-shadow: 0 16px 40px rgb(0 0 0 / 20%);
+      }
+      .dialog h3 { margin: 0; color: var(--heading); font-size: 18px; line-height: 27px; font-weight: 600; }
+      .dialog p { margin: 0; font-size: 13px; line-height: 22px; color: var(--muted); }
+      .dialog button {
+        appearance: none; display: inline-flex; justify-content: center; align-items: center;
+        min-height: 36px; padding: 0 17px; border: 1px solid transparent; border-radius: 8px;
+        font: inherit; font-size: 13px; font-weight: 500; line-height: 20px;
+        color: var(--text); background: transparent; cursor: pointer;
+      }
+      .dialog button:focus-visible { outline: 2px solid var(--danger); outline-offset: 3px; }
+      .dialog .keep { border-color: #5c4e40; background: #35302a; }
+      .dialog .keep:hover { background: #3c342c; }
+      .dialog .delete { color: var(--on-danger); background: var(--danger); }
+      .dialog .delete:hover { background: #f4b9a9; }
+      .dialog .quiet { color: var(--muted); }
+      .dialog .quiet:hover { color: var(--text); background: #35302a; }
+      .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+      svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .trash-mark { color: var(--danger); background: var(--danger-soft); flex-shrink: 0; display: grid; place-items: center; }
+      .compact { padding: 24px; }
+      .compact p { margin-top: 8px; }
+      .compact .actions { margin-top: 27px; }
+      .compact .delete { min-width: 92px; }
+      .context { width: 456px; overflow: hidden; }
+      .context-body { padding: 24px 24px 20px; }
+      .context-title { display: flex; align-items: center; gap: 12px; }
+      .context-title .trash-mark { width: 36px; height: 36px; border-radius: 10px; }
+      .context-title .trash-mark svg { width: 19px; height: 19px; }
+      .context-title p { margin-top: 3px; }
+      .text-preview {
+        margin-top: 19px; padding: 13px 15px; background: var(--inset);
+        border: 1px solid #423a33; border-radius: 9px;
+      }
+      .preview-meta { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+      .preview-meta span:last-child { color: #a19382; }
+      .text-preview p { color: var(--text); font-size: 13px; line-height: 22px; }
+      .context .actions { padding: 14px 24px; border-top: 1px solid #423a33; background: #302b26; }
+      .context .keep { background: transparent; }
+      .context .delete { min-width: 110px; }
+      .centered { width: 360px; padding: 27px 28px 19px; text-align: center; }
+      .centered .trash-mark { width: 46px; height: 46px; border-radius: 50%; margin: 0 auto 15px; }
+      .centered .trash-mark svg { width: 23px; height: 23px; }
+      .centered p { margin-top: 8px; }
+      .centered .actions { margin-top: 23px; display: flex; flex-direction: column; gap: 5px; }
+      .centered .actions button { width: 100%; min-height: 38px; }
+      .centered .actions .quiet { min-height: 32px; }
+      .screenreader { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      @media (max-width: 560px) {
+        .intro { padding-inline: 24px; }
+        .study-label { left: 24px; right: 24px; }
+        .study-label small { display: none; }
+        .stage { padding-inline: 20px; }
+        .design-note { left: 20px; right: 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main aria-label="删除确认弹窗设计方案">
+      <header class="intro">
+        <h1>删除确认弹窗 · 3 版方案</h1>
+        <p>暖灰深色主题 · 静态设计稿 · 方案 B 中的文本为示例</p>
+      </header>
+      <p id="static-notice" class="screenreader">以下为静态设计稿，按钮不执行删除操作。</p>
+
+      <section class="study" id="design-a" aria-label="方案 A：极简确认">
+        <header class="study-label">
+          <div class="study-name"><span class="letter">A</span><h2>极简确认</h2></div>
+          <small>轻量 · 低打扰</small>
+        </header>
+        <div class="stage">
+          <div class="dialog compact" role="group" aria-labelledby="title-a" aria-describedby="static-notice desc-a">
+            <h3 id="title-a">删除这段常用文本？</h3>
+            <p id="desc-a">删除后无法恢复。</p>
+            <div class="actions">
+              <button class="quiet" type="button">取消</button>
+              <button class="delete" type="button">删除文本</button>
+            </div>
+          </div>
+        </div>
+        <p class="design-note">去掉图标与分隔线，文字左对齐，操作集中在右下角</p>
+      </section>
+
+      <section class="study" id="design-b" aria-label="方案 B：内容核对">
+        <header class="study-label">
+          <div class="study-name"><span class="letter">B</span><h2>内容核对</h2></div>
+          <small>可识别 · 更安心</small>
+        </header>
+        <div class="stage">
+          <div class="dialog context" role="group" aria-labelledby="title-b" aria-describedby="static-notice desc-b">
+            <div class="context-body">
+              <div class="context-title">
+                <div class="trash-mark" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7"/></svg>
+                </div>
+                <div><h3 id="title-b">删除这段常用文本？</h3><p id="desc-b">删除后无法恢复。</p></div>
+              </div>
+              <div class="text-preview" aria-label="待删除文本示例">
+                <div class="preview-meta"><span>日常沟通</span><span>示例内容</span></div>
+                <p>你好，消息已收到。<br />我会整理好相关资料后尽快回复你。</p>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="keep" type="button">保留文本</button>
+              <button class="delete" type="button">确认删除</button>
+            </div>
+          </div>
+        </div>
+        <p class="design-note">显示分类与正文摘要，让用户确认自己正在删除哪一条</p>
+      </section>
+
+      <section class="study" id="design-c" aria-label="方案 C：居中聚焦">
+        <header class="study-label">
+          <div class="study-name"><span class="letter">C</span><h2>居中聚焦</h2></div>
+          <small>清晰 · 有停顿感</small>
+        </header>
+        <div class="stage">
+          <div class="dialog centered" role="group" aria-labelledby="title-c" aria-describedby="static-notice desc-c">
+            <div class="trash-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7"/></svg>
+            </div>
+            <h3 id="title-c">确定删除这段文本？</h3>
+            <p id="desc-c">这段常用文本将被永久删除。<br />删除后无法恢复。</p>
+            <div class="actions">
+              <button class="delete" type="button">删除文本</button>
+              <button class="quiet" type="button">保留文本</button>
+            </div>
+          </div>
+        </div>
+        <p class="design-note">纵向居中排布，完整主按钮与轻量返回操作分开呈现</p>
+      </section>
+    </main>
+  </body>
+</html>
