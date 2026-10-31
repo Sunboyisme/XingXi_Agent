@@ -7,7 +7,11 @@ import {
   useState,
 } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import Document from "@tiptap/extension-document";
+import HardBreak from "@tiptap/extension-hard-break";
+import Paragraph from "@tiptap/extension-paragraph";
+import Text from "@tiptap/extension-text";
+import { Gapcursor, UndoRedo, TrailingNode } from "@tiptap/extensions";
 import { ImagePlus, Undo2, Redo2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { nativeFile, useNativeDrop } from "@/lib/nativeDrop";
@@ -29,23 +33,13 @@ import { ErrorNotice } from "./common";
 type ImageEdit = { assetId: string; getPos: () => number | undefined };
 type Point = { x: number; y: number };
 const extensions = [
-  StarterKit.configure({
-    blockquote: false,
-    bold: false,
-    bulletList: false,
-    code: false,
-    codeBlock: false,
-    dropcursor: false,
-    heading: false,
-    horizontalRule: false,
-    italic: false,
-    link: false,
-    listItem: false,
-    listKeymap: false,
-    orderedList: false,
-    strike: false,
-    underline: false,
-  }),
+  Document,
+  Gapcursor,
+  HardBreak,
+  UndoRedo,
+  Paragraph,
+  Text,
+  TrailingNode,
   CommonTextImageNode,
 ];
 

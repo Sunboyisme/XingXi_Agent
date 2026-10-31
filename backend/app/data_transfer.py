@@ -121,7 +121,10 @@ def create_archive():
             clear_local_references(connection)
             # Draft uploads are not saved common texts and must not enter an export.
             from .common_text_assets import image_ids
-            used_images = set().union(set(), *(image_ids(json.loads(raw)) for (raw,) in connection.execute("SELECT document FROM common_texts WHERE document IS NOT NULL") if raw and raw != "null"))
+            used_images = {identifier
+                           for (raw,) in connection.execute("SELECT document FROM common_texts WHERE document IS NOT NULL")
+                           if raw and raw != "null"
+                           for identifier in image_ids(json.loads(raw))}
             for (identifier,) in connection.execute("SELECT id FROM common_text_assets").fetchall():
                 if identifier not in used_images:
                     connection.execute("DELETE FROM common_text_assets WHERE id=?", (identifier,))

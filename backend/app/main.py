@@ -544,12 +544,11 @@ def delete_model_provider(provider_id: str, db=Depends(database)):
     if not any(x["id"] == provider_id for x in profiles):
         raise HTTPException(404, "模型连接不存在。")
     from . import service_credentials
-    references = service_credentials.dependents(settings, provider_id)
     try:
         secret_set(model_profiles.secret_ref(provider_id), "")
     except Exception:
         raise HTTPException(503, "清除密钥失败，请检查系统凭据存储。") from None
-    service_credentials.detach(settings, provider_id)
+    references = service_credentials.detach(settings, provider_id)
     settings.model_providers = [x for x in profiles if x["id"] != provider_id]
     if settings.default_provider == provider_id:
         settings.default_provider = next((x["id"] for x in settings.model_providers if x["models"]), "custom")

@@ -33,11 +33,12 @@ pub async fn common_text_copy_image(app: tauri::AppHandle, asset_id: String) -> 
     })
     .await
     .map_err(|_| "读取图片失败".to_string())??;
+    let (width, height) = image.dimensions();
     app.clipboard()
         .write_image(&tauri::image::Image::new_owned(
-            image.as_raw().clone(),
-            image.width(),
-            image.height(),
+            image.into_raw(),
+            width,
+            height,
         ))
         .map_err(|_| "复制图片失败，请重试".to_string())
 }

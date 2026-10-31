@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, Copy, ExternalLink, Plus, Pencil, X } from "lucide-react";
+import { Check, Copy, ExternalLink, Plus, Pencil, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useCopyFeedback } from "@/lib/clipboard";
 import {
@@ -16,11 +16,9 @@ import { Input } from "./ui/input";
 import { SoftSelect } from "./ui/soft-select";
 
 export function SelectionCommonTexts({
-  onBack,
   onManage,
   onClose,
 }: {
-  onBack?: () => void;
   onManage: () => void;
   onClose: () => void;
 }) {
@@ -95,10 +93,6 @@ export function SelectionCommonTexts({
   return (
     <section className="selection-texts" aria-label="常用文本">
       <header className="selection-texts-heading">
-        {onBack && <button onClick={onBack}>
-          <ArrowLeft size={16} />
-          返回划词
-        </button>}
         <strong>常用文本</strong>
         <button onClick={() => { setNotice(""); setEditor({ key: Date.now() }); }}><Plus size={15} />新增</button>
         <button onClick={onManage}>

@@ -80,8 +80,10 @@ def image_ids(document):
 
 
 def referenced(db):
-    return set().union(set(), *(image_ids(doc) for doc in db.scalars(select(store.CommonText.document)
-        .where(store.CommonText.profile_id == config.PROFILE_ID))))
+    return {identifier
+            for doc in db.scalars(select(store.CommonText.document)
+                .where(store.CommonText.profile_id == config.PROFILE_ID))
+            for identifier in image_ids(doc)}
 
 
 def cleanup(db, candidates):
@@ -225,7 +227,7 @@ def delete(identifier: str):
 def validate_portable(connection, stage):
     """Validate every document and image before a portable archive is accepted."""
     from .common_texts import Document
-    assets = {}
+    assets = set()
     for identifier, width, height, raw_scene in connection.execute("SELECT id, width, height, scene FROM common_text_assets"):
         if len(identifier) != 36 or any(char not in "abcdef0123456789-" for char in identifier):
             raise ValueError("常用文本图片记录无效")
@@ -238,9 +240,9 @@ def validate_portable(connection, stage):
         for suffix in (".bin", ".png"):
             if not (stage / "attachments" / "common-texts" / f"{identifier}{suffix}").is_file():
                 raise ValueError("常用文本图片文件缺失")
-        assets[identifier] = True
+        assets.add(identifier)
     for (raw,) in connection.execute("SELECT document FROM common_texts WHERE document IS NOT NULL"):
         if raw and raw != "null":
             document = Document.model_validate(json.loads(raw)).model_dump()
-            if image_ids(document) - assets.keys():
+            if image_ids(document) - assets:
                 raise ValueError("常用文本引用的图片缺失")
