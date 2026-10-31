@@ -125,6 +125,8 @@ export function App() {
     localStorage.setItem("bai-sidebar-width", String(value));
   }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [knowledgeDirectoryOpen, setKnowledgeDirectoryOpen] = useState(true);
+  const [knowledgeDirectoryAvailable, setKnowledgeDirectoryAvailable] = useState(false);
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
   const [planCalendarVisible, setPlanCalendarVisible] = useState(true);
   const [learningSidebar, setLearningSidebar] = useState({ available: false, expanded: false });
@@ -609,11 +611,11 @@ export function App() {
     );
   return (
     <WindowFrame
-      collapsed={page === "plans" ? !planSidebarOpen : page === "learning" ? !learningSidebar.expanded : sidebarCollapsed}
-      sidebarAvailable={page === "chat" || (page === "plans" && planCalendarVisible) || (page === "learning" && learningSidebar.available)}
-      sidebarLabel={page === "plans" ? "每日计划" : page === "learning" ? "课程目录" : "侧栏"}
-      sidebarControls={page === "plans" ? "plan-day-sidebar" : page === "learning" ? "course-outline" : "chat-sidebar"}
-      onToggle={page === "chat" ? toggleSidebar : page === "plans" && planCalendarVisible ? () => setPlanSidebarOpen(open => !open) : page === "learning" ? () => window.dispatchEvent(new Event("xiaoxi-toggle-learning-outline")) : undefined}
+      collapsed={page === "knowledge" ? !knowledgeDirectoryOpen : page === "plans" ? !planSidebarOpen : page === "learning" ? !learningSidebar.expanded : sidebarCollapsed}
+      sidebarAvailable={page === "chat" || (page === "knowledge" && knowledgeDirectoryAvailable) || (page === "plans" && planCalendarVisible) || (page === "learning" && learningSidebar.available)}
+      sidebarLabel={page === "knowledge" ? "资料目录" : page === "plans" ? "每日计划" : page === "learning" ? "课程目录" : "侧栏"}
+      sidebarControls={page === "knowledge" ? "knowledge-directory" : page === "plans" ? "plan-day-sidebar" : page === "learning" ? "course-outline" : "chat-sidebar"}
+      onToggle={page === "knowledge" ? () => setKnowledgeDirectoryOpen(open => !open) : page === "chat" ? toggleSidebar : page === "plans" && planCalendarVisible ? () => setPlanSidebarOpen(open => !open) : page === "learning" ? () => window.dispatchEvent(new Event("xiaoxi-toggle-learning-outline")) : undefined}
       menuActions={{
         newChat: startNewChat,
         newLearning: () => navigate("learning", true),
@@ -831,7 +833,7 @@ export function App() {
                   />
                 </Suspense>
               )}
-              {page === "knowledge" && <KnowledgePage openSource={knowledgeSource} onOpened={() => setKnowledgeSource(undefined)} />}
+              {page === "knowledge" && <KnowledgePage openSource={knowledgeSource} onOpened={() => setKnowledgeSource(undefined)} directoryOpen={knowledgeDirectoryOpen} onDirectoryAvailableChange={setKnowledgeDirectoryAvailable} />}
               {page === "common-texts" && <CommonTextsPage />}
               {page === "pomodoro" && <PomodoroPage />}
               {page === "settings" && (

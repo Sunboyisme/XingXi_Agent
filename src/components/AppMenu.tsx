@@ -16,6 +16,7 @@ type Selection = { element: Editor; start: number; end: number };
 export function AppMenu({
   actions,
   collapsed,
+  sidebarLabel = "侧栏",
   onToggle,
   onFitWindow,
   onClose,
@@ -24,6 +25,7 @@ export function AppMenu({
 }: {
   actions: AppMenuActions;
   collapsed: boolean;
+  sidebarLabel?: string;
   onToggle?: () => void;
   onFitWindow?: () => void;
   onClose?: () => void;
@@ -163,13 +165,8 @@ export function AppMenu({
           {item("对话", () => actions.navigate("chat"), "Ctrl+1")}
           {item("学习", () => actions.navigate("learning"), "Ctrl+2")}
           {item("计划", () => actions.navigate("plans"), "Ctrl+3")}
-          <Menubar.Separator className="app-menu-separator" />
-          {item(
-            collapsed ? "显示聊天侧栏" : "隐藏聊天侧栏",
-            () => onToggle?.(),
-            undefined,
-            !onToggle,
-          )}
+          {(onToggle || onFitWindow) && <Menubar.Separator className="app-menu-separator" />}
+          {onToggle && item(`${collapsed ? "显示" : "隐藏"}${sidebarLabel}`, onToggle)}
           {onFitWindow && item("适配窗口到屏幕", onFitWindow)}
         </>,
       )}

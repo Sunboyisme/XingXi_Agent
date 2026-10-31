@@ -190,21 +190,13 @@ export function PomodoroPage() {
                 />
               </svg>
               <div className="pomodoro-dial-copy">
-                <span>{isBreak ? "休息时间" : "专注时间"}</span>
                 <strong
                   role="timer"
                   aria-live="off"
-                  aria-label={`剩余 ${formatCountdown(remaining)}`}
+                  aria-label={`${isBreak ? "休息" : "专注"}剩余 ${formatCountdown(remaining)}`}
                 >
                   {formatCountdown(remaining)}
                 </strong>
-                <span>
-                  {data.status === "paused"
-                    ? "已暂停 · 等你继续"
-                    : data.status === "waiting"
-                      ? "准备好后，手动开始"
-                      : `${minutes} 分钟${isBreak ? "休息" : "专注"}`}
-                </span>
               </div>
             </div>
             <div className="pomodoro-controls">
@@ -217,13 +209,13 @@ export function PomodoroPage() {
               </Button>
               {data.phase !== "idle" && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   className="pomodoro-end"
                   aria-label="结束本轮"
                   disabled={busy}
                   onClick={() => void act("end")}
                 >
-                  <Square size={14} />
+                  <Square size={12} fill="currentColor" strokeWidth={0} aria-hidden="true" />
                   <span>结束</span>
                 </Button>
               )}

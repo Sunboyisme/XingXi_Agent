@@ -35,7 +35,7 @@
   line-height: 1.6;
   color: var(--ui-color-text-muted);
 }
-/* Keep titlebar menus still while a page adds or removes its sidebar control. */
+/* Only pages with a sidebar render this control and reserve its width. */
 .window-titlebar .window-sidebar-control {
   display: grid;
   place-items: center;

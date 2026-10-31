@@ -1,51 +1,72 @@
 .pomodoro-notice {
-  margin: 10px;
-  padding: 24px;
-  border-radius: 22px;
-  max-height: calc(100vh - 20px);
+  --ui-color-text: #3d2b20;
+  --ui-color-heading: #35251c;
+  --ui-color-text-muted: #92785e;
+  --ui-color-line: #dfd2c3;
+  --ui-color-focus: #b85f3e;
+  --ui-color-danger: #a23d30;
+  color-scheme: light;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 16px);
+  max-height: calc(100vh - 16px);
+  margin: 8px;
+  padding: 22px 24px;
+  border-radius: 10px;
   overflow: auto;
   border: 1px solid var(--ui-color-line);
-  background: var(--ui-color-surface);
+  background: #faf8f4;
   box-shadow: 0 6px 24px rgb(0 0 0 / 10%);
   color: var(--ui-color-text);
 }
 .pomodoro-notice-heading {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-shrink: 0;
 }
-.pomodoro-notice-symbol {
-  display: grid;
-  place-items: center;
-  flex: 0 0 46px;
-  height: 46px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--ui-color-action) 12%, transparent);
-  color: var(--ui-color-action);
-}
-.pomodoro-notice-heading > div > span {
+.pomodoro-notice-heading > span {
   color: var(--ui-color-text-muted);
   font-size: 12px;
 }
 .pomodoro-notice h1 {
-  margin: 5px 0 0;
+  margin: 12px 0 0;
   color: var(--ui-color-heading);
-  font-size: 19px;
+  font-size: 21px;
   line-height: 1.4;
   font-weight: 600;
 }
 .pomodoro-notice-description {
-  margin: 20px 0 24px;
+  margin: 9px 0 28px;
   color: var(--ui-color-text-muted);
   font-size: 13px;
   line-height: 1.7;
 }
 .pomodoro-notice-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
   gap: 10px;
+  margin-top: auto;
 }
 html[data-desktop] .pomodoro-notice-actions button {
-  min-height: 38px;
-  border-radius: 12px;
+  min-height: 36px;
+  padding: 0 15px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+html[data-desktop] .pomodoro-notice-actions button[data-variant="outline"] {
+  border: 1px solid var(--ui-color-line);
+  background: transparent;
+  color: var(--ui-color-text);
+}
+html[data-desktop] .pomodoro-notice-actions button[data-variant="outline"]:hover {
+  background: #f0e9df;
+}
+html[data-desktop] .pomodoro-notice-actions button[data-variant="default"] {
+  border: 1px solid #b85f3e;
+  background: #b85f3e;
+  color: #fffaf5;
+}
+html[data-desktop] .pomodoro-notice-actions button[data-variant="default"]:hover {
+  border-color: #a65335;
+  background: #a65335;
 }

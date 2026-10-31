@@ -17,8 +17,6 @@ import {
   Trash2,
   Upload,
   X,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
 } from "lucide-react";
 import { api, downloadApiFile, fetchApi } from "@/lib/api";
@@ -226,9 +224,13 @@ function FileTree({
 export function KnowledgePage({
   openSource,
   onOpened,
+  directoryOpen,
+  onDirectoryAvailableChange,
 }: {
   openSource?: KnowledgeSource;
   onOpened: () => void;
+  directoryOpen: boolean;
+  onDirectoryAvailableChange: (available: boolean) => void;
 }) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [status, setStatus] = useState<Status>();
@@ -253,7 +255,11 @@ export function KnowledgePage({
   const [results, setResults] = useState<KnowledgeSource[]>([]);
   const [related, setRelated] = useState<KnowledgeSource>();
   const [searched, setSearched] = useState(false);
-  const [directoryHidden, setDirectoryHidden] = useState(false);
+  const directoryAvailable = documents.length > 0 || searched;
+  useEffect(() => {
+    onDirectoryAvailableChange(directoryAvailable);
+    return () => onDirectoryAvailableChange(false);
+  }, [directoryAvailable, onDirectoryAvailableChange]);
   const lock = useRef(false);
   const requestVersion = useRef(0);
   const files = useRef<HTMLInputElement>(null);
@@ -545,29 +551,6 @@ export function KnowledgePage({
               <X size={16} />
             </Button>
           )}
-          {documents.length > 0 && (
-            <Hint
-              label={
-                directoryHidden ? "展开资料目录" : "收起资料目录，放大正文"
-              }
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={directoryHidden ? "展开资料目录" : "收起资料目录"}
-                aria-expanded={!directoryHidden}
-                aria-controls="knowledge-directory"
-                onClick={() => setDirectoryHidden((value) => !value)}
-              >
-                {directoryHidden ? (
-                  <PanelLeftOpen size={17} />
-                ) : (
-                  <PanelLeftClose size={17} />
-                )}
-              </Button>
-            </Hint>
-          )}
         </form>
       </div>
       {status?.error && <ErrorNotice tone="warning" message={status.error} />}
@@ -589,12 +572,12 @@ export function KnowledgePage({
         </section>
       ) : (
         <div
-          className={`knowledge-workspace${directoryHidden ? " directory-hidden" : ""}`}
+          className={`knowledge-workspace${directoryOpen ? "" : " directory-hidden"}`}
         >
           <aside
             id="knowledge-directory"
             aria-label="知识库文件"
-            hidden={directoryHidden}
+            hidden={!directoryOpen}
           >
             <h2>
               <BookOpen size={17} />

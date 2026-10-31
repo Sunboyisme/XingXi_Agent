@@ -80,15 +80,14 @@ export function WindowFrame({
         <span className="window-brand" data-tauri-drag-region>
           XiaoXi
         </span>
-        <div className="window-sidebar-control">
-          {sidebarAvailable && (
+        {sidebarAvailable && onToggle && (
+          <div className="window-sidebar-control">
             <Hint label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}>
               <button
                 className="sidebar-toggle"
                 aria-label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}
                 aria-expanded={!collapsed}
                 aria-controls={sidebarControls}
-                disabled={!onToggle}
                 onClick={onToggle}
               >
                 {collapsed ? (
@@ -98,13 +97,14 @@ export function WindowFrame({
                 )}
               </button>
             </Hint>
-          )}
-        </div>
+          </div>
+        )}
         {menuActions && (
           <AppMenu
             actions={menuActions}
             collapsed={collapsed}
-            onToggle={onToggle}
+            onToggle={sidebarAvailable ? onToggle : undefined}
+            sidebarLabel={sidebarLabel}
             onFitWindow={
               native
                 ? () => void control(() => invoke("restore_window_layout"))

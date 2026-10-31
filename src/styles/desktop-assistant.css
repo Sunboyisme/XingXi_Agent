@@ -311,6 +311,12 @@ html[data-desktop] .capture-handle {
   background: transparent;
   z-index: 2;
 }
+html[data-desktop] .capture-handle:is(:hover, :active, :focus-visible) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
 .capture-handle::after {
   content: "";
   position: absolute;
@@ -318,46 +324,55 @@ html[data-desktop] .capture-handle {
   border: 1px solid white;
   border-radius: 50%;
   background: #368df5;
+  pointer-events: none;
+}
+.capture-handle:focus-visible::after {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+html[data-desktop] .capture-handle:is(.handle-nw, .handle-se) {
+  cursor: url("../assets/cursors/resize-nwse.svg") 18 18, nwse-resize;
+}
+html[data-desktop] .capture-handle:is(.handle-ne, .handle-sw) {
+  cursor: url("../assets/cursors/resize-nesw.svg") 18 18, nesw-resize;
+}
+html[data-desktop] .capture-handle:is(.handle-n, .handle-s) {
+  cursor: url("../assets/cursors/resize-vertical.svg") 18 18, ns-resize;
+}
+html[data-desktop] .capture-handle:is(.handle-e, .handle-w) {
+  cursor: url("../assets/cursors/resize-horizontal.svg") 18 18, ew-resize;
 }
 .handle-nw {
   left: -13px;
   top: -13px;
-  cursor: nw-resize;
 }
 .handle-n {
   left: calc(50% - 12px);
   top: -13px;
-  cursor: n-resize;
 }
 .handle-ne {
   right: -13px;
   top: -13px;
-  cursor: ne-resize;
 }
 .handle-e {
   right: -13px;
   top: calc(50% - 12px);
-  cursor: e-resize;
 }
 .handle-se {
   right: -13px;
   bottom: -13px;
-  cursor: se-resize;
 }
 .handle-s {
   left: calc(50% - 12px);
   bottom: -13px;
-  cursor: s-resize;
 }
 .handle-sw {
   left: -13px;
   bottom: -13px;
-  cursor: sw-resize;
 }
 .handle-w {
   left: -13px;
   top: calc(50% - 12px);
-  cursor: w-resize;
 }
 .capture-toolbar {
   position: absolute;

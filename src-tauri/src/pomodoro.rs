@@ -82,7 +82,7 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| e.to_string())?;
     WebviewWindowBuilder::new(app, "pomodoro-notice", WebviewUrl::App("index.html?view=pomodoro-notice".into()))
-        .title("XiaoXi · 专注完成").inner_size(380.0, 250.0).decorations(false)
+        .title("XiaoXi · 专注完成").inner_size(480.0, 228.0).decorations(false)
         .transparent(true).background_color(tauri::window::Color(0, 0, 0, 0)).always_on_top(true)
         .skip_taskbar(true).resizable(false).shadow(false).focused(false).visible(false)
         .build().map_err(|e| e.to_string())?;
@@ -232,7 +232,7 @@ fn show_focus_notice(app: &tauri::AppHandle, sequence: u64) {
         let scale = monitor.scale_factor();
         let size = window
             .outer_size()
-            .unwrap_or(tauri::PhysicalSize::new(360, 190));
+            .unwrap_or(tauri::PhysicalSize::new(480, 228));
         let _ = window.set_position(PhysicalPosition::new(
             area.position.x + area.size.width.saturating_sub(size.width) as i32
                 - (16.0 * scale) as i32,

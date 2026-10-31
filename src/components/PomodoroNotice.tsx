@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Coffee } from "lucide-react";
 import { pomodoroAction, usePomodoro } from "@/lib/pomodoro";
 import { Button } from "./ui/button";
 import { errorMessage } from "@/lib/utils";
@@ -37,13 +36,10 @@ export function PomodoroNotice() {
   return (
     <section className="pomodoro-notice" aria-label="专注完成提醒">
       <header className="pomodoro-notice-heading">
-        <span className="pomodoro-notice-symbol" aria-hidden="true"><Coffee size={23} /></span>
-        <div>
-          <span>这一段专注完成了</span>
-          <h1>给自己 {data?.session?.break_minutes ?? 5} 分钟休息</h1>
-        </div>
+        <span>XiaoXi · 休息提醒</span>
+        <h1>专注了这么久，该休息了…</h1>
       </header>
-      <p className="pomodoro-notice-description">起身走走，喝口水，让眼睛放松一下。</p>
+      <p className="pomodoro-notice-description">起身走走，看看远处，让眼睛和肩颈都放松一下。</p>
       {error && (
         <p className="field-error" role="alert">
           {error}
@@ -55,13 +51,13 @@ export function PomodoroNotice() {
           disabled={busy || acting || data?.phase !== "waiting_break"}
           onClick={() => void act("skip_break")}
         >
-          知道了
+          我知道了
         </Button>
         <Button
           disabled={busy || acting || data?.phase !== "waiting_break"}
           onClick={() => void act("start_break")}
         >
-          休息一会
+          进入休息
         </Button>
       </div>
     </section>
