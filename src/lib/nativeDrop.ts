@@ -4,7 +4,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { errorMessage } from "./utils";
 
 type NativeFile = { path: string; name: string; directory: boolean; relative_path: string; bytes: number[]; last_modified?: number };
-type Target = { element: () => HTMLElement | null; enabled: () => boolean; recursive: boolean; foldersOnly: boolean; receive: (files: NativeFile[], position?: { x: number; y: number }) => void | Promise<void>; error: (text: string) => void; loading: (value: boolean) => void };
+type Target = { element: () => HTMLElement | null; enabled: () => boolean; recursive: boolean; foldersOnly: boolean; receive: (files: NativeFile[], position?: { x: number; y: number }) => void | Promise<void>; error: (text: string) => void; loading: (value: boolean, position?: { x: number; y: number }) => void };
 const targets = new Set<Target>();
 const receiving = new WeakSet<Target>();
 let listening: Promise<void> | undefined;
@@ -29,8 +29,8 @@ function listen() {
     if (receiving.has(target)) { target.error(target.foldersOnly ? "正在处理上次拖入的文件夹，请稍候" : "正在读取上次拖入的文件，请稍候"); return; }
     const element = target.element();
     receiving.add(target);
-    target.loading(true);
     try {
+      target.loading(true, { x, y });
       if (target.foldersOnly && payload.paths.length > 20) throw new Error("每次最多拖入 20 个文件夹");
       if (!target.foldersOnly && !target.recursive && payload.paths.length > 4) throw new Error("每次最多提交 4 个附件");
       const files = await invoke<NativeFile[]>("read_dropped_files", { paths: payload.paths, recursive: target.recursive, foldersOnly: target.foldersOnly });
@@ -58,7 +58,7 @@ export function useNativeDrop(ref: RefObject<HTMLElement | null>, receive: Targe
     if (!isTauri()) return;
     const target: Target = { element: () => ref.current, enabled: () => !callbacks.current.disabled && callbacks.current.scopeKey === scopeKey, recursive, foldersOnly,
       receive: (files, position) => callbacks.current.receive(files, position), error: (message) => callbacks.current.error(message),
-      loading: (value) => { if (callbacks.current.scopeKey === scopeKey) callbacks.current.onReading?.(value); } };
+      loading: (value, position) => { if (callbacks.current.scopeKey === scopeKey) callbacks.current.onReading?.(value, position); } };
     targets.add(target); listen();
     return () => { targets.delete(target); ref.current?.classList.remove("image-drag-over"); };
   }, [ref, recursive, scopeKey, foldersOnly]);

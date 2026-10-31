@@ -77,6 +77,20 @@ export function CommonTextImageEditor({
   const sourceBlob = useRef<Blob | undefined>(undefined);
   const lock = useRef(false),
     mounted = useRef(false);
+  function cancelDrawing() {
+    const active = gesture.current;
+    gesture.current = null;
+    if (active && canvas.current?.hasPointerCapture(active.pointer))
+      canvas.current.releasePointerCapture(active.pointer);
+    setLive(null);
+  }
+  useEffect(() => {
+    window.addEventListener("blur", cancelDrawing);
+    return () => {
+      window.removeEventListener("blur", cancelDrawing);
+      cancelDrawing();
+    };
+  }, []);
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
@@ -135,14 +149,14 @@ export function CommonTextImageEditor({
     setMarks(next);
   }
   function undo() {
-    if (busy || !history.length) return;
+    if (busy || text || gesture.current || !history.length) return;
     setRedo((r) => [...r, marks]);
     setMarks(history.at(-1)!);
     setHistory((h) => h.slice(0, -1));
     setSelected(null);
   }
   function redoAction() {
-    if (busy || !redo.length) return;
+    if (busy || text || gesture.current || !redo.length) return;
     setHistory((h) => [...h, marks]);
     setMarks(redo.at(-1)!);
     setRedo((r) => r.slice(0, -1));
@@ -300,12 +314,16 @@ export function CommonTextImageEditor({
                     ))}
                   </select>
                 </label>
-                <button type="button" disabled={!history.length} onClick={undo}>
+                <button
+                  type="button"
+                  disabled={Boolean(text) || !history.length}
+                  onClick={undo}
+                >
                   撤销
                 </button>
                 <button
                   type="button"
-                  disabled={!redo.length}
+                  disabled={Boolean(text) || !redo.length}
                   onClick={redoAction}
                 >
                   重做
@@ -314,6 +332,7 @@ export function CommonTextImageEditor({
                   <button
                     type="button"
                     data-delete-action
+                    disabled={Boolean(text)}
                     onClick={() => {
                       commit(
                         marks,
@@ -339,7 +358,7 @@ export function CommonTextImageEditor({
                   width={source.width}
                   height={source.height}
                   onPointerDown={(event) => {
-                    if (busy || event.button !== 0) return;
+                    if (busy || text || event.button !== 0) return;
                     const at = point(event);
                     event.preventDefault();
                     if (tool === "select") {
@@ -404,12 +423,10 @@ export function CommonTextImageEditor({
                     setLive(null);
                     event.currentTarget.releasePointerCapture(event.pointerId);
                   }}
-                  onPointerCancel={() => {
-                    gesture.current = null;
-                    setLive(null);
-                  }}
+                  onPointerCancel={cancelDrawing}
+                  onLostPointerCapture={cancelDrawing}
                 />
-                {tool === "select" && !busy && (
+                {tool === "select" && !busy && !text && (
                   <CaptureObjects
                     marks={marks}
                     selected={selected}
@@ -491,7 +508,13 @@ export function CommonTextImageEditor({
               type="button"
               disabled={busy || !source || Boolean(text)}
               onClick={async () => {
-                if (lock.current || !source || !sourceBlob.current || !asset)
+                if (
+                  lock.current ||
+                  gesture.current ||
+                  !source ||
+                  !sourceBlob.current ||
+                  !asset
+                )
                   return;
                 lock.current = true;
                 setBusy(true);

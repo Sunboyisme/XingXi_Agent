@@ -139,9 +139,11 @@ def edit_category(identifier: str, value: CategoryWrite):
 def delete_category(identifier: str):
     with store.Session() as db:
         row = require(db, store.CommonTextCategory, identifier)
+        # Moving to the default category does not change the document revision;
+        # an already open editor can choose another category without a false conflict.
         db.execute(update(store.CommonText).where(
             store.CommonText.profile_id == config.PROFILE_ID, store.CommonText.category_id == identifier
-        ).values(category_id=None))
+        ).values(category_id=None, updated_at=store.CommonText.updated_at))
         db.delete(row)
         db.commit()
         return {"ok": True}

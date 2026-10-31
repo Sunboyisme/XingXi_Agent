@@ -212,23 +212,23 @@ export function App() {
     if (saved) setProjects((items) => items.some((item) => item.id === saved.id)
       ? items.map((item) => item.id === saved.id ? saved : item)
       : [...items, saved]);
-    navigate("projects");
-    setProjectOverviewId(id);
-    setActiveProjectId(id);
+    navigate("projects", false, false, () => {
+      setProjectOverviewId(id);
+      setActiveProjectId(id);
+    });
   }
   function openConversation(
     conversation: Conversation,
     messageId?: string | null,
   ) {
-    setProjectPanelRequest(null);
-    setProjectOverviewId(null);
-    setActiveProjectId(conversation.project_id || null);
-    setConversations((items) =>
-      items.map((item) => (item.id === conversation.id ? conversation : item)),
-    );
-    setConversationId(conversation.id);
-    setFocusMessageId(messageId || null);
-    navigate("chat");
+    navigate("chat", false, false, () => {
+      setProjectPanelRequest(null);
+      setProjectOverviewId(null);
+      setActiveProjectId(conversation.project_id || null);
+      setConversations(items => items.map(item => item.id === conversation.id ? conversation : item));
+      setConversationId(conversation.id);
+      setFocusMessageId(messageId || null);
+    });
   }
   const acceptDesktopNavigation = useEffectEvent((request: DesktopNavigation) => {
     const epoch = ++navigationEpoch.current;
@@ -236,18 +236,18 @@ export function App() {
     if (request.page === "common-texts") { if (request.commonTextAssetId) setCommonTextDrafts(queue => [...queue, { id: request.id, assetId: request.commonTextAssetId! }]); navigate("common-texts"); return; }
     if (request.page === "pomodoro") { navigate("pomodoro"); return; }
     if (request.page === "plans") {
-      setPlanAgenda({ day: zonedToday(settings?.timezone), tab: "todo" });
-      navigate("plans");
+      navigate("plans", false, false, () => setPlanAgenda({ day: zonedToday(settings?.timezone), tab: "todo" }));
       return;
     }
     if (request.page === "notifications") { setNotificationOpen(true); return; }
     if (request.settings) {
-      navigate("settings");
       const tts = request.settingsTab === "tts";
       const tab = tts ? "services" : isSettingsTab(request.settingsTab) ? request.settingsTab : "desktop";
-      setSettingsTab(tab);
-      setSpeechConfigureRequested(tab === "services" && !tts);
-      setTtsConfigureRequested(tts);
+      navigate("settings", false, false, () => {
+        setSettingsTab(tab);
+        setSpeechConfigureRequested(tab === "services" && !tts);
+        setTtsConfigureRequested(tts);
+      });
     } else if (request.conversationId) {
       void api<Conversation[]>("/conversations").then(values => {
         if (navigationEpoch.current !== epoch) return;
@@ -385,9 +385,9 @@ export function App() {
       void stop.then((fn) => fn());
     };
   }, [refresh]);
-  function navigate(value: string, create = false, draftClosed = false) {
+  function navigate(value: string, create = false, draftClosed = false, afterNavigate?: () => void) {
     if (!draftClosed && document.querySelector(".common-text-editor") && (value !== "common-texts" || create)) {
-      window.dispatchEvent(new CustomEvent("xiaoxi-common-text-request-close", { detail: () => navigate(value, create, true) }));
+      window.dispatchEvent(new CustomEvent("xiaoxi-common-text-request-close", { detail: () => navigate(value, create, true, afterNavigate) }));
       return;
     }
     if (value === "reminders" || value === "calendar") value = "plans";
@@ -413,6 +413,7 @@ export function App() {
     }
     if (create) setCreateKey(Date.now());
     else setCreateKey(0);
+    afterNavigate?.();
   }
   async function deleteConversation(deleting: Conversation) {
     if (conversationDeletions.current.has(deleting.id)) throw new Error("这段对话正在删除，请稍候。");
@@ -464,19 +465,21 @@ export function App() {
     openNewChat();
   }
   function openNewChat(projectId = activeProjectId, pinned = false) {
-    setSidebarCollapsed(true);
-    setProjectOverviewId(null);
-    setActiveProjectId(projectId);
-    setNewChatPinned(pinned);
-    setFocusMessageId(null);
-    setConversationId(null);
-    navigate("chat");
+    navigate("chat", false, false, () => {
+      setSidebarCollapsed(true);
+      setProjectOverviewId(null);
+      setActiveProjectId(projectId);
+      setNewChatPinned(pinned);
+      setFocusMessageId(null);
+      setConversationId(null);
+    });
   }
   function openPlan(planId: string, occurrence?: string | null) {
-    setPlanAgenda(undefined);
-    setCalendarEventId(planId);
-    setPlanOccurrence(occurrence);
-    navigate("plans");
+    navigate("plans", false, false, () => {
+      setPlanAgenda(undefined);
+      setCalendarEventId(planId);
+      setPlanOccurrence(occurrence);
+    });
   }
   const handleShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (document.querySelector('[role="dialog"]')) return;

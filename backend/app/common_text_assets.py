@@ -115,19 +115,32 @@ def recover():
 
 def decode(raw):
     try:
-        image = Image.open(io.BytesIO(raw))
-        if image.format not in {"PNG", "JPEG", "WEBP"} or image.width * image.height > PIXELS:
-            raise ValueError()
-        return ImageOps.exif_transpose(image).convert("RGBA")
+        with Image.open(io.BytesIO(raw)) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"} or image.width * image.height > PIXELS:
+                raise ValueError()
+            return ImageOps.exif_transpose(image).convert("RGBA")
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         raise HTTPException(422, "请添加有效的 PNG、JPG 或 WebP 图片，图片不能超过 8,000 万像素") from None
 
 
+class ImageBuffer(io.BytesIO):
+    def write(self, value):
+        if self.tell() + len(value) > LIMIT:
+            raise HTTPException(413, "图片无损编码后超过 32 MB，请缩小图片后添加")
+        return super().write(value)
+
+
+def encode(image):
+    with ImageBuffer() as buffer:
+        image.save(buffer, "PNG")
+        return buffer.getvalue()
+
+
 @router.post("/common-text-assets", response_model=AssetRead)
-async def upload(file: Annotated[UploadFile, File()], rendered: Annotated[UploadFile | None, File()] = None,
+def upload(file: Annotated[UploadFile, File()], rendered: Annotated[UploadFile | None, File()] = None,
                  scene: Annotated[str | None, Form(max_length=8 * 1024 * 1024)] = None):
-    raw = await file.read(LIMIT + 1)
-    output = await rendered.read(LIMIT + 1) if rendered else raw
+    raw = file.file.read(LIMIT + 1)
+    output = rendered.file.read(LIMIT + 1) if rendered else raw
     if len(raw) > LIMIT or len(output) > LIMIT:
         raise HTTPException(413, "单张图片不能超过 32 MB")
     source = decode(raw)
@@ -142,17 +155,25 @@ async def upload(file: Annotated[UploadFile, File()], rendered: Annotated[Upload
         raise HTTPException(422, "图片标注与原图的尺寸不一致")
     if rendered and not value:
         raise HTTPException(422, "编辑后的图片缺少标注数据")
+    width, height = source.size
+    # Compress before opening a write transaction: large images must not hold
+    # the SQLite writer lock or block the async event loop during encoding.
+    try:
+        original_png = encode(source)
+        rendered_png = encode(result) if result is not source else original_png
+    finally:
+        source.close()
+        if result is not source:
+            result.close()
     with lock, store.Session() as db:
         row = store.CommonTextAsset(name=Path(file.filename or "图片.png").name[:300], media_type="image/png",
-            width=source.width, height=source.height, scene=value.model_dump() if value else None)
+            width=width, height=height, scene=value.model_dump() if value else None)
         db.add(row)
         db.flush()
         try:
             folder().mkdir(exist_ok=True)
-            source.save(path(row.id, True), "PNG")
-            result.save(path(row.id), "PNG")
-            if path(row.id, True).stat().st_size > LIMIT or path(row.id).stat().st_size > LIMIT:
-                raise HTTPException(413, "图片无损编码后超过 32 MB，请缩小图片后添加")
+            path(row.id, True).write_bytes(original_png)
+            path(row.id).write_bytes(rendered_png)
             db.commit()
         except Exception as error:
             db.rollback()

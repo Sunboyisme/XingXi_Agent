@@ -64,6 +64,9 @@ export function CommonTextDocumentEditor({
   disabled: boolean;
 }) {
   const [initialContent] = useState(() => commonTextToProse(document));
+  const [readingFiles, setReadingFiles] = useState(false);
+  const nativeReading = useRef(false);
+  const nativeRange = useRef<{ from: number; to: number } | null>(null);
   const [uploading, setUploading] = useState(false),
     [error, setError] = useState("");
   const [editing, setEditing] = useState<ImageEdit>();
@@ -72,7 +75,8 @@ export function CommonTextDocumentEditor({
   const lock = useRef(false),
     mounted = useRef(false);
   const scope = useId();
-  const busy = uploading || Boolean(editing),
+  const dropInactive = disabled || uploading || Boolean(editing);
+  const busy = readingFiles || uploading || Boolean(editing),
     inactive = disabled || busy;
   const latest = useRef({
     onChange,
@@ -109,7 +113,7 @@ export function CommonTextDocumentEditor({
       },
       handleKeyDown: (_view, event) => {
         if (
-          (latest.current.inactive || lock.current) &&
+          (latest.current.inactive || nativeReading.current || lock.current) &&
           (["Backspace", "Delete", "Enter"].includes(event.key) ||
             ((event.ctrlKey || event.metaKey) &&
               ["x", "v", "z", "y"].includes(event.key.toLowerCase())))
@@ -170,13 +174,19 @@ export function CommonTextDocumentEditor({
     if (editor && !editor.isDestroyed) editor.setEditable(!inactive, false);
   }, [editor, inactive]);
 
-  async function addImages(files: File[], position?: Point) {
+  async function addImages(
+    files: File[],
+    position?: Point,
+    fromNative = false,
+  ) {
     if (
       !files.length ||
       !editor ||
       editor.isDestroyed ||
       lock.current ||
-      latest.current.inactive
+      latest.current.disabled ||
+      Boolean(editing) ||
+      (nativeReading.current && !fromNative)
     )
       return;
     if (editor.view.composing) {
@@ -186,9 +196,15 @@ export function CommonTextDocumentEditor({
     const drop = position
       ? editor.view.posAtCoords({ left: position.x, top: position.y })
       : null;
-    const range = drop
-      ? { from: drop.pos, to: drop.pos }
-      : { from: editor.state.selection.from, to: editor.state.selection.to };
+    const range =
+      fromNative && nativeRange.current
+        ? nativeRange.current
+        : drop
+          ? { from: drop.pos, to: drop.pos }
+          : {
+              from: editor.state.selection.from,
+              to: editor.state.selection.to,
+            };
     lock.current = true;
     editor.setEditable(false, false);
     setUploading(true);
@@ -230,8 +246,11 @@ export function CommonTextDocumentEditor({
       lock.current = false;
       if (mounted.current && !editor.isDestroyed) {
         setUploading(false);
-        latest.current.onBusyChange(false);
-        editor.setEditable(!latest.current.disabled, false);
+        latest.current.onBusyChange(nativeReading.current);
+        editor.setEditable(
+          !latest.current.disabled && !nativeReading.current,
+          false,
+        );
         editor.commands.focus();
       }
     }
@@ -254,12 +273,34 @@ export function CommonTextDocumentEditor({
   useNativeDrop(
     surface,
     async (files, position) => {
-      await addImages(files.map(nativeFile), position);
+      await addImages(files.map(nativeFile), position, true);
     },
     setError,
     false,
-    inactive,
+    dropInactive,
     scope,
+    (reading, position) => {
+      nativeReading.current = reading;
+      setReadingFiles(reading);
+      if (reading && editor && !editor.isDestroyed) {
+        const hit = position
+          ? editor.view.posAtCoords({ left: position.x, top: position.y })
+          : null;
+        nativeRange.current = hit
+          ? { from: hit.pos, to: hit.pos }
+          : {
+              from: editor.state.selection.from,
+              to: editor.state.selection.to,
+            };
+      }
+      if (!reading) nativeRange.current = null;
+      latest.current.onBusyChange(reading || lock.current || Boolean(editing));
+      if (editor && !editor.isDestroyed)
+        editor.setEditable(
+          !reading && !lock.current && !editing && !latest.current.disabled,
+          false,
+        );
+    },
   );
   return (
     <>
@@ -320,7 +361,9 @@ export function CommonTextDocumentEditor({
             <EditorContent editor={editor} />
           </CommonTextImageContext.Provider>
         </div>
-        {uploading && <p role="status">正在添加图片…</p>}
+        {(readingFiles || uploading) && (
+          <p role="status">{uploading ? "正在添加图片…" : "正在读取图片…"}</p>
+        )}
         {error && <ErrorNotice message={error} />}
       </div>
       {editing && (
