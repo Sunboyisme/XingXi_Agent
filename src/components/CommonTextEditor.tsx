@@ -12,12 +12,10 @@ import {
   documentFor,
   documentImages,
   documentText,
-  draftBlocks,
-  serializeBlocks,
   type CommonTextDocument,
-  type DraftBlock,
   type CommonTextAsset,
 } from "@/lib/commonTextDocument";
+import { normalizeCommonTextDocument } from "@/lib/commonTextProse";
 import { errorMessage } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
@@ -56,9 +54,7 @@ export function CommonTextEditor({
   const [initial] = useState(
     () => initialDocument || documentFor(value || { content: initialContent }),
   );
-  const [blocks, setBlocks] = useState(() => draftBlocks(initial));
-  const currentBlocks = useRef(blocks);
-  currentBlocks.current = blocks;
+  const [document, setDocument] = useState(initial);
   const [category, setCategory] = useState(
     value?.category_id || initialCategory || "uncategorized",
   );
@@ -71,15 +67,12 @@ export function CommonTextEditor({
   const [saving, setSaving] = useState(false),
     [editingBusy, setEditingBusy] = useState(false),
     [discard, setDiscard] = useState(false);
-  const [history, setHistory] = useState<DraftBlock[][]>([]),
-    [redo, setRedo] = useState<DraftBlock[][]>([]);
   const [reload, setReload] = useState(0),
     revision = useCommonTextsRevision();
   const mounted = useRef(false),
     lock = useRef(false);
   const staged = useRef(new Set(initialAssets)),
     retained = useRef(new Set<string>());
-  const typing = useRef({ key: "", time: 0 });
   const leave = useRef<(() => void) | undefined>(undefined);
   const closeRequest = useRef(() => {});
   const id = useId();
@@ -137,42 +130,14 @@ export function CommonTextEditor({
       });
     return () => controller.abort();
   }, [reload, revision]);
-  function change(next: DraftBlock[], group = "") {
-    if (!next.length)
-      next = [{ key: crypto.randomUUID(), type: "text", text: "" }];
-    const now = performance.now(),
-      before = currentBlocks.current;
-    if (JSON.stringify(before) === JSON.stringify(next)) return;
-    if (
-      !group ||
-      typing.current.key !== group ||
-      now - typing.current.time > 750
-    )
-      setHistory((h) => [...h.slice(-99), before]);
-    typing.current = { key: group, time: now };
-    setRedo([]);
-    currentBlocks.current = next;
-    setBlocks(next);
+  function change(next: CommonTextDocument) {
+    setDocument(next);
     setFieldError("");
   }
-  function undo() {
-    if (!history.length || saving || editingBusy) return;
-    typing.current.key = "";
-    setRedo((r) => [...r, blocks]);
-    setBlocks(history.at(-1)!);
-    setHistory((h) => h.slice(0, -1));
-  }
-  function redoAction() {
-    if (!redo.length || saving || editingBusy) return;
-    typing.current.key = "";
-    setHistory((h) => [...h, blocks]);
-    setBlocks(redo.at(-1)!);
-    setRedo((r) => r.slice(0, -1));
-  }
-  const document = serializeBlocks(blocks),
-    content = documentText(document);
+  const content = documentText(document);
   const dirty =
-    JSON.stringify(document) !== JSON.stringify(initial) ||
+    JSON.stringify(normalizeCommonTextDocument(document)) !==
+      JSON.stringify(normalizeCommonTextDocument(initial)) ||
     category !== initialGroup.current ||
     initialAssets.length > 0;
   function finishClose() {
@@ -260,17 +225,13 @@ export function CommonTextEditor({
             <fieldset disabled={saving}>
               <Label>正文</Label>
               <CommonTextDocumentEditor
-                blocks={blocks}
+                document={document}
                 onChange={change}
                 disabled={saving}
                 onAssetCreated={(asset: CommonTextAsset) =>
                   staged.current.add(asset.id)
                 }
                 onBusyChange={setEditingBusy}
-                onUndo={undo}
-                onRedo={redoAction}
-                canUndo={Boolean(history.length)}
-                canRedo={Boolean(redo.length)}
               />
               {fieldError && (
                 <p className="common-text-field-error" role="alert">

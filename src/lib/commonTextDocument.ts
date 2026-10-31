@@ -5,7 +5,6 @@ import type { CaptureMark } from "./captureDrawing";
 export type CommonTextBlock =
   { type: "text"; text: string } | { type: "image"; asset_id: string };
 export type CommonTextDocument = { version: 1; blocks: CommonTextBlock[] };
-export type DraftBlock = CommonTextBlock & { key: string };
 export type CaptureScene = {
   version: 1;
   width: number;
@@ -31,12 +30,6 @@ export function documentFor(value?: {
     }
   );
 }
-export const draftBlocks = (document: CommonTextDocument): DraftBlock[] =>
-  document.blocks.map((block) => ({ ...block, key: crypto.randomUUID() }));
-export const serializeBlocks = (blocks: DraftBlock[]): CommonTextDocument => ({
-  version: 1,
-  blocks: blocks.map(({ key: _key, ...block }) => block),
-});
 export const documentText = (document: CommonTextDocument) =>
   document.blocks
     .flatMap((block) => (block.type === "text" ? [block.text] : []))

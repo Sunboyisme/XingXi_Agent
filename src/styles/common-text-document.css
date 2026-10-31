@@ -40,8 +40,7 @@
 }
 .common-text-image figcaption button,
 .common-image-controls button,
-.common-block-grip,
-.common-block-remove {
+.common-block-grip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -83,19 +82,54 @@
   padding: 6px 8px;
   border-bottom: 1px solid var(--ui-color-border);
 }
-.common-document-blocks {
+.common-document-surface {
   max-height: min(44vh, 500px);
   overflow: auto;
-  padding: 8px;
+  padding: 12px 14px;
   overscroll-behavior: contain;
 }
-.common-document-block {
-  display: flex;
-  gap: 4px;
-  align-items: flex-start;
-  border-radius: 5px;
+.common-document-prose {
+  position: relative;
+  min-height: 200px;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  color: var(--ui-color-text);
 }
-.common-document-block[data-dragging],
+.common-document-prose p {
+  min-height: 1.7em;
+  margin: 0;
+}
+.common-document-surface[data-empty="true"] .common-document-prose::before {
+  content: "输入文字，或粘贴、拖入图片";
+  float: left;
+  height: 0;
+  color: var(--ui-color-text-muted);
+  pointer-events: none;
+}
+.common-document-prose .ProseMirror-gapcursor::after {
+  border-top-color: var(--ui-color-text);
+}
+.common-text-image-node {
+  min-width: 0;
+  white-space: normal;
+}
+.common-text-image-node .common-text-image {
+  margin: 10px 0;
+}
+.common-document-prose .common-text-image img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(26vh, 240px);
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+.common-text-image-node[data-selected] .common-text-image img {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
 .text-category-list li[data-dragging] {
   background: var(--surface-hover);
   outline: 1px solid var(--ui-color-focus);
@@ -107,28 +141,7 @@
   color: var(--ui-color-text-muted);
   min-height: 30px;
 }
-.common-block-body {
-  flex: 1;
-  min-width: 0;
-}
-.common-text-editor .common-document-block textarea {
-  display: block;
-  width: 100%;
-  min-height: 66px;
-  max-height: 260px;
-  resize: vertical;
-  padding: 8px;
-  line-height: 1.7;
-  color: var(--ui-color-text);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 5px;
-}
-.common-text-editor .common-document-block textarea:focus {
-  outline: none;
-  border-color: var(--ui-color-border);
-}
-.common-document-editor.image-drag-over {
+.common-document-surface.image-drag-over {
   outline: 2px solid var(--ui-color-focus);
   outline-offset: 2px;
 }
@@ -229,7 +242,7 @@ html[data-desktop="selection"]
   .common-text-rich-editor[data-slot="dialog-content"] {
     padding: 16px;
   }
-  .common-document-blocks {
+  .common-document-surface {
     max-height: 42vh;
   }
 }
