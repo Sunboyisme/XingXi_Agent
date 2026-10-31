@@ -100,8 +100,8 @@ export const SettingsIcon = softIcon(
 
 export const ConnectionIcon = softIcon(
   "ConnectionIcon",
-  <rect x="4.25" y="5.5" width="15.5" height="13" rx="3" />,
-  <path d="M8 9.5h8M8 14.5h4.5" />,
+  <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />,
+  <path d="M12 22v-5M9 8V2M15 8V2" />,
 );
 
 export const MicrophoneIcon = softIcon(
