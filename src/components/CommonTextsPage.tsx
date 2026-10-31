@@ -154,7 +154,7 @@ function TextCard({
   );
 }
 
-export function CommonTextsPage() {
+export function CommonTextsPage({ createRequested = 0 }: { createRequested?: number }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("category");
@@ -164,6 +164,9 @@ export function CommonTextsPage() {
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [editor, setEditor] = useState<{ value?: CommonText; key: number }>();
+  useEffect(() => {
+    if (createRequested) setEditor({ key: createRequested });
+  }, [createRequested]);
   const [manager, setManager] = useState(false);
   const [deleting, setDeleting] = useState<CommonText>();
   const [deleteError, setDeleteError] = useState("");

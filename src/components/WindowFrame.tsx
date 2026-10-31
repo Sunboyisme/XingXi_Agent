@@ -1,5 +1,5 @@
 import { Hint } from "./common";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import {
   Bell,
   Copy,
@@ -39,6 +39,21 @@ export function WindowFrame({
   const native = isTauri();
   const [maximized, setMaximized] = useState(false);
   const [error, setError] = useState("");
+  const handleSidebarShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      reminder || !sidebarAvailable || !onToggle || event.defaultPrevented ||
+      event.isComposing || !event.altKey || event.ctrlKey || event.metaKey ||
+      event.shiftKey || (event.key !== "1" && event.code !== "Digit1") ||
+      document.querySelector('[role="dialog"], [role="alertdialog"]')
+    ) return;
+    event.preventDefault();
+    if (!event.repeat) onToggle();
+  });
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => handleSidebarShortcut(event);
+    document.addEventListener("keydown", shortcut);
+    return () => document.removeEventListener("keydown", shortcut);
+  }, []);
   useEffect(() => {
     if (!native || reminder) return;
     let active = true;
@@ -82,12 +97,13 @@ export function WindowFrame({
         </span>
         {sidebarAvailable && onToggle && (
           <div className="window-sidebar-control">
-            <Hint label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}>
+            <Hint label={`${collapsed ? "展开" : "收起"}${sidebarLabel}（Alt+1）`}>
               <button
                 className="sidebar-toggle"
                 aria-label={`${collapsed ? "展开" : "收起"}${sidebarLabel}`}
                 aria-expanded={!collapsed}
                 aria-controls={sidebarControls}
+                aria-keyshortcuts="Alt+1"
                 onClick={onToggle}
               >
                 {collapsed ? (

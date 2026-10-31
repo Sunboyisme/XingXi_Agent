@@ -618,8 +618,13 @@ export function App() {
       onToggle={page === "knowledge" ? () => setKnowledgeDirectoryOpen(open => !open) : page === "chat" ? toggleSidebar : page === "plans" && planCalendarVisible ? () => setPlanSidebarOpen(open => !open) : page === "learning" ? () => window.dispatchEvent(new Event("xiaoxi-toggle-learning-outline")) : undefined}
       menuActions={{
         newChat: startNewChat,
+        newProject: () => {
+          navigate("projects");
+          setProjectPanelRequest({ id: null, action: "create", key: Date.now() });
+        },
         newLearning: () => navigate("learning", true),
         newPlan: () => navigate("plans", true),
+        newCommonText: () => navigate("common-texts", true),
         navigate,
         about: () => setInfo(true),
         shortcuts: () => setShortcuts(true),
@@ -834,7 +839,7 @@ export function App() {
                 </Suspense>
               )}
               {page === "knowledge" && <KnowledgePage openSource={knowledgeSource} onOpened={() => setKnowledgeSource(undefined)} directoryOpen={knowledgeDirectoryOpen} onDirectoryAvailableChange={setKnowledgeDirectoryAvailable} />}
-              {page === "common-texts" && <CommonTextsPage />}
+              {page === "common-texts" && <CommonTextsPage createRequested={createKey} />}
               {page === "pomodoro" && <PomodoroPage />}
               {page === "settings" && (
                 <SettingsPage
@@ -910,8 +915,9 @@ export function App() {
             </DialogHeader>
             <dl className="shortcut-list">
               {[
-                ["新建对话", "Ctrl+N"],
+                ["新聊天", "Ctrl+N"],
                 ["对话 / 学习 / 计划", "Ctrl+1 / 2 / 3"],
+                ["展开 / 收起当前侧栏", "Alt+1"],
                 ["连接与设置", "Ctrl+,"],
                 ["打开快捷键", "F1"],
                 ["发送消息", "Enter"],

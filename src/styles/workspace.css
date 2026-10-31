@@ -285,11 +285,15 @@ body,
   display: flex;
   justify-content: flex-start;
   width: 100%;
-  min-height: 40px;
-  padding: 8px 14px;
-  margin: 0 0 28px;
-  gap: 10px;
-  border-radius: 13px;
+  height: 36px;
+  min-height: 36px;
+  padding: 6px 8px;
+  margin: 0 0 24px;
+  gap: 8px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
 }
 .chat-sidebar .conversation-sidebar {
   display: block;

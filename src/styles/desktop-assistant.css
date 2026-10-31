@@ -331,16 +331,16 @@ html[data-desktop] .capture-handle:is(:hover, :active, :focus-visible) {
   outline-offset: 2px;
 }
 html[data-desktop] .capture-handle:is(.handle-nw, .handle-se) {
-  cursor: url("../assets/cursors/resize-nwse.svg") 18 18, nwse-resize;
+  cursor: url("../assets/cursors/resize-nwse.svg") 12 12, nwse-resize;
 }
 html[data-desktop] .capture-handle:is(.handle-ne, .handle-sw) {
-  cursor: url("../assets/cursors/resize-nesw.svg") 18 18, nesw-resize;
+  cursor: url("../assets/cursors/resize-nesw.svg") 12 12, nesw-resize;
 }
 html[data-desktop] .capture-handle:is(.handle-n, .handle-s) {
-  cursor: url("../assets/cursors/resize-vertical.svg") 18 18, ns-resize;
+  cursor: url("../assets/cursors/resize-vertical.svg") 12 12, ns-resize;
 }
 html[data-desktop] .capture-handle:is(.handle-e, .handle-w) {
-  cursor: url("../assets/cursors/resize-horizontal.svg") 18 18, ew-resize;
+  cursor: url("../assets/cursors/resize-horizontal.svg") 12 12, ew-resize;
 }
 .handle-nw {
   left: -13px;

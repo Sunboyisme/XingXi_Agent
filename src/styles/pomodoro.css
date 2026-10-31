@@ -72,7 +72,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 28px;
+  gap: 24px;
 }
 .pomodoro-card-top {
   display: flex;
@@ -102,20 +102,20 @@
   container-type: inline-size;
   position: relative;
   flex-shrink: 0;
-  width: min(100%, 304px, max(80px, calc(100cqh - 132px)));
+  width: min(100%, 264px, max(80px, calc(100cqh - 132px)));
   aspect-ratio: 1;
   margin: 0;
 }
 .pomodoro-focus-card:is([data-phase="break"], [data-phase="waiting_break"])
   .pomodoro-dial {
-  width: min(100%, 304px, max(80px, calc(100cqh - 188px)));
+  width: min(100%, 264px, max(80px, calc(100cqh - 188px)));
 }
 .pomodoro-dial > svg {
   display: block;
   width: 100%;
   height: 100%;
   fill: none;
-  stroke-width: 3;
+  stroke-width: 2.4;
   transform: rotate(-90deg);
 }
 .pomodoro-ring-track {
@@ -134,14 +134,24 @@
   justify-content: center;
 }
 .pomodoro-dial-copy > strong {
+  display: flex;
+  align-items: center;
+  gap: clamp(2px, 0.9cqw, 4px);
   color: var(--ui-color-heading);
   font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-  font-size: clamp(26px, 24cqw, 72px);
-  font-weight: 600;
+  font-size: clamp(18px, 22cqw, 58px);
+  font-weight: 450;
   line-height: 1;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+}
+.pomodoro-time-separator {
+  padding-bottom: 0.08em;
+  font-size: 0.62em;
+  font-weight: 400;
+  letter-spacing: 0;
+  opacity: 0.48;
 }
 .pomodoro-controls {
   display: grid;

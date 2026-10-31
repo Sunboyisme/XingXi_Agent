@@ -80,6 +80,8 @@ export function PomodoroPage() {
     data.status === "running" || data.status === "paused"
       ? Math.max(0, Math.min(1, 1 - remaining / (minutes * 60)))
       : 0;
+  const countdown = formatCountdown(remaining);
+  const [clockMinutes, clockSeconds] = countdown.split(":");
   async function act(action: Parameters<typeof pomodoroAction>[0]) {
     const navigationId = desktopNavigationId();
     setWindowError("");
@@ -193,9 +195,11 @@ export function PomodoroPage() {
                 <strong
                   role="timer"
                   aria-live="off"
-                  aria-label={`${isBreak ? "休息" : "专注"}剩余 ${formatCountdown(remaining)}`}
+                  aria-label={`${isBreak ? "休息" : "专注"}剩余 ${countdown}`}
                 >
-                  {formatCountdown(remaining)}
+                  <span aria-hidden="true">{clockMinutes}</span>
+                  <span className="pomodoro-time-separator" aria-hidden="true">:</span>
+                  <span aria-hidden="true">{clockSeconds}</span>
                 </strong>
               </div>
             </div>

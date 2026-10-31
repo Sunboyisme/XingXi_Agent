@@ -3,8 +3,10 @@ import { Menubar } from "radix-ui";
 
 export type AppMenuActions = {
   newChat: () => void;
+  newProject: () => void;
   newLearning: () => void;
   newPlan: () => void;
+  newCommonText: () => void;
   navigate: (page: string) => void;
   about: () => void;
   shortcuts: () => void;
@@ -131,11 +133,14 @@ export function AppMenu({
       {group(
         "文件",
         <>
-          {item("新建对话", actions.newChat, "Ctrl+N")}
+          {item("新聊天", actions.newChat, "Ctrl+N")}
+          {item("新建项目", actions.newProject)}
           {item("新建学习目标", actions.newLearning)}
           {item("新建计划", actions.newPlan)}
+          {item("新增常用文本", actions.newCommonText)}
           <Menubar.Separator className="app-menu-separator" />
           {item("连接与设置", () => actions.navigate("settings"), "Ctrl+,")}
+          {item("数据导入与导出", () => actions.navigate("data"))}
           {onClose && (
             <>
               <Menubar.Separator className="app-menu-separator" />
@@ -156,24 +161,32 @@ export function AppMenu({
           {item("粘贴", () => void edit("paste"), "Ctrl+V")}
           {item("全选", () => void edit("selectAll"), "Ctrl+A")}
           <Menubar.Separator className="app-menu-separator" />
-          {item("编辑记忆", () => actions.navigate("memories"))}
+          {item("管理常用文本", () => actions.navigate("common-texts"))}
+          {item("管理记忆", () => actions.navigate("memories"))}
         </>,
       )}
       {group(
         "视图",
         <>
           {item("对话", () => actions.navigate("chat"), "Ctrl+1")}
+          {item("项目", () => actions.navigate("projects"))}
           {item("学习", () => actions.navigate("learning"), "Ctrl+2")}
           {item("计划", () => actions.navigate("plans"), "Ctrl+3")}
+          {item("知识库", () => actions.navigate("knowledge"))}
+          {item("常用文本", () => actions.navigate("common-texts"))}
+          {item("番茄钟", () => actions.navigate("pomodoro"))}
           {(onToggle || onFitWindow) && <Menubar.Separator className="app-menu-separator" />}
-          {onToggle && item(`${collapsed ? "显示" : "隐藏"}${sidebarLabel}`, onToggle)}
+          {onToggle && item(`${collapsed ? "显示" : "隐藏"}${sidebarLabel}`, onToggle, "Alt+1")}
           {onFitWindow && item("适配窗口到屏幕", onFitWindow)}
         </>,
       )}
       {group(
         "帮助",
         <>
-          {item("快捷键", actions.shortcuts, "F1")}
+          {item("快捷键一览", actions.shortcuts, "F1")}
+          {item("桌面与划词设置", () => actions.navigate("desktop"))}
+          {item("模型与能力设置", () => actions.navigate("connections"))}
+          <Menubar.Separator className="app-menu-separator" />
           {item("关于 XiaoXi", actions.about)}
         </>,
       )}

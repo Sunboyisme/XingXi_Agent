@@ -484,7 +484,7 @@ export function ProjectSidebar({
         aria-label="新聊天"
         onClick={() => onNew(projectId)}
       >
-        <SquarePen size={19} aria-hidden="true" />
+        <SquarePen size={14} className="size-3.5" strokeWidth={1.7} aria-hidden="true" />
         <span className="new-chat-button-label">新聊天</span>
       </Button>
       <div className="conversation-sidebar project-conversations">
