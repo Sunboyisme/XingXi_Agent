@@ -25,6 +25,94 @@
   border-radius: 7px;
   background: var(--ui-color-bg);
 }
+.common-text-image .common-text-picture-trigger {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: zoom-in;
+}
+.common-text-image .common-text-picture-trigger:hover {
+  background: transparent;
+}
+.common-text-picture-viewer[data-slot="dialog-content"] {
+  width: calc(100vw - 32px);
+  max-width: calc(100vw - 32px);
+  height: calc(100dvh - 32px);
+  max-height: calc(100dvh - 32px);
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 18px;
+  gap: 12px;
+  overflow: hidden;
+}
+.common-text-picture-viewer-heading {
+  min-width: 0;
+  padding-right: 30px;
+}
+.common-text-picture-viewer-heading [data-slot="dialog-title"] {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.common-text-picture-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.common-text-picture-viewer-toolbar button[aria-pressed="true"] {
+  color: var(--ui-color-action);
+  background: var(--surface-hover);
+}
+.common-text-picture-viewer-toolbar > span {
+  color: var(--ui-color-text-muted);
+  font-size: 12px;
+  margin-left: auto;
+}
+.common-text-picture-viewport {
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ui-color-bg);
+  border: 1px solid var(--ui-color-border);
+  border-radius: 8px;
+  overscroll-behavior: contain;
+}
+.common-text-picture-viewport:focus-visible {
+  outline: 2px solid var(--ui-color-focus);
+  outline-offset: 2px;
+}
+.common-text-picture-canvas {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.common-text-picture-canvas > img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.common-text-picture-viewport[data-original-size] .common-text-picture-canvas {
+  width: max-content;
+  height: max-content;
+  min-width: 100%;
+  min-height: 100%;
+}
+.common-text-picture-viewport[data-original-size] img {
+  flex-shrink: 0;
+  max-width: none;
+  max-height: none;
+}
 .common-text-image figcaption {
   display: flex;
   align-items: center;

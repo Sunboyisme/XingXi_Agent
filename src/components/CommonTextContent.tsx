@@ -9,6 +9,7 @@ import {
 } from "@/lib/commonTextDocument";
 import { errorMessage } from "@/lib/utils";
 import { ErrorNotice } from "./common";
+import { CommonTextPictureViewer } from "./CommonTextPictureViewer";
 
 export function CommonTextPicture({
   id,
@@ -24,6 +25,7 @@ export function CommonTextPicture({
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const [retry, setRetry] = useState(0);
   const generation = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -52,6 +54,7 @@ export function CommonTextPicture({
     setError("");
     setCopied(false);
     setCopying(false);
+    setViewing(false);
     void Promise.all([
       api<CommonTextAsset>(`/common-text-assets/${id}`, "GET", undefined, {
         signal: controller.signal,
@@ -80,13 +83,21 @@ export function CommonTextPicture({
   return (
     <figure ref={figure} className="common-text-image">
       {url && asset ? (
-        <img
-          src={url}
-          alt={asset.name}
-          width={asset.width}
-          height={asset.height}
-          loading="lazy"
-        />
+        <button
+          type="button"
+          className="common-text-picture-trigger"
+          aria-label={`放大查看 ${asset.name}`}
+          onClick={() => setViewing(true)}
+        >
+          <img
+            src={url}
+            alt={asset.name}
+            width={asset.width}
+            height={asset.height}
+            loading="lazy"
+            draggable={false}
+          />
+        </button>
       ) : (
         !error && <p role="status">正在读取图片…</p>
       )}
@@ -125,6 +136,13 @@ export function CommonTextPicture({
         <ErrorNotice
           message={error}
           retry={!url ? () => setRetry((n) => n + 1) : undefined}
+        />
+      )}
+      {viewing && asset && url && (
+        <CommonTextPictureViewer
+          asset={asset}
+          url={url}
+          onClose={() => setViewing(false)}
         />
       )}
     </figure>
